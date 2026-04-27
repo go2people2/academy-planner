@@ -158,26 +158,29 @@ export default function Overview({
 }
 
 function StudentRowItem({ student, isSelected, isBatchMode, onClick }: { student: Student, isSelected: boolean, isBatchMode: boolean, onClick: () => void }) {
+  const daysFormatted = student.class_days?.join(',') || '';
+  
   return (
     <motion.div 
       layout 
       onClick={onClick} 
-      className={`flex items-center justify-between p-2 rounded-xl border cursor-pointer transition-all duration-300 group ${
+      className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all duration-300 group ${
         isSelected ? 'bg-blue-600 border-blue-400 shadow-lg' : 
         isBatchMode ? 'hover:border-red-500/50 hover:bg-red-500/5' : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
       }`}
     >
-      <div className="flex items-center gap-2">
-        <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-black transition-colors ${
-          isSelected ? 'bg-white text-blue-600' : isBatchMode ? 'bg-red-500/20 text-red-500 group-hover:bg-red-500 group-hover:text-white' : 'bg-white/5 text-white'
-        }`}>{student.name[0]}</div>
-        <div className="overflow-hidden">
-          <h4 className={`text-xs font-bold tracking-tight truncate ${isSelected ? 'text-white' : isBatchMode ? 'group-hover:text-red-400' : 'text-gray-100'}`}>{student.name}</h4>
-          <p className="text-[9px] font-medium text-gray-500 opacity-60 uppercase truncate">{student.class} · {student.grade}</p>
+      <div className="flex items-center gap-3 overflow-hidden">
+        <div className="flex items-baseline gap-2 overflow-hidden">
+          <h4 className={`text-[13px] font-black tracking-tight shrink-0 ${isSelected ? 'text-white' : isBatchMode ? 'group-hover:text-red-400' : 'text-gray-100'}`}>
+            {student.name}
+          </h4>
+          <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-blue-100' : 'text-gray-500'}`}>
+            {student.grade} · {student.class} · {daysFormatted}
+          </span>
         </div>
       </div>
       
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2 shrink-0">
         {isBatchMode ? (
           <MinusCircle size={14} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
         ) : (

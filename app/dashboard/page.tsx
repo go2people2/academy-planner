@@ -92,22 +92,37 @@ export default function DashboardPage() {
   const saveTodaySession = async (studentId: string, sessionData: Partial<SessionLog>) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return false;
-    let sessionId = student.todaySession?.id;
+    
+    // 컴포넌트에서 전달된 구체적인 날짜가 있으면 사용, 없으면 전체 선택 날짜 사용
+    const targetDate = (sessionData as any).session_date || selectedDate;
+    
+    // 해당 날짜의 세션이 이미 존재하는지 전체 로그에서 확인
+    const existingSession = student.allLogs?.find(l => l.date === targetDate);
+    let sessionId = existingSession?.id;
 
     try {
       if (!sessionId) {
         const { data, error } = await supabase.from('ams_session_logs').insert([{
-          student_id: studentId, academy_id: student.academy_id, session_date: selectedDate, ...sessionData, status: sessionData.status || 'none'
+          student_id: studentId, academy_id: student.academy_id, session_date: targetDate, ...sessionData, status: sessionData.status || 'none'
         }]).select();
         if (error) return false;
         if (data) {
-          setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: data[0] as SessionLog } : s));
+          // 데이터 갱신을 위해 전체 데이터를 다시 불러오거나 로컬 상태를 영리하게 업데이트
+          setStudents(prev => prev.map(s => s.id === studentId ? { 
+            ...s, 
+            todaySession: targetDate === selectedDate ? (data[0] as SessionLog) : s.todaySession,
+            allLogs: [data[0] as SessionLog, ...(s.allLogs || []).filter(l => l.id !== data[0].id)]
+          } : s));
           return true;
         }
       } else {
         const { error } = await supabase.from('ams_session_logs').update(sessionData).eq('id', sessionId);
         if (error) return false;
-        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: { ...s.todaySession!, ...sessionData } } : s));
+        setStudents(prev => prev.map(s => s.id === studentId ? { 
+          ...s, 
+          todaySession: targetDate === selectedDate ? { ...s.todaySession!, ...sessionData } : s.todaySession,
+          allLogs: (s.allLogs || []).map(l => l.id === sessionId ? { ...l, ...sessionData } : l)
+        } : s));
         return true;
       }
     } catch (e) { return false; }

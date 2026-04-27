@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Send, Loader2, CheckCircle, Wand2, Settings2, Check, ClipboardList, Calendar as CalendarIcon } from 'lucide-react';
+import { Send, Loader2, CheckCircle, Wand2, Settings2, Check, ClipboardList, Calendar as CalendarIcon, History as HistoryIcon } from 'lucide-react';
 import { HomeworkItem } from '@/types/dashboard';
 import HomeworkEditor from './HomeworkEditor';
 import TestAnswerModal from './TestAnswerModal';
@@ -17,7 +17,7 @@ interface ColumnConfig {
 
 const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'date', label: 'Date', minWidth: 45, canHide: true },
-  { id: 'name', label: 'Student', minWidth: 80, isSticky: true, canHide: false },
+  { id: 'name', label: 'Student', minWidth: 100, isSticky: true, canHide: false },
   { id: 'grade', label: 'Grade', minWidth: 45, canHide: true },
   { id: 'class', label: 'Class', minWidth: 70, canHide: true },
   { id: 'attendance', label: 'Att.', minWidth: 45, canHide: true },
@@ -25,161 +25,74 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'review', label: 'Review', minWidth: 150, canHide: true },
   { id: 'assign', label: 'Homework Assignment', minWidth: 250, canHide: true }, 
   { id: 'notes', label: 'Notes', minWidth: 120, canHide: true },
-  { id: 'action', label: 'Save', minWidth: 40, isSticky: false, canHide: false },
+  { id: 'action', label: 'Save', minWidth: 40, isSticky: true, canHide: false },
 ];
 
-export default function TodaySheet({ students, masterTextbooks, onSave, selectedDate, onDateChange }: any) {
-  const [colWidths, setColWidths] = useState<Record<string, number>>(
-    Object.fromEntries(DEFAULT_COLUMNS.map(col => [col.id, col.minWidth]))
-  );
-  
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(
-    DEFAULT_COLUMNS.map(c => c.id)
-  );
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-
-  const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
-
-  const onMouseDown = (e: React.MouseEvent, colId: string) => {
-    resizingCol.current = { id: colId, startX: e.pageX, startWidth: colWidths[colId] };
-    document.addEventListener('mousemove', onMouseMove);
-    document.addEventListener('mouseup', onMouseUp);
-    document.body.style.cursor = 'col-resize';
-  };
-
-  const onMouseMove = (e: MouseEvent) => {
-    if (!resizingCol.current) return;
-    const { id, startX, startWidth } = resizingCol.current;
-    const newWidth = Math.max(30, startWidth + (e.pageX - startX));
-    setColWidths(prev => ({ ...prev, [id]: newWidth }));
-  };
-
-  const onMouseUp = () => {
-    resizingCol.current = null;
-    document.removeEventListener('mousemove', onMouseMove);
-    document.removeEventListener('mouseup', onMouseUp);
-    document.body.style.cursor = 'default';
-  };
-
-  const activeColumns = useMemo(() => 
-    DEFAULT_COLUMNS.filter(col => visibleColumns.includes(col.id)),
-    [visibleColumns]
-  );
-
-  const totalWidth = useMemo(() => 
-    activeColumns.reduce((acc, col) => acc + colWidths[col.id], 0),
-    [activeColumns, colWidths]
-  );
-
-  const toggleColumn = (id: string) => {
-    setVisibleColumns(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
-  };
-
+function HistoryPeekRow({ log, studentName, colWidths, activeColumns }: any) {
   return (
-    <div className="p-0.5 relative">
-      {/* 상단 컨트롤 영역: 날짜 선택 및 열 설정 */}
-      <div className="absolute right-4 top-2 z-50 flex items-center gap-2">
-        {/* 날짜 선택기 (Daily Sheet 핵심) */}
-        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-md px-2 py-1 text-gray-400 hover:text-white transition-all group">
-          <CalendarIcon size={12} className="group-hover:text-blue-500" />
-          <input 
-            type="date" 
-            value={selectedDate}
-            onChange={(e) => onDateChange(e.target.value)}
-            className="bg-transparent text-[10px] font-black uppercase outline-none cursor-pointer [color-scheme:dark]"
-          />
-        </div>
+    <tr className="bg-white/[0.01] opacity-60 align-middle text-[10px] border-l-2 border-blue-500/30">
+      {activeColumns.map((col: any) => {
+        const styles: React.CSSProperties = {
+          width: col.id === 'assign' ? 'auto' : colWidths[col.id],
+          position: col.isSticky ? 'sticky' : 'relative' as any,
+          left: col.id === 'name' ? 0 : 'auto',
+          right: col.id === 'action' ? 0 : 'auto',
+          zIndex: col.isSticky ? 20 : 1
+        };
 
-        <button 
-          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-          className={`p-1.5 rounded-md transition-all border ${isSettingsOpen ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white'}`}
-        >
-          <Settings2 size={14} />
-        </button>
-
-        <AnimatePresence>
-          {isSettingsOpen && (
-            <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
-              className="absolute right-0 mt-2 top-full w-48 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl p-2 z-[60]">
-              <h4 className="text-[10px] font-black uppercase text-gray-500 mb-2 px-2 tracking-widest">Columns</h4>
-              <div className="space-y-0.5">
-                {DEFAULT_COLUMNS.filter(c => c.canHide).map(col => (
-                  <div key={col.id} onClick={() => toggleColumn(col.id)}
-                    className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-white/5 cursor-pointer group">
-                    <span className={`text-[11px] font-bold ${visibleColumns.includes(col.id) ? 'text-white' : 'text-gray-500'}`}>{col.label}</span>
-                    {visibleColumns.includes(col.id) && <Check size={12} className="text-blue-500" />}
-                  </div>
-                ))}
-              </div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
-
-      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#0f0f0f] border border-white/10 rounded-lg overflow-hidden shadow-2xl">
-        <div className="overflow-x-auto custom-scrollbar-h min-h-[500px]">
-          <table style={{ width: totalWidth }} className="text-left border-collapse table-fixed select-none">
-            <thead>
-              <tr className="bg-white/[0.05] border-b border-white/10">
-                {activeColumns.map((col) => (
-                  <th key={col.id} style={{ width: colWidths[col.id], position: col.isSticky ? 'sticky' : 'relative', left: col.isSticky ? 0 : 'auto', zIndex: col.isSticky ? 30 : 10 }}
-                    className={`py-1.5 px-1.5 text-[9px] font-black uppercase text-gray-500 bg-[#0f0f0f] border-r border-white/10 ${col.isSticky ? 'z-30' : ''}`}>
-                    <div className="relative flex items-center h-full overflow-hidden">
-                      <span className="truncate pr-2">{col.label}</span>
-                      <div onMouseDown={(e) => onMouseDown(e, col.id)} className="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40" />
-                    </div>
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-white/[0.03]">
-              {students.map((s: any) => (
-                <TodaySheetRow key={s.id} student={s} selectedDate={selectedDate} colWidths={colWidths} activeColumns={activeColumns} masterTextbooks={masterTextbooks} onSave={onSave} />
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </motion.div>
-      {isSettingsOpen && <div className="fixed inset-0 z-40" onClick={() => setIsSettingsOpen(false)} />}
-    </div>
+        if (col.id === 'date') return <td key={col.id} style={styles} className="py-1 px-1 text-center border-r border-white/5 font-bold tabular-nums text-blue-400/50 bg-[#0a0a0a]">{log.date.slice(5).replace('-', '.')}</td>;
+        if (col.id === 'name') return <td key={col.id} style={styles} className="py-1 px-2 sticky left-0 bg-[#0a0a0a] z-20 border-r border-white/10 font-bold text-gray-500 italic">{studentName} (Hist)</td>;
+        if (col.id === 'grade' || col.id === 'class') return <td key={col.id} style={styles} className="py-1 px-1 text-center border-r border-white/5 text-gray-600 bg-[#0a0a0a]">-</td>;
+        if (col.id === 'attendance') return <td key={col.id} style={styles} className="py-1 px-1 text-center border-r border-white/5 text-gray-500 bg-[#0a0a0a]">{log.attendance_status}</td>;
+        if (col.id === 'test') return <td key={col.id} style={styles} className="py-1 px-1 border-r border-white/5 text-gray-500 text-center truncate bg-[#0a0a0a]">{log.test_id || '-'}</td>;
+        if (col.id === 'review') return <td key={col.id} style={styles} className="py-1 px-2 border-r border-white/5 text-gray-500 italic truncate bg-[#0a0a0a]">Prev: {log.status}</td>;
+        if (col.id === 'assign') return <td key={col.id} style={styles} className="py-1 px-1 border-r border-white/5 text-gray-400 font-medium truncate italic bg-[#0a0a0a]">{log.homework_text || 'No homework'}</td>;
+        if (col.id === 'notes') return <td key={col.id} style={styles} className="py-1 px-1 border-r border-white/5 text-gray-600 truncate bg-[#0a0a0a]">{log.special_notes}</td>;
+        if (col.id === 'action') return <td key={col.id} style={styles} className="py-1 sticky right-0 bg-[#0a0a0a] z-20 border-l border-white/10 text-center text-gray-700">-</td>;
+        return null;
+      })}
+    </tr>
   );
 }
 
-function TodaySheetRow({ student, masterTextbooks, onSave, colWidths, activeColumns, selectedDate }: any) {
+function TodaySheetRow({ student, masterTextbooks, onSave, colWidths, activeColumns, selectedDate, isHistoryExpanded, onToggleHistory }: any) {
   const [isEditorOpen, setIsEditorOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
-  
-  const initialHwJson = useMemo(() => {
-    if (student.todaySession?.homework_json?.length) return student.todaySession.homework_json;
-    return (student.assigned_books || []).map((b:any) => ({ type: 'book', book_name: b, range: '', units: [] }));
-  }, [student.todaySession, student.assigned_books]);
+  const [rowDate, setRowDate] = useState(selectedDate);
 
-  const [formData, setFormData] = useState<any>({
-    attendance_status: student.todaySession?.attendance_status || '출석',
-    status: student.todaySession?.status || 'none',
-    special_notes: student.todaySession?.special_notes || '',
-    homework_text: student.todaySession?.homework_text || '',
-    homework_json: initialHwJson,
-    test_id: student.todaySession?.test_id || ''
-  });
+  const getInitialFormData = (date: string) => {
+    const session = (student.allLogs || []).find((l: any) => l.date === date);
+    const initialHwJson = session?.homework_json?.length 
+      ? session.homework_json 
+      : (student.assigned_books || []).map((b:any) => ({ type: 'book', book_name: b, range: '', units: [] }));
 
-  // 날짜나 학생 데이터가 바뀌면 폼 데이터 동기화
-  useEffect(() => {
-    setFormData({
-      attendance_status: student.todaySession?.attendance_status || '출석',
-      status: student.todaySession?.status || 'none',
-      special_notes: student.todaySession?.special_notes || '',
-      homework_text: student.todaySession?.homework_text || '',
+    return {
+      attendance_status: session?.attendance_status || '출석',
+      status: session?.status || 'none',
+      special_notes: session?.special_notes || '',
+      homework_text: session?.homework_text || '',
       homework_json: initialHwJson,
-      test_id: student.todaySession?.test_id || ''
-    });
-  }, [student.todaySession, initialHwJson]);
+      test_id: session?.test_id || ''
+    };
+  };
+
+  const [formData, setFormData] = useState<any>(() => getInitialFormData(selectedDate));
+
+  useEffect(() => {
+    setRowDate(selectedDate);
+    setFormData(getInitialFormData(selectedDate));
+  }, [selectedDate, student.allLogs]);
+
+  const handleDateChange = (newDate: string) => {
+    setRowDate(newDate);
+    setFormData(getInitialFormData(newDate));
+  };
 
   const handleSave = async (extraData = {}) => {
     if (isSaving) return;
-    const finalData = { ...formData, ...extraData };
+    const finalData = { ...formData, ...extraData, session_date: rowDate };
     setIsSaving(true);
     const success = await onSave(student.id, finalData);
     setIsSaving(false);
@@ -221,21 +134,36 @@ function TodaySheetRow({ student, masterTextbooks, onSave, colWidths, activeColu
     return lines.length > 0 ? lines[0].trim() : '';
   }, [formData.test_id]);
 
-  const displayDate = useMemo(() => {
-    return selectedDate.slice(5).replace('-', '.');
-  }, [selectedDate]);
+  const displayDateShort = useMemo(() => {
+    return rowDate.slice(5).replace('-', '.');
+  }, [rowDate]);
 
   return (
     <tr className="hover:bg-white/[0.02] transition-colors group align-middle text-[11px]">
       {activeColumns.map((col: any) => {
         if (col.id === 'date') return (
-          <td key={col.id} className="py-1.5 px-1 text-center border-r border-white/5 opacity-40 font-bold tabular-nums truncate" style={{ width: colWidths.date }}>
-            {displayDate}
+          <td key={col.id} className="py-1.5 px-1 text-center border-r border-white/5 font-bold tabular-nums truncate relative group/date" style={{ width: colWidths.date }}>
+            <span className="opacity-40 group-hover/date:opacity-0 transition-opacity">{displayDateShort}</span>
+            <input 
+              type="date" 
+              value={rowDate} 
+              onChange={(e) => handleDateChange(e.target.value)}
+              className="absolute inset-0 opacity-0 group-hover/date:opacity-100 bg-[#1a1a1a] text-blue-500 cursor-pointer outline-none [color-scheme:dark] px-1 text-[9px] transition-opacity"
+            />
           </td>
         );
         if (col.id === 'name') return (
-          <td key={col.id} className="py-1.5 px-2 sticky left-0 bg-[#0f0f0f] z-10 border-r border-white/10 font-bold text-white group-hover:bg-[#151515] truncate h-full align-middle" style={{ width: colWidths.name }}>
-            {student.name}
+          <td key={col.id} className="py-1.5 px-2 sticky left-0 bg-[#0f0f0f] z-10 border-r border-white/10 font-bold text-white group-hover:bg-[#151515] h-full align-middle" style={{ width: colWidths.name }}>
+            <div className="flex items-center justify-between gap-1 overflow-hidden">
+              <span className="truncate flex-1">{student.name}</span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onToggleHistory(); }}
+                className={`p-1 rounded-sm transition-all ${isHistoryExpanded ? 'bg-blue-500 text-white' : 'bg-white/5 text-gray-600 hover:text-white'}`}
+                title="지난 수업 기록 보기"
+              >
+                <HistoryIcon size={10} />
+              </button>
+            </div>
           </td>
         );
         if (col.id === 'grade') return (
@@ -275,7 +203,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, colWidths, activeColu
           </td>
         );
         if (col.id === 'assign') return (
-          <td key={col.id} className="py-1.5 px-1 border-r border-white/5" style={{ width: colWidths.assign }}>
+          <td key={col.id} className="py-1.5 px-1 border-r border-white/5" style={{ width: col.id === 'assign' ? 'auto' : colWidths[col.id] }}>
             <div className="flex items-start gap-1 h-full">
               <textarea rows={Math.min(3, formData.homework_text.split('\n').length || 1)} value={formData.homework_text} onChange={(e) => setFormData({ ...formData, homework_text: e.target.value })} onKeyDown={handleKeyDown}
                 className="flex-1 bg-white/[0.03] border border-white/10 rounded-[2px] px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-blue-500 transition-all font-medium resize-none overflow-hidden min-h-[24px]" />
@@ -300,5 +228,163 @@ function TodaySheetRow({ student, masterTextbooks, onSave, colWidths, activeColu
         return null;
       })}
     </tr>
+  );
+}
+
+export default function TodaySheet({ students, masterTextbooks, onSave, selectedDate, onDateChange }: any) {
+  const [colWidths, setColWidths] = useState<Record<string, number>>(
+    Object.fromEntries(DEFAULT_COLUMNS.map(col => [col.id, col.minWidth]))
+  );
+  
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(
+    DEFAULT_COLUMNS.map(c => c.id)
+  );
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [expandedHistory, setExpandedHistory] = useState<Record<string, number>>({});
+
+  const toggleHistory = (studentId: string) => {
+    setExpandedHistory(prev => ({
+      ...prev,
+      [studentId]: prev[studentId] ? 0 : 3
+    }));
+  };
+
+  const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
+
+  const onMouseDown = (e: React.MouseEvent, colId: string) => {
+    resizingCol.current = { id: colId, startX: e.pageX, startWidth: colWidths[colId] };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (!resizingCol.current) return;
+    const { id, startX, startWidth } = resizingCol.current;
+    const newWidth = Math.max(30, startWidth + (e.pageX - startX));
+    setColWidths(prev => ({ ...prev, [id]: newWidth }));
+  };
+
+  const onMouseUp = () => {
+    resizingCol.current = null;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'default';
+  };
+
+  const activeColumns = useMemo(() => 
+    DEFAULT_COLUMNS.filter(col => visibleColumns.includes(col.id)),
+    [visibleColumns]
+  );
+
+  const totalWidth = useMemo(() => 
+    activeColumns.reduce((acc, col) => acc + colWidths[col.id], 0),
+    [activeColumns, colWidths]
+  );
+
+  const toggleColumn = (id: string) => {
+    setVisibleColumns(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]);
+  };
+
+  return (
+    <div className="p-0.5 relative">
+      <div className="absolute right-4 top-2 z-50 flex items-center gap-2">
+        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-md px-2 py-1 text-gray-400 hover:text-white transition-all group">
+          <CalendarIcon size={12} className="group-hover:text-blue-500" />
+          <input 
+            type="date" 
+            value={selectedDate}
+            onChange={(e) => onDateChange(e.target.value)}
+            className="bg-transparent text-[10px] font-black uppercase outline-none cursor-pointer [color-scheme:dark]"
+          />
+        </div>
+
+        <button 
+          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          className={`p-1.5 rounded-md transition-all border ${isSettingsOpen ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white'}`}
+        >
+          <Settings2 size={14} />
+        </button>
+
+        <AnimatePresence>
+          {isSettingsOpen && (
+            <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="absolute right-0 mt-2 top-full w-48 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl p-2 z-[60]">
+              <h4 className="text-[10px] font-black uppercase text-gray-500 mb-2 px-2 tracking-widest">Columns</h4>
+              <div className="space-y-0.5">
+                {DEFAULT_COLUMNS.filter(c => c.canHide).map(col => (
+                  <div key={col.id} onClick={() => toggleColumn(col.id)}
+                    className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-white/5 cursor-pointer group">
+                    <span className={`text-[11px] font-bold ${visibleColumns.includes(col.id) ? 'text-white' : 'text-gray-500'}`}>{col.label}</span>
+                    {visibleColumns.includes(col.id) && <Check size={12} className="text-blue-500" />}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#0f0f0f] border border-white/10 rounded-lg overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto custom-scrollbar-h min-h-[500px]">
+          <table 
+            style={{ minWidth: totalWidth, width: '100%' }} 
+            className="text-left border-collapse table-fixed select-none"
+          >
+            <thead>
+              <tr className="bg-white/[0.05] border-b border-white/10">
+                {activeColumns.map((col) => (
+                  <th key={col.id} 
+                    style={{ 
+                      width: col.id === 'assign' ? 'auto' : colWidths[col.id], 
+                      position: col.isSticky ? 'sticky' : 'relative', 
+                      left: col.id === 'name' ? 0 : 'auto', 
+                      right: col.id === 'action' ? 0 : 'auto',
+                      zIndex: col.isSticky ? 30 : 10 
+                    }}
+                    className={`py-1.5 px-1.5 text-[9px] font-black uppercase text-gray-500 bg-[#0f0f0f] border-r border-white/10 ${col.isSticky ? 'z-30' : ''}`}>
+                    <div className="relative flex items-center h-full overflow-hidden">
+                      <span className="truncate pr-2">{col.label}</span>
+                      <div onMouseDown={(e) => onMouseDown(e, col.id)} className="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40" />
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.03]">
+              {students.map((s: any) => {
+                const historyCount = expandedHistory[s.id] || 0;
+                const pastLogs = (s.allLogs || []).filter((l: any) => l.date < selectedDate).slice(0, historyCount);
+
+                return (
+                  <React.Fragment key={s.id}>
+                    {pastLogs.map((log: any) => (
+                      <HistoryPeekRow 
+                        key={`${s.id}-${log.date}`} 
+                        log={log} 
+                        studentName={s.name}
+                        colWidths={colWidths} 
+                        activeColumns={activeColumns} 
+                      />
+                    ))}
+                    <TodaySheetRow 
+                      student={s} 
+                      selectedDate={selectedDate} 
+                      colWidths={colWidths} 
+                      activeColumns={activeColumns} 
+                      masterTextbooks={masterTextbooks} 
+                      onSave={onSave} 
+                      isHistoryExpanded={historyCount > 0}
+                      onToggleHistory={() => toggleHistory(s.id)}
+                    />
+                  </React.Fragment>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+      {isSettingsOpen && <div className="fixed inset-0 z-40" onClick={() => setIsSettingsOpen(false)} />}
+    </div>
   );
 }
