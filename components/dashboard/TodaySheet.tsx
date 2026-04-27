@@ -1,0 +1,314 @@
+'use client';
+
+import { useState, useMemo, useEffect, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Plus, Send, Loader2, CheckCircle, Wand2, Settings2, Check, ClipboardList } from 'lucide-react';
+import { HomeworkItem } from '@/types/dashboard';
+import HomeworkEditor from './HomeworkEditor';
+import TestAnswerModal from './TestAnswerModal';
+
+const TODAY_ISO = new Date().toISOString().split('T')[0];
+
+interface ColumnConfig {
+  id: string;
+  label: string;
+  minWidth: number;
+  isSticky?: boolean;
+  canHide?: boolean;
+}
+
+const DEFAULT_COLUMNS: ColumnConfig[] = [
+  { id: 'date', label: 'Date', minWidth: 45, canHide: true },
+  { id: 'name', label: 'Student', minWidth: 80, isSticky: true, canHide: false },
+  { id: 'grade', label: 'Grade', minWidth: 45, canHide: true },
+  { id: 'class', label: 'Class', minWidth: 70, canHide: true },
+  { id: 'attendance', label: 'Att.', minWidth: 45, canHide: true },
+  { id: 'test', label: 'Test', minWidth: 70, canHide: true },
+  { id: 'review', label: 'Review', minWidth: 150, canHide: true },
+  { id: 'assign', label: 'Homework Assignment', minWidth: 250, canHide: true }, 
+  { id: 'notes', label: 'Notes', minWidth: 120, canHide: true },
+  { id: 'action', label: 'Save', minWidth: 40, isSticky: false, canHide: false },
+];
+
+export default function TodaySheet({ students, masterTextbooks, onSave }: any) {
+  const [colWidths, setColWidths] = useState<Record<string, number>>(
+    Object.fromEntries(DEFAULT_COLUMNS.map(col => [col.id, col.minWidth]))
+  );
+  
+  const [visibleColumns, setVisibleColumns] = useState<string[]>(
+    DEFAULT_COLUMNS.map(c => c.id)
+  );
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+
+  const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
+
+  const onMouseDown = (e: React.MouseEvent, colId: string) => {
+    resizingCol.current = {
+      id: colId,
+      startX: e.pageX,
+      startWidth: colWidths[colId],
+    };
+    document.addEventListener('mousemove', onMouseMove);
+    document.addEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'col-resize';
+  };
+
+  const onMouseMove = (e: MouseEvent) => {
+    if (!resizingCol.current) return;
+    const { id, startX, startWidth } = resizingCol.current;
+    const newWidth = Math.max(30, startWidth + (e.pageX - startX));
+    setColWidths(prev => ({ ...prev, [id]: newWidth }));
+  };
+
+  const onMouseUp = () => {
+    resizingCol.current = null;
+    document.removeEventListener('mousemove', onMouseMove);
+    document.removeEventListener('mouseup', onMouseUp);
+    document.body.style.cursor = 'default';
+  };
+
+  const activeColumns = useMemo(() => 
+    DEFAULT_COLUMNS.filter(col => visibleColumns.includes(col.id)),
+    [visibleColumns]
+  );
+
+  const totalWidth = useMemo(() => 
+    activeColumns.reduce((acc, col) => acc + colWidths[col.id], 0),
+    [activeColumns, colWidths]
+  );
+
+  const toggleColumn = (id: string) => {
+    setVisibleColumns(prev => 
+      prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]
+    );
+  };
+
+  return (
+    <div className="p-0.5 relative">
+      <div className="absolute right-4 top-2 z-50">
+        <button 
+          onClick={() => setIsSettingsOpen(!isSettingsOpen)}
+          className={`p-1.5 rounded-md transition-all border ${isSettingsOpen ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white'}`}
+        >
+          <Settings2 size={14} />
+        </button>
+
+        <AnimatePresence>
+          {isSettingsOpen && (
+            <motion.div 
+              initial={{ opacity: 0, y: 10, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 10, scale: 0.95 }}
+              className="absolute right-0 mt-2 w-48 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl p-2 z-[60]"
+            >
+              <h4 className="text-[10px] font-black uppercase text-gray-500 mb-2 px-2 tracking-widest">Columns</h4>
+              <div className="space-y-0.5">
+                {DEFAULT_COLUMNS.filter(c => c.canHide).map(col => (
+                  <div 
+                    key={col.id} 
+                    onClick={() => toggleColumn(col.id)}
+                    className="flex items-center justify-between px-2 py-1.5 rounded-md hover:bg-white/5 cursor-pointer group"
+                  >
+                    <span className={`text-[11px] font-bold ${visibleColumns.includes(col.id) ? 'text-white' : 'text-gray-500'}`}>{col.label}</span>
+                    {visibleColumns.includes(col.id) && <Check size={12} className="text-blue-500" />}
+                  </div>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+
+      <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="bg-[#0f0f0f] border border-white/10 rounded-lg overflow-hidden shadow-2xl">
+        <div className="overflow-x-auto custom-scrollbar-h min-h-[500px]">
+          <table 
+            style={{ width: totalWidth }}
+            className="text-left border-collapse table-fixed select-none"
+          >
+            <thead>
+              <tr className="bg-white/[0.05] border-b border-white/10">
+                {activeColumns.map((col) => (
+                  <th key={col.id} 
+                    style={{ 
+                      width: colWidths[col.id], 
+                      position: col.isSticky ? 'sticky' : 'relative', 
+                      left: col.isSticky ? 0 : 'auto', 
+                      zIndex: col.isSticky ? 30 : 10 
+                    }}
+                    className={`py-1.5 px-1.5 text-[9px] font-black uppercase text-gray-500 bg-[#0f0f0f] border-r border-white/10 ${col.isSticky ? 'z-30' : ''}`}>
+                    <div className="relative flex items-center h-full overflow-hidden">
+                      <span className="truncate pr-2">{col.label}</span>
+                      <div 
+                        onMouseDown={(e) => onMouseDown(e, col.id)}
+                        className="absolute -right-1.5 top-0 bottom-0 w-3 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40" 
+                      />
+                    </div>
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-white/[0.03]">
+              {students.map((s: any) => (
+                <TodaySheetRow 
+                  key={s.id} 
+                  student={s} 
+                  colWidths={colWidths} 
+                  activeColumns={activeColumns}
+                  masterTextbooks={masterTextbooks} 
+                  onSave={onSave} 
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </motion.div>
+      {isSettingsOpen && <div className="fixed inset-0 z-40" onClick={() => setIsSettingsOpen(false)} />}
+    </div>
+  );
+}
+
+function TodaySheetRow({ student, masterTextbooks, onSave, colWidths, activeColumns }: any) {
+  const [isEditorOpen, setIsEditorOpen] = useState(false);
+  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  
+  const initialHwJson = useMemo(() => {
+    if (student.todaySession?.homework_json?.length) return student.todaySession.homework_json;
+    return (student.assigned_books || []).map((b:any) => ({ type: 'book', book_name: b, range: '', units: [] }));
+  }, [student.todaySession, student.assigned_books]);
+
+  const [formData, setFormData] = useState<any>({
+    attendance_status: student.todaySession?.attendance_status || '출석',
+    status: student.todaySession?.status || 'none',
+    special_notes: student.todaySession?.special_notes || '',
+    homework_text: student.todaySession?.homework_text || '',
+    homework_json: initialHwJson,
+    test_id: student.todaySession?.test_id || ''
+  });
+
+  const handleSave = async (extraData = {}) => {
+    if (isSaving) return;
+    const finalData = { ...formData, ...extraData };
+    setIsSaving(true);
+    const success = await onSave(student.id, finalData);
+    setIsSaving(false);
+    if (success) { setSaveStatus('success'); setTimeout(() => setSaveStatus('idle'), 2000); }
+    else { setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 2000); }
+  };
+
+  const syncHomeworkText = (newJson: HomeworkItem[]) => {
+    const manualNotes = (formData.homework_text || '').split('\n').filter((line: string) => {
+      if (!line.trim()) return false;
+      return !newJson.some(h => {
+        const title = masterTextbooks.find((m:any) => m.tabName === h.book_name)?.title || h.book_name;
+        return line.startsWith(`${title}:`);
+      });
+    });
+    const bookLines = newJson.filter(h => h.range).map(h => {
+      const title = masterTextbooks.find((m:any) => m.tabName === h.book_name)?.title || h.book_name;
+      return `${title}: ${h.range}`;
+    });
+    const combinedText = [...manualNotes, ...bookLines].join('\n');
+    setFormData({ ...formData, homework_json: newJson, homework_text: combinedText });
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      handleSave();
+    }
+  };
+
+  const handleTestSave = (answers: any) => {
+    // 답안 데이터와 함께 세션 로그 저장
+    handleSave({ test_answers: answers });
+    setIsTestModalOpen(false);
+  };
+
+  return (
+    <tr className="hover:bg-white/[0.02] transition-colors group align-middle text-[11px] h-8">
+      {activeColumns.map((col: any) => {
+        if (col.id === 'date') return (
+          <td key={col.id} className="px-1 text-center border-r border-white/5 opacity-40 font-bold tabular-nums truncate" style={{ width: colWidths.date }}>
+            {TODAY_ISO.slice(5).replace('-', '.')}
+          </td>
+        );
+        if (col.id === 'name') return (
+          <td key={col.id} className="px-2 sticky left-0 bg-[#0f0f0f] z-10 border-r border-white/10 font-bold text-white group-hover:bg-[#151515] truncate h-full align-middle" style={{ width: colWidths.name }}>
+            {student.name}
+          </td>
+        );
+        if (col.id === 'grade') return (
+          <td key={col.id} className="px-1 text-[10px] text-gray-500 text-center font-bold border-r border-white/5 truncate" style={{ width: colWidths.grade }}>
+            {student.grade}
+          </td>
+        );
+        if (col.id === 'class') return (
+          <td key={col.id} className="px-1 text-[10px] text-gray-400 text-center border-r border-white/5 truncate" style={{ width: colWidths.class }}>
+            {student.class}
+          </td>
+        );
+        if (col.id === 'attendance') return (
+          <td key={col.id} className="px-1 text-center border-r border-white/5" style={{ width: colWidths.attendance }}>
+            <button onClick={() => setFormData({ ...formData, attendance_status: formData.attendance_status === '출석' ? '결석' : formData.attendance_status === '결석' ? '지각' : '출석' })}
+              className={`w-full py-0.5 rounded-[2px] text-[8px] font-black border transition-all ${formData.attendance_status === '출석' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' : formData.attendance_status === '결석' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-amber-500/10 text-amber-500 border-amber-500/20'}`}>{formData.attendance_status}</button>
+          </td>
+        );
+        if (col.id === 'test') return (
+          <td key={col.id} className="px-1 text-center border-r border-white/5" style={{ width: colWidths.test }}>
+            <div className="flex items-center gap-1 h-full py-0.5">
+              <input type="text" value={formData.test_id || ''} onChange={(e) => setFormData({ ...formData, test_id: e.target.value })} onKeyDown={handleKeyDown} placeholder="ID"
+                className="flex-1 bg-white/[0.03] border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-center text-white focus:outline-none focus:border-blue-500 transition-all font-bold h-6 w-full" />
+              <button onClick={() => setIsTestModalOpen(true)} disabled={!formData.test_id}
+                className="w-5 h-6 shrink-0 rounded-[2px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed">
+                <ClipboardList size={10} />
+              </button>
+            </div>
+            {isTestModalOpen && (
+              <TestAnswerModal 
+                testId={formData.test_id} 
+                studentName={student.name} 
+                onClose={() => setIsTestModalOpen(false)} 
+                onSave={handleTestSave} 
+              />
+            )}
+          </td>
+        );
+        if (col.id === 'review') return (
+          <td key={col.id} className="px-2 border-r border-white/5" style={{ width: colWidths.review }}>
+            <div className="flex items-center justify-between gap-1 overflow-hidden h-full">
+              <div className="flex-1 truncate text-[9px] text-gray-400 font-medium">{student.lastSession?.homework_text || <span className="text-gray-600 italic">None</span>}</div>
+              <button onClick={() => { const seq = ['none', 'perfect', 'warning', 'late']; setFormData({ ...formData, status: seq[(seq.indexOf(formData.status) + 1) % seq.length] }); }}
+                className={`w-5 h-5 rounded-[2px] flex items-center justify-center text-[9px] font-black shrink-0 ${formData.status === 'perfect' ? 'bg-emerald-500 text-white' : formData.status === 'warning' ? 'bg-amber-500 text-white' : formData.status === 'late' ? 'bg-red-500 text-white' : 'bg-white/5 text-gray-600'}`}>{formData.status === 'none' ? '-' : formData.status[0].toUpperCase()}</button>
+            </div>
+          </td>
+        );
+        if (col.id === 'assign') return (
+          <td key={col.id} className="px-1 border-r border-white/5" style={{ width: colWidths.assign }}>
+            <div className="flex items-center gap-1 h-full py-0.5">
+              <input type="text" value={formData.homework_text} onChange={(e) => setFormData({ ...formData, homework_text: e.target.value })} onKeyDown={handleKeyDown}
+                className="flex-1 bg-white/[0.03] border border-white/10 rounded-[2px] px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-blue-500 transition-all font-medium h-6 w-full" />
+              <button onClick={() => setIsEditorOpen(true)} className="w-6 h-6 shrink-0 rounded-[2px] bg-blue-600/10 text-blue-500 border border-blue-500/20 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center"><Wand2 size={10} /></button>
+            </div>
+            <AnimatePresence>{isEditorOpen && (<HomeworkEditor homeworkJson={formData.homework_json} masterTextbooks={masterTextbooks} onUpdate={syncHomeworkText} onClose={() => setIsEditorOpen(false)} />)}</AnimatePresence>
+          </td>
+        );
+        if (col.id === 'notes') return (
+          <td key={col.id} className="px-1 border-r border-white/5" style={{ width: colWidths.notes }}>
+            <input type="text" value={formData.special_notes || ''} onChange={(e) => setFormData({ ...formData, special_notes: e.target.value })} 
+              className="w-full bg-transparent border-b border-transparent focus:border-blue-500/50 px-1 py-0 text-[10px] text-gray-400 outline-none truncate h-6" />
+          </td>
+        );
+        if (col.id === 'action') return (
+          <td key={col.id} className="px-1 sticky right-0 bg-[#0f0f0f] z-10 border-l border-white/10 text-center" style={{ width: colWidths.action }}>
+            <button onClick={() => handleSave()} disabled={isSaving} className={`w-6 h-6 rounded-[2px] transition-all flex items-center justify-center mx-auto ${saveStatus === 'success' ? 'bg-emerald-500 text-white' : saveStatus === 'error' ? 'bg-red-500 text-white' : 'bg-blue-600 text-white hover:bg-blue-500'}`}>
+              {isSaving ? <Loader2 className="animate-spin" size={10} /> : saveStatus === 'success' ? <CheckCircle size={10} /> : <Send size={10} />}
+            </button>
+          </td>
+        );
+        return null;
+      })}
+    </tr>
+  );
+}
