@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 // 분리된 컴포넌트 임포트
 import Sidebar from '@/components/dashboard/Sidebar';
 import Overview from '@/components/dashboard/Overview';
-import TodaySheet from '@/components/dashboard/TodaySheet';
+import TodaySheet from '@/components/dashboard/TodaySheet'; // 나중에 DailySheet로 개칭 예정
 import ProgressSequencer from '@/components/dashboard/ProgressSequencer';
 import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
 
@@ -30,13 +30,14 @@ export default function DashboardPage() {
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
 
-  const { todayISO, todayKey, dateString } = useMemo(() => {
-    const now = new Date();
-    const iso = now.toISOString().split('T')[0];
-    const key = DAYS_KOR[now.getDay()];
-    const str = now.toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'long' });
-    return { todayISO: iso, todayKey: key, dateString: str };
-  }, []);
+  // --- 💡 핵심 변경: 선택된 날짜 관리 ---
+  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+
+  // 선택된 날짜에 따른 요일 정보 계산
+  const selectedDayKey = useMemo(() => {
+    const d = new Date(selectedDate);
+    return DAYS_KOR[d.getDay()];
+  }, [selectedDate]);
 
   const refreshTextbooks = useCallback(async () => {
     setIsRefreshingBooks(true);
@@ -53,7 +54,9 @@ export default function DashboardPage() {
       if (sErr) throw sErr;
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
-        const { data: logsData } = await supabase.from('ams_session_logs').select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(10);
+        // 선택된 날짜를 기준으로 로그를 가져옴 (오늘뿐만 아니라 과거 날짜 기록도 포함)
+        const { data: logsData } = await supabase.from('ams_session_logs').select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(20);
+        
         const logs: SessionLog[] = (logsData || []).map(l => ({
           id: l.id, date: l.session_date, status: (l.status || 'none') as StudentStatus,
           attendance_status: l.attendance_status || '출석', special_notes: l.special_notes || '',
@@ -62,14 +65,19 @@ export default function DashboardPage() {
           test_id: l.test_id || ''
         }));
 
-        const history = logs.slice(0, 5).map(l => l.status);
+        const history = logs.filter(l => l.date < selectedDate).slice(0, 5).map(l => l.status);
         while (history.length < 5) history.push('none');
+
+        // selectedDate에 해당하는 세션 찾기
+        const todaySession = logs.find(l => l.date === selectedDate);
+        // selectedDate보다 이전의 가장 최근 세션 찾기
+        const lastSession = logs.filter(l => l.date < selectedDate)[0];
 
         return {
           id: s.id, academy_id: s.academy_id, name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', class: s.class_name || '일반반',
           class_days: s.class_days || [], assigned_books: s.assigned_books || [],
           history, isRedLight: history.includes('warning') || history.includes('late'),
-          lastSession: logs.filter(l => l.date < todayISO)[0], todaySession: logs.find(l => l.date === todayISO),
+          lastSession, todaySession,
           allLogs: logs
         };
       }));
@@ -77,7 +85,7 @@ export default function DashboardPage() {
       setStudents(enriched);
       await refreshTextbooks();
     } catch (error) { console.error('Data load error:', error); } finally { setIsLoading(false); }
-  }, [todayISO, refreshTextbooks]);
+  }, [selectedDate, refreshTextbooks]);
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -89,7 +97,7 @@ export default function DashboardPage() {
     try {
       if (!sessionId) {
         const { data, error } = await supabase.from('ams_session_logs').insert([{
-          student_id: studentId, academy_id: student.academy_id, session_date: todayISO, ...sessionData, status: sessionData.status || 'none'
+          student_id: studentId, academy_id: student.academy_id, session_date: selectedDate, ...sessionData, status: sessionData.status || 'none'
         }]).select();
         if (error) return false;
         if (data) {
@@ -128,7 +136,7 @@ export default function DashboardPage() {
     try {
       const inserts = studentIds.map(id => {
         const s = students.find(st => st.id === id);
-        return { student_id: id, academy_id: s?.academy_id, session_date: todayISO, attendance_status: '보강', status: 'none' };
+        return { student_id: id, academy_id: s?.academy_id, session_date: selectedDate, attendance_status: '보강', status: 'none' };
       });
       const { error } = await supabase.from('ams_session_logs').insert(inserts);
       if (!error) await fetchAllData();
@@ -151,7 +159,7 @@ export default function DashboardPage() {
     } catch (e) { console.error(e); }
   };
 
-  const todayStudents = useMemo(() => students.filter(s => s.class_days.includes(todayKey) || !!s.todaySession).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, todayKey]);
+  const todayStudents = useMemo(() => students.filter(s => s.class_days.includes(selectedDayKey) || !!s.todaySession).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey]);
   const filteredAllStudents = useMemo(() => students.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, searchQuery]);
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
@@ -169,12 +177,20 @@ export default function DashboardPage() {
               <Overview 
                 todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} 
                 selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} 
-                todayKey={todayKey} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode}
+                todayKey={selectedDayKey} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode}
                 onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
               />
             )}
-            {viewMode === 'todayTable' && <TodaySheet students={todayStudents} masterTextbooks={availableTextbooks} onSave={saveTodaySession} />}
+            {viewMode === 'todayTable' && (
+              <TodaySheet 
+                students={todayStudents} 
+                selectedDate={selectedDate} // 날짜 전달
+                onDateChange={setSelectedDate} // 날짜 변경 함수 전달
+                masterTextbooks={availableTextbooks} 
+                onSave={saveTodaySession} 
+              />
+            )}
             {viewMode === 'progress' && <ProgressSequencer students={students} masterTextbooks={availableTextbooks} />}
           </div>
         )}
