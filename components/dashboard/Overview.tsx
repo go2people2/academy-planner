@@ -209,15 +209,22 @@ function StudentRowItem({
                   <div key={day} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md ${isToday ? 'bg-white/10 ring-1 ring-white/10' : ''}`}>
                     <span className={`text-[9px] mr-0.5 ${isToday ? 'text-emerald-400 font-black' : ''}`}>{day}</span>
                     <div className="flex gap-0.5">
-                      {activeHours.map(h => (
-                        <div 
-                          key={h} 
-                          className={`w-1 h-2.5 rounded-sm ${h < 19 ? 'bg-blue-500' : 'bg-orange-400'}`} 
-                        />
-                      ))}
-                      {activeHours.length === 0 && (
-                        <div className="w-1 h-2.5 rounded-sm bg-white/5" />
-                      )}
+                      {activeHours.map(h => {
+                        const isWhite = h >= 100;
+                        const actualHour = isWhite ? h - 100 : h;
+                        
+                        return (
+                          <div 
+                            key={h} 
+                            className={`w-1 h-2.5 rounded-sm transition-colors ${
+                              isWhite 
+                                ? 'bg-white border border-gray-400/20' 
+                                : (actualHour < 19 ? 'bg-blue-500' : 'bg-orange-400')
+                            }`} 
+                            title={`${actualHour}:00`}
+                          />
+                        );
+                      })}
                     </div>
                   </div>
                 );

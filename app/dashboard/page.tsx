@@ -9,7 +9,7 @@ import { supabase } from '@/lib/supabase';
 // 분리된 컴포넌트 임포트
 import Sidebar from '@/components/dashboard/Sidebar';
 import Overview from '@/components/dashboard/Overview';
-import TodaySheet from '@/components/dashboard/TodaySheet'; // 나중에 DailySheet로 개칭 예정
+import TodaySheet from '@/components/dashboard/TodaySheet';
 import ProgressSequencer from '@/components/dashboard/ProgressSequencer';
 import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
 
@@ -24,17 +24,14 @@ export default function DashboardPage() {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
-  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
 
-  // --- 💡 핵심 변경: 선택된 날짜 관리 ---
   const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
 
-  // 선택된 날짜에 따른 요일 정보 계산
   const selectedDayKey = useMemo(() => {
     const d = new Date(selectedDate);
     return DAYS_KOR[d.getDay()];
@@ -51,21 +48,11 @@ export default function DashboardPage() {
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     try {
-      // 1. 선생님 목록 가져오기 (테이블이 없을 경우 대비)
-      const { data: teachersData, error: tErr } = await supabase.from('ams_teachers').select('*');
-      if (tErr) {
-        console.warn('ams_teachers table might not exist yet:', tErr.message);
-      } else if (teachersData) {
-        setTeachers(teachersData);
-      }
-
       const { data: studentsData, error: sErr } = await supabase.from('ams_students').select('*').eq('is_deleted', false);
       if (sErr) throw sErr;
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
-        // 선택된 날짜를 기준으로 로그를 가져옴 (오늘뿐만 아니라 과거 날짜 기록도 포함)
         const { data: logsData } = await supabase.from('ams_session_logs').select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(20);
-        
         const logs: SessionLog[] = (logsData || []).map(l => ({
           id: l.id, date: l.session_date, status: (l.status || 'none') as StudentStatus,
           attendance_status: l.attendance_status || '출석', special_notes: l.special_notes || '',
@@ -73,28 +60,16 @@ export default function DashboardPage() {
           homework_json: l.homework_json || [],
           test_id: l.test_id || ''
         }));
-
         const history = logs.filter(l => l.date < selectedDate).slice(0, 5).map(l => l.status);
         while (history.length < 5) history.push('none');
-
-        // selectedDate에 해당하는 세션 찾기
-        const todaySession = logs.find(l => l.date === selectedDate);
-        // selectedDate보다 이전의 가장 최근 세션 찾기
-        const lastSession = logs.filter(l => l.date < selectedDate)[0];
-
         return {
-          id: s.id, academy_id: s.academy_id, 
-          teacher_id: s.teacher_id, // 💡 담당 선생님 ID 추가
-          name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', class: s.class_name || '일반반',
-          class_days: s.class_days || [], 
-          day_schedules: s.day_schedules || {}, // 💡 DB에서 가져온 시간 데이터 추가
-          assigned_books: s.assigned_books || [],
+          id: s.id, academy_id: s.academy_id, name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', class: s.class_name || '일반반',
+          class_days: s.class_days || [], assigned_books: s.assigned_books || [], day_schedules: s.day_schedules || {},
           history, isRedLight: history.includes('warning') || history.includes('late'),
-          lastSession, todaySession,
+          lastSession: logs.filter(l => l.date < selectedDate)[0], todaySession: logs.find(l => l.date === selectedDate),
           allLogs: logs
         };
       }));
-
       setStudents(enriched);
       await refreshTextbooks();
     } catch (error) { console.error('Data load error:', error); } finally { setIsLoading(false); }
@@ -105,37 +80,21 @@ export default function DashboardPage() {
   const saveTodaySession = async (studentId: string, sessionData: Partial<SessionLog>) => {
     const student = students.find(s => s.id === studentId);
     if (!student) return false;
-    
-    // 컴포넌트에서 전달된 구체적인 날짜가 있으면 사용, 없으면 전체 선택 날짜 사용
-    const targetDate = (sessionData as any).session_date || selectedDate;
-    
-    // 해당 날짜의 세션이 이미 존재하는지 전체 로그에서 확인
-    const existingSession = student.allLogs?.find(l => l.date === targetDate);
-    let sessionId = existingSession?.id;
-
+    let sessionId = student.todaySession?.id;
     try {
       if (!sessionId) {
         const { data, error } = await supabase.from('ams_session_logs').insert([{
-          student_id: studentId, academy_id: student.academy_id, session_date: targetDate, ...sessionData, status: sessionData.status || 'none'
+          student_id: studentId, academy_id: student.academy_id, session_date: selectedDate, ...sessionData, status: sessionData.status || 'none'
         }]).select();
         if (error) return false;
         if (data) {
-          // 데이터 갱신을 위해 전체 데이터를 다시 불러오거나 로컬 상태를 영리하게 업데이트
-          setStudents(prev => prev.map(s => s.id === studentId ? { 
-            ...s, 
-            todaySession: targetDate === selectedDate ? (data[0] as SessionLog) : s.todaySession,
-            allLogs: [data[0] as SessionLog, ...(s.allLogs || []).filter(l => l.id !== data[0].id)]
-          } : s));
+          setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: data[0] as SessionLog } : s));
           return true;
         }
       } else {
         const { error } = await supabase.from('ams_session_logs').update(sessionData).eq('id', sessionId);
         if (error) return false;
-        setStudents(prev => prev.map(s => s.id === studentId ? { 
-          ...s, 
-          todaySession: targetDate === selectedDate ? { ...s.todaySession!, ...sessionData } : s.todaySession,
-          allLogs: (s.allLogs || []).map(l => l.id === sessionId ? { ...l, ...sessionData } : l)
-        } : s));
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: { ...s.todaySession!, ...sessionData } } : s));
         return true;
       }
     } catch (e) { return false; }
@@ -144,26 +103,14 @@ export default function DashboardPage() {
 
   const handleAddNewStudent = async (data: any) => {
     try {
-      // students[0]이 없을 경우를 대비해 환경변수나 기본값 사용
-      const academyId = students[0]?.academy_id || process.env.NEXT_PUBLIC_ACADEMY_SLUG || 'hokma-math';
-      
       const { error } = await supabase.from('ams_students').insert([{
-        academy_id: academyId,
-        name: data.name, 
-        school: data.school, 
-        grade: data.grade, 
-        class_name: data.class_name, 
-        phone: data.phone, 
-        class_days: data.class_days, 
-        day_schedules: {}, // 💡 신규 학생 등록 시 빈 시간표 객체 추가
-        is_deleted: false
+        academy_id: students[0]?.academy_id || 'hokma-math',
+        name: data.name, school: data.school, grade: data.grade, class_name: data.class_name, phone: data.phone, 
+        class_days: data.class_days, day_schedules: data.day_schedules, assigned_books: data.assigned_books, is_deleted: false
       }]);
-      if (error) {
-        console.error('Student Registration Error:', error);
-        throw error;
-      }
+      if (error) throw error;
       await fetchAllData();
-    } catch (e) { console.error('handleAddNewStudent Error:', e); }
+    } catch (e) { console.error('Add student error:', e); }
   };
 
   const addStudentToToday = async (studentId: string) => {
@@ -196,12 +143,8 @@ export default function DashboardPage() {
   const updateStudentInfo = async (studentId: string, field: string, value: any) => {
     try {
       const { error } = await supabase.from('ams_students').update({ [field]: value }).eq('id', studentId);
-      if (error) {
-        console.error('Update Error Detail:', error);
-        return;
-      }
-      await fetchAllData();
-    } catch (e) { console.error('Update Catch Error:', e); }
+      if (!error) await fetchAllData();
+    } catch (e) { console.error(e); }
   };
 
   const todayStudents = useMemo(() => students.filter(s => s.class_days.includes(selectedDayKey) || !!s.todaySession).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey]);
@@ -225,17 +168,10 @@ export default function DashboardPage() {
                 todayKey={selectedDayKey} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode}
                 onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
+                masterTextbooks={availableTextbooks}
               />
             )}
-            {viewMode === 'todayTable' && (
-              <TodaySheet 
-                students={todayStudents} 
-                selectedDate={selectedDate} // 날짜 전달
-                onDateChange={setSelectedDate} // 날짜 변경 함수 전달
-                masterTextbooks={availableTextbooks} 
-                onSave={saveTodaySession} 
-              />
-            )}
+            {viewMode === 'todayTable' && <TodaySheet students={todayStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} masterTextbooks={availableTextbooks} onSave={saveTodaySession} />}
             {viewMode === 'progress' && <ProgressSequencer students={students} masterTextbooks={availableTextbooks} />}
           </div>
         )}

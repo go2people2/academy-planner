@@ -2,7 +2,7 @@
  * API 키 없이 공개된 구글 시트 데이터를 가져오는 유틸리티
  */
 
-const SHEET_ID = process.env.GOOGLE_SHEET_ID_TEXTBOOK_MASTER;
+const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID_TEXTBOOK_MASTER;
 
 export interface TextbookMaster {
   title: string;
@@ -14,36 +14,51 @@ export interface TextbookMaster {
 
 /**
  * 구글 시트를 CSV 형식으로 다운로드하여 파싱합니다.
- * (API 키가 필요 없는 가장 간편한 방식)
  */
 async function fetchSheetAsCsv(tabName: string) {
   try {
-    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeShadowURIComponent(tabName)}`;
-    const response = await fetch(url);
+    if (!SHEET_ID) {
+      console.error("❌ [GoogleSheets] SHEET_ID is missing! Check your .env.local");
+      return [];
+    }
+
+    const url = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&sheet=${encodeURIComponent(tabName)}`;
+    console.log(`🌐 [GoogleSheets] Fetching: ${tabName} ...`);
+    
+    const response = await fetch(url, { cache: 'no-store' });
     const text = await response.text();
     
-    // CSV 파싱 (단순 쉼표 분리, 따옴표 처리)
-    return text.split('\n').map(row => 
-      row.split('","').map(cell => cell.replace(/"/g, ''))
-    );
+    if (!response.ok) {
+      console.error(`❌ [GoogleSheets] HTTP Error: ${response.status}`);
+      return [];
+    }
+
+    if (text.includes('<!DOCTYPE html>') || text.includes('google-signin')) {
+      console.error(`❌ [GoogleSheets] Permission Denied or Invalid Sheet ID. Make sure it's public.`);
+      return [];
+    }
+
+    // 가장 단순하고 확실한 줄바꿈 분리
+    const rows = text.split(/\r?\n/).map(row => {
+      // 따옴표로 감싸진 셀 처리
+      return row.split('","').map(cell => cell.replace(/^"|"$/g, ''));
+    });
+
+    console.log(`✅ [GoogleSheets] Successfully fetched ${rows.length} rows from ${tabName}`);
+    return rows;
   } catch (e) {
-    console.error(`Error fetching tab ${tabName}:`, e);
+    console.error(`❌ [GoogleSheets] Critical Error:`, e);
     return [];
   }
 }
 
-// 부모 컴포넌트 호환용 인코딩 함수
-function encodeShadowURIComponent(str: string) {
-  return encodeURIComponent(str);
-}
-
 export async function fetchTextbookMasterList(): Promise<TextbookMaster[]> {
-  if (!SHEET_ID) return [];
+  const rows = await fetchSheetAsCsv('master');
+  if (!rows || rows.length <= 1) {
+    console.warn("⚠️ [GoogleSheets] No data found in 'master' tab.");
+    return [];
+  }
 
-  const rows = await fetchSheetAsCsv('Master');
-  if (rows.length <= 1) return [];
-
-  // 첫 번째 행(헤더) 제외
   return rows.slice(1).map((row) => ({
     title: row[0] || '',
     grade: row[1] || '',
@@ -54,7 +69,6 @@ export async function fetchTextbookMasterList(): Promise<TextbookMaster[]> {
 }
 
 export async function fetchTextbookUnits(tabName: string) {
-  if (!SHEET_ID) return [];
   const rows = await fetchSheetAsCsv(tabName);
-  return rows.slice(1); // 헤더 제외 데이터만
+  return rows.slice(1);
 }

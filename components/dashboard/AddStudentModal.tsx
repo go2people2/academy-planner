@@ -1,171 +1,228 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, UserPlus, GraduationCap, Phone, Book, Save, Loader2 } from 'lucide-react';
+import { X, UserPlus, Phone, Calendar, BookOpen, Save, Loader2, Plus, Trash2, Search, Check } from 'lucide-react';
+import { TextbookOption } from '@/types/dashboard';
 
 interface AddStudentModalProps {
   onClose: () => void;
   onSave: (studentData: any) => Promise<void>;
+  masterTextbooks: TextbookOption[];
 }
 
-export default function AddStudentModal({ onClose, onSave }: AddStudentModalProps) {
+const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
+
+export default function AddStudentModal({ onClose, onSave, masterTextbooks }: AddStudentModalProps) {
   const [isSaving, setIsSaving] = useState(false);
+  const [bookSearch, setBookSearch] = useState('');
+  
   const [formData, setFormData] = useState({
     name: '',
     school: '',
-    grade: '고1',
+    grade: '중1',
     class_name: '일반반',
-    phone: '', // 비밀번호로 사용될 전화번호
-    class_days: [] as string[]
+    phone: '',
+    class_days: [] as string[],
+    day_schedules: {} as { [key: string]: number[] },
+    assigned_books: [] as string[]
   });
 
-  const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
-
-  const toggleDay = (day: string) => {
-    setFormData(prev => ({
-      ...prev,
-      class_days: prev.class_days.includes(day) 
-        ? prev.class_days.filter(d => d !== day) 
-        : [...prev.class_days, day]
-    }));
-  };
+  // 검색 필터링된 교재 목록
+  const filteredBooks = useMemo(() => {
+    return masterTextbooks.filter(b => 
+      b.title.toLowerCase().includes(bookSearch.toLowerCase()) || 
+      b.grade.toLowerCase().includes(bookSearch.toLowerCase())
+    );
+  }, [masterTextbooks, bookSearch]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
     setIsSaving(true);
-    
-    // 전화번호 뒷자리 4개를 초기 비밀번호로 설정하는 로직 포함 가능
     await onSave(formData);
     setIsSaving(false);
     onClose();
   };
 
+  const handleTimeToggle = (day: string, hour: number) => {
+    const currentHours = formData.day_schedules[day] || [];
+    const isNormalActive = currentHours.includes(hour);
+    const isWhiteActive = currentHours.includes(hour + 100);
+    
+    let newHours;
+    if (!isNormalActive && !isWhiteActive) {
+      newHours = [...currentHours, hour];
+    } else if (isNormalActive) {
+      newHours = [...currentHours.filter(h => h !== hour), hour + 100];
+    } else {
+      newHours = currentHours.filter(h => h !== (hour + 100));
+    }
+    
+    const sortedHours = newHours.sort((a, b) => (a % 100) - (b % 100));
+    const newSchedules = { ...formData.day_schedules, [day]: sortedHours };
+    
+    let newDays = [...formData.class_days];
+    if (sortedHours.length > 0 && !newDays.includes(day)) {
+      newDays.push(day);
+    } else if (sortedHours.length === 0 && newDays.includes(day)) {
+      newDays = newDays.filter(d => d !== day);
+    }
+
+    setFormData({ ...formData, day_schedules: newSchedules, class_days: newDays });
+  };
+
+  const handleDayToggle = (day: string) => {
+    const isSelected = formData.class_days.includes(day);
+    if (isSelected) {
+      const newDays = formData.class_days.filter(d => d !== day);
+      const newSchedules = { ...formData.day_schedules };
+      delete newSchedules[day];
+      setFormData({ ...formData, class_days: newDays, day_schedules: newSchedules });
+    } else {
+      const newDays = [...formData.class_days, day];
+      const newSchedules = { ...formData.day_schedules, [day]: [16, 17, 18] };
+      setFormData({ ...formData, class_days: newDays, day_schedules: newSchedules });
+    }
+  };
+
+  const toggleBookSelection = (tabName: string) => {
+    setFormData(prev => ({
+      ...prev,
+      assigned_books: prev.assigned_books.includes(tabName)
+        ? prev.assigned_books.filter(b => b !== tabName)
+        : [...prev.assigned_books, tabName]
+    }));
+  };
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-[#121212] border border-white/10 rounded-3xl w-full max-w-lg shadow-2xl overflow-hidden"
-      >
-        <div className="p-6 border-b border-white/5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg shadow-blue-600/20">
-              <UserPlus className="text-white" size={20} />
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
+      <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+        className="bg-[#0f0f0f] border border-white/10 rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        
+        <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20">
+              <UserPlus className="text-white" size={24} />
             </div>
             <div>
-              <h2 className="text-lg font-black text-white uppercase tracking-tight">Add New Student</h2>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-0.5">학생 등록 및 자동 계정 생성</p>
+              <h2 className="text-xl font-black text-white uppercase tracking-tight">Register New Student</h2>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">학생 정보 및 교재 일괄 선택</p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-500 hover:text-white">
-            <X size={20} />
-          </button>
+          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors text-gray-500 hover:text-white"><X size={24} /></button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-6">
-          {/* 이름 & 학교 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Student Name</label>
-              <input 
-                required
-                type="text" 
-                placeholder="이름 입력"
-                value={formData.name}
-                onChange={(e) => setFormData({...formData, name: e.target.value})}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
-              />
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar-v p-8">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            
+            {/* 1. 기본 정보 */}
+            <div className="space-y-6">
+              <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1"><UserPlus size={14} /> Basic Info</h3>
+              <div className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 shadow-inner">
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Name</label>
+                  <input required type="text" placeholder="학생 이름" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1">School</label>
+                  <input type="text" placeholder="학교명" value={formData.school} onChange={(e) => setFormData({...formData, school: e.target.value})}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Grade</label>
+                    <select value={formData.grade} onChange={(e) => setFormData({...formData, grade: e.target.value})}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none">
+                      {['중1','중2','중3','고1','고2','고3'].map(g => <option key={g} value={g} className="bg-[#121212]">{g}</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Class / Teacher</label>
+                    <input type="text" placeholder="반" value={formData.class_name} onChange={(e) => setFormData({...formData, class_name: e.target.value})}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
+                  </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Phone (Password)</label>
+                  <input required type="tel" placeholder="010-0000-0000" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">School</label>
-              <input 
-                type="text" 
-                placeholder="학교명"
-                value={formData.school}
-                onChange={(e) => setFormData({...formData, school: e.target.value})}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
-              />
-            </div>
-          </div>
 
-          {/* 학년 & 반 */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Grade</label>
-              <select 
-                value={formData.grade}
-                onChange={(e) => setFormData({...formData, grade: e.target.value})}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
-              >
-                <option value="중1" className="bg-[#121212]">중1</option>
-                <option value="중2" className="bg-[#121212]">중2</option>
-                <option value="중3" className="bg-[#121212]">중3</option>
-                <option value="고1" className="bg-[#121212]">고1</option>
-                <option value="고2" className="bg-[#121212]">고2</option>
-                <option value="고3" className="bg-[#121212]">고3</option>
-              </select>
+            {/* 2. 교재 다중 선택 (업그레이드된 부분) */}
+            <div className="space-y-6 flex flex-col h-full">
+              <h3 className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] flex items-center justify-between px-1">
+                <span className="flex items-center gap-2"><BookOpen size={14} /> Textbooks</span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">{formData.assigned_books.length} Selected</span>
+              </h3>
+              <div className="bg-white/5 border border-white/5 rounded-2xl flex flex-col overflow-hidden h-[400px] shadow-inner">
+                <div className="p-3 border-b border-white/5 bg-black/20 flex items-center gap-2">
+                  <Search size={14} className="text-gray-500" />
+                  <input type="text" placeholder="Search textbooks..." value={bookSearch} onChange={(e) => setBookSearch(e.target.value)}
+                    className="bg-transparent border-none text-xs text-white outline-none w-full" />
+                </div>
+                <div className="flex-1 overflow-y-auto p-2 custom-scrollbar-v space-y-1">
+                  {filteredBooks.map((book) => {
+                    const isSelected = formData.assigned_books.includes(book.tabName);
+                    return (
+                      <div key={book.tabName} onClick={() => toggleBookSelection(book.tabName)}
+                        className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border ${isSelected ? 'bg-emerald-500/10 border-emerald-500/30' : 'hover:bg-white/5 border-transparent'}`}>
+                        <div>
+                          <h4 className={`text-[11px] font-bold ${isSelected ? 'text-emerald-400' : 'text-gray-300'}`}>{book.title}</h4>
+                          <p className="text-[9px] text-gray-500">{book.grade} · {book.course}</p>
+                        </div>
+                        {isSelected && <div className="bg-emerald-500 text-black p-0.5 rounded-full"><Check size={10} strokeWidth={4} /></div>}
+                      </div>
+                    );
+                  })}
+                  {filteredBooks.length === 0 && <p className="text-center text-[10px] text-gray-600 py-10 italic">검색 결과가 없습니다.</p>}
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Class</label>
-              <input 
-                type="text" 
-                placeholder="반 이름"
-                value={formData.class_name}
-                onChange={(e) => setFormData({...formData, class_name: e.target.value})}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
-              />
-            </div>
-          </div>
 
-          {/* 연락처 (비밀번호로 활용) */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Phone Number (Initial Password)</label>
-            <div className="relative group">
-              <Phone className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-              <input 
-                required
-                type="tel" 
-                placeholder="010-0000-0000"
-                value={formData.phone}
-                onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                className="w-full bg-white/5 border border-white/10 rounded-xl py-3 pl-12 pr-4 text-white text-sm focus:outline-none focus:border-blue-500 transition-all"
-              />
+            {/* 3. 주간 스케줄 */}
+            <div className="space-y-6">
+              <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1"><Calendar size={14} /> Schedule</h3>
+              <div className="bg-white/5 border border-white/5 rounded-2xl p-4 shadow-inner">
+                <div className="grid grid-cols-7 gap-1">
+                  {DAYS.map(day => {
+                    const activeHours = formData.day_schedules[day] || [];
+                    const isDaySelected = formData.class_days.includes(day);
+                    return (
+                      <div key={day} className="flex flex-col items-center gap-3">
+                        <button type="button" onClick={() => handleDayToggle(day)}
+                          className={`text-[9px] font-black w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-500'}`}>{day}</button>
+                        <div className="flex flex-col gap-1 w-full">
+                          {[16, 17, 18, 19, 20, 21].map((h, idx) => {
+                            const isNormal = activeHours.includes(h);
+                            const isWhite = activeHours.includes(h + 100);
+                            const isFirstHalf = idx < 3;
+                            return (
+                              <button key={h} type="button" onClick={() => handleTimeToggle(day, h)}
+                                className={`w-full h-3 rounded-sm transition-all ${isNormal ? (isFirstHalf ? 'bg-blue-500' : 'bg-orange-400') : isWhite ? 'bg-white' : 'bg-white/[0.03]'}`} />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <p className="text-[9px] text-gray-600 font-bold px-1">뒷자리 4자리가 학생의 초기 비밀번호가 됩니다.</p>
-          </div>
 
-          {/* 수업 요일 */}
-          <div className="space-y-2">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Class Days</label>
-            <div className="flex justify-between gap-2">
-              {DAYS.map(day => (
-                <button
-                  key={day}
-                  type="button"
-                  onClick={() => toggleDay(day)}
-                  className={`flex-1 py-2 rounded-lg text-xs font-black transition-all border ${
-                    formData.class_days.includes(day) 
-                      ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' 
-                      : 'bg-white/5 border-white/5 text-gray-500 hover:border-white/20'
-                  }`}
-                >
-                  {day}
-                </button>
-              ))}
-            </div>
           </div>
-
-          {/* 저장 버튼 */}
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="w-full bg-white text-black font-black py-4 rounded-2xl flex items-center justify-center gap-3 transition-all active:scale-[0.98] disabled:opacity-50 mt-4 shadow-xl hover:bg-gray-100"
-          >
-            {isSaving ? <Loader2 className="animate-spin" size={20} /> : <><Save size={20} /> Register & Create Account</>}
-          </button>
         </form>
+
+        <div className="p-6 border-t border-white/5 bg-white/[0.01] flex justify-end items-center gap-4 px-10">
+          <button type="button" onClick={onClose} className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase text-gray-500 hover:text-white transition-all">Cancel</button>
+          <button onClick={handleSubmit} disabled={isSaving || !formData.name}
+            className="flex items-center gap-3 px-10 py-4 rounded-2xl bg-blue-600 text-white text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/20 hover:bg-blue-500 transition-all disabled:opacity-50">
+            {isSaving ? <Loader2 className="animate-spin" size={20} /> : <><Save size={20} /> Complete Registration</>}
+          </button>
+        </div>
       </motion.div>
     </div>
   );
