@@ -43,6 +43,17 @@ export default function Overview({
     setIsBatchMode(false);
   };
 
+  const getDayOfWeek = (dateStr: string) => {
+    try {
+      const days = ['일', '월', '화', '수', '목', '금', '토'];
+      const date = new Date(dateStr);
+      return days[date.getDay()];
+    } catch {
+      return '월';
+    }
+  };
+  const currentDayName = getDayOfWeek(todayKey);
+
   return (
     <div className="p-2 space-y-6 relative">
       {/* 1. 상단: 오늘의 명단 */}
@@ -68,6 +79,7 @@ export default function Overview({
               student={s} 
               isSelected={selectedStudentId === s.id && !isBatchMode} 
               isBatchMode={isBatchMode}
+              currentDay={currentDayName}
               onClick={() => isBatchMode ? onRemoveFromToday(s.id) : onSelectStudent(s.id)} 
             />
           ))}
@@ -82,7 +94,7 @@ export default function Overview({
         <div className="flex items-center justify-between px-1">
           <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
             <Users size={14} /> 
-            All Students
+            Rest of Students
           </h3>
 
           <div className="flex gap-2">
@@ -127,11 +139,11 @@ export default function Overview({
           )}
         </AnimatePresence>
 
-        <div className="grid grid-cols-4 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12 2xl:grid-cols-16 gap-1.5">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
           {otherStudents.map((s) => {
             const isChecked = selectedForBatch.includes(s.id);
             return (
-              <CompactStudentItem 
+              <StudentRowItem 
                 key={s.id} 
                 student={s} 
                 isSelected={selectedStudentId === s.id && !isBatchMode} 
@@ -157,32 +169,77 @@ export default function Overview({
   );
 }
 
-function StudentRowItem({ student, isSelected, isBatchMode, onClick }: { student: Student, isSelected: boolean, isBatchMode: boolean, onClick: () => void }) {
-  const daysFormatted = student.class_days?.join(',') || '';
-  
+function StudentRowItem({ 
+  student, isSelected, isChecked, isBatchMode, onClick, currentDay 
+}: { 
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, currentDay?: string 
+}) {
+  const isSelectionMode = isBatchMode && isChecked !== undefined;
+
   return (
     <motion.div 
       layout 
       onClick={onClick} 
       className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all duration-300 group ${
-        isSelected ? 'bg-blue-600 border-blue-400 shadow-lg' : 
-        isBatchMode ? 'hover:border-red-500/50 hover:bg-red-500/5' : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
+        isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg' : 
+        isBatchMode 
+          ? isSelectionMode 
+            ? 'hover:border-blue-500/50 hover:bg-blue-500/5 bg-[#0f0f0f] border-white/5' 
+            : 'hover:border-red-500/50 hover:bg-red-500/5 bg-[#0f0f0f] border-white/5'
+          : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
       }`}
     >
       <div className="flex items-center gap-3 overflow-hidden">
         <div className="flex items-baseline gap-2 overflow-hidden">
-          <h4 className={`text-[13px] font-black tracking-tight shrink-0 ${isSelected ? 'text-white' : isBatchMode ? 'group-hover:text-red-400' : 'text-gray-100'}`}>
+          <h4 className={`text-[13px] font-black tracking-tight shrink-0 ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-gray-100'}`}>
             {student.name}
           </h4>
-          <span className={`text-[10px] font-bold truncate ${isSelected ? 'text-blue-100' : 'text-gray-500'}`}>
-            {student.grade} · {student.class} · {daysFormatted}
-          </span>
+          <div className={`text-[10px] font-bold truncate flex items-center gap-x-2 gap-y-1 flex-wrap ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-500'}`}>
+            <span className="shrink-0">{student.grade} · {student.class}</span>
+            
+            <div className="flex items-center gap-1.5 ml-1">
+              {student.class_days?.slice().sort((a, b) => {
+                const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+              }).map(day => {
+                const activeHours = student.day_schedules?.[day] || [];
+                const isToday = day === currentDay;
+                
+                return (
+                  <div key={day} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md ${isToday ? 'bg-white/10 ring-1 ring-white/10' : ''}`}>
+                    <span className={`text-[9px] mr-0.5 ${isToday ? 'text-emerald-400 font-black' : ''}`}>{day}</span>
+                    <div className="flex gap-0.5">
+                      {activeHours.map(h => (
+                        <div 
+                          key={h} 
+                          className={`w-1 h-2.5 rounded-sm ${h < 19 ? 'bg-blue-500' : 'bg-orange-400'}`} 
+                        />
+                      ))}
+                      {activeHours.length === 0 && (
+                        <div className="w-1 h-2.5 rounded-sm bg-white/5" />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
       </div>
       
       <div className="flex items-center gap-2 shrink-0">
         {isBatchMode ? (
-          <MinusCircle size={14} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+          isSelectionMode ? (
+            isChecked ? (
+              <div className="bg-white text-blue-600 p-0.5 rounded-full shadow-lg">
+                <Check size={10} strokeWidth={4} />
+              </div>
+            ) : (
+              <div className="w-4 h-4 rounded-full border border-white/20 group-hover:border-blue-500/50 transition-colors" />
+            )
+          ) : (
+            <MinusCircle size={14} className="text-red-500 opacity-0 group-hover:opacity-100 transition-opacity" />
+          )
         ) : (
           <>
             <div className="flex gap-0.5">
@@ -195,41 +252,5 @@ function StudentRowItem({ student, isSelected, isBatchMode, onClick }: { student
         )}
       </div>
     </motion.div>
-  );
-}
-
-function CompactStudentItem({ student, isSelected, isChecked, isBatchMode, onClick }: { student: Student, isSelected: boolean, isChecked: boolean, isBatchMode: boolean, onClick: () => void }) {
-  return (
-    <div 
-      onClick={onClick} 
-      className={`p-1.5 rounded-lg border cursor-pointer transition-all relative group ${
-        isSelected 
-          ? 'bg-blue-600 border-blue-400 shadow-md' 
-          : isChecked
-            ? 'bg-blue-600 border-blue-400 scale-95'
-            : isBatchMode
-              ? 'bg-white/[0.03] border-white/10 hover:border-blue-500/50 hover:bg-blue-500/10'
-              : 'bg-[#0f0f0f] border-white/5 hover:border-white/10'
-      }`}
-    >
-      {isChecked && (
-        <div className="absolute -top-1 -right-1 z-10 bg-white text-blue-600 p-0.5 rounded-full shadow-lg border-2 border-blue-600">
-          <Check size={6} strokeWidth={4} />
-        </div>
-      )}
-
-      <div className="flex flex-col items-center gap-1">
-        <div className={`w-6 h-6 rounded flex items-center justify-center font-black text-[10px] transition-colors ${
-          isSelected || isChecked ? 'bg-white text-blue-600' : 'bg-white/5 text-gray-500 group-hover:text-blue-400'
-        }`}>
-          {student.name[0]}
-        </div>
-        <p className={`text-center text-[9px] font-bold truncate w-full ${
-          isSelected || isChecked ? 'text-white' : 'text-gray-400 group-hover:text-white'
-        }`}>
-          {student.name}
-        </p>
-      </div>
-    </div>
   );
 }

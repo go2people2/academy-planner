@@ -19,12 +19,16 @@ export interface SessionLog {
 
 export interface Student {
   id: string;
-  academy_id: string; // 💡 학원 ID 추가
+  academy_id: string; 
+  teacher_id?: string; // 💡 담당 선생님 ID 추가
   name: string;
   school: string;
   grade: string;
   class: string;
   class_days: string[];
+  day_schedules?: {
+    [key: string]: number[];
+  };
   assigned_books: string[];
   assigned_book_titles?: string[];
   history: StudentStatus[];
@@ -32,6 +36,14 @@ export interface Student {
   lastSession?: SessionLog;
   todaySession?: SessionLog;
   allLogs: SessionLog[];
+}
+
+export interface Teacher {
+  id: string;
+  academy_id: string;
+  name: string;
+  email?: string;
+  role: 'admin' | 'teacher';
 }
 
 export interface TextbookOption {

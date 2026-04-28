@@ -24,6 +24,7 @@ export default function DashboardPage() {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
+  const [teachers, setTeachers] = useState<Teacher[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
@@ -50,6 +51,14 @@ export default function DashboardPage() {
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     try {
+      // 1. 선생님 목록 가져오기 (테이블이 없을 경우 대비)
+      const { data: teachersData, error: tErr } = await supabase.from('ams_teachers').select('*');
+      if (tErr) {
+        console.warn('ams_teachers table might not exist yet:', tErr.message);
+      } else if (teachersData) {
+        setTeachers(teachersData);
+      }
+
       const { data: studentsData, error: sErr } = await supabase.from('ams_students').select('*').eq('is_deleted', false);
       if (sErr) throw sErr;
 
@@ -74,8 +83,12 @@ export default function DashboardPage() {
         const lastSession = logs.filter(l => l.date < selectedDate)[0];
 
         return {
-          id: s.id, academy_id: s.academy_id, name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', class: s.class_name || '일반반',
-          class_days: s.class_days || [], assigned_books: s.assigned_books || [],
+          id: s.id, academy_id: s.academy_id, 
+          teacher_id: s.teacher_id, // 💡 담당 선생님 ID 추가
+          name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', class: s.class_name || '일반반',
+          class_days: s.class_days || [], 
+          day_schedules: s.day_schedules || {}, // 💡 DB에서 가져온 시간 데이터 추가
+          assigned_books: s.assigned_books || [],
           history, isRedLight: history.includes('warning') || history.includes('late'),
           lastSession, todaySession,
           allLogs: logs
@@ -131,13 +144,26 @@ export default function DashboardPage() {
 
   const handleAddNewStudent = async (data: any) => {
     try {
+      // students[0]이 없을 경우를 대비해 환경변수나 기본값 사용
+      const academyId = students[0]?.academy_id || process.env.NEXT_PUBLIC_ACADEMY_SLUG || 'hokma-math';
+      
       const { error } = await supabase.from('ams_students').insert([{
-        academy_id: students[0]?.academy_id || 'hokma-math',
-        name: data.name, school: data.school, grade: data.grade, class_name: data.class_name, phone: data.phone, class_days: data.class_days, is_deleted: false
+        academy_id: academyId,
+        name: data.name, 
+        school: data.school, 
+        grade: data.grade, 
+        class_name: data.class_name, 
+        phone: data.phone, 
+        class_days: data.class_days, 
+        day_schedules: {}, // 💡 신규 학생 등록 시 빈 시간표 객체 추가
+        is_deleted: false
       }]);
-      if (error) throw error;
+      if (error) {
+        console.error('Student Registration Error:', error);
+        throw error;
+      }
       await fetchAllData();
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error('handleAddNewStudent Error:', e); }
   };
 
   const addStudentToToday = async (studentId: string) => {
@@ -170,8 +196,12 @@ export default function DashboardPage() {
   const updateStudentInfo = async (studentId: string, field: string, value: any) => {
     try {
       const { error } = await supabase.from('ams_students').update({ [field]: value }).eq('id', studentId);
-      if (!error) await fetchAllData();
-    } catch (e) { console.error(e); }
+      if (error) {
+        console.error('Update Error Detail:', error);
+        return;
+      }
+      await fetchAllData();
+    } catch (e) { console.error('Update Catch Error:', e); }
   };
 
   const todayStudents = useMemo(() => students.filter(s => s.class_days.includes(selectedDayKey) || !!s.todaySession).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey]);

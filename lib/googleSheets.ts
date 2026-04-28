@@ -2,7 +2,7 @@
  * API 키 없이 공개된 구글 시트 데이터를 가져오는 유틸리티
  */
 
-const SHEET_ID = process.env.GOOGLE_SHEET_ID;
+const SHEET_ID = process.env.GOOGLE_SHEET_ID_TEXTBOOK_MASTER;
 
 export interface TextbookMaster {
   title: string;
