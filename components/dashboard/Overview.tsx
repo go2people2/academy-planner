@@ -1,9 +1,9 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle } from 'lucide-react';
-import { Student } from '@/types/dashboard';
+import { Student, TextbookOption } from '@/types/dashboard';
 import AddStudentModal from './AddStudentModal';
 
 interface OverviewProps {
@@ -12,24 +12,48 @@ interface OverviewProps {
   selectedStudentId: string | null;
   onSelectStudent: (id: string) => void;
   todayKey: string;
+  selectedFilter: string;
   isBatchMode: boolean;
   setIsBatchMode: (val: boolean) => void;
-  onBatchAdd: (ids: string[]) => Promise<void>;
-  onRemoveFromToday: (id: string) => Promise<void>;
-  onAddNewStudent: (data: any) => Promise<void>; // 새 학생 추가 함수 추가
+  onBatchAdd: (ids: string[], reasons: Record<string, string>) => Promise<void>;
+  onRemoveFromToday: (id: string, reason: string) => Promise<void>;
+  onAddNewStudent: (data: any) => Promise<void>;
+  masterTextbooks: TextbookOption[];
+  title?: string;
+  showAddButton?: boolean;
 }
 
 export default function Overview({ 
-  todayStudents, filteredAllStudents, selectedStudentId, onSelectStudent, todayKey,
-  isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent
+  todayStudents = [], filteredAllStudents = [], selectedStudentId, onSelectStudent, todayKey,
+  selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, masterTextbooks = [],
+  title,
+  showAddButton = false
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
+  const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  
+  // 사유 입력 모달 상태
+  const [reasonModal, setReasonModal] = useState<{
+    isOpen: boolean;
+    type: 'add' | 'remove';
+    studentIds: string[];
+  }>({ isOpen: false, type: 'add', studentIds: [] });
+  
+  const [reasons, setReasons] = useState<Record<string, string>>({}); // 💡 개별 사유 상태
 
-  const otherStudents = filteredAllStudents.filter(
-    s => !todayStudents.some(ts => ts.id === s.id)
-  );
+  // 💡 안전한 필터 모드 판단
+  const isArchiveMode = useMemo(() => selectedFilter?.toLowerCase() === 'discharged', [selectedFilter]);
+
+  // 💡 하단에 표시할 학생 리스트 계산
+  const studentsToDisplay = useMemo(() => {
+    if (isArchiveMode) {
+      return filteredAllStudents || [];
+    } else {
+      return (filteredAllStudents || []).filter(s => !todayStudents.some(ts => ts.id === s.id));
+    }
+  }, [filteredAllStudents, todayStudents, isArchiveMode]);
 
   const toggleSelection = (id: string) => {
     setSelectedForBatch(prev => 
@@ -37,68 +61,136 @@ export default function Overview({
     );
   };
 
-  const handleApplyBatch = async () => {
-    if (selectedForBatch.length > 0) await onBatchAdd(selectedForBatch);
-    setSelectedForBatch([]);
+  const toggleRemoveSelection = (id: string) => {
+    setSelectedToRemove(prev => 
+      prev.includes(id) ? prev.filter(item => item !== id) : [...prev, id]
+    );
+  };
+
+  const handleApplyBatch = () => {
+    if (selectedForBatch.length > 0) {
+      const initialReasons: Record<string, string> = {};
+      selectedForBatch.forEach(id => { initialReasons[id] = '보강 수업'; });
+      
+      setReasons(initialReasons);
+      setReasonModal({
+        isOpen: true,
+        type: 'add',
+        studentIds: selectedForBatch
+      });
+      return;
+    }
+
+    if (selectedToRemove.length > 0) {
+      const initialReasons: Record<string, string> = {};
+      selectedToRemove.forEach(id => { initialReasons[id] = '수업 취소'; });
+      
+      setReasons(initialReasons);
+      setReasonModal({
+        isOpen: true,
+        type: 'remove',
+        studentIds: selectedToRemove
+      });
+    }
+  };
+
+  const confirmReason = async () => {
+    if (reasonModal.type === 'add') {
+      await onBatchAdd(reasonModal.studentIds, reasons);
+      setSelectedForBatch([]);
+      
+      if (selectedToRemove.length > 0) {
+        const initialReasons: Record<string, string> = {};
+        selectedToRemove.forEach(id => { initialReasons[id] = '수업 취소'; });
+        setReasons(initialReasons);
+        setReasonModal({
+          isOpen: true,
+          type: 'remove',
+          studentIds: selectedToRemove
+        });
+        return;
+      }
+    } else {
+      await Promise.all(reasonModal.studentIds.map(id => onRemoveFromToday(id, reasons[id] || '수업 취소')));
+      setSelectedToRemove([]);
+    }
+    
+    setReasonModal({ ...reasonModal, isOpen: false });
+    setReasons({});
     setIsBatchMode(false);
+  };
+
+  const updateIndividualReason = (id: string, text: string) => {
+    setReasons(prev => ({ ...prev, [id]: text }));
+  };
+
+  const getStudentName = (id: string) => {
+    return studentsToDisplay.find(s => s.id === id)?.name || todayStudents.find(s => s.id === id)?.name || 'Student';
   };
 
   const getDayOfWeek = (dateStr: string) => {
     try {
       const days = ['일', '월', '화', '수', '목', '금', '토'];
       const date = new Date(dateStr);
-      return days[date.getDay()];
+      return isNaN(date.getTime()) ? dateStr : days[date.getDay()];
     } catch {
-      return '월';
+      return dateStr || '';
     }
   };
+
   const currentDayName = getDayOfWeek(todayKey);
 
   return (
     <div className="p-2 space-y-6 relative">
-      {/* 1. 상단: 오늘의 명단 */}
-      <section className="space-y-2">
-        <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
-          <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
-          Today ({todayKey})
-          <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/5 uppercase font-bold">
-            {todayStudents.length} Students
-          </span>
-        </h3>
+      {/* 1. 상단: 오늘의 명단 (퇴원생 모드일 때는 절대 보여주지 않음) */}
+      {!isArchiveMode && (
+        <section className="space-y-2">
+          <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
+            Today ({todayKey})
+            <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/5 uppercase font-bold">
+              {todayStudents.length} Students
+            </span>
+          </h3>
 
-        {isBatchMode && (
-          <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest animate-pulse px-1">
-            💡 Click to remove from today&apos;s list
-          </p>
-        )}
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
-          {todayStudents.map((s) => (
-            <StudentRowItem 
-              key={s.id} 
-              student={s} 
-              isSelected={selectedStudentId === s.id && !isBatchMode} 
-              isBatchMode={isBatchMode}
-              currentDay={currentDayName}
-              onClick={() => isBatchMode ? onRemoveFromToday(s.id) : onSelectStudent(s.id)} 
-            />
-          ))}
-          {todayStudents.length === 0 && (
-            <div className="p-6 rounded-xl bg-white/[0.02] border border-dashed border-white/5 text-center text-gray-600 font-bold uppercase tracking-widest text-[9px]">No classes scheduled</div>
+          {isBatchMode && (
+            <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest animate-pulse px-1">
+              💡 Click to remove from today&apos;s list
+            </p>
           )}
-        </div>
-      </section>
 
-      {/* 2. 하단: 전체 학생 */}
-      <section className="space-y-2 pt-4 border-t border-white/5">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+            {todayStudents.map((s) => {
+              const isChecked = selectedToRemove.includes(s.id);
+              return (
+                <StudentRowItem 
+                  key={s.id} 
+                  student={s} 
+                  isSelected={selectedStudentId === s.id && !isBatchMode} 
+                  isChecked={isChecked}
+                  isBatchMode={isBatchMode}
+                  currentDay={currentDayName}
+                  onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)} 
+                />
+              );
+            })}
+            {todayStudents.length === 0 && (
+              <div className="p-6 rounded-xl bg-white/[0.02] border border-dashed border-white/5 text-center text-gray-600 font-bold uppercase tracking-widest text-[9px]">No classes scheduled</div>
+            )}
+          </div>
+        </section>
+      )}
+
+      {/* 2. 하단: 리스트 영역 */}
+      <section className={`space-y-2 ${todayStudents.length > 0 ? 'pt-4 border-t border-white/5' : ''}`}>
         <div className="flex items-center justify-between px-1">
           <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
             <Users size={14} /> 
-            Rest of Students
+            {title ? title : (isArchiveMode ? 'Discharged Students Archive' : 'Rest of Students')}
           </h3>
 
           <div className="flex gap-2">
-            {!isBatchMode && (
+            {!isBatchMode && !isArchiveMode && showAddButton && (
               <button 
                 onClick={() => setIsAddModalOpen(true)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
@@ -109,22 +201,29 @@ export default function Overview({
             
             {isBatchMode && (
               <button 
-                onClick={() => { setIsBatchMode(false); setSelectedForBatch([]); }}
+                onClick={() => { setIsBatchMode(false); setSelectedForBatch([]); setSelectedToRemove([]); }}
                 className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase bg-white/5 text-gray-500 hover:text-white transition-all"
               >
                 Cancel
               </button>
             )}
-            <button 
-              onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
-                isBatchMode 
-                  ? 'bg-blue-600 text-white shadow-lg' 
-                  : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
-              }`}
-            >
-              {isBatchMode ? <><Check size={10} /> {selectedForBatch.length} Confirm</> : <><Users size={10} /> 오늘 수업 추가</>}
-            </button>
+            
+            {!isArchiveMode && (
+              <button 
+                onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                  isBatchMode 
+                    ? 'bg-blue-600 text-white shadow-lg' 
+                    : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
+                }`}
+              >
+                {isBatchMode ? (
+                  <><Check size={10} /> {selectedForBatch.length + selectedToRemove.length} Confirm</>
+                ) : (
+                  <><Users size={10} /> 오늘 수업 변경</>
+                )}
+              </button>
+            )}
           </div>
         </div>
 
@@ -140,7 +239,7 @@ export default function Overview({
         </AnimatePresence>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
-          {otherStudents.map((s) => {
+          {studentsToDisplay.map((s) => {
             const isChecked = selectedForBatch.includes(s.id);
             return (
               <StudentRowItem 
@@ -149,12 +248,76 @@ export default function Overview({
                 isSelected={selectedStudentId === s.id && !isBatchMode} 
                 isChecked={isChecked}
                 isBatchMode={isBatchMode}
+                currentDay={currentDayName}
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)} 
               />
             );
           })}
+          {studentsToDisplay.length === 0 && (
+            <div className="p-10 text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest border border-dashed border-white/5 rounded-2xl w-full col-span-full">
+              {isArchiveMode ? 'No discharged students found' : 'All students are in today\'s list'}
+            </div>
+          )}
         </div>
       </section>
+
+      {/* 사유 입력 모달 */}
+      <AnimatePresence>
+        {reasonModal.isOpen && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+              className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4">
+              <div className="flex items-center gap-2">
+                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${reasonModal.type === 'add' ? 'bg-blue-500/20 text-blue-500' : 'bg-red-500/20 text-red-500'}`}>
+                  {reasonModal.type === 'add' ? <Users size={20} /> : <MinusCircle size={20} />}
+                </div>
+                <div>
+                  <h4 className="text-white font-black text-sm uppercase">{reasonModal.type === 'add' ? '오늘 수업 변경' : '오늘 수업 제외'}</h4>
+                  <p className="text-[10px] text-gray-500 font-bold">{reasonModal.studentIds.length} 명의 학생 선택됨</p>
+                </div>
+              </div>
+
+              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar-v">
+                <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest px-1 block mb-1">학생별 사유 입력</label>
+                {reasonModal.studentIds.map((id) => (
+                  <div key={id} className="space-y-1 bg-white/[0.02] p-2 rounded-xl border border-white/5">
+                    <div className="flex justify-between items-center px-1">
+                      <span className="text-[11px] font-black text-gray-300">{getStudentName(id)}</span>
+                    </div>
+                    <input 
+                      type="text" 
+                      value={reasons[id] || ''} 
+                      onChange={(e) => updateIndividualReason(id, e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && confirmReason()}
+                      placeholder="사유를 입력하세요"
+                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button 
+                  onClick={() => setReasonModal({ ...reasonModal, isOpen: false })} 
+                  className="flex-1 py-3 bg-white/5 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-white/10 transition-all"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={confirmReason}
+                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase shadow-lg transition-all ${
+                    reasonModal.type === 'add' 
+                      ? 'bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-500' 
+                      : 'bg-red-600 text-white shadow-red-600/20 hover:bg-red-500'
+                  }`}
+                >
+                  확인
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
 
       {/* 신규 학생 등록 모달 */}
       <AnimatePresence>
@@ -162,6 +325,7 @@ export default function Overview({
           <AddStudentModal 
             onClose={() => setIsAddModalOpen(false)} 
             onSave={onAddNewStudent} 
+            masterTextbooks={masterTextbooks}
           />
         )}
       </AnimatePresence>
@@ -175,6 +339,7 @@ function StudentRowItem({
   student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, currentDay?: string 
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
+  const isMakeup = student.todaySession?.attendance_status === '보강';
 
   return (
     <motion.div 
@@ -186,19 +351,28 @@ function StudentRowItem({
           ? isSelectionMode 
             ? 'hover:border-blue-500/50 hover:bg-blue-500/5 bg-[#0f0f0f] border-white/5' 
             : 'hover:border-red-500/50 hover:bg-red-500/5 bg-[#0f0f0f] border-white/5'
-          : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
+          : isMakeup 
+            ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10'
+            : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
       }`}
     >
       <div className="flex items-center gap-3 overflow-hidden">
         <div className="flex items-baseline gap-2 overflow-hidden">
-          <h4 className={`text-[13px] font-black tracking-tight shrink-0 ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-gray-100'}`}>
-            {student.name}
-          </h4>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <h4 className={`text-[13px] font-black tracking-tight ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-gray-100'}`}>
+              {student.name}
+            </h4>
+            {isMakeup && !isSelected && !isChecked && (
+              <span className="bg-emerald-500/20 text-emerald-500 text-[8px] font-black px-1 py-0.5 rounded border border-emerald-500/20 uppercase tracking-tighter">
+                보강
+              </span>
+            )}
+          </div>
           <div className={`text-[10px] font-bold truncate flex items-center gap-x-2 gap-y-1 flex-wrap ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-500'}`}>
             <span className="shrink-0">{student.grade} · {student.class}</span>
             
             <div className="flex items-center gap-1.5 ml-1">
-              {student.class_days?.slice().sort((a, b) => {
+              {(student.class_days || []).slice().sort((a, b) => {
                 const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
                 return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
               }).map(day => {
@@ -250,7 +424,7 @@ function StudentRowItem({
         ) : (
           <>
             <div className="flex gap-0.5">
-              {student.history.map((status, i) => (
+              {(student.history || []).map((status, i) => (
                 <div key={i} className={`w-1 h-1 rounded-full ${status === 'perfect' ? 'bg-emerald-500' : status === 'warning' ? 'bg-amber-500' : status === 'late' ? 'bg-blue-400' : 'bg-white/10'}`} />
               ))}
             </div>

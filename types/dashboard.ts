@@ -9,6 +9,8 @@ export interface HomeworkItem {
 
 export interface SessionLog {
   id?: string;
+  student_id?: string;
+  student_name?: string; // 💡 학생 삭제 후에도 누구 기록인지 알기 위해 추가
   date: string;
   status: StudentStatus;
   attendance_status: string;
@@ -31,6 +33,10 @@ export interface Student {
   };
   assigned_books: string[];
   assigned_book_titles?: string[];
+  is_deleted?: boolean;
+  phone?: string;
+  created_at?: string; // 💡 신입생 확인용
+  status_changed_at?: string; // 💡 퇴원/복구일 확인용
   history: StudentStatus[];
   isRedLight: boolean;
   lastSession?: SessionLog;

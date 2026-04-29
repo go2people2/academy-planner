@@ -5,11 +5,11 @@
 const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID_TEXTBOOK_MASTER;
 
 export interface TextbookMaster {
+  bookcode: string;
   title: string;
   grade: string;
-  course: string;
-  tabName: string;
   status: string;
+  ePeriod: string; // e-period
 }
 
 /**
@@ -38,9 +38,7 @@ async function fetchSheetAsCsv(tabName: string) {
       return [];
     }
 
-    // 가장 단순하고 확실한 줄바꿈 분리
     const rows = text.split(/\r?\n/).map(row => {
-      // 따옴표로 감싸진 셀 처리
       return row.split('","').map(cell => cell.replace(/^"|"$/g, ''));
     });
 
@@ -59,13 +57,14 @@ export async function fetchTextbookMasterList(): Promise<TextbookMaster[]> {
     return [];
   }
 
+  // 변경된 헤더 순서: [0]bookcode, [1]book(title), [2]grade, [3]status, [4]e-period
   return rows.slice(1).map((row) => ({
-    title: row[0] || '',
-    grade: row[1] || '',
-    course: row[2] || '',
-    tabName: row[3] || '',
-    status: row[4] || '',
-  })).filter(item => item.title && item.status !== '비활성');
+    bookcode: row[0] || '',
+    title: row[1] || '',
+    grade: row[2] || '',
+    status: row[3] || '',
+    ePeriod: row[4] || '',
+  })).filter(item => item.bookcode && item.status !== '비활성');
 }
 
 export async function fetchTextbookUnits(tabName: string) {

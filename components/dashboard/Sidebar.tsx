@@ -1,7 +1,7 @@
 'use client';
 
 import { 
-  LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap 
+  LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight 
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter } from 'next/navigation';
@@ -13,10 +13,13 @@ interface SidebarProps {
   students: any[];
   selectedFilter: string;
   setSelectedFilter: (filter: string) => void;
+  filterTarget: 'all' | 'today' | 'rest';
+  setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
 }
 
 export default function Sidebar({ 
-  viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter 
+  viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
+  filterTarget, setFilterTarget
 }: SidebarProps) {
   const router = useRouter();
 
@@ -43,12 +46,12 @@ export default function Sidebar({
           <SidebarLink 
             icon={<LayoutDashboard size={14} />} 
             label="Overview" 
-            active={viewMode === 'board'} 
-            onClick={() => setViewMode('board')} 
+            active={viewMode === 'board' && selectedFilter !== 'Discharged'} 
+            onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} 
           />
           <SidebarLink 
             icon={<TableIcon size={14} />} 
-            label="Today Sheet" 
+            label="Daily Sheet" 
             active={viewMode === 'todayTable'} 
             onClick={() => setViewMode('todayTable')} 
             badge={todayCount > 0 ? String(todayCount) : undefined} 
@@ -59,13 +62,51 @@ export default function Sidebar({
             active={viewMode === 'progress'} 
             onClick={() => setViewMode('progress')} 
           />
+          <SidebarLink 
+            icon={<UserCog size={14} />} 
+            label="학생정보수정" 
+            active={viewMode === 'studentEdit'} 
+            onClick={() => setViewMode('studentEdit')} 
+          />
+          <SidebarLink 
+            icon={<ArrowLeftRight size={14} />} 
+            label="이번 달 변동 사항" 
+            active={viewMode === 'monthlyChanges'} 
+            onClick={() => setViewMode('monthlyChanges')} 
+          />
+          {/* 💡 퇴원생 보관소 추가 */}
+          <SidebarLink 
+            icon={<UserX size={14} />} 
+            label="Discharged" 
+            active={selectedFilter === 'Discharged'} 
+            onClick={() => { setViewMode('board'); setSelectedFilter('Discharged'); }} 
+          />
         </nav>
 
         <nav className="space-y-1">
-          <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2 px-2">Filter</h3>
-          <FilterItem label="Total" count={students.length} active={selectedFilter === 'All'} onClick={() => setSelectedFilter('All')} />
-          <FilterItem label="HS (고등)" count={students.filter(s => s.grade.includes('고')).length} active={selectedFilter === '고'} onClick={() => setSelectedFilter('고')} />
-          <FilterItem label="MS (중등)" count={students.filter(s => s.grade.includes('중')).length} active={selectedFilter === '중'} onClick={() => setSelectedFilter('중')} />
+          <div className="flex items-center justify-between mb-2 px-2">
+            <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Filter</h3>
+            <div className="flex bg-white/5 rounded-md p-0.5 border border-white/5">
+              {(['all', 'today', 'rest'] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setFilterTarget(t)}
+                  className={`text-[7px] px-1.5 py-0.5 rounded-[3px] font-black uppercase transition-all ${
+                    filterTarget === t 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-400'
+                  }`}
+                  title={t === 'all' ? '전체 적용' : t === 'today' ? '오늘 목록만' : '기타 목록만'}
+                >
+                  {t === 'all' ? 'All' : t === 'today' ? 'Top' : 'Btm'}
+                </button>
+              ))}
+            </div>
+          </div>
+          <FilterItem label="Total" count={students.filter(s => !s.is_deleted).length} active={selectedFilter === 'All'} onClick={() => setSelectedFilter('All')} />
+          <FilterItem label="HS (고등)" count={students.filter(s => !s.is_deleted && s.grade.includes('고')).length} active={selectedFilter === '고'} onClick={() => setSelectedFilter('고')} />
+          <FilterItem label="MS (중등)" count={students.filter(s => !s.is_deleted && s.grade.includes('중')).length} active={selectedFilter === '중'} onClick={() => setSelectedFilter('중')} />
+          <FilterItem label="ES (초등)" count={students.filter(s => !s.is_deleted && s.grade.includes('초')).length} active={selectedFilter === '초'} onClick={() => setSelectedFilter('초')} />
         </nav>
       </div>
 

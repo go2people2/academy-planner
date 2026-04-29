@@ -28,11 +28,10 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
     assigned_books: [] as string[]
   });
 
-  // 검색 필터링된 교재 목록
   const filteredBooks = useMemo(() => {
-    return masterTextbooks.filter(b => 
-      b.title.toLowerCase().includes(bookSearch.toLowerCase()) || 
-      b.grade.toLowerCase().includes(bookSearch.toLowerCase())
+    return (masterTextbooks || []).filter(b => 
+      b.title?.toLowerCase().includes(bookSearch.toLowerCase()) || 
+      b.grade?.toLowerCase().includes(bookSearch.toLowerCase())
     );
   }, [masterTextbooks, bookSearch]);
 
@@ -49,26 +48,15 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
     const currentHours = formData.day_schedules[day] || [];
     const isNormalActive = currentHours.includes(hour);
     const isWhiteActive = currentHours.includes(hour + 100);
-    
     let newHours;
-    if (!isNormalActive && !isWhiteActive) {
-      newHours = [...currentHours, hour];
-    } else if (isNormalActive) {
-      newHours = [...currentHours.filter(h => h !== hour), hour + 100];
-    } else {
-      newHours = currentHours.filter(h => h !== (hour + 100));
-    }
-    
+    if (!isNormalActive && !isWhiteActive) newHours = [...currentHours, hour];
+    else if (isNormalActive) newHours = [...currentHours.filter(h => h !== hour), hour + 100];
+    else newHours = currentHours.filter(h => h !== (hour + 100));
     const sortedHours = newHours.sort((a, b) => (a % 100) - (b % 100));
     const newSchedules = { ...formData.day_schedules, [day]: sortedHours };
-    
     let newDays = [...formData.class_days];
-    if (sortedHours.length > 0 && !newDays.includes(day)) {
-      newDays.push(day);
-    } else if (sortedHours.length === 0 && newDays.includes(day)) {
-      newDays = newDays.filter(d => d !== day);
-    }
-
+    if (sortedHours.length > 0 && !newDays.includes(day)) newDays.push(day);
+    else if (sortedHours.length === 0 && newDays.includes(day)) newDays = newDays.filter(d => d !== day);
     setFormData({ ...formData, day_schedules: newSchedules, class_days: newDays });
   };
 
@@ -86,12 +74,12 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
     }
   };
 
-  const toggleBookSelection = (tabName: string) => {
+  const toggleBookSelection = (bookcode: string) => {
     setFormData(prev => ({
       ...prev,
-      assigned_books: prev.assigned_books.includes(tabName)
-        ? prev.assigned_books.filter(b => b !== tabName)
-        : [...prev.assigned_books, tabName]
+      assigned_books: prev.assigned_books.includes(bookcode)
+        ? prev.assigned_books.filter(b => b !== bookcode)
+        : [...prev.assigned_books, bookcode]
     }));
   };
 
@@ -99,12 +87,9 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
         className="bg-[#0f0f0f] border border-white/10 rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-        
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20">
-              <UserPlus className="text-white" size={24} />
-            </div>
+            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20"><UserPlus className="text-white" size={24} /></div>
             <div>
               <h2 className="text-xl font-black text-white uppercase tracking-tight">Register New Student</h2>
               <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">학생 정보 및 교재 일괄 선택</p>
@@ -115,8 +100,6 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
 
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto custom-scrollbar-v p-8">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* 1. 기본 정보 */}
             <div className="space-y-6">
               <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1"><UserPlus size={14} /> Basic Info</h3>
               <div className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 shadow-inner">
@@ -134,7 +117,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Grade</label>
                     <select value={formData.grade} onChange={(e) => setFormData({...formData, grade: e.target.value})}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none">
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer">
                       {['중1','중2','중3','고1','고2','고3'].map(g => <option key={g} value={g} className="bg-[#121212]">{g}</option>)}
                     </select>
                   </div>
@@ -152,7 +135,6 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
               </div>
             </div>
 
-            {/* 2. 교재 다중 선택 (업그레이드된 부분) */}
             <div className="space-y-6 flex flex-col h-full">
               <h3 className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] flex items-center justify-between px-1">
                 <span className="flex items-center gap-2"><BookOpen size={14} /> Textbooks</span>
@@ -166,13 +148,13 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 custom-scrollbar-v space-y-1">
                   {filteredBooks.map((book) => {
-                    const isSelected = formData.assigned_books.includes(book.tabName);
+                    const isSelected = formData.assigned_books.includes(book.bookcode);
                     return (
-                      <div key={book.tabName} onClick={() => toggleBookSelection(book.tabName)}
+                      <div key={book.bookcode} onClick={() => toggleBookSelection(book.bookcode)}
                         className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border ${isSelected ? 'bg-emerald-500/10 border-emerald-500/30' : 'hover:bg-white/5 border-transparent'}`}>
                         <div>
                           <h4 className={`text-[11px] font-bold ${isSelected ? 'text-emerald-400' : 'text-gray-300'}`}>{book.title}</h4>
-                          <p className="text-[9px] text-gray-500">{book.grade} · {book.course}</p>
+                          <p className="text-[9px] text-gray-500">{book.grade} · {book.ePeriod}</p>
                         </div>
                         {isSelected && <div className="bg-emerald-500 text-black p-0.5 rounded-full"><Check size={10} strokeWidth={4} /></div>}
                       </div>
@@ -183,7 +165,6 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
               </div>
             </div>
 
-            {/* 3. 주간 스케줄 */}
             <div className="space-y-6">
               <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1"><Calendar size={14} /> Schedule</h3>
               <div className="bg-white/5 border border-white/5 rounded-2xl p-4 shadow-inner">
@@ -212,7 +193,6 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                 </div>
               </div>
             </div>
-
           </div>
         </form>
 

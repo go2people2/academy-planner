@@ -12,6 +12,7 @@ import Overview from '@/components/dashboard/Overview';
 import TodaySheet from '@/components/dashboard/TodaySheet';
 import ProgressSequencer from '@/components/dashboard/ProgressSequencer';
 import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
+import MonthlyChanges from '@/components/dashboard/MonthlyChanges';
 
 // 공통 타입 임포트
 import { Student, SessionLog, StudentStatus, TextbookOption } from '@/types/dashboard';
@@ -20,8 +21,9 @@ const DAYS_KOR = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function DashboardPage() {
   const router = useRouter();
-  const [viewMode, setViewMode] = useState<'board' | 'todayTable' | 'progress'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'todayTable' | 'progress' | 'studentEdit' | 'monthlyChanges'>('board');
   const [selectedFilter, setSelectedFilter] = useState('All');
+  const [filterTarget, setFilterTarget] = useState<'all' | 'today' | 'rest'>('rest'); // 💡 필터 적용 범위 추가
   const [searchQuery, setSearchQuery] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -48,7 +50,7 @@ export default function DashboardPage() {
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: studentsData, error: sErr } = await supabase.from('ams_students').select('*').eq('is_deleted', false);
+      const { data: studentsData, error: sErr } = await supabase.from('ams_students').select('*');
       if (sErr) throw sErr;
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
@@ -64,6 +66,9 @@ export default function DashboardPage() {
         while (history.length < 5) history.push('none');
         return {
           id: s.id, academy_id: s.academy_id, name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', class: s.class_name || '일반반',
+          phone: s.phone || '', is_deleted: !!s.is_deleted,
+          created_at: s.created_at, // 💡 추가
+          status_changed_at: s.updated_at, // 💡 추가
           class_days: s.class_days || [], assigned_books: s.assigned_books || [], day_schedules: s.day_schedules || {},
           history, isRedLight: history.includes('warning') || history.includes('late'),
           lastSession: logs.filter(l => l.date < selectedDate)[0], todaySession: logs.find(l => l.date === selectedDate),
@@ -84,7 +89,12 @@ export default function DashboardPage() {
     try {
       if (!sessionId) {
         const { data, error } = await supabase.from('ams_session_logs').insert([{
-          student_id: studentId, academy_id: student.academy_id, session_date: selectedDate, ...sessionData, status: sessionData.status || 'none'
+          student_id: studentId, 
+          student_name: student.name, // 💡 이름 저장
+          academy_id: student.academy_id, 
+          session_date: selectedDate, 
+          ...sessionData, 
+          status: sessionData.status || 'none'
         }]).select();
         if (error) return false;
         if (data) {
@@ -92,9 +102,12 @@ export default function DashboardPage() {
           return true;
         }
       } else {
-        const { error } = await supabase.from('ams_session_logs').update(sessionData).eq('id', sessionId);
+        const { error } = await supabase.from('ams_session_logs').update({
+          ...sessionData,
+          student_name: student.name // 💡 이름 업데이트 (이름 변경 대비)
+        }).eq('id', sessionId);
         if (error) return false;
-        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: { ...s.todaySession!, ...sessionData } } : s));
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: { ...s.todaySession!, ...sessionData, student_name: student.name } } : s));
         return true;
       }
     } catch (e) { return false; }
@@ -119,41 +132,145 @@ export default function DashboardPage() {
     await saveTodaySession(studentId, { attendance_status: '보강', homework_text: student.lastSession?.homework_text || '' });
   };
 
-  const batchAddStudents = async (studentIds: string[]) => {
+  const batchAddStudents = async (studentIds: string[], reasons: Record<string, string> = {}) => {
     setIsLoading(true);
     try {
-      const inserts = studentIds.map(id => {
+      const timestamp = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+
+      const inserts = await Promise.all(studentIds.map(async id => {
         const s = students.find(st => st.id === id);
-        return { student_id: id, academy_id: s?.academy_id, session_date: selectedDate, attendance_status: '보강', status: 'none' };
-      });
-      const { error } = await supabase.from('ams_session_logs').insert(inserts);
+        const reason = reasons[id] || '';
+        const formattedReason = reason ? `[${timestamp}] ${reason}` : '';
+
+        // 기존 로그가 있는지 확인 (오늘 날짜)
+        const { data: existingLog } = await supabase
+          .from('ams_session_logs')
+          .select('special_notes')
+          .eq('student_id', id)
+          .eq('session_date', selectedDate)
+          .single();
+
+        const newNotes = existingLog?.special_notes 
+          ? `${existingLog.special_notes}\n${formattedReason}`.trim()
+          : formattedReason;
+
+        return { 
+          student_id: id, 
+          student_name: s?.name,
+          academy_id: s?.academy_id, 
+          session_date: selectedDate, 
+          attendance_status: '보강', 
+          status: 'none',
+          special_notes: newNotes 
+        };
+      }));
+
+      const { error } = await supabase.from('ams_session_logs').upsert(inserts, { onConflict: 'student_id, session_date' });
       if (!error) await fetchAllData();
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
-  const removeStudentFromToday = async (studentId: string) => {
+  const removeStudentFromToday = async (studentId: string, reason: string = '') => {
     const student = students.find(s => s.id === studentId);
-    if (!student || !student.todaySession) return;
+    if (!student) return;
+
     try {
-      const { error } = await supabase.from('ams_session_logs').delete().eq('id', student.todaySession.id);
-      if (!error) await fetchAllData();
+      const timestamp = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+      const formattedReason = reason ? `[${timestamp}] ${reason}` : '';
+      
+      const existingNotes = student.todaySession?.special_notes || '';
+      const newNotes = existingNotes 
+        ? `${existingNotes}\n${formattedReason}`.trim()
+        : formattedReason;
+
+      if (student.todaySession?.id) {
+        const { error } = await supabase
+          .from('ams_session_logs')
+          .update({ 
+            attendance_status: '수업제외', 
+            special_notes: newNotes,
+            student_name: student.name // 💡 이름 업데이트
+          })
+          .eq('id', student.todaySession.id);
+        if (!error) await fetchAllData();
+      } else {
+        const { error } = await supabase
+          .from('ams_session_logs')
+          .insert([{
+            student_id: studentId,
+            student_name: student.name, // 💡 이름 저장
+            academy_id: student.academy_id,
+            session_date: selectedDate,
+            attendance_status: '수업제외',
+            special_notes: newNotes,
+            status: 'none'
+          }]);
+        if (!error) await fetchAllData();
+      }
     } catch (e) { console.error(e); }
   };
 
   const updateStudentInfo = async (studentId: string, field: string, value: any) => {
     try {
-      const { error } = await supabase.from('ams_students').update({ [field]: value }).eq('id', studentId);
-      if (!error) await fetchAllData();
-    } catch (e) { console.error(e); }
+      if (field === 'PERMANENT_DELETE') {
+        const { error } = await supabase.from('ams_students').delete().eq('id', studentId);
+        if (error) throw error;
+        setSelectedStudentId(null);
+      } else {
+        const { error } = await supabase.from('ams_students').update({ [field]: value }).eq('id', studentId);
+        if (error) throw error;
+      }
+      await fetchAllData();
+    } catch (e) { console.error('Update student error:', e); }
   };
 
-  const todayStudents = useMemo(() => students.filter(s => s.class_days.includes(selectedDayKey) || !!s.todaySession).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey]);
-  const filteredAllStudents = useMemo(() => students.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase())).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, searchQuery]);
+  const todayStudents = useMemo(() => students.filter(s => {
+    if (s.is_deleted) return false;
+
+    // 학년 필터 적용 범위 확인 (오늘만 또는 전체인 경우)
+    if (selectedFilter !== 'All' && (filterTarget === 'today' || filterTarget === 'all')) {
+      if (!s.grade.includes(selectedFilter)) return false;
+    }
+
+    const isToday = (s.class_days.includes(selectedDayKey) && (!s.todaySession || s.todaySession.attendance_status !== '수업제외')) || 
+                    (s.todaySession && s.todaySession.attendance_status !== '수업제외' && s.todaySession.attendance_status !== 'none') ||
+                    (s.todaySession && s.todaySession.attendance_status === '보강');
+    
+    return isToday;
+  }).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey, selectedFilter, filterTarget]);
+  const filteredAllStudents = useMemo(() => {
+    return students.filter(s => {
+      // 1. 검색어 필터링 (항상 적용)
+      const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
+      if (!matchesSearch) return false;
+
+      // 2. 퇴원생 모드일 때
+      if (selectedFilter === 'Discharged') {
+        return s.is_deleted === true;
+      }
+
+      // 3. 일반 모드(재원생 모드)일 때
+      if (s.is_deleted) return false; // 퇴원생은 절대 안 보여줌
+      
+      // 학년 필터 적용 범위 확인 (나머지만 또는 전체인 경우)
+      if (selectedFilter !== 'All' && (filterTarget === 'rest' || filterTarget === 'all')) {
+        if (!s.grade.includes(selectedFilter)) return false;
+      }
+      
+      return true;
+    }).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }, [students, searchQuery, selectedFilter, filterTarget]);
+
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] flex font-sans selection:bg-blue-500/30 overflow-hidden text-xs">
-      <Sidebar viewMode={viewMode} setViewMode={setViewMode} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} />
+      <Sidebar 
+        viewMode={viewMode} setViewMode={setViewMode} 
+        todayCount={todayStudents.length} students={students} 
+        selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter}
+        filterTarget={filterTarget} setFilterTarget={setFilterTarget} // 💡 추가된 프롭
+      />
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500">
@@ -163,16 +280,31 @@ export default function DashboardPage() {
           <div className="h-full">
             {viewMode === 'board' && (
               <Overview 
-                todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} 
+                todayStudents={todayStudents} 
+                filteredAllStudents={filteredAllStudents} // 💡 항상 목록 표시
                 selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} 
-                todayKey={selectedDayKey} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode}
+                todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode}
                 onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
                 masterTextbooks={availableTextbooks}
               />
             )}
+            {viewMode === 'studentEdit' && (
+              <Overview 
+                todayStudents={[]} // 💡 상단 섹션 숨김
+                filteredAllStudents={filteredAllStudents} // 💡 필터링된 전체 학생 표시
+                selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} 
+                todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}}
+                onBatchAdd={async () => {}} onRemoveFromToday={async () => {}}
+                onAddNewStudent={handleAddNewStudent}
+                masterTextbooks={availableTextbooks}
+                title="전체 학생 정보 관리" 
+                showAddButton={true} // 💡 수정 모드에서만 버튼 표시
+              />
+            )}
             {viewMode === 'todayTable' && <TodaySheet students={todayStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} masterTextbooks={availableTextbooks} onSave={saveTodaySession} />}
-            {viewMode === 'progress' && <ProgressSequencer students={students} masterTextbooks={availableTextbooks} />}
+            {viewMode === 'progress' && <ProgressSequencer students={students.filter(s => !s.is_deleted)} masterTextbooks={availableTextbooks} />}
+            {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
           </div>
         )}
       </main>
