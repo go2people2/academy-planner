@@ -30,13 +30,25 @@ export default function Sidebar({
 
   return (
     <aside className="w-52 border-r border-white/5 bg-[#0a0a0a]/90 backdrop-blur-2xl flex flex-col p-3 sticky top-0 h-screen z-30">
-      <div className="flex items-center gap-2 mb-6 px-1 cursor-pointer" onClick={() => setViewMode('board')}>
-        <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg">
-          <GraduationCap className="text-white" size={18} />
+      <div className="mb-6 px-1 cursor-pointer" onClick={() => setViewMode('board')}>
+        <div className="flex items-center gap-2">
+          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+            <GraduationCap className="text-white" size={18} />
+          </div>
+          <div>
+            <h1 className="text-sm font-black tracking-tight text-white leading-none uppercase">HOKMA</h1>
+            <p className="text-[7px] font-bold text-blue-500 tracking-[0.2em] uppercase mt-0.5">Management</p>
+          </div>
         </div>
-        <div>
-          <h1 className="text-sm font-black tracking-tight text-white leading-none uppercase">HOKMA</h1>
-          <p className="text-[7px] font-bold text-blue-500 tracking-[0.2em] uppercase mt-0.5">Management</p>
+        
+        {/* 💡 오늘 날짜 및 요일 표시 (독립된 행) */}
+        <div className="mt-3 px-1 py-1.5 bg-white/[0.03] rounded-lg border border-white/5 flex items-baseline justify-center gap-1">
+          <span className="text-[10px] font-black text-gray-300 tabular-nums">
+            {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
+          </span>
+          <span className="text-[11px] font-black text-blue-500">
+            ({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})
+          </span>
         </div>
       </div>
 
@@ -53,32 +65,32 @@ export default function Sidebar({
             icon={<TableIcon size={14} />} 
             label="Daily Sheet" 
             active={viewMode === 'todayTable'} 
-            onClick={() => setViewMode('todayTable')} 
+            onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} 
             badge={todayCount > 0 ? String(todayCount) : undefined} 
           />
           <SidebarLink 
             icon={<Activity size={14} />} 
             label="Progress" 
             active={viewMode === 'progress'} 
-            onClick={() => setViewMode('progress')} 
+            onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} 
           />
           <SidebarLink 
             icon={<UserCog size={14} />} 
             label="학생정보수정" 
             active={viewMode === 'studentEdit'} 
-            onClick={() => setViewMode('studentEdit')} 
+            onClick={() => { setViewMode('studentEdit'); setSelectedFilter('All'); }} 
           />
           <SidebarLink 
             icon={<ArrowLeftRight size={14} />} 
             label="이번 달 변동 사항" 
             active={viewMode === 'monthlyChanges'} 
-            onClick={() => setViewMode('monthlyChanges')} 
+            onClick={() => { setViewMode('monthlyChanges'); setSelectedFilter('All'); }} 
           />
           {/* 💡 퇴원생 보관소 추가 */}
           <SidebarLink 
             icon={<UserX size={14} />} 
             label="Discharged" 
-            active={selectedFilter === 'Discharged'} 
+            active={viewMode === 'board' && selectedFilter === 'Discharged'} 
             onClick={() => { setViewMode('board'); setSelectedFilter('Discharged'); }} 
           />
         </nav>

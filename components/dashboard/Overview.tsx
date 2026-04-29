@@ -9,6 +9,7 @@ import AddStudentModal from './AddStudentModal';
 interface OverviewProps {
   todayStudents: Student[];
   filteredAllStudents: Student[];
+  allTodayIds?: string[]; // 💡 추가
   selectedStudentId: string | null;
   onSelectStudent: (id: string) => void;
   todayKey: string;
@@ -21,13 +22,15 @@ interface OverviewProps {
   masterTextbooks: TextbookOption[];
   title?: string;
   showAddButton?: boolean;
+  hideTodaySection?: boolean; // 💡 추가
 }
 
 export default function Overview({ 
-  todayStudents = [], filteredAllStudents = [], selectedStudentId, onSelectStudent, todayKey,
+  todayStudents = [], filteredAllStudents = [], allTodayIds = [], selectedStudentId, onSelectStudent, todayKey,
   selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, masterTextbooks = [],
   title,
-  showAddButton = false
+  showAddButton = false,
+  hideTodaySection = false // 💡 기본값
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
@@ -51,9 +54,10 @@ export default function Overview({
     if (isArchiveMode) {
       return filteredAllStudents || [];
     } else {
-      return (filteredAllStudents || []).filter(s => !todayStudents.some(ts => ts.id === s.id));
+      // 💡 필터링된 todayStudents가 아니라, 고정된 allTodayIds를 사용하여 목록 간 이동 방지
+      return (filteredAllStudents || []).filter(s => !allTodayIds.includes(s.id));
     }
-  }, [filteredAllStudents, todayStudents, isArchiveMode]);
+  }, [filteredAllStudents, allTodayIds, isArchiveMode]);
 
   const toggleSelection = (id: string) => {
     setSelectedForBatch(prev => 
@@ -142,8 +146,8 @@ export default function Overview({
 
   return (
     <div className="p-2 space-y-6 relative">
-      {/* 1. 상단: 오늘의 명단 (퇴원생 모드일 때는 절대 보여주지 않음) */}
-      {!isArchiveMode && (
+      {/* 1. 상단: 오늘의 명단 (퇴원생 모드나 명시적 숨김일 때는 절대 보여주지 않음) */}
+      {!isArchiveMode && !hideTodaySection && (
         <section className="space-y-2">
           <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 

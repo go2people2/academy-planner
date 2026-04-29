@@ -12,6 +12,7 @@ import Overview from '@/components/dashboard/Overview';
 import TodaySheet from '@/components/dashboard/TodaySheet';
 import ProgressSequencer from '@/components/dashboard/ProgressSequencer';
 import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
+import StudentStudyReportDrawer from '@/components/dashboard/StudentStudyReportDrawer'; // 💡 추가
 import MonthlyChanges from '@/components/dashboard/MonthlyChanges';
 
 // 공통 타입 임포트
@@ -32,7 +33,12 @@ export default function DashboardPage() {
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
 
-  const [selectedDate, setSelectedDate] = useState(() => new Date().toISOString().split('T')[0]);
+  const [selectedDate, setSelectedDate] = useState(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    const localDate = new Date(now.getTime() - offset);
+    return localDate.toISOString().split('T')[0];
+  });
 
   const selectedDayKey = useMemo(() => {
     const d = new Date(selectedDate);
@@ -227,32 +233,38 @@ export default function DashboardPage() {
   const todayStudents = useMemo(() => students.filter(s => {
     if (s.is_deleted) return false;
 
-    // 학년 필터 적용 범위 확인 (오늘만 또는 전체인 경우)
-    if (selectedFilter !== 'All' && (filterTarget === 'today' || filterTarget === 'all')) {
-      if (!s.grade.includes(selectedFilter)) return false;
-    }
-
+    // 1. 오늘 수업 여부 확인 (이게 가장 우선되는 구분값)
     const isToday = (s.class_days.includes(selectedDayKey) && (!s.todaySession || s.todaySession.attendance_status !== '수업제외')) || 
                     (s.todaySession && s.todaySession.attendance_status !== '수업제외' && s.todaySession.attendance_status !== 'none') ||
                     (s.todaySession && s.todaySession.attendance_status === '보강');
     
-    return isToday;
-  }).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey, selectedFilter, filterTarget]);
+    if (!isToday) return false;
+
+    // 2. 검색어 필터링
+    if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+    // 3. 학년 필터 적용 (타겟이 Top 또는 All일 때만 가시성 결정)
+    if (selectedFilter !== 'All' && (filterTarget === 'today' || filterTarget === 'all')) {
+      if (!s.grade.includes(selectedFilter)) return false;
+    }
+    
+    return true;
+  }).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey, selectedFilter, filterTarget, searchQuery]);
+
   const filteredAllStudents = useMemo(() => {
     return students.filter(s => {
-      // 1. 검색어 필터링 (항상 적용)
-      const matchesSearch = s.name.toLowerCase().includes(searchQuery.toLowerCase());
-      if (!matchesSearch) return false;
-
-      // 2. 퇴원생 모드일 때
+      // 1. 퇴원생 모드일 때
       if (selectedFilter === 'Discharged') {
-        return s.is_deleted === true;
+        return s.is_deleted === true && s.name.toLowerCase().includes(searchQuery.toLowerCase());
       }
 
-      // 3. 일반 모드(재원생 모드)일 때
-      if (s.is_deleted) return false; // 퇴원생은 절대 안 보여줌
+      // 2. 일반 모드
+      if (s.is_deleted) return false;
       
-      // 학년 필터 적용 범위 확인 (나머지만 또는 전체인 경우)
+      // 검색어 확인
+      if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
+
+      // 학년 필터 적용 (타겟이 Btm 또는 All일 때만 가시성 결정)
       if (selectedFilter !== 'All' && (filterTarget === 'rest' || filterTarget === 'all')) {
         if (!s.grade.includes(selectedFilter)) return false;
       }
@@ -262,6 +274,14 @@ export default function DashboardPage() {
   }, [students, searchQuery, selectedFilter, filterTarget]);
 
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
+
+  // 💡 필터와 상관없이 '오늘 수업인' 학생들의 전체 ID 목록 (목록 간 이동 방지용)
+  const allTodayIds = useMemo(() => students.filter(s => {
+    if (s.is_deleted) return false;
+    return (s.class_days.includes(selectedDayKey) && (!s.todaySession || s.todaySession.attendance_status !== '수업제외')) || 
+           (s.todaySession && s.todaySession.attendance_status !== '수업제외' && s.todaySession.attendance_status !== 'none') ||
+           (s.todaySession && s.todaySession.attendance_status === '보강');
+  }).map(s => s.id), [students, selectedDayKey]);
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] flex font-sans selection:bg-blue-500/30 overflow-hidden text-xs">
@@ -282,6 +302,7 @@ export default function DashboardPage() {
               <Overview 
                 todayStudents={todayStudents} 
                 filteredAllStudents={filteredAllStudents} // 💡 항상 목록 표시
+                allTodayIds={allTodayIds} // 💡 추가
                 selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} 
                 todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode}
                 onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday}
@@ -291,15 +312,17 @@ export default function DashboardPage() {
             )}
             {viewMode === 'studentEdit' && (
               <Overview 
-                todayStudents={[]} // 💡 상단 섹션 숨김
+                todayStudents={[]} // 💡 상단 섹션 숨김용 빈 배열
                 filteredAllStudents={filteredAllStudents} // 💡 필터링된 전체 학생 표시
+                allTodayIds={[]} // 에디트 모드에서는 제외 로직 불필요
                 selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} 
                 todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}}
-                onBatchAdd={async () => {}} onRemoveFromToday={async () => {}}
+                onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
                 masterTextbooks={availableTextbooks}
                 title="전체 학생 정보 관리" 
                 showAddButton={true} // 💡 수정 모드에서만 버튼 표시
+                hideTodaySection={true} // 💡 상단 섹션 완전히 제거
               />
             )}
             {viewMode === 'todayTable' && <TodaySheet students={todayStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} masterTextbooks={availableTextbooks} onSave={saveTodaySession} />}
@@ -310,7 +333,25 @@ export default function DashboardPage() {
       </main>
       <AnimatePresence>
         {selectedStudentId && selectedStudent && !isBatchMode && (
-          <StudentDetailDrawer student={selectedStudent} availableTextbooks={availableTextbooks} isRefreshingBooks={isRefreshingBooks} onRefreshBooks={refreshTextbooks} onUpdateInfo={updateStudentInfo} onAddToToday={addStudentToToday} onClose={() => setSelectedStudentId(null)} />
+          <>
+            {viewMode === 'studentEdit' ? (
+              <StudentDetailDrawer 
+                student={selectedStudent} 
+                availableTextbooks={availableTextbooks} 
+                isRefreshingBooks={isRefreshingBooks} 
+                onRefreshBooks={refreshTextbooks} 
+                onUpdateInfo={updateStudentInfo} 
+                onAddToToday={addStudentToToday} 
+                onClose={() => setSelectedStudentId(null)} 
+              />
+            ) : (
+              <StudentStudyReportDrawer 
+                student={selectedStudent} 
+                onClose={() => setSelectedStudentId(null)} 
+                onEditMode={() => setViewMode('studentEdit')}
+              />
+            )}
+          </>
         )}
       </AnimatePresence>
       <AnimatePresence>{selectedStudentId && !isBatchMode && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedStudentId(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />)}</AnimatePresence>
