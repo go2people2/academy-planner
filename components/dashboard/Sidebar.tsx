@@ -13,12 +13,19 @@ interface SidebarProps {
   students: any[];
   selectedFilter: string;
   setSelectedFilter: (filter: string) => void;
+  selectedDays: string[]; // 💡 추가
+  setSelectedDays: (days: string[]) => void; // 💡 추가
+  isAndFilter: boolean; // 💡 추가
+  setIsAndFilter: (val: boolean) => void; // 💡 추가
   filterTarget: 'all' | 'today' | 'rest';
   setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
 }
 
+const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
+
 export default function Sidebar({ 
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
+  selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, // 💡 추가
   filterTarget, setFilterTarget
 }: SidebarProps) {
   const router = useRouter();
@@ -26,6 +33,14 @@ export default function Sidebar({
   const handleLogout = async () => {
     await supabase.auth.signOut();
     router.push('/login');
+  };
+
+  const toggleDay = (day: string) => {
+    if (selectedDays.includes(day)) {
+      setSelectedDays(selectedDays.filter(d => d !== day));
+    } else {
+      setSelectedDays([...selectedDays, day]);
+    }
   };
 
   return (
@@ -119,6 +134,46 @@ export default function Sidebar({
           <FilterItem label="HS (고등)" count={students.filter(s => !s.is_deleted && s.grade.includes('고')).length} active={selectedFilter === '고'} onClick={() => setSelectedFilter('고')} />
           <FilterItem label="MS (중등)" count={students.filter(s => !s.is_deleted && s.grade.includes('중')).length} active={selectedFilter === '중'} onClick={() => setSelectedFilter('중')} />
           <FilterItem label="ES (초등)" count={students.filter(s => !s.is_deleted && s.grade.includes('초')).length} active={selectedFilter === '초'} onClick={() => setSelectedFilter('초')} />
+          
+          {/* 💡 요일 다중 선택 필터 추가 */}
+          <div className="pt-2 px-1">
+            <h3 className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-2 flex items-center justify-between">
+              Day Filter
+              <div className="flex items-center gap-2">
+                {selectedDays.length > 1 && (
+                  <button 
+                    onClick={() => setIsAndFilter(!isAndFilter)} 
+                    className={`px-1.5 py-0.5 rounded text-[8px] font-black transition-all ${
+                      isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'bg-white/5 text-gray-600 hover:text-gray-400'
+                    }`}
+                  >
+                    AND
+                  </button>
+                )}
+                {selectedDays.length > 0 && (
+                  <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal">reset</button>
+                )}
+              </div>
+            </h3>
+            <div className="flex flex-wrap gap-[3px]">
+              {DAYS_SHORT.map((day) => {
+                const isActive = selectedDays.includes(day);
+                return (
+                  <button
+                    key={day}
+                    onClick={() => toggleDay(day)}
+                    className={`w-[21px] h-[21px] rounded-md text-[9px] font-black transition-all border ${
+                      isActive 
+                        ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' 
+                        : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-400'
+                    }`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </nav>
       </div>
 

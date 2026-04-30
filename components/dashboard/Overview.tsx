@@ -212,7 +212,7 @@ export default function Overview({
               </button>
             )}
             
-            {!isArchiveMode && (
+            {!isArchiveMode && !hideTodaySection && (
               <button 
                 onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
                 className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
@@ -338,9 +338,9 @@ export default function Overview({
 }
 
 function StudentRowItem({ 
-  student, isSelected, isChecked, isBatchMode, onClick, currentDay 
+  student, isSelected, isChecked, isBatchMode, onClick, currentDay, masterTextbooks 
 }: { 
-  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, currentDay?: string 
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, currentDay?: string, masterTextbooks: TextbookOption[] 
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   const isMakeup = student.todaySession?.attendance_status === '보강';
@@ -360,59 +360,72 @@ function StudentRowItem({
             : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
       }`}
     >
-      <div className="flex items-center gap-3 overflow-hidden">
-        <div className="flex items-baseline gap-2 overflow-hidden">
-          <div className="flex items-center gap-1.5 shrink-0">
-            <h4 className={`text-[13px] font-black tracking-tight ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-gray-100'}`}>
-              {student.name}
-            </h4>
-            {isMakeup && !isSelected && !isChecked && (
-              <span className="bg-emerald-500/20 text-emerald-500 text-[8px] font-black px-1 py-0.5 rounded border border-emerald-500/20 uppercase tracking-tighter">
-                보강
-              </span>
-            )}
+      <div className="flex flex-col gap-1 overflow-hidden flex-1">
+        <div className="flex items-center gap-2 overflow-hidden">
+          <h4 className={`text-[13px] font-black tracking-tight shrink-0 ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-gray-100'}`}>
+            {student.name}
+          </h4>
+          {isMakeup && !isSelected && !isChecked && (
+            <span className="bg-emerald-500/20 text-emerald-500 text-[8px] font-black px-1 py-0.5 rounded border border-emerald-500/20 uppercase tracking-tighter shrink-0">
+              보강
+            </span>
+          )}
+          <span className={`text-[10px] font-bold truncate ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-500'}`}>
+            {student.grade} · {student.class}
+          </span>
+        </div>
+
+        {/* 💡 배정 교재 표시 추가 */}
+        {student.assigned_books && student.assigned_books.length > 0 && (
+          <div className="flex flex-wrap gap-1">
+            {student.assigned_books.map(code => {
+              const bookTitle = masterTextbooks.find(m => m.bookcode === code)?.title || code;
+              return (
+                <span key={code} className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold truncate max-w-[100px] ${
+                  isSelected || isChecked ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-400 border border-white/5'
+                }`}>
+                  {bookTitle}
+                </span>
+              );
+            })}
           </div>
-          <div className={`text-[10px] font-bold truncate flex items-center gap-x-2 gap-y-1 flex-wrap ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-500'}`}>
-            <span className="shrink-0">{student.grade} · {student.class}</span>
+        )}
+
+        <div className="flex items-center gap-1.5 mt-0.5">
+          {(student.class_days || []).slice().sort((a, b) => {
+            const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+            return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+          }).map(day => {
+            const activeHours = student.day_schedules?.[day] || [];
+            const isToday = day === currentDay;
             
-            <div className="flex items-center gap-1.5 ml-1">
-              {(student.class_days || []).slice().sort((a, b) => {
-                const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-                return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
-              }).map(day => {
-                const activeHours = student.day_schedules?.[day] || [];
-                const isToday = day === currentDay;
-                
-                return (
-                  <div key={day} className={`flex items-center gap-0.5 px-1.5 py-0.5 rounded-md ${isToday ? 'bg-white/10 ring-1 ring-white/10' : ''}`}>
-                    <span className={`text-[9px] mr-0.5 ${isToday ? 'text-emerald-400 font-black' : ''}`}>{day}</span>
-                    <div className="flex gap-0.5">
-                      {activeHours.map(h => {
-                        const isWhite = h >= 100;
-                        const actualHour = isWhite ? h - 100 : h;
-                        
-                        return (
-                          <div 
-                            key={h} 
-                            className={`w-1 h-2.5 rounded-sm transition-colors ${
-                              isWhite 
-                                ? 'bg-white border border-gray-400/20' 
-                                : (actualHour < 19 ? 'bg-blue-500' : 'bg-orange-400')
-                            }`} 
-                            title={`${actualHour}:00`}
-                          />
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+            return (
+              <div key={day} className={`flex items-center gap-0.5 px-1 py-0.5 rounded-md ${isToday ? 'bg-white/10 ring-1 ring-white/10' : ''}`}>
+                <span className={`text-[8px] mr-0.5 font-bold ${isToday ? 'text-emerald-400 font-black' : 'text-gray-600'}`}>{day}</span>
+                <div className="flex gap-0.5">
+                  {activeHours.map(h => {
+                    const isWhite = h >= 100;
+                    const actualHour = isWhite ? h - 100 : h;
+                    
+                    return (
+                      <div 
+                        key={h} 
+                        className={`w-0.5 h-2 rounded-sm transition-colors ${
+                          isWhite 
+                            ? 'bg-white border border-gray-400/20' 
+                            : (actualHour < 19 ? 'bg-blue-500/80' : 'bg-orange-400/80')
+                        }`} 
+                      />
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
       
-      <div className="flex items-center gap-2 shrink-0">
+      <div className="flex items-center gap-2 shrink-0 ml-2">
         {isBatchMode ? (
           isSelectionMode ? (
             isChecked ? (

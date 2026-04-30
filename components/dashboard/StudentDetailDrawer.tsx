@@ -98,7 +98,7 @@ export default function StudentDetailDrawer({
       
       <div className="flex-1 space-y-10">
         {/* 1. 기본 정보 */}
-        <section className="bg-white/5 border border-white/5 rounded-2xl p-4 space-y-3 shadow-inner">
+        <section className="bg-white/5 border border-white/5 rounded-2xl p-4 space-y-4 shadow-inner">
           <div className="grid grid-cols-12 gap-2">
             <div className="col-span-5">
               <input type="text" value={localName} placeholder="Name" onChange={(e) => setLocalName(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'name', localName)}
@@ -113,6 +113,28 @@ export default function StudentDetailDrawer({
                 className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-gray-400 text-center outline-none focus:border-blue-500 transition-all" />
             </div>
           </div>
+
+          {/* 💡 배정 교재 요약 (이름과 전화번호 사이로 이동) */}
+          {student.assigned_books.length > 0 && (
+            <div className="flex flex-wrap gap-1.5 py-1 border-y border-white/5 mx-1">
+              {student.assigned_books.map(code => {
+                const book = availableTextbooks.find(b => b.bookcode === code);
+                if (!book) return null;
+                return (
+                  <div key={code} className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600/20 border border-blue-500/30 rounded-lg group">
+                    <span className="text-[9px] font-black text-blue-400">{book.title}</span>
+                    <button 
+                      onClick={() => toggleBookSelection(code)}
+                      className="text-blue-500/40 hover:text-blue-400 transition-colors"
+                    >
+                      <X size={10} strokeWidth={3} />
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
           <div className="relative group">
             <input type="tel" value={localPhone} placeholder="Phone Number (010-0000-0000)" onChange={(e) => setLocalPhone(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'phone', localPhone)}
               className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all" />
@@ -154,6 +176,7 @@ export default function StudentDetailDrawer({
             <h5 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2"><BookOpen size={14} /> Assigned Textbooks</h5>
             <button onClick={onRefreshBooks} className="text-gray-500 hover:text-white transition-all"><RefreshCw size={12} className={isRefreshingBooks ? 'animate-spin' : ''} /></button>
           </div>
+
           <div className="bg-white/5 border border-white/5 rounded-2xl flex flex-col overflow-hidden h-[300px] shadow-inner">
             <div className="p-3 border-b border-white/5 bg-black/20 flex items-center gap-2">
               <Search size={14} className="text-gray-500" />

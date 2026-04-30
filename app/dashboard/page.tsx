@@ -24,6 +24,8 @@ export default function DashboardPage() {
   const router = useRouter();
   const [viewMode, setViewMode] = useState<'board' | 'todayTable' | 'progress' | 'studentEdit' | 'monthlyChanges'>('board');
   const [selectedFilter, setSelectedFilter] = useState('All');
+  const [selectedDays, setSelectedDays] = useState<string[]>([]); // 💡 요일 다중 선택 상태 추가
+  const [isAndFilter, setIsAndFilter] = useState(false); // 💡 AND/OR 필터 조건 추가
   const [filterTarget, setFilterTarget] = useState<'all' | 'today' | 'rest'>('rest'); // 💡 필터 적용 범위 추가
   const [searchQuery, setSearchQuery] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
@@ -247,9 +249,20 @@ export default function DashboardPage() {
     if (selectedFilter !== 'All' && (filterTarget === 'today' || filterTarget === 'all')) {
       if (!s.grade.includes(selectedFilter)) return false;
     }
+
+    // 4. 요일 필터 적용 (타겟이 Top 또는 All일 때만 가시성 결정)
+    if (selectedDays.length > 0 && (filterTarget === 'today' || filterTarget === 'all')) {
+      if (isAndFilter) {
+        const hasAll = selectedDays.every(day => s.class_days.includes(day));
+        if (!hasAll) return false;
+      } else {
+        const hasOverlap = s.class_days.some(day => selectedDays.includes(day));
+        if (!hasOverlap) return false;
+      }
+    }
     
     return true;
-  }).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey, selectedFilter, filterTarget, searchQuery]);
+  }).sort((a, b) => a.name.localeCompare(b.name, 'ko')), [students, selectedDayKey, selectedFilter, selectedDays, isAndFilter, filterTarget, searchQuery]);
 
   const filteredAllStudents = useMemo(() => {
     return students.filter(s => {
@@ -268,10 +281,21 @@ export default function DashboardPage() {
       if (selectedFilter !== 'All' && (filterTarget === 'rest' || filterTarget === 'all')) {
         if (!s.grade.includes(selectedFilter)) return false;
       }
+
+      // 요일 필터 적용 (타겟이 Btm 또는 All일 때만 가시성 결정)
+      if (selectedDays.length > 0 && (filterTarget === 'rest' || filterTarget === 'all')) {
+        if (isAndFilter) {
+          const hasAll = selectedDays.every(day => s.class_days.includes(day));
+          if (!hasAll) return false;
+        } else {
+          const hasOverlap = s.class_days.some(day => selectedDays.includes(day));
+          if (!hasOverlap) return false;
+        }
+      }
       
       return true;
     }).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  }, [students, searchQuery, selectedFilter, filterTarget]);
+  }, [students, searchQuery, selectedFilter, selectedDays, isAndFilter, filterTarget]);
 
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
@@ -289,6 +313,8 @@ export default function DashboardPage() {
         viewMode={viewMode} setViewMode={setViewMode} 
         todayCount={todayStudents.length} students={students} 
         selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter}
+        selectedDays={selectedDays} setSelectedDays={setSelectedDays} // 💡 추가된 프롭
+        isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} // 💡 추가된 프롭
         filterTarget={filterTarget} setFilterTarget={setFilterTarget} // 💡 추가된 프롭
       />
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
