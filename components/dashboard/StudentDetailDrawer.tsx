@@ -119,13 +119,14 @@ export default function StudentDetailDrawer({
             <div className="flex flex-wrap gap-1.5 py-1 border-y border-white/5 mx-1">
               {student.assigned_books.map(code => {
                 const book = availableTextbooks.find(b => b.bookcode === code);
-                if (!book) return null;
                 return (
-                  <div key={code} className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600/20 border border-blue-500/30 rounded-lg group">
-                    <span className="text-[9px] font-black text-blue-400">{book.title}</span>
+                  <div key={code} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg group ${book ? 'bg-blue-600/20 border border-blue-500/30' : 'bg-red-500/10 border border-red-500/20'}`}>
+                    <span className={`text-[9px] font-black ${book ? 'text-blue-400' : 'text-red-400'}`}>
+                      {book ? book.title : `(사라진 교재: ${code})`}
+                    </span>
                     <button 
                       onClick={() => toggleBookSelection(code)}
-                      className="text-blue-500/40 hover:text-blue-400 transition-colors"
+                      className="text-gray-500 hover:text-white transition-colors"
                     >
                       <X size={10} strokeWidth={3} />
                     </button>

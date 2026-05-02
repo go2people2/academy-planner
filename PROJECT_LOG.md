@@ -128,7 +128,30 @@
     - 학생 프로필 삭제 시에도 과거 수업/테스트 통계 기록은 DB에 보존되며 실명으로 식별 가능하도록 보장.
 - [x] **Runtime Error 수정**:
     - `Overview.tsx`에서 누락되었던 `currentDayName` 정의 및 `getDayOfWeek` 헬퍼 함수 복구.
-- [x] **데이터 매핑 보완**:
+- **데이터 매핑 보완**:
     - Supabase에서 가져온 원시 데이터를 프론트엔드 `Student` 객체로 변환할 때 `phone` 번호와 `is_deleted` 상태가 누락되지 않도록 매핑 로직 보강.
+
+## 11. PDF 교재 분석 및 구글 시트 데이터화 가이드
+향후 교재 데이터 확충 시 다음의 표준 절차를 준수한다.
+
+### ① 환경 설정 및 도구
+- **필수 라이브러리**: `pypdf` (Python)
+- **설치**: `python3 -m pip install pypdf --user --break-system-packages`
+
+### ② 분석 프로세스
+1. **코드 매칭**: 구글 시트 `master` 탭에서 대상 교재의 `bookcode`를 먼저 확인한다. (예: `rpm-gt1`, `rpm-ds`)
+2. **텍스트 추출**: PDF의 6~15페이지(목차 영역)에서 단원명과 시작 페이지 정보를 추출한다.
+   ```bash
+   python3 -c "import sys; from pypdf import PdfReader; reader = PdfReader('파일경로.pdf'); [print(f'--- Page {i+1} ---\n', reader.pages[i].extract_text()) for i in range(5, 14)]"
+   ```
+3. **데이터 가공 원칙**:
+   - **시작 페이지**: 첫 단원의 시작은 반드시 **1페이지**로 설정한다. (표지 및 목차를 포함하여 선생님의 숙제 범위 입력 편의성 제공)
+   - **단원명**: `01. 단원명` 형식을 유지한다.
+   - **끝 페이지**: 다음 단원의 시작 페이지 바로 전 페이지로 설정한다.
+
+### ③ 데이터 입력 방법
+- **Markdown 표 활용**: 에이전트는 분석 결과를 Markdown Table 형식으로 출력하여 사용자가 구글 시트(`unit-page` 탭)에 즉시 복사-붙여넣기 할 수 있도록 제공한다.
+- **열 분할**: 시트에서 자동으로 열이 나누어지지 않을 경우, 구글 시트의 '텍스트를 열로 분할' 기능을 활용하도록 안내한다.
+
 
 

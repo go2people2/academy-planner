@@ -34,6 +34,13 @@ export default function DashboardPage() {
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
   const [isBatchMode, setIsBatchMode] = useState(false);
+  const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
+
+  const handleViewProgress = (studentId: string) => {
+    setActiveProgressStudentId(studentId);
+    setViewMode('progress');
+    setSelectedStudentId(null); // 드로어는 닫음
+  };
 
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
@@ -94,31 +101,42 @@ export default function DashboardPage() {
     const student = students.find(s => s.id === studentId);
     if (!student) return false;
     let sessionId = student.todaySession?.id;
+
+    // 💡 DB 스키마에 없을 수 있는 필드들을 안전하게 제거
+    const { test_id, homework_json, ...dbCompatibleData } = sessionData as any;
+
     try {
       if (!sessionId) {
         const { data, error } = await supabase.from('ams_session_logs').insert([{
           student_id: studentId, 
-          student_name: student.name, // 💡 이름 저장
           academy_id: student.academy_id, 
           session_date: selectedDate, 
-          ...sessionData, 
+          ...dbCompatibleData, 
           status: sessionData.status || 'none'
         }]).select();
-        if (error) return false;
+        if (error) {
+          console.error('Supabase insert error:', error);
+          return false;
+        }
         if (data) {
-          setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: data[0] as SessionLog } : s));
+          setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: { ...data[0], homework_json: sessionData.homework_json || [] } as SessionLog } : s));
           return true;
         }
       } else {
         const { error } = await supabase.from('ams_session_logs').update({
-          ...sessionData,
-          student_name: student.name // 💡 이름 업데이트 (이름 변경 대비)
+          ...dbCompatibleData
         }).eq('id', sessionId);
-        if (error) return false;
-        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: { ...s.todaySession!, ...sessionData, student_name: student.name } } : s));
+        if (error) {
+          console.error('Supabase update error:', error);
+          return false;
+        }
+        setStudents(prev => prev.map(s => s.id === studentId ? { ...s, todaySession: { ...s.todaySession!, ...sessionData } } : s));
         return true;
       }
-    } catch (e) { return false; }
+    } catch (e) { 
+      console.error('Critical save error:', e);
+      return false; 
+    }
     return false;
   };
 
@@ -327,9 +345,11 @@ export default function DashboardPage() {
             {viewMode === 'board' && (
               <Overview 
                 todayStudents={todayStudents} 
-                filteredAllStudents={filteredAllStudents} // 💡 항상 목록 표시
-                allTodayIds={allTodayIds} // 💡 추가
+                filteredAllStudents={filteredAllStudents} 
+                allTodayIds={allTodayIds} 
                 selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} 
+                selectedDate={selectedDate} onDateChange={setSelectedDate} 
+                onViewProgress={handleViewProgress}
                 todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode}
                 onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
@@ -338,21 +358,38 @@ export default function DashboardPage() {
             )}
             {viewMode === 'studentEdit' && (
               <Overview 
-                todayStudents={[]} // 💡 상단 섹션 숨김용 빈 배열
-                filteredAllStudents={filteredAllStudents} // 💡 필터링된 전체 학생 표시
-                allTodayIds={[]} // 에디트 모드에서는 제외 로직 불필요
+                todayStudents={[]} 
+                filteredAllStudents={filteredAllStudents} 
+                allTodayIds={[]} 
                 selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} 
+                selectedDate={selectedDate} onDateChange={setSelectedDate} 
+                onViewProgress={handleViewProgress}
                 todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}}
                 onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
                 masterTextbooks={availableTextbooks}
                 title="전체 학생 정보 관리" 
-                showAddButton={true} // 💡 수정 모드에서만 버튼 표시
-                hideTodaySection={true} // 💡 상단 섹션 완전히 제거
+                showAddButton={true} 
+                hideTodaySection={true} 
               />
             )}
-            {viewMode === 'todayTable' && <TodaySheet students={todayStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} masterTextbooks={availableTextbooks} onSave={saveTodaySession} />}
-            {viewMode === 'progress' && <ProgressSequencer students={students.filter(s => !s.is_deleted)} masterTextbooks={availableTextbooks} />}
+            {viewMode === 'todayTable' && (
+              <TodaySheet 
+                students={todayStudents} 
+                selectedDate={selectedDate} 
+                onDateChange={setSelectedDate} 
+                onViewProgress={handleViewProgress}
+                masterTextbooks={availableTextbooks} 
+                onSave={saveTodaySession} 
+              />
+            )}
+            {viewMode === 'progress' && (
+              <ProgressSequencer 
+                students={students.filter(s => !s.is_deleted)} 
+                masterTextbooks={availableTextbooks} 
+                initialStudentId={activeProgressStudentId}
+              />
+            )}
             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
           </div>
         )}
@@ -373,6 +410,7 @@ export default function DashboardPage() {
             ) : (
               <StudentStudyReportDrawer 
                 student={selectedStudent} 
+                availableTextbooks={availableTextbooks}
                 onClose={() => setSelectedStudentId(null)} 
                 onEditMode={() => setViewMode('studentEdit')}
               />

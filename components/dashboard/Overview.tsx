@@ -2,16 +2,19 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 import AddStudentModal from './AddStudentModal';
 
 interface OverviewProps {
   todayStudents: Student[];
   filteredAllStudents: Student[];
-  allTodayIds?: string[]; // 💡 추가
+  allTodayIds?: string[];
   selectedStudentId: string | null;
   onSelectStudent: (id: string) => void;
+  onViewProgress?: (id: string) => void;
+  selectedDate: string;
+  onDateChange: (date: string) => void;
   todayKey: string;
   selectedFilter: string;
   isBatchMode: boolean;
@@ -22,39 +25,38 @@ interface OverviewProps {
   masterTextbooks: TextbookOption[];
   title?: string;
   showAddButton?: boolean;
-  hideTodaySection?: boolean; // 💡 추가
+  hideTodaySection?: boolean;
 }
 
 export default function Overview({ 
-  todayStudents = [], filteredAllStudents = [], allTodayIds = [], selectedStudentId, onSelectStudent, todayKey,
+  todayStudents = [], filteredAllStudents = [], allTodayIds = [], selectedStudentId, onSelectStudent, 
+  onViewProgress,
+  selectedDate, onDateChange,
+  todayKey,
   selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, masterTextbooks = [],
   title,
   showAddButton = false,
-  hideTodaySection = false // 💡 기본값
+  hideTodaySection = false 
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
   const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   
-  // 사유 입력 모달 상태
   const [reasonModal, setReasonModal] = useState<{
     isOpen: boolean;
     type: 'add' | 'remove';
     studentIds: string[];
   }>({ isOpen: false, type: 'add', studentIds: [] });
   
-  const [reasons, setReasons] = useState<Record<string, string>>({}); // 💡 개별 사유 상태
+  const [reasons, setReasons] = useState<Record<string, string>>({});
 
-  // 💡 안전한 필터 모드 판단
   const isArchiveMode = useMemo(() => selectedFilter?.toLowerCase() === 'discharged', [selectedFilter]);
 
-  // 💡 하단에 표시할 학생 리스트 계산
   const studentsToDisplay = useMemo(() => {
     if (isArchiveMode) {
       return filteredAllStudents || [];
     } else {
-      // 💡 필터링된 todayStudents가 아니라, 고정된 allTodayIds를 사용하여 목록 간 이동 방지
       return (filteredAllStudents || []).filter(s => !allTodayIds.includes(s.id));
     }
   }, [filteredAllStudents, allTodayIds, isArchiveMode]);
@@ -102,18 +104,6 @@ export default function Overview({
     if (reasonModal.type === 'add') {
       await onBatchAdd(reasonModal.studentIds, reasons);
       setSelectedForBatch([]);
-      
-      if (selectedToRemove.length > 0) {
-        const initialReasons: Record<string, string> = {};
-        selectedToRemove.forEach(id => { initialReasons[id] = '수업 취소'; });
-        setReasons(initialReasons);
-        setReasonModal({
-          isOpen: true,
-          type: 'remove',
-          studentIds: selectedToRemove
-        });
-        return;
-      }
     } else {
       await Promise.all(reasonModal.studentIds.map(id => onRemoveFromToday(id, reasons[id] || '수업 취소')));
       setSelectedToRemove([]);
@@ -142,39 +132,55 @@ export default function Overview({
     }
   };
 
-  const currentDayName = getDayOfWeek(todayKey);
-
   return (
     <div className="p-2 space-y-6 relative">
-      {/* 1. 상단: 오늘의 명단 (퇴원생 모드나 명시적 숨김일 때는 절대 보여주지 않음) */}
       {!isArchiveMode && !hideTodaySection && (
         <section className="space-y-2">
-          <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
-            Today ({todayKey})
-            <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/5 uppercase font-bold">
-              {todayStudents.length} Students
-            </span>
-          </h3>
+          <div className="flex items-center justify-between gap-4 mb-2">
+            <div className="flex items-center gap-3">
+              <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
+                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
+                {todayKey === getDayOfWeek(new Date().toISOString().split('T')[0]) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
+                <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/5 uppercase font-bold">
+                  {todayStudents.length} Students
+                </span>
+              </h3>
 
-          {isBatchMode && (
-            <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest animate-pulse px-1">
-              💡 Click to remove from today&apos;s list
-            </p>
-          )}
+              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative">
+                <Calendar size={12} className="group-hover/date:text-blue-500" />
+                <span className="text-[10px] font-black uppercase tracking-tighter">
+                  {selectedDate.replace(/-/g, '.')}
+                </span>
+                <input 
+                  type="date" 
+                  value={selectedDate}
+                  onChange={(e) => onDateChange(e.target.value)}
+                  className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark]"
+                />
+              </div>
+            </div>
+
+            {isBatchMode && (
+              <p className="text-[9px] text-red-500 font-bold uppercase tracking-widest animate-pulse px-1">
+                💡 Click to remove from today&apos;s list
+              </p>
+            )}
+          </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
             {todayStudents.map((s) => {
               const isChecked = selectedToRemove.includes(s.id);
               return (
-                <StudentRowItem 
-                  key={s.id} 
-                  student={s} 
-                  isSelected={selectedStudentId === s.id && !isBatchMode} 
+                <StudentRowItem
+                  key={s.id}
+                  student={s}
+                  isSelected={selectedStudentId === s.id && !isBatchMode}
                   isChecked={isChecked}
                   isBatchMode={isBatchMode}
-                  currentDay={currentDayName}
-                  onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)} 
+                  currentDay={todayKey}
+                  masterTextbooks={masterTextbooks}
+                  onViewProgress={onViewProgress}
+                  onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)}
                 />
               );
             })}
@@ -185,7 +191,6 @@ export default function Overview({
         </section>
       )}
 
-      {/* 2. 하단: 리스트 영역 */}
       <section className={`space-y-2 ${todayStudents.length > 0 ? 'pt-4 border-t border-white/5' : ''}`}>
         <div className="flex items-center justify-between px-1">
           <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
@@ -252,7 +257,9 @@ export default function Overview({
                 isSelected={selectedStudentId === s.id && !isBatchMode} 
                 isChecked={isChecked}
                 isBatchMode={isBatchMode}
-                currentDay={currentDayName}
+                currentDay={todayKey}
+                masterTextbooks={masterTextbooks}
+                onViewProgress={onViewProgress}
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)} 
               />
             );
@@ -265,7 +272,6 @@ export default function Overview({
         </div>
       </section>
 
-      {/* 사유 입력 모달 */}
       <AnimatePresence>
         {reasonModal.isOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
@@ -323,7 +329,6 @@ export default function Overview({
         )}
       </AnimatePresence>
 
-      {/* 신규 학생 등록 모달 */}
       <AnimatePresence>
         {isAddModalOpen && (
           <AddStudentModal 
@@ -338,9 +343,9 @@ export default function Overview({
 }
 
 function StudentRowItem({ 
-  student, isSelected, isChecked, isBatchMode, onClick, currentDay, masterTextbooks 
+  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks 
 }: { 
-  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, currentDay?: string, masterTextbooks: TextbookOption[] 
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[] 
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   const isMakeup = student.todaySession?.attendance_status === '보강';
@@ -365,6 +370,18 @@ function StudentRowItem({
           <h4 className={`text-[13px] font-black tracking-tight shrink-0 ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-gray-100'}`}>
             {student.name}
           </h4>
+          {!isBatchMode && onViewProgress && (
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                onViewProgress(student.id);
+              }}
+              className="p-1 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-all shadow-sm shadow-blue-900/20"
+              title="진도표 바로가기"
+            >
+              <TrendingUp size={10} />
+            </button>
+          )}
           {isMakeup && !isSelected && !isChecked && (
             <span className="bg-emerald-500/20 text-emerald-500 text-[8px] font-black px-1 py-0.5 rounded border border-emerald-500/20 uppercase tracking-tighter shrink-0">
               보강
@@ -375,16 +392,16 @@ function StudentRowItem({
           </span>
         </div>
 
-        {/* 💡 배정 교재 표시 추가 */}
         {student.assigned_books && student.assigned_books.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {student.assigned_books.map(code => {
-              const bookTitle = masterTextbooks.find(m => m.bookcode === code)?.title || code;
+              const book = masterTextbooks.find(m => m.bookcode === code);
+              if (!book) return null;
               return (
                 <span key={code} className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold truncate max-w-[100px] ${
                   isSelected || isChecked ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-400 border border-white/5'
                 }`}>
-                  {bookTitle}
+                  {book.title}
                 </span>
               );
             })}

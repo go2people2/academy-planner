@@ -53,8 +53,9 @@ export interface Teacher {
 }
 
 export interface TextbookOption {
+  bookcode: string;
   title: string;
   grade: string;
-  course: string;
-  tabName: string;
+  status: string;
+  ePeriod: string;
 }

@@ -11,13 +11,14 @@ import { Student, SessionLog, TextbookOption } from '@/types/dashboard';
 
 interface StudentStudyReportDrawerProps {
   student: Student;
+  availableTextbooks: TextbookOption[]; // 💡 추가
   onClose: () => void;
   onEditMode: () => void; // 정보 수정 모드로 전환 (선택 사항)
 }
 
 type TabType = 'summary' | 'history' | 'stats' | 'roadmap' | 'journal';
 
-export default function StudentStudyReportDrawer({ student, onClose, onEditMode }: StudentStudyReportDrawerProps) {
+export default function StudentStudyReportDrawer({ student, availableTextbooks, onClose, onEditMode }: StudentStudyReportDrawerProps) {
   const [activeTab, setActiveTab] = useState<TabType>('summary');
 
   // 데이터 가공 (실제 데이터 + 더미 데이터 혼합)
@@ -83,7 +84,7 @@ export default function StudentStudyReportDrawer({ student, onClose, onEditMode 
       {/* 3. 메인 스크롤 영역 */}
       <div className="flex-1 overflow-y-auto custom-scrollbar-v p-8">
         <AnimatePresence mode="wait">
-          {activeTab === 'summary' && <SummaryTab key="summary" student={student} stats={stats} />}
+          {activeTab === 'summary' && <SummaryTab key="summary" student={student} stats={stats} availableTextbooks={availableTextbooks} />}
           {activeTab === 'history' && <HistoryTab key="history" student={student} />}
           {activeTab === 'stats' && <StatsTab key="stats" student={student} />}
           {activeTab === 'roadmap' && <RoadmapTab key="roadmap" student={student} />}
@@ -122,7 +123,7 @@ function TabButton({ active, onClick, icon, label }: any) {
 
 // --- 탭별 서브 컴포넌트들 ---
 
-function SummaryTab({ student, stats }: any) {
+function SummaryTab({ student, stats, availableTextbooks }: any) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
       {/* 주요 지표 */}
@@ -136,25 +137,30 @@ function SummaryTab({ student, stats }: any) {
       <section className="space-y-4">
         <SectionTitle title="현재 학습 중인 교재" />
         <div className="space-y-2">
-          {student.assigned_books.map((bookCode: string) => (
-            <div key={bookCode} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between group hover:border-blue-500/30 transition-all">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-500">
-                  <BookOpen size={20} />
+          {student.assigned_books.map((bookCode: string) => {
+            const bookInfo = availableTextbooks?.find((b: any) => b.bookcode === bookCode);
+            const bookTitle = bookInfo?.title || bookCode;
+
+            return (
+              <div key={bookCode} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between group hover:border-blue-500/30 transition-all">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-500">
+                    <BookOpen size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-[13px] font-black text-white">{bookTitle}</h4>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Expected completion: 2 weeks left</p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="text-[13px] font-black text-white">{bookCode}</h4>
-                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Expected completion: 2 weeks left</p>
+                <div className="text-right">
+                  <div className="text-[14px] font-black text-blue-500">65%</div>
+                  <div className="w-24 h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
+                    <div className="h-full bg-blue-500" style={{ width: '65%' }} />
+                  </div>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-[14px] font-black text-blue-500">65%</div>
-                <div className="w-24 h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
-                  <div className="h-full bg-blue-500" style={{ width: '65%' }} />
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </section>
 
