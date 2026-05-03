@@ -17,6 +17,9 @@ export interface SessionLog {
   special_notes: string;
   homework_text: string;
   homework_json: HomeworkItem[];
+  test_id?: string;
+  test_score?: number;
+  test_result?: string;
 }
 
 export interface Student {
@@ -26,6 +29,8 @@ export interface Student {
   name: string;
   school: string;
   grade: string;
+  course: 'E' | 'D' | 'C' | 'B' | 'A';
+  book_courses?: Record<string, 'E' | 'D' | 'C' | 'B' | 'A'>;
   class: string;
   class_days: string[];
   day_schedules?: {

@@ -388,7 +388,7 @@ function StudentRowItem({
             </span>
           )}
           <span className={`text-[10px] font-bold truncate ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-500'}`}>
-            {student.grade} · {student.class}
+            {student.grade} · {student.course} · {student.class}
           </span>
         </div>
 

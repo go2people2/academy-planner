@@ -193,7 +193,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
             <div className="flex items-center justify-between gap-2">
               <div className="flex flex-col min-w-0 overflow-hidden">
                 <span className="font-black text-white text-[12px] tracking-tight truncate">{student.name}</span>
-                <span className="text-[8px] font-bold text-gray-600 uppercase tracking-tighter truncate">{student.grade} · {student.class}</span>
+                <span className="text-[8px] font-bold text-gray-600 uppercase tracking-tighter truncate">{student.grade} · {student.course} · {student.class}</span>
               </div>
               {onViewProgress && (
                 <button 

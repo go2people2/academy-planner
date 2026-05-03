@@ -21,7 +21,10 @@ export default function StudentDetailDrawer({
   const [localSchedules, setLocalSchedules] = useState<{[key: string]: number[]}>(student.day_schedules || {});
   const [localDays, setLocalDays] = useState<string[]>(student.class_days || []);
   const [localName, setLocalName] = useState(student.name);
+  const [localSchool, setLocalSchool] = useState(student.school || '');
   const [localGrade, setLocalGrade] = useState(student.grade);
+  const [localCourse, setLocalCourse] = useState(student.course || 'C');
+  const [localBookCourses, setLocalBookCourses] = useState<Record<string, 'E' | 'D' | 'C' | 'B' | 'A'>>(student.book_courses || {});
   const [localClass, setLocalClass] = useState(student.class);
   const [localPhone, setLocalPhone] = useState(student.phone || '');
   const [bookSearch, setBookSearch] = useState('');
@@ -33,10 +36,13 @@ export default function StudentDetailDrawer({
     setLocalSchedules(student.day_schedules || {});
     setLocalDays(student.class_days || []);
     setLocalName(student.name);
+    setLocalSchool(student.school || '');
     setLocalGrade(student.grade);
+    setLocalCourse(student.course || 'C');
+    setLocalBookCourses(student.book_courses || {});
     setLocalClass(student.class);
     setLocalPhone(student.phone || '');
-  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.class, student.phone]);
+  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone]);
 
   const filteredBooks = useMemo(() => {
     return (availableTextbooks || []).filter(b => 
@@ -100,45 +106,75 @@ export default function StudentDetailDrawer({
         {/* 1. 기본 정보 */}
         <section className="bg-white/5 border border-white/5 rounded-2xl p-4 space-y-4 shadow-inner">
           <div className="grid grid-cols-12 gap-2">
-            <div className="col-span-5">
+            <div className="col-span-4">
               <input type="text" value={localName} placeholder="Name" onChange={(e) => setLocalName(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'name', localName)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-4 py-3 text-lg font-black text-white outline-none focus:border-blue-500 transition-all" />
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-lg font-black text-white outline-none focus:border-blue-500 transition-all" />
+            </div>
+            <div className="col-span-2">
+              <input type="text" value={localGrade} placeholder="Grade" onChange={(e) => setLocalGrade(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'grade', localGrade)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-3 text-xs font-bold text-blue-400 text-center outline-none focus:border-blue-500 transition-all" title="Grade" />
             </div>
             <div className="col-span-3">
-              <input type="text" value={localGrade} placeholder="Grade" onChange={(e) => setLocalGrade(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'grade', localGrade)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-blue-400 text-center outline-none focus:border-blue-500 transition-all" />
+              <select value={localCourse} onChange={(e) => {
+                const val = e.target.value as any;
+                setLocalCourse(val);
+                onUpdateInfo(student.id, 'course', val);
+              }} className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-3 text-xs font-black text-blue-500 text-center outline-none appearance-none cursor-pointer">
+                {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c} Course</option>)}
+              </select>
             </div>
-            <div className="col-span-4">
-              <input type="text" value={localClass} placeholder="Class/Teacher" onChange={(e) => setLocalClass(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'class_name', localClass)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-sm font-bold text-gray-400 text-center outline-none focus:border-blue-500 transition-all" />
+            <div className="col-span-3">
+              <input type="text" value={localClass} placeholder="Class" onChange={(e) => setLocalClass(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'class_name', localClass)}
+                className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-3 text-xs font-bold text-gray-400 text-center outline-none focus:border-blue-500 transition-all" />
             </div>
           </div>
 
           {/* 💡 배정 교재 요약 (이름과 전화번호 사이로 이동) */}
           {student.assigned_books.length > 0 && (
-            <div className="flex flex-wrap gap-1.5 py-1 border-y border-white/5 mx-1">
-              {student.assigned_books.map(code => {
-                const book = availableTextbooks.find(b => b.bookcode === code);
-                return (
-                  <div key={code} className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg group ${book ? 'bg-blue-600/20 border border-blue-500/30' : 'bg-red-500/10 border border-red-500/20'}`}>
-                    <span className={`text-[9px] font-black ${book ? 'text-blue-400' : 'text-red-400'}`}>
-                      {book ? book.title : `(사라진 교재: ${code})`}
-                    </span>
-                    <button 
-                      onClick={() => toggleBookSelection(code)}
-                      className="text-gray-500 hover:text-white transition-colors"
-                    >
-                      <X size={10} strokeWidth={3} />
-                    </button>
-                  </div>
-                );
-              })}
+            <div className="flex flex-col gap-2 py-1 border-y border-white/5 mx-1">
+              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest px-1">Book Courses (Overridable)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {student.assigned_books.map(code => {
+                  const book = availableTextbooks.find(b => b.bookcode === code);
+                  const bookCourse = localBookCourses[code] || localCourse;
+                  return (
+                    <div key={code} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg group border ${book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
+                      <span className={`text-[9px] font-black px-1.5 ${book ? 'text-gray-400' : 'text-red-400'}`}>
+                        {book ? book.title : `(${code})`}
+                      </span>
+                      <select 
+                        value={bookCourse}
+                        onChange={(e) => {
+                          const newCourses = { ...localBookCourses, [code]: e.target.value as any };
+                          setLocalBookCourses(newCourses);
+                          onUpdateInfo(student.id, 'book_courses', newCourses);
+                        }}
+                        className="bg-blue-600/20 text-blue-500 text-[10px] font-black rounded px-1 py-0.5 outline-none appearance-none cursor-pointer hover:bg-blue-600 hover:text-white transition-all"
+                      >
+                        {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c}</option>)}
+                      </select>
+                      <button 
+                        onClick={() => toggleBookSelection(code)}
+                        className="text-gray-600 hover:text-red-500 transition-colors ml-1"
+                      >
+                        <X size={10} strokeWidth={3} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 
-          <div className="relative group">
-            <input type="tel" value={localPhone} placeholder="Phone Number (010-0000-0000)" onChange={(e) => setLocalPhone(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'phone', localPhone)}
-              className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all" />
+          <div className="grid grid-cols-2 gap-2">
+            <div className="relative group">
+              <input type="text" value={localSchool} placeholder="School Name" onChange={(e) => setLocalSchool(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'school', localSchool)}
+                className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-400 outline-none focus:border-blue-500/50 transition-all font-bold" />
+            </div>
+            <div className="relative group">
+              <input type="tel" value={localPhone} placeholder="Phone Number" onChange={(e) => setLocalPhone(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'phone', localPhone)}
+                className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
+            </div>
           </div>
         </section>
 

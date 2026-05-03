@@ -80,7 +80,10 @@ export default function DashboardPage() {
         const history = logs.filter(l => l.date < selectedDate).slice(0, 5).map(l => l.status);
         while (history.length < 5) history.push('none');
         return {
-          id: s.id, academy_id: s.academy_id, name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', class: s.class_name || '일반반',
+          id: s.id, academy_id: s.academy_id, name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', 
+          course: s.course || 'C',
+          book_courses: s.book_courses || {},
+          class: s.class_name || '일반반',
           phone: s.phone || '', is_deleted: !!s.is_deleted,
           created_at: s.created_at, // 💡 추가
           status_changed_at: s.updated_at, // 💡 추가
@@ -144,7 +147,10 @@ export default function DashboardPage() {
     try {
       const { error } = await supabase.from('ams_students').insert([{
         academy_id: students[0]?.academy_id || 'hokma-math',
-        name: data.name, school: data.school, grade: data.grade, class_name: data.class_name, phone: data.phone, 
+        name: data.name, school: data.school, grade: data.grade, 
+        course: data.course,
+        book_courses: data.book_courses || {},
+        class_name: data.class_name, phone: data.phone, 
         class_days: data.class_days, day_schedules: data.day_schedules, assigned_books: data.assigned_books, is_deleted: false
       }]);
       if (error) throw error;

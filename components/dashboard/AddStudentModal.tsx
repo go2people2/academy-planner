@@ -20,12 +20,14 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
   const [formData, setFormData] = useState({
     name: '',
     school: '',
-    grade: '중1',
+    grade: '초5',
+    course: 'C' as 'E' | 'D' | 'C' | 'B' | 'A',
     class_name: '일반반',
     phone: '',
     class_days: [] as string[],
     day_schedules: {} as { [key: string]: number[] },
-    assigned_books: [] as string[]
+    assigned_books: [] as string[],
+    book_courses: {} as Record<string, 'E' | 'D' | 'C' | 'B' | 'A'>
   });
 
   const filteredBooks = useMemo(() => {
@@ -75,11 +77,31 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
   };
 
   const toggleBookSelection = (bookcode: string) => {
+    setFormData(prev => {
+      const isSelected = prev.assigned_books.includes(bookcode);
+      const newBooks = isSelected
+        ? prev.assigned_books.filter(b => b !== bookcode)
+        : [...prev.assigned_books, bookcode];
+      
+      const newBookCourses = { ...prev.book_courses };
+      if (!isSelected) {
+        newBookCourses[bookcode] = prev.course;
+      } else {
+        delete newBookCourses[bookcode];
+      }
+
+      return {
+        ...prev,
+        assigned_books: newBooks,
+        book_courses: newBookCourses
+      };
+    });
+  };
+
+  const updateBookCourse = (bookcode: string, course: 'E' | 'D' | 'C' | 'B' | 'A') => {
     setFormData(prev => ({
       ...prev,
-      assigned_books: prev.assigned_books.includes(bookcode)
-        ? prev.assigned_books.filter(b => b !== bookcode)
-        : [...prev.assigned_books, bookcode]
+      book_courses: { ...prev.book_courses, [bookcode]: course }
     }));
   };
 
@@ -113,16 +135,29 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                   <input type="text" placeholder="학교명" value={formData.school} onChange={(e) => setFormData({...formData, school: e.target.value})}
                     className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
                 </div>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Grade</label>
                     <select value={formData.grade} onChange={(e) => setFormData({...formData, grade: e.target.value})}
                       className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer">
-                      {['중1','중2','중3','고1','고2','고3'].map(g => <option key={g} value={g} className="bg-[#121212]">{g}</option>)}
+                      {['초5','초6','중1','중2','중3','고1','고2','고3'].map(g => <option key={g} value={g} className="bg-[#121212]">{g}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Class / Teacher</label>
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Course</label>
+                    <select value={formData.course} onChange={(e) => setFormData({...formData, course: e.target.value as any})}
+                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer font-black text-blue-500">
+                      {[
+                        { l: 'E', p: '100%' },
+                        { l: 'D', p: '90%' },
+                        { l: 'C', p: '80%' },
+                        { l: 'B', p: '70%' },
+                        { l: 'A', p: '50%' }
+                      ].map(c => <option key={c.l} value={c.l} className="bg-[#121212] text-white">{c.l} ({c.p})</option>)}
+                    </select>
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Class</label>
                     <input type="text" placeholder="반" value={formData.class_name} onChange={(e) => setFormData({...formData, class_name: e.target.value})}
                       className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
                   </div>
@@ -149,14 +184,36 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                 <div className="flex-1 overflow-y-auto p-2 custom-scrollbar-v space-y-1">
                   {filteredBooks.map((book) => {
                     const isSelected = formData.assigned_books.includes(book.bookcode);
+                    const bookCourse = formData.book_courses[book.bookcode] || formData.course;
                     return (
-                      <div key={book.bookcode} onClick={() => toggleBookSelection(book.bookcode)}
-                        className={`flex items-center justify-between p-3 rounded-xl cursor-pointer transition-all border ${isSelected ? 'bg-emerald-500/10 border-emerald-500/30' : 'hover:bg-white/5 border-transparent'}`}>
-                        <div>
-                          <h4 className={`text-[11px] font-bold ${isSelected ? 'text-emerald-400' : 'text-gray-300'}`}>{book.title}</h4>
-                          <p className="text-[9px] text-gray-500">{book.grade} · {book.ePeriod}</p>
+                      <div key={book.bookcode} className={`p-3 rounded-xl transition-all border ${isSelected ? 'bg-emerald-500/10 border-emerald-500/30' : 'hover:bg-white/5 border-transparent'}`}>
+                        <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleBookSelection(book.bookcode)}>
+                          <div>
+                            <h4 className={`text-[11px] font-bold ${isSelected ? 'text-emerald-400' : 'text-gray-300'}`}>{book.title}</h4>
+                            <p className="text-[9px] text-gray-500">{book.grade} · {book.ePeriod}</p>
+                          </div>
+                          {isSelected && <div className="bg-emerald-500 text-black p-0.5 rounded-full"><Check size={10} strokeWidth={4} /></div>}
                         </div>
-                        {isSelected && <div className="bg-emerald-500 text-black p-0.5 rounded-full"><Check size={10} strokeWidth={4} /></div>}
+                        
+                        {isSelected && (
+                          <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
+                            <span className="text-[8px] font-black text-emerald-500/50 uppercase tracking-widest">Select Course</span>
+                            <div className="flex gap-1">
+                              {['E','D','C','B','A'].map(c => (
+                                <button 
+                                  key={c}
+                                  type="button"
+                                  onClick={() => updateBookCourse(book.bookcode, c as any)}
+                                  className={`w-6 h-5 rounded text-[9px] font-black transition-all ${
+                                    bookCourse === c ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-white/5 text-gray-600 hover:bg-white/10'
+                                  }`}
+                                >
+                                  {c}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        )}
                       </div>
                     );
                   })}

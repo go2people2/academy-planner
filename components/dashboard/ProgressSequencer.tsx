@@ -14,6 +14,14 @@ interface ProgressSequencerProps {
   initialStudentId?: string | null;
 }
 
+const COURSE_TARGETS = {
+  'E': 100,
+  'D': 90,
+  'C': 80,
+  'B': 70,
+  'A': 50
+};
+
 export default function ProgressSequencer({ students, masterTextbooks, initialStudentId }: ProgressSequencerProps) {
   const [activeStudentId, setActiveStudentId] = useState<string | null>(initialStudentId || students[0]?.id || null);
 
@@ -28,19 +36,30 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
   return (
     <div className="flex h-full overflow-hidden bg-[#050505]">
       {/* Track Selector (Left) */}
-      <div className="w-52 border-r border-white/10 flex flex-col h-full bg-[#0a0a0a] z-20">
+      <div className="w-56 border-r border-white/10 flex flex-col h-full bg-[#0a0a0a] z-20">
         <div className="p-5 border-b border-white/10 bg-white/[0.02] font-black text-[9px] uppercase text-blue-500 tracking-widest italic flex items-center justify-between">
           <span>Tracks</span>
           <Users size={12} />
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {students.map(s => (
-            <div key={s.id} onClick={() => setActiveStudentId(s.id)} className={`p-4 border-b border-white/[0.05] cursor-pointer transition-all relative ${activeStudentId === s.id ? 'bg-blue-600/20' : 'hover:bg-white/[0.03]'}`}>
-              {activeStudentId === s.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)]" />}
-              <p className={`font-black text-[11px] mb-0.5 ${activeStudentId === s.id ? 'text-white' : 'text-gray-500'}`}>{s.name}</p>
-              <p className="text-[9px] text-gray-600 font-bold uppercase">{s.grade} · {s.class}</p>
-            </div>
-          ))}
+          {students.map(s => {
+            const target = COURSE_TARGETS[s.course || 'C'];
+            return (
+              <div key={s.id} onClick={() => setActiveStudentId(s.id)} className={`p-4 border-b border-white/[0.05] cursor-pointer transition-all relative ${activeStudentId === s.id ? 'bg-blue-600/20' : 'hover:bg-white/[0.03]'}`}>
+                {activeStudentId === s.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)]" />}
+                <div className="flex justify-between items-start mb-0.5">
+                  <p className={`font-black text-[11px] ${activeStudentId === s.id ? 'text-white' : 'text-gray-500'}`}>{s.name}</p>
+                  <span className={`text-[8px] font-black px-1 rounded ${activeStudentId === s.id ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-500'}`}>
+                    {s.course || 'C'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <p className="text-[9px] text-gray-600 font-bold uppercase">{s.grade}</p>
+                  <p className="text-[8px] text-gray-700 font-black italic">Target: {target}%</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 
@@ -53,6 +72,11 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                   <span className="font-black text-[10px] uppercase tracking-wider text-white">{activeStudent.name}&apos;s Master Sequence</span>
+                </div>
+                <div className="flex items-center gap-3 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                  <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{activeStudent.course || 'C'} Course</span>
+                  <div className="w-px h-2.5 bg-white/10" />
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Target: {COURSE_TARGETS[activeStudent.course || 'C']}%</span>
                 </div>
               </div>
             </div>
@@ -164,13 +188,39 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
     return names;
   }, [student.allLogs, bookCode]);
 
+  // 해당 교재의 각 단원별 최고 테스트 점수 추출
+  const unitTestScores = useMemo(() => {
+    const scores: Record<string, number> = {};
+    student.allLogs.forEach((log: any) => {
+      if (log.test_score !== undefined && log.homework_json) {
+        log.homework_json.forEach((h: any) => {
+          if (h.book_name === bookCode && h.units) {
+            h.units.forEach((u: string) => {
+              scores[u] = Math.max(scores[u] || 0, log.test_score);
+            });
+          }
+        });
+      }
+    });
+    return scores;
+  }, [student.allLogs, bookCode]);
+
+  const targetPercentage = useMemo(() => {
+    const bookCourse = student.book_courses?.[bookCode] || student.course || 'C';
+    return COURSE_TARGETS[bookCourse as keyof typeof COURSE_TARGETS] || 80;
+  }, [student.book_courses, student.course, bookCode]);
+
   return (
     <div className="space-y-3 relative z-10">
       <div className="flex items-center gap-3 bg-white/[0.03] w-fit pr-6 pl-2 py-1.5 rounded-xl border border-white/5 shadow-inner">
         <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg"><BookOpen size={14} /></div>
         <div className="flex flex-col">
           <h3 className="font-black text-[11px] text-white tracking-tight leading-none mb-0.5">{textbook?.title || bookCode}</h3>
-          <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">{bookCode}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">{bookCode}</span>
+            <span className="w-1 h-1 rounded-full bg-white/20" />
+            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{student.book_courses?.[bookCode] || student.course || 'C'} Course</span>
+          </div>
         </div>
       </div>
       
@@ -186,7 +236,10 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
             const unitName = u[2];
             const startP = Number(u[3]); 
             const endP = Number(u[4]);
-            const isDone = completedUnitNames.has(unitName);
+            
+            const unitScore = unitTestScores[unitName] || 0;
+            const isTargetMet = unitScore >= targetPercentage;
+            const isDone = completedUnitNames.has(unitName) && isTargetMet;
             
             const totalInUnit = endP - startP + 1;
             const pagesInUnit = bookHistoryPages.filter(p => p >= startP && p <= endP);
@@ -197,10 +250,12 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
               <motion.div 
                 key={idx} 
                 whileHover={{ scale: 1.02, y: -2 }} 
-                className={`min-w-[200px] h-[160px] rounded-2xl border flex flex-col relative overflow-hidden transition-all duration-300 ${
+                className={`min-w-[200px] h-[175px] rounded-2xl border flex flex-col relative overflow-hidden transition-all duration-300 ${
                   isDone 
-                    ? 'bg-[#1a1a1a] border-blue-500/50 shadow-[0_10px_30px_rgba(37,99,235,0.1)]' 
-                    : 'bg-[#0a0a0a] border-white/5 hover:border-white/10'
+                    ? 'bg-[#1a1a1a] border-emerald-500/50 shadow-[0_10px_30px_rgba(16,185,129,0.1)]' 
+                    : isTargetMet && unitScore > 0
+                      ? 'bg-[#1a1a1a] border-blue-500/50'
+                      : 'bg-[#0a0a0a] border-white/5 hover:border-white/10'
                 }`}
               >
                 <div className="flex-1 flex flex-col p-4 gap-3">
@@ -208,24 +263,44 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
                     <p className={`font-black text-[12px] leading-[1.3] line-clamp-2 ${isDone ? 'text-white' : 'text-gray-300'}`}>
                       {unitName}
                     </p>
-                    {isDone && <CheckCircle size={12} className="text-blue-500 shrink-0 mt-0.5" />}
+                    {isDone ? (
+                      <CheckCircle size={12} className="text-emerald-500 shrink-0 mt-0.5" />
+                    ) : unitScore > 0 && (
+                      <div className={`text-[9px] font-black px-1.5 py-0.5 rounded ${isTargetMet ? 'bg-blue-500 text-white' : 'bg-red-500/20 text-red-500'}`}>
+                        {unitScore}%
+                      </div>
+                    )}
                   </div>
 
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[8px] font-black text-gray-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 uppercase">Page</span>
-                    <span className="text-[10px] font-bold text-gray-400">P.{startP} ~ P.{endP}</span>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[8px] font-black text-gray-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 uppercase">Page</span>
+                      <span className="text-[10px] font-bold text-gray-400">P.{startP} ~ P.{endP}</span>
+                    </div>
+                    {unitScore > 0 && (
+                      <span className="text-[8px] font-black text-gray-600 uppercase italic">Target: {targetPercentage}%</span>
+                    )}
                   </div>
-{/* 3행: 4등분 진도 영역 (더 가늘고 각지게) */}
-<div className="grid grid-cols-4 gap-1 h-2">
-  {[0, 1, 2, 3].map(i => {
-    const threshold = (i + 1) * 0.25;
-    const startThreshold = i * 0.25;
-    let bgColor = 'bg-white/[0.02]';
-    if (isDone || progressRatio >= threshold) bgColor = 'bg-blue-500/40 border-blue-400/20';
-    else if (progressRatio > startThreshold) bgColor = 'bg-emerald-500/60 border-emerald-400/40 animate-pulse';
-    return <div key={`r3-${i}`} className={`rounded-[1px] border border-white/5 transition-all duration-500 ${bgColor}`} />;
-  })}
-</div>
+
+                  {/* 3행: 진도 및 성취율 시각화 */}
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-4 gap-1 h-1.5">
+                      {[0, 1, 2, 3].map(i => {
+                        const threshold = (i + 1) * 0.25;
+                        const startThreshold = i * 0.25;
+                        let bgColor = 'bg-white/[0.02]';
+                        if (isDone || progressRatio >= threshold) bgColor = 'bg-blue-500/40 border-blue-400/20';
+                        else if (progressRatio > startThreshold) bgColor = 'bg-blue-500/20 border-blue-400/10 animate-pulse';
+                        return <div key={`r3-${i}`} className={`rounded-[1px] border border-white/5 transition-all duration-500 ${bgColor}`} />;
+                      })}
+                    </div>
+                    {/* 테스트 성취율 바 */}
+                    <div className="relative h-1 bg-white/[0.03] rounded-full overflow-hidden border border-white/5">
+                      <div className={`absolute top-0 left-0 h-full transition-all duration-1000 ${isTargetMet ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${unitScore}%` }} />
+                      {/* 목표선 표시 */}
+                      <div className="absolute top-0 h-full w-0.5 bg-white/40 z-10" style={{ left: `${targetPercentage}%` }} />
+                    </div>
+                  </div>
 
 
                   <div className="grid grid-cols-4 gap-1 h-6">
@@ -255,7 +330,7 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
                 
                 <div className="h-1 w-full bg-black/40 flex items-center">
                   <div className={`h-full transition-all duration-1000 ${
-                    isDone ? 'w-full bg-gradient-to-r from-blue-600 to-indigo-500' : 'w-0'
+                    isDone ? 'bg-gradient-to-r from-emerald-600 to-teal-500 w-full' : isTargetMet && unitScore > 0 ? 'bg-blue-500 w-full' : 'w-0'
                   }`} />
                 </div>
               </motion.div>
