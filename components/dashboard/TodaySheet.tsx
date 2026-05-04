@@ -69,7 +69,7 @@ function HistoryRows({ student, activeColumns, colWidths, isExpanded }: any) {
         if (col.id === 'test_id') return <td key={col.id} style={styles} className="py-1 px-2 border-r border-white/5 text-gray-600 truncate">{log.test_id}</td>;
         if (col.id === 'test_score') return <td key={col.id} style={styles} className="py-1 px-2 border-r border-white/5 text-center text-gray-600 font-bold">{log.test_score}</td>;
         if (col.id === 'review') return <td key={col.id} style={styles} className="py-1 px-2 border-r border-white/5 text-gray-500 italic truncate bg-[#0a0a0a]">Prev: {log.status}</td>;
-        if (col.id === 'assign') return <td key={col.id} style={styles} className="py-1 px-2 border-r border-white/5 text-gray-500 italic truncate whitespace-pre-wrap leading-tight">{log.homework_text}</td>;
+        if (col.id === 'assign') return <td key={col.id} style={styles} className="py-1 px-2 border-r border-white/5 text-gray-500 italic whitespace-pre-wrap leading-tight">{log.homework_text}</td>;
         if (col.id === 'notes') return <td key={col.id} style={styles} className="py-1 px-2 border-r border-white/5 text-gray-600 italic truncate">{log.special_notes}</td>;
         if (col.id === 'action') return <td key={col.id} style={styles} className="py-1 sticky right-0 bg-[#0a0a0a] z-20 border-l border-white/10 text-center text-gray-700">-</td>;
         return null;
@@ -85,8 +85,11 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [rowDate, setRowDate] = useState(selectedDate);
 
+  const getSession = (date: string) => (student.allLogs || []).find((l: any) => l.date === date);
+  const hasSession = useMemo(() => !!getSession(rowDate), [student.allLogs, rowDate]);
+
   const getInitialFormData = (date: string) => {
-    const session = (student.allLogs || []).find((l: any) => l.date === date);
+    const session = getSession(date);
     const initialHwJson = session?.homework_json?.length 
       ? session.homework_json 
       : (student.assigned_books || []).map((b:any) => ({ type: 'book', book_name: b, range: '', units: [] }));
@@ -97,11 +100,45 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
       special_notes: session?.special_notes || '',
       homework_text: session?.homework_text || '',
       homework_json: initialHwJson,
-      test_id: session?.test_id || ''
+      test_id: session?.test_id || '',
+      test_score: session?.test_score || ''
     };
   };
 
   const [formData, setFormData] = useState<any>(() => getInitialFormData(selectedDate));
+  const testRef = useRef<HTMLTextAreaElement>(null);
+  const hwRef = useRef<HTMLTextAreaElement>(null);
+  const notesRef = useRef<HTMLTextAreaElement>(null);
+
+  // 💡 데이터 변경 여부 확인 (Dirty Check)
+  const isDirty = useMemo(() => {
+    const initial = getInitialFormData(rowDate);
+    return (
+      formData.attendance_status !== initial.attendance_status ||
+      formData.status !== initial.status ||
+      formData.special_notes !== initial.special_notes ||
+      formData.homework_text !== initial.homework_text ||
+      formData.test_id !== initial.test_id ||
+      String(formData.test_score) !== String(initial.test_score)
+    );
+  }, [formData, rowDate, student.allLogs]);
+
+  // 💡 완료 상태 정의 (DB에 세션이 있고, 현재 수정 중(Dirty)이 아닐 때)
+  const isCompleted = hasSession && !isDirty;
+
+  // 💡 텍스트 양에 따라 높이 자동 조절
+  useEffect(() => {
+    const adjustHeight = (ref: React.RefObject<HTMLTextAreaElement>) => {
+      if (ref.current) {
+        ref.current.style.height = 'auto';
+        const newHeight = Math.min(250, ref.current.scrollHeight);
+        ref.current.style.height = `${newHeight}px`;
+      }
+    };
+    adjustHeight(testRef);
+    adjustHeight(hwRef);
+    adjustHeight(notesRef);
+  }, [formData.test_id, formData.homework_text, formData.special_notes]);
 
   useEffect(() => {
     setRowDate(selectedDate);
@@ -169,7 +206,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
   }, [rowDate]);
 
   return (
-    <tr className="hover:bg-white/[0.02] transition-colors group align-middle text-[11px]">
+    <tr className={`hover:bg-white/[0.02] transition-colors group align-middle text-[11px] ${isCompleted ? 'bg-emerald-500/[0.02]' : ''}`}>
       {activeColumns.map((col: any) => {
         const styles: React.CSSProperties = {
           position: col.isSticky ? 'sticky' : 'relative',
@@ -178,21 +215,24 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
           zIndex: col.isSticky ? 20 : 1,
           width: colWidths[col.id] || col.minWidth,
           minWidth: colWidths[col.id] || col.minWidth,
-          backgroundColor: (col.isSticky ? '#0a0a0a' : 'transparent')
+          backgroundColor: (col.isSticky ? ( isCompleted ? '#0a0d0a' : '#0a0a0a') : 'transparent')
         };
         if (col.id === 'date') return (
           <td key={col.id} style={styles} className="py-1.5 px-3 border-r border-white/5 font-black text-gray-600 text-[8px] tabular-nums">
             <div className="flex flex-col gap-1">
               {displayDateShort}
-              <button onClick={() => onToggleHistory(student.id)} className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isHistoryExpanded ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 text-gray-500 hover:bg-white/10'}`}><HistoryIcon size={10} /></button>
+              <button onClick={() => onToggleHistory(student.id)} className={`w-5 h-5 rounded-[2px] flex items-center justify-center transition-all ${isHistoryExpanded ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 text-gray-500 hover:bg-white/10'}`}><HistoryIcon size={10} /></button>
             </div>
           </td>
         );
         if (col.id === 'name') return (
-          <td key={col.id} style={styles} className="py-1.5 px-3 sticky left-0 bg-[#0a0a0a] z-20 border-r border-white/10 group-hover:bg-[#111] transition-colors">
+          <td key={col.id} style={styles} className={`py-1.5 px-3 sticky left-0 z-20 border-r border-white/10 transition-colors ${isCompleted ? 'bg-[#0a0d0a]' : 'bg-[#0a0a0a] group-hover:bg-[#111]'}`}>
             <div className="flex items-center justify-between gap-2">
               <div className="flex flex-col min-w-0 overflow-hidden">
-                <span className="font-black text-white text-[12px] tracking-tight truncate">{student.name}</span>
+                <div className="flex items-center gap-1.5">
+                  <span className="font-black text-white text-[12px] tracking-tight truncate">{student.name}</span>
+                  {isCompleted && <Check size={10} className="text-emerald-500 shadow-sm" />}
+                </div>
                 <span className="text-[8px] font-bold text-gray-600 uppercase tracking-tighter truncate">{student.grade} · {student.course} · {student.class}</span>
               </div>
               {onViewProgress && (
@@ -218,8 +258,14 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
         if (col.id === 'test_id') return (
           <td key={col.id} style={styles} className="py-1.5 px-1 border-r border-white/5">
             <div className="flex items-start gap-1 h-full">
-              <textarea rows={Math.min(3, (formData.test_id || '').split('\n').length || 1)} value={formData.test_id || ''} onChange={(e) => setFormData({ ...formData, test_id: e.target.value })} onKeyDown={handleKeyDown} placeholder="ID"
-                className="flex-1 bg-white/[0.03] border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-center text-white focus:outline-none focus:border-blue-500 transition-all font-bold resize-none overflow-hidden min-h-[24px]" />
+              <textarea 
+                ref={testRef}
+                value={formData.test_id || ''} 
+                onChange={(e) => setFormData({ ...formData, test_id: e.target.value })} 
+                onKeyDown={handleKeyDown} 
+                placeholder="ID"
+                className="flex-1 bg-white/[0.03] border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-center text-white focus:outline-none focus:border-blue-500 transition-all font-bold resize-none overflow-y-auto custom-scrollbar-v min-h-[24px]" 
+              />
               <button onClick={() => setIsTestModalOpen(true)} disabled={!currentPrimaryTestId}
                 className="w-5 h-6 shrink-0 rounded-[2px] bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed mt-0.5"><ClipboardList size={10} /></button>
             </div>
@@ -244,8 +290,13 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
         if (col.id === 'assign') return (
           <td key={col.id} style={styles} className="py-1.5 px-1 border-r border-white/5">
             <div className="flex items-start gap-1 h-full">
-              <textarea rows={Math.min(3, formData.homework_text.split('\n').length || 1)} value={formData.homework_text} onChange={(e) => setFormData({ ...formData, homework_text: e.target.value })} onKeyDown={handleKeyDown}
-                className="flex-1 bg-white/[0.03] border border-white/10 rounded-[2px] px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-blue-500 transition-all font-medium resize-none overflow-hidden min-h-[24px]" />
+              <textarea 
+                ref={hwRef}
+                value={formData.homework_text} 
+                onChange={(e) => setFormData({ ...formData, homework_text: e.target.value })} 
+                onKeyDown={handleKeyDown}
+                className="flex-1 bg-white/[0.03] border border-white/10 rounded-[2px] px-1.5 py-0.5 text-[10px] text-white focus:outline-none focus:border-blue-500 transition-all font-medium resize-none overflow-y-auto custom-scrollbar-v min-h-[24px]" 
+              />
               <button 
                 onClick={(e) => {
                   e.stopPropagation();
@@ -269,15 +320,32 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
         );
         if (col.id === 'notes') return (
           <td key={col.id} style={styles} className="py-1.5 px-1 border-r border-white/5">
-            <textarea rows={Math.min(3, formData.special_notes.split('\n').length || 1)} value={formData.special_notes} onChange={(e) => setFormData({ ...formData, special_notes: e.target.value })} onKeyDown={handleKeyDown} placeholder="..."
-              className="w-full bg-white/[0.03] border border-white/10 rounded-[2px] px-1.5 py-0.5 text-[10px] text-gray-400 focus:outline-none focus:border-blue-500 transition-all font-medium resize-none overflow-hidden min-h-[24px]" />
+            <textarea 
+              ref={notesRef}
+              value={formData.special_notes} 
+              onChange={(e) => setFormData({ ...formData, special_notes: e.target.value })} 
+              onKeyDown={handleKeyDown} 
+              placeholder="..."
+              className="w-full bg-white/[0.03] border border-white/10 rounded-[2px] px-1.5 py-0.5 text-[10px] text-gray-400 focus:outline-none focus:border-blue-500 transition-all font-medium resize-none overflow-y-auto custom-scrollbar-v min-h-[24px]" 
+            />
           </td>
         );
         if (col.id === 'action') return (
-          <td key={col.id} style={styles} className="py-1.5 px-2 sticky right-0 bg-[#0a0a0a] z-20 border-l border-white/10">
-            <button onClick={() => handleSave()} disabled={isSaving}
-              className={`w-full h-8 rounded-[4px] flex items-center justify-center transition-all shadow-lg ${saveStatus === 'success' ? 'bg-emerald-500 text-white' : saveStatus === 'error' ? 'bg-red-500 text-white' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-blue-900/20'}`}>
-              {isSaving ? <Loader2 size={14} className="animate-spin" /> : saveStatus === 'success' ? <CheckCircle size={14} /> : <Send size={14} />}
+          <td key={col.id} style={styles} className={`py-1.5 px-2 sticky right-0 z-20 border-l border-white/10 ${isCompleted ? 'bg-[#0a0d0a]' : 'bg-[#0a0a0a]'}`}>
+            <button 
+              onClick={() => handleSave()} 
+              disabled={isSaving || (isCompleted && saveStatus === 'idle')}
+              className={`w-full h-8 rounded-[4px] flex items-center justify-center transition-all shadow-lg ${
+                isSaving ? 'bg-blue-600/50 cursor-wait' :
+                saveStatus === 'success' ? 'bg-emerald-500 text-white' : 
+                saveStatus === 'error' ? 'bg-red-500 text-white' : 
+                (!hasSession || isDirty) ? 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-blue-900/20' :
+                'bg-emerald-500/20 text-emerald-500 border border-emerald-500/30'
+              }`}
+            >
+              {isSaving ? <Loader2 size={14} className="animate-spin" /> : 
+               (saveStatus === 'success' || isCompleted) ? <Check size={14} className="stroke-[3px]" /> : 
+               saveStatus === 'error' ? <CheckCircle size={14} /> : <Send size={14} />}
             </button>
           </td>
         );
@@ -385,7 +453,7 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
           <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
             <ClipboardList size={14} /> 
             Daily Learning Sheet
-            <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/5 uppercase font-bold">
+            <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
               {students.length} Students
             </span>
           </h3>
@@ -408,7 +476,7 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
                 try { (input as any).showPicker(); } catch (err) { console.error(err); }
               }
             }}
-            className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-gray-400 hover:text-white transition-all group cursor-pointer"
+            className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-1.5 text-gray-400 hover:text-white transition-all group cursor-pointer"
           >
             <CalendarIcon size={12} className="group-hover:text-blue-500" />
             <input 
@@ -422,7 +490,7 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
           <div className="relative">
             <button 
               onClick={() => setIsSettingsOpen(!isSettingsOpen)}
-              className={`p-2 rounded-lg transition-all border ${isSettingsOpen ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'}`}
+              className={`p-2 rounded-[2px] transition-all border ${isSettingsOpen ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'}`}
             >
               <Settings2 size={14} />
             </button>
@@ -430,7 +498,7 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
             <AnimatePresence>
               {isSettingsOpen && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-2 w-48 bg-[#1a1a1a] border border-white/10 rounded-lg shadow-2xl p-2 z-[60]">
+                  className="absolute right-0 mt-2 w-48 bg-[#1a1a1a] border border-white/10 rounded-[2px] shadow-2xl p-2 z-[60]">
                   <h4 className="text-[10px] font-black uppercase text-gray-500 mb-2 px-2 tracking-widest">Columns Settings</h4>
                   <div className="space-y-0.5 max-h-[300px] overflow-y-auto custom-scrollbar-v">
                     {DEFAULT_COLUMNS.filter(c => c.canHide).map(col => (
@@ -448,7 +516,7 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
         </div>
       </div>
 
-      <div className="bg-[#0a0a0a] border border-white/10 rounded-xl overflow-hidden shadow-2xl custom-scrollbar-h overflow-x-auto">
+      <div className="bg-[#0a0a0a] border border-white/10 rounded-sm overflow-hidden shadow-2xl custom-scrollbar-h overflow-x-auto">
         <table style={{ width: totalWidth, minWidth: '100%' }} className="border-collapse table-fixed">
           <thead>
             <TodaySheetHeader colWidths={colWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} />

@@ -24,7 +24,7 @@ export default function StudentPortal() {
       {/* 학생 상단 바 */}
       <header className="p-6 flex items-center justify-between bg-[#0a0a0a] border-b border-white/5 sticky top-0 z-20 backdrop-blur-xl">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20">
+          <div className="w-10 h-10 bg-blue-600 rounded-sm flex items-center justify-center shadow-lg shadow-blue-600/20">
             <User className="text-white" size={20} />
           </div>
           <div>
@@ -39,7 +39,7 @@ export default function StudentPortal() {
 
       <main className="p-4 space-y-6 max-w-md mx-auto">
         {/* 공지사항/알림 */}
-        <section className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-2xl flex items-center gap-4">
+        <section className="bg-blue-600/10 border border-blue-500/20 p-4 rounded-sm flex items-center gap-4">
           <div className="w-10 h-10 bg-blue-500/20 rounded-full flex items-center justify-center shrink-0">
             <Bell className="text-blue-500" size={20} />
           </div>
@@ -63,7 +63,7 @@ export default function StudentPortal() {
               <motion.div 
                 key={hw.id}
                 whileTap={{ scale: 0.98 }}
-                className="bg-[#0f0f0f] border border-white/5 p-4 rounded-2xl flex items-center justify-between group"
+                className="bg-[#0f0f0f] border border-white/5 p-4 rounded-sm flex items-center justify-between group"
               >
                 <div>
                   <h4 className="text-[13px] font-bold text-white">{hw.book}</h4>
@@ -81,7 +81,7 @@ export default function StudentPortal() {
 
         {/* 테스트 입력 버튼 (메인 액션) */}
         <section className="pt-4">
-          <button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-2xl shadow-xl shadow-blue-600/20 flex items-center justify-center gap-3 transition-all active:scale-95 text-sm uppercase tracking-wider">
+          <button className="w-full bg-blue-600 hover:bg-blue-500 text-white font-black py-4 rounded-sm shadow-xl shadow-blue-600/20 flex items-center justify-center gap-3 transition-all active:scale-95 text-sm uppercase tracking-wider">
             <ClipboardCheck size={20} />
             테스트 답안 입력하기
           </button>

@@ -70,10 +70,10 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
             <div className="h-14 border-b border-white/10 bg-[#0d0d0d] flex items-center px-8 justify-between z-10 shadow-xl">
               <div className="flex items-center gap-6">
                 <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                  <div className="w-2 h-2 rounded-[2px] bg-emerald-500 animate-pulse" />
                   <span className="font-black text-[10px] uppercase tracking-wider text-white">{activeStudent.name}&apos;s Master Sequence</span>
                 </div>
-                <div className="flex items-center gap-3 bg-white/5 px-3 py-1 rounded-full border border-white/5">
+                <div className="flex items-center gap-3 bg-white/5 px-3 py-1 rounded-[2px] border border-white/5">
                   <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{activeStudent.course || 'C'} Course</span>
                   <div className="w-px h-2.5 bg-white/10" />
                   <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Target: {COURSE_TARGETS[activeStudent.course || 'C']}%</span>
@@ -212,13 +212,13 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
 
   return (
     <div className="space-y-3 relative z-10">
-      <div className="flex items-center gap-3 bg-white/[0.03] w-fit pr-6 pl-2 py-1.5 rounded-xl border border-white/5 shadow-inner">
-        <div className="w-7 h-7 rounded-lg bg-blue-600 flex items-center justify-center text-white shadow-lg"><BookOpen size={14} /></div>
+      <div className="flex items-center gap-3 bg-white/[0.03] w-fit pr-6 pl-2 py-1.5 rounded-sm border border-white/5 shadow-inner">
+        <div className="w-7 h-7 rounded-[2px] bg-blue-600 flex items-center justify-center text-white shadow-lg"><BookOpen size={14} /></div>
         <div className="flex flex-col">
           <h3 className="font-black text-[11px] text-white tracking-tight leading-none mb-0.5">{textbook?.title || bookCode}</h3>
           <div className="flex items-center gap-2">
             <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">{bookCode}</span>
-            <span className="w-1 h-1 rounded-full bg-white/20" />
+            <span className="w-1 h-1 rounded-[2px] bg-white/20" />
             <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{student.book_courses?.[bookCode] || student.course || 'C'} Course</span>
           </div>
         </div>
@@ -226,9 +226,9 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
       
       <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar-h px-1">
         {loading ? (
-          <div className="flex gap-3">{Array.from({length: 6}).map((_, i) => <div key={i} className="min-w-[200px] h-32 rounded-2xl bg-white/[0.02] border border-white/10 animate-pulse" />)}</div>
+          <div className="flex gap-3">{Array.from({length: 6}).map((_, i) => <div key={i} className="min-w-[200px] h-32 rounded-sm bg-white/[0.02] border border-white/10 animate-pulse" />)}</div>
         ) : units.length === 0 ? (
-          <div className="p-8 border border-dashed border-white/5 rounded-2xl text-[9px] text-gray-700 font-bold uppercase tracking-widest italic bg-white/[0.01]">
+          <div className="p-8 border border-dashed border-white/5 rounded-sm text-[9px] text-gray-700 font-bold uppercase tracking-widest italic bg-white/[0.01]">
             unit-page에 단원 정보가 없습니다. ({bookCode})
           </div>
         ) : (
@@ -250,7 +250,7 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
               <motion.div 
                 key={idx} 
                 whileHover={{ scale: 1.02, y: -2 }} 
-                className={`min-w-[200px] h-[175px] rounded-2xl border flex flex-col relative overflow-hidden transition-all duration-300 ${
+                className={`min-w-[200px] h-[175px] rounded-sm border flex flex-col relative overflow-hidden transition-all duration-300 ${
                   isDone 
                     ? 'bg-[#1a1a1a] border-emerald-500/50 shadow-[0_10px_30px_rgba(16,185,129,0.1)]' 
                     : isTargetMet && unitScore > 0
@@ -295,7 +295,7 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
                       })}
                     </div>
                     {/* 테스트 성취율 바 */}
-                    <div className="relative h-1 bg-white/[0.03] rounded-full overflow-hidden border border-white/5">
+                    <div className="relative h-1 bg-white/[0.03] rounded-[2px] overflow-hidden border border-white/5">
                       <div className={`absolute top-0 left-0 h-full transition-all duration-1000 ${isTargetMet ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${unitScore}%` }} />
                       {/* 목표선 표시 */}
                       <div className="absolute top-0 h-full w-0.5 bg-white/40 z-10" style={{ left: `${targetPercentage}%` }} />
@@ -315,7 +315,7 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
                         <button 
                           key={step.id} title={step.label}
                           onClick={(e) => { e.stopPropagation(); toggleStep(unitName, sIdx); }}
-                          className={`rounded-md border border-white/5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
+                          className={`rounded-[2px] border border-white/5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
                             isStepDone 
                               ? 'bg-emerald-500/40 text-emerald-300 border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]' 
                               : 'bg-white/[0.02] text-gray-700 hover:text-gray-400 hover:bg-white/5'

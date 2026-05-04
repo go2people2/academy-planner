@@ -1,7 +1,8 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight 
+  LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle 
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
@@ -19,6 +20,7 @@ interface SidebarProps {
   setIsAndFilter: (val: boolean) => void; // 💡 추가
   filterTarget: 'all' | 'today' | 'rest';
   setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
+  academyInfo: any; // 💡 추가
 }
 
 const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
@@ -26,45 +28,88 @@ const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
 export default function Sidebar({ 
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
   selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, // 💡 추가
-  filterTarget, setFilterTarget
+  filterTarget, setFilterTarget,
+  academyInfo // 💡 추가
 }: SidebarProps) {
   const router = useRouter();
   const { slug } = useParams();
+  const [user, setUser] = useState<any>(null);
+
+  const [isMultiMode, setIsMultiMode] = useState(false);
+
+  useEffect(() => {
+    const userJson = localStorage.getItem('ams_user');
+    if (userJson) setUser(JSON.parse(userJson));
+  }, []);
+
+  useEffect(() => {
+    if (selectedDays.length === 0) {
+      setIsMultiMode(false);
+    }
+  }, [selectedDays]);
 
   const handleLogout = async () => {
+    localStorage.removeItem('ams_user');
     await supabase.auth.signOut();
     router.push(`/${slug}/login`);
   };
 
   const toggleDay = (day: string) => {
     if (selectedDays.includes(day)) {
-      setSelectedDays(selectedDays.filter(d => d !== day));
+      const newDays = selectedDays.filter(d => d !== day);
+      setSelectedDays(newDays);
+      if (newDays.length <= 1) {
+        setIsMultiMode(false);
+      }
     } else {
-      setSelectedDays([...selectedDays, day]);
+      if (isMultiMode) {
+        setSelectedDays([...selectedDays, day]);
+      } else {
+        setSelectedDays([day]);
+      }
     }
   };
 
   return (
     <aside className="w-52 border-r border-white/5 bg-[#0a0a0a]/90 backdrop-blur-2xl flex flex-col p-3 sticky top-0 h-screen z-30">
-      <div className="mb-6 px-1 cursor-pointer" onClick={() => setViewMode('board')}>
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg">
+      <div className="mb-6 px-1 space-y-3">
+        {/* 1. 학원 브랜딩 */}
+        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode('board')}>
+          <div className="w-8 h-8 bg-blue-600 rounded-[2px] flex items-center justify-center shadow-lg shrink-0">
             <GraduationCap className="text-white" size={18} />
           </div>
-          <div>
-            <h1 className="text-sm font-black tracking-tight text-white leading-none uppercase">HOKMA</h1>
+          <div className="min-w-0">
+            <h1 className="text-xs font-black tracking-tight text-white leading-tight uppercase truncate">
+              {academyInfo?.academy_name || 'Academy'}
+            </h1>
             <p className="text-[7px] font-bold text-blue-500 tracking-[0.2em] uppercase mt-0.5">Management</p>
           </div>
         </div>
-        
-        {/* 💡 오늘 날짜 및 요일 표시 (독립된 행) */}
-        <div className="mt-3 px-1 py-1.5 bg-white/[0.03] rounded-lg border border-white/5 flex items-baseline justify-center gap-1">
-          <span className="text-[10px] font-black text-gray-300 tabular-nums">
-            {new Date().toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
-          </span>
-          <span className="text-[11px] font-black text-blue-500">
-            ({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})
-          </span>
+
+        {/* 2 & 3. 날짜 및 사용자 정보 (통합 행) */}
+        <div className="flex items-stretch gap-1">
+          {/* 날짜 표시 */}
+          <div className="flex-1 px-1.5 py-1 bg-white/[0.03] rounded-[2px] border border-white/5 flex items-center justify-center gap-1 min-w-0">
+            <span className="text-[10px] font-black text-gray-300 tabular-nums leading-none">
+              {new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}
+            </span>
+            <span className="text-[9px] font-bold text-blue-500 leading-none">
+              ({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})
+            </span>
+          </div>
+
+          {/* 사용자 정보 */}
+          {user && (
+            <div className="flex-[1.2] p-1.5 bg-white/5 rounded-[2px] border border-white/5 flex items-center gap-1.5 min-w-0">
+              <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0">
+                <UserCircle size={10} />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-[9px] font-black text-white truncate leading-none">{user.name}</p>
+                <p className="text-[7px] font-bold text-gray-500 uppercase tracking-tighter mt-0.5">{user.role}</p>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
@@ -114,12 +159,12 @@ export default function Sidebar({
         <nav className="space-y-1">
           <div className="flex items-center justify-between mb-2 px-2">
             <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Filter</h3>
-            <div className="flex bg-white/5 rounded-md p-0.5 border border-white/5">
+            <div className="flex bg-white/5 rounded-[2px] p-0.5 border border-white/5">
               {(['all', 'today', 'rest'] as const).map((t) => (
                 <button
                   key={t}
                   onClick={() => setFilterTarget(t)}
-                  className={`text-[7px] px-1.5 py-0.5 rounded-[3px] font-black uppercase transition-all ${
+                  className={`text-[7px] px-1.5 py-0.5 rounded-[1px] font-black uppercase transition-all ${
                     filterTarget === t 
                       ? 'bg-blue-600 text-white shadow-sm' 
                       : 'text-gray-600 hover:text-gray-400'
@@ -140,19 +185,29 @@ export default function Sidebar({
           <div className="pt-2 px-1">
             <h3 className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-2 flex items-center justify-between">
               Day Filter
-              <div className="flex items-center gap-2">
-                {selectedDays.length > 1 && (
-                  <button 
-                    onClick={() => setIsAndFilter(!isAndFilter)} 
-                    className={`px-1.5 py-0.5 rounded text-[8px] font-black transition-all ${
-                      isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'bg-white/5 text-gray-600 hover:text-gray-400'
-                    }`}
-                  >
-                    AND
-                  </button>
+              <div className="flex items-center gap-1.5">
+                {selectedDays.length >= 1 && (
+                  <div className="flex items-center gap-0.5 bg-white/5 p-0.5 rounded-[2px] border border-white/5">
+                    <button 
+                      onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} 
+                      className={`px-1 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${
+                        isMultiMode && isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'
+                      }`}
+                    >
+                      AND
+                    </button>
+                    <button 
+                      onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} 
+                      className={`px-1 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${
+                        isMultiMode && !isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'
+                      }`}
+                    >
+                      OR
+                    </button>
+                  </div>
                 )}
                 {selectedDays.length > 0 && (
-                  <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal">reset</button>
+                  <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal text-[8px]">reset</button>
                 )}
               </div>
             </h3>
@@ -163,7 +218,7 @@ export default function Sidebar({
                   <button
                     key={day}
                     onClick={() => toggleDay(day)}
-                    className={`w-[21px] h-[21px] rounded-md text-[9px] font-black transition-all border ${
+                    className={`w-[21px] h-[21px] rounded-[2px] text-[9px] font-black transition-all border ${
                       isActive 
                         ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' 
                         : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-400'
@@ -179,10 +234,15 @@ export default function Sidebar({
       </div>
 
       <div className="pt-4 border-t border-white/5 space-y-1">
-        <SidebarLink icon={<Settings size={14} />} label="Settings" />
+        <SidebarLink 
+          icon={<Settings size={14} />} 
+          label="Settings" 
+          active={viewMode === 'settings'}
+          onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }}
+        />
         <button 
           onClick={handleLogout}
-          className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-all group font-bold"
+          className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-all group font-bold"
         >
           <LogOut size={14} />
           <span className="text-[11px]">Log Out</span>
@@ -194,7 +254,7 @@ export default function Sidebar({
 
 function SidebarLink({ icon, label, active = false, onClick, badge }: any) {
   return (
-    <div onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-all group ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
+    <div onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-[2px] cursor-pointer transition-all group ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
       <span className={active ? 'text-white' : 'group-hover:text-blue-500 transition-colors'}>{icon}</span>
       <span className="font-bold text-[11px] tracking-tight">{label}</span>
       {badge && <span className="ml-auto bg-red-600 text-white text-[8px] font-black px-1 py-0.5 rounded ring-2 ring-[#0a0a0a]">{badge}</span>}
@@ -204,7 +264,7 @@ function SidebarLink({ icon, label, active = false, onClick, badge }: any) {
 
 function FilterItem({ label, count, active, onClick }: any) {
   return (
-    <div onClick={onClick} className={`flex items-center justify-between px-3 py-1.5 rounded-lg cursor-pointer transition-all ${active ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-400 hover:bg-white/5'}`}>
+    <div onClick={onClick} className={`flex items-center justify-between px-3 py-1.5 rounded-[2px] cursor-pointer transition-all ${active ? 'bg-white/10 text-white' : 'text-gray-500 hover:text-gray-400 hover:bg-white/5'}`}>
       <span className="text-[11px] font-bold">{label}</span>
       <span className="text-[9px] font-black opacity-30">{count}</span>
     </div>

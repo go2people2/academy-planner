@@ -44,12 +44,12 @@ export default function TestAnswerModal({ testId, studentName, onClose, onSave }
       <motion.div 
         initial={{ opacity: 0, scale: 0.9, y: 20 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-[#121212] border border-white/10 rounded-2xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-[#121212] border border-white/10 rounded-[4px] w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
       >
         {/* 헤더 */}
         <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+            <div className="w-10 h-10 bg-blue-600 rounded-[2px] flex items-center justify-center shadow-lg">
               <Hash className="text-white" size={20} />
             </div>
             <div>
@@ -92,7 +92,7 @@ export default function TestAnswerModal({ testId, studentName, onClose, onSave }
                       <button
                         key={num}
                         onClick={() => handleAnswerChange('mc', i, String(num))}
-                        className={`w-7 h-7 rounded-md text-[10px] font-black transition-all border ${
+                        className={`w-7 h-7 rounded-[2px] text-[10px] font-black transition-all border ${
                           answers[`mc_${i}`] === String(num) 
                             ? 'bg-blue-600 border-blue-500 text-white shadow-lg' 
                             : 'bg-white/5 border-white/5 text-gray-500 hover:border-white/20'
@@ -118,7 +118,7 @@ export default function TestAnswerModal({ testId, studentName, onClose, onSave }
                     value={answers[`desc_${i}`] || ''}
                     onChange={(e) => handleAnswerChange('desc', i, e.target.value)}
                     placeholder="답안을 입력하세요..."
-                    className="w-full bg-white/[0.03] border border-white/5 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-blue-500 transition-all resize-none group-hover:border-white/10"
+                    className="w-full bg-white/[0.03] border border-white/5 rounded-[2px] p-3 text-xs text-white focus:outline-none focus:border-blue-500 transition-all resize-none group-hover:border-white/10"
                   />
                 </div>
               ))}
@@ -130,13 +130,13 @@ export default function TestAnswerModal({ testId, studentName, onClose, onSave }
         <div className="p-4 border-t border-white/5 bg-white/[0.01] flex justify-end gap-3">
           <button 
             onClick={onClose}
-            className="px-4 py-2 rounded-xl text-[10px] font-black uppercase text-gray-500 hover:bg-white/5 transition-all"
+            className="px-4 py-2 rounded-[2px] text-[10px] font-black uppercase text-gray-500 hover:bg-white/5 transition-all"
           >
             Cancel
           </button>
           <button 
             onClick={() => onSave(answers)}
-            className="flex items-center gap-2 px-6 py-2 rounded-xl bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 hover:bg-blue-500 transition-all"
+            className="flex items-center gap-2 px-6 py-2 rounded-[2px] bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-600/20 hover:bg-blue-500 transition-all"
           >
             <Send size={12} />
             Submit Answers

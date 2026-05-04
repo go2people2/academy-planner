@@ -46,13 +46,13 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
         </button>
 
         <div className="flex items-start gap-5">
-          <div className="w-16 h-16 rounded-2xl bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20">
+          <div className="w-16 h-16 rounded-[4px] bg-blue-600 flex items-center justify-center shadow-lg shadow-blue-600/20">
             <GraduationCap className="text-white" size={32} />
           </div>
           <div className="space-y-1">
             <div className="flex items-center gap-3">
               <h2 className="text-2xl font-black text-white tracking-tight">{student.name}</h2>
-              <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-full text-[10px] font-black uppercase tracking-widest">
+              <span className="px-2 py-0.5 bg-blue-500/10 text-blue-500 border border-blue-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest">
                 {student.grade}
               </span>
             </div>
@@ -63,7 +63,7 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
             </p>
             <div className="flex gap-1.5 mt-2">
               {['출석 안정', '숙제 우수', '진도 빠름'].map(tag => (
-                <span key={tag} className="text-[9px] font-bold text-gray-500 bg-white/5 px-2 py-0.5 rounded-md border border-white/5 italic">
+                <span key={tag} className="text-[9px] font-bold text-gray-500 bg-white/5 px-2 py-0.5 rounded-[2px] border border-white/5 italic">
                   #{tag}
                 </span>
               ))}
@@ -94,10 +94,10 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
 
       {/* 4. 하단 버튼 (수정 모드 접근) */}
       <div className="p-6 border-t border-white/5 bg-[#0a0a0a]/50 flex gap-3">
-        <button onClick={onClose} className="flex-1 py-3 px-4 bg-white/5 text-gray-400 rounded-xl text-[11px] font-black uppercase hover:bg-white/10 transition-all border border-white/5">
+        <button onClick={onClose} className="flex-1 py-3 px-4 bg-white/5 text-gray-400 rounded-[2px] text-[11px] font-black uppercase hover:bg-white/10 transition-all border border-white/5">
           Close Report
         </button>
-        <button onClick={onEditMode} className="flex-1 py-3 px-4 bg-blue-600/10 text-blue-400 rounded-xl text-[11px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all border border-blue-500/20">
+        <button onClick={onEditMode} className="flex-1 py-3 px-4 bg-blue-600/10 text-blue-400 rounded-[2px] text-[11px] font-black uppercase hover:bg-blue-600 hover:text-white transition-all border border-blue-500/20">
           학생 정보 수정
         </button>
       </div>
@@ -109,7 +109,7 @@ function TabButton({ active, onClick, icon, label }: any) {
   return (
     <button 
       onClick={onClick}
-      className={`flex items-center gap-2 px-4 py-3 rounded-xl transition-all whitespace-nowrap ${
+      className={`flex items-center gap-2 px-4 py-3 rounded-[2px] transition-all whitespace-nowrap ${
         active 
           ? 'bg-blue-600/10 text-blue-500 border-b-2 border-blue-600 rounded-b-none' 
           : 'text-gray-500 hover:text-gray-300'
@@ -142,9 +142,9 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
             const bookTitle = bookInfo?.title || bookCode;
 
             return (
-              <div key={bookCode} className="bg-white/5 border border-white/5 p-4 rounded-2xl flex items-center justify-between group hover:border-blue-500/30 transition-all">
+              <div key={bookCode} className="bg-white/5 border border-white/5 p-4 rounded-[4px] flex items-center justify-between group hover:border-blue-500/30 transition-all">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center text-blue-500">
+                  <div className="w-10 h-10 bg-blue-600/20 rounded-[2px] flex items-center justify-center text-blue-500">
                     <BookOpen size={20} />
                   </div>
                   <div>
@@ -154,7 +154,7 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
                 </div>
                 <div className="text-right">
                   <div className="text-[14px] font-black text-blue-500">65%</div>
-                  <div className="w-24 h-1 bg-white/10 rounded-full mt-1 overflow-hidden">
+                  <div className="w-24 h-1 bg-white/10 rounded-[2px] mt-1 overflow-hidden">
                     <div className="h-full bg-blue-500" style={{ width: '65%' }} />
                   </div>
                 </div>
@@ -167,7 +167,7 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
       {/* 최근 상담 요약 */}
       <section className="space-y-4">
         <SectionTitle title="최근 특이사항" />
-        <div className="bg-white/[0.02] border border-white/5 rounded-2xl p-5 space-y-4">
+        <div className="bg-white/[0.02] border border-white/5 rounded-[4px] p-5 space-y-4">
           {student.allLogs.filter((l: any) => l.special_notes).slice(0, 2).map((log: any) => (
             <div key={log.id} className="flex gap-4">
               <div className="shrink-0 text-[10px] font-black text-gray-600 tabular-nums pt-1">{log.date}</div>
@@ -197,10 +197,10 @@ function HistoryTab({ student }: any) {
             <div className="absolute -left-[30px] top-1 w-6 h-6 rounded-full bg-[#080808] border-2 border-blue-500 flex items-center justify-center z-10 shadow-lg shadow-blue-500/20">
               <CheckCircle2 size={12} className="text-blue-500" />
             </div>
-            <div className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-2 group hover:bg-white/[0.08] transition-all">
+            <div className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2 group hover:bg-white/[0.08] transition-all">
               <div className="flex justify-between items-center">
                 <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">{item.date}</span>
-                <span className="text-[9px] font-black px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded uppercase">{item.status}</span>
+                <span className="text-[9px] font-black px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-[2px] uppercase">{item.status}</span>
               </div>
               <h4 className="text-[13px] font-black text-white tracking-tight">{item.title}</h4>
               <p className="text-[11px] font-bold text-gray-500 italic">마지막 성취도: {item.result}</p>
@@ -227,7 +227,7 @@ function StatsTab({ student }: any) {
       </p>
       <div className="flex justify-center gap-2 mt-10">
         {[40, 70, 50, 90, 60, 80].map((h, i) => (
-          <div key={i} className="w-4 bg-blue-600/20 rounded-t-md relative flex items-end h-20 overflow-hidden border border-white/5">
+          <div key={i} className="w-4 bg-blue-600/20 rounded-t-[2px] relative flex items-end h-20 overflow-hidden border border-white/5">
             <motion.div 
               initial={{ height: 0 }} animate={{ height: `${h}%` }} 
               transition={{ delay: i * 0.1, duration: 1 }}
@@ -259,10 +259,10 @@ function JournalTab({ student }: any) {
       <SectionTitle title="누적 상담 및 지도 일지" />
       <div className="space-y-3">
         {student.allLogs.filter((l: any) => l.special_notes).map((log: any) => (
-          <div key={log.id} className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-2">
+          <div key={log.id} className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black text-gray-500 flex items-center gap-1.5"><Clock size={12}/> {log.date}</span>
-              <span className="text-[9px] font-bold text-blue-500 bg-blue-500/5 px-2 py-0.5 rounded border border-blue-500/10 italic">Session Log</span>
+              <span className="text-[9px] font-bold text-blue-500 bg-blue-500/5 px-2 py-0.5 rounded-[2px] border border-blue-500/10 italic">Session Log</span>
             </div>
             <p className="text-[11px] font-bold text-gray-300 leading-relaxed">{log.special_notes}</p>
           </div>
@@ -276,7 +276,7 @@ function JournalTab({ student }: any) {
 
 function MetricCard({ label, value, sub, color, icon }: any) {
   return (
-    <div className="bg-white/5 border border-white/5 p-4 rounded-2xl space-y-1 shadow-inner group hover:border-white/10 transition-all">
+    <div className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-1 shadow-inner group hover:border-white/10 transition-all">
       <div className="flex items-center gap-2 text-gray-500 mb-1">
         {icon}
         <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
@@ -297,8 +297,8 @@ function SectionTitle({ title }: { title: string }) {
 
 function RoadmapItem({ month, task, sub, active = false }: any) {
   return (
-    <div className={`p-4 rounded-2xl border flex items-center gap-4 transition-all ${active ? 'bg-blue-600/10 border-blue-500/30' : 'bg-white/5 border-white/5 opacity-60'}`}>
-      <div className={`w-12 h-12 rounded-xl flex flex-col items-center justify-center font-black ${active ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-500'}`}>
+    <div className={`p-4 rounded-[4px] border flex items-center gap-4 transition-all ${active ? 'bg-blue-600/10 border-blue-500/30' : 'bg-white/5 border-white/5 opacity-60'}`}>
+      <div className={`w-12 h-12 rounded-[2px] flex flex-col items-center justify-center font-black ${active ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-500'}`}>
         <span className="text-[10px] uppercase">{month}</span>
       </div>
       <div>

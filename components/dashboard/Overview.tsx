@@ -23,6 +23,7 @@ interface OverviewProps {
   onRemoveFromToday: (id: string, reason: string) => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
   masterTextbooks: TextbookOption[];
+  teachers?: any[]; // 💡 추가
   title?: string;
   showAddButton?: boolean;
   hideTodaySection?: boolean;
@@ -34,6 +35,7 @@ export default function Overview({
   selectedDate, onDateChange,
   todayKey,
   selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, masterTextbooks = [],
+  teachers = [], // 💡 추가
   title,
   showAddButton = false,
   hideTodaySection = false 
@@ -141,7 +143,7 @@ export default function Overview({
               <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
                 <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
                 {todayKey === getDayOfWeek(new Date().toISOString().split('T')[0]) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
-                <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-full border border-white/5 uppercase font-bold">
+                <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
                   {todayStudents.length} Students
                 </span>
               </h3>
@@ -153,7 +155,7 @@ export default function Overview({
                     try { (input as any).showPicker(); } catch (err) { console.error(err); }
                   }
                 }}
-                className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative cursor-pointer"
+                className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative cursor-pointer"
               >
                 <Calendar size={12} className="group-hover/date:text-blue-500" />
                 <span className="text-[10px] font-black uppercase tracking-tighter">
@@ -193,7 +195,7 @@ export default function Overview({
               );
             })}
             {todayStudents.length === 0 && (
-              <div className="p-6 rounded-xl bg-white/[0.02] border border-dashed border-white/5 text-center text-gray-600 font-bold uppercase tracking-widest text-[9px]">No classes scheduled</div>
+              <div className="p-6 rounded-[2px] bg-white/[0.02] border border-dashed border-white/5 text-center text-gray-600 font-bold uppercase tracking-widest text-[9px]">No classes scheduled</div>
             )}
           </div>
         </section>
@@ -210,7 +212,7 @@ export default function Overview({
             {!isBatchMode && !isArchiveMode && showAddButton && (
               <button 
                 onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
+                className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
               >
                 <UserPlus size={10} /> 신규 학생 등록
               </button>
@@ -219,7 +221,7 @@ export default function Overview({
             {isBatchMode && (
               <button 
                 onClick={() => { setIsBatchMode(false); setSelectedForBatch([]); setSelectedToRemove([]); }}
-                className="px-3 py-1.5 rounded-lg text-[9px] font-black uppercase bg-white/5 text-gray-500 hover:text-white transition-all"
+                className="px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase bg-white/5 text-gray-500 hover:text-white transition-all"
               >
                 Cancel
               </button>
@@ -228,7 +230,7 @@ export default function Overview({
             {!isArchiveMode && !hideTodaySection && (
               <button 
                 onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all ${
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all ${
                   isBatchMode 
                     ? 'bg-blue-600 text-white shadow-lg' 
                     : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
@@ -248,7 +250,7 @@ export default function Overview({
           {isBatchMode && (
             <motion.div 
               initial={{ opacity: 0, y: -5 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -5 }}
-              className="bg-blue-600/5 border border-blue-500/10 p-2 rounded-lg flex items-center justify-center gap-2 text-blue-400 font-bold text-[9px] uppercase tracking-widest"
+              className="bg-blue-600/5 border border-blue-500/10 p-2 rounded-[2px] flex items-center justify-center gap-2 text-blue-400 font-bold text-[9px] uppercase tracking-widest"
             >
               <MousePointer2 size={10} className="animate-pulse" /> Select students and click confirm
             </motion.div>
@@ -273,7 +275,7 @@ export default function Overview({
             );
           })}
           {studentsToDisplay.length === 0 && (
-            <div className="p-10 text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest border border-dashed border-white/5 rounded-2xl w-full col-span-full">
+            <div className="p-10 text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest border border-dashed border-white/5 rounded-sm w-full col-span-full">
               {isArchiveMode ? 'No discharged students found' : 'All students are in today\'s list'}
             </div>
           )}
@@ -284,7 +286,7 @@ export default function Overview({
         {reasonModal.isOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl max-w-md w-full shadow-2xl space-y-4">
+              className="bg-[#1a1a1a] border border-white/10 p-6 rounded-sm max-w-md w-full shadow-2xl space-y-4">
               <div className="flex items-center gap-2">
                 <div className={`w-10 h-10 rounded-full flex items-center justify-center ${reasonModal.type === 'add' ? 'bg-blue-500/20 text-blue-500' : 'bg-red-500/20 text-red-500'}`}>
                   {reasonModal.type === 'add' ? <Users size={20} /> : <MinusCircle size={20} />}
@@ -298,7 +300,7 @@ export default function Overview({
               <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar-v">
                 <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest px-1 block mb-1">학생별 사유 입력</label>
                 {reasonModal.studentIds.map((id) => (
-                  <div key={id} className="space-y-1 bg-white/[0.02] p-2 rounded-xl border border-white/5">
+                  <div key={id} className="space-y-1 bg-white/[0.02] p-2 rounded-[2px] border border-white/5">
                     <div className="flex justify-between items-center px-1">
                       <span className="text-[11px] font-black text-gray-300">{getStudentName(id)}</span>
                     </div>
@@ -308,7 +310,7 @@ export default function Overview({
                       onChange={(e) => updateIndividualReason(id, e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && confirmReason()}
                       placeholder="사유를 입력하세요"
-                      className="w-full bg-black/40 border border-white/10 rounded-lg px-3 py-2 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all"
+                      className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all"
                     />
                   </div>
                 ))}
@@ -317,13 +319,13 @@ export default function Overview({
               <div className="flex gap-2 pt-2">
                 <button 
                   onClick={() => setReasonModal({ ...reasonModal, isOpen: false })} 
-                  className="flex-1 py-3 bg-white/5 text-gray-500 rounded-xl text-[10px] font-black uppercase hover:bg-white/10 transition-all"
+                  className="flex-1 py-3 bg-white/5 text-gray-500 rounded-[2px] text-[10px] font-black uppercase hover:bg-white/10 transition-all"
                 >
                   취소
                 </button>
                 <button 
                   onClick={confirmReason}
-                  className={`flex-1 py-3 rounded-xl text-[10px] font-black uppercase shadow-lg transition-all ${
+                  className={`flex-1 py-3 rounded-[2px] text-[10px] font-black uppercase shadow-lg transition-all ${
                     reasonModal.type === 'add' 
                       ? 'bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-500' 
                       : 'bg-red-600 text-white shadow-red-600/20 hover:bg-red-500'
@@ -339,13 +341,13 @@ export default function Overview({
 
       <AnimatePresence>
         {isAddModalOpen && (
-          <AddStudentModal 
-            onClose={() => setIsAddModalOpen(false)} 
-            onSave={onAddNewStudent} 
+          <AddStudentModal
+            onClose={() => setIsAddModalOpen(false)}
+            onSave={onAddNewStudent}
             masterTextbooks={masterTextbooks}
+            teachers={teachers}
           />
-        )}
-      </AnimatePresence>
+        )}      </AnimatePresence>
     </div>
   );
 }
@@ -362,7 +364,7 @@ function StudentRowItem({
     <motion.div 
       layout 
       onClick={onClick} 
-      className={`flex items-center justify-between p-2.5 rounded-xl border cursor-pointer transition-all duration-300 group ${
+      className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
         isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg' : 
         isBatchMode 
           ? isSelectionMode 

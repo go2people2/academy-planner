@@ -87,11 +87,11 @@ export default function HomeworkEditor({
         animate={{ opacity: 1, scale: 1 }} 
         exit={{ opacity: 0, scale: 0.95 }}
         onClick={(e) => e.stopPropagation()} 
-        className="pointer-events-auto relative w-full max-w-[480px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-blue-500/30 rounded-[2.5rem] shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] p-0 flex flex-col overflow-hidden"
+        className="pointer-events-auto relative w-full max-w-[480px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-blue-500/30 rounded-sm shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] p-0 flex flex-col overflow-hidden"
       >
         <div className="cursor-move bg-gradient-to-r from-blue-600/20 to-indigo-600/10 p-6 flex items-center justify-between border-b border-white/5 active:from-blue-600/30 transition-all">
           <div className="flex items-center gap-4">
-            <div className="w-8 h-8 rounded-xl bg-blue-600/30 flex items-center justify-center shadow-inner shadow-blue-400/20">
+            <div className="w-8 h-8 rounded-[2px] bg-blue-600/30 flex items-center justify-center shadow-inner shadow-blue-400/20">
               <ClipboardList size={16} className="text-blue-400" />
             </div>
             <div>
@@ -111,7 +111,7 @@ export default function HomeworkEditor({
                   onUpdate(resetHw);
                 }
               }}
-              className="px-3 py-1.5 rounded-lg bg-red-500/10 text-red-500/60 hover:text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-500/10"
+              className="px-3 py-1.5 rounded-[2px] bg-red-500/10 text-red-500/60 hover:text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-500/10"
               title="입력 내용 초기화"
             >
               <RefreshCcw size={12} /> Reset
@@ -146,7 +146,7 @@ export default function HomeworkEditor({
             
             <button 
               onClick={() => onUpdate([...homeworkJson, { type: 'custom', book_name: '', range: '' }])}
-              className="w-full py-5 border border-dashed border-white/10 rounded-3xl text-[11px] font-black uppercase tracking-widest text-gray-600 hover:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-3 group"
+              className="w-full py-5 border border-dashed border-white/10 rounded-sm text-[11px] font-black uppercase tracking-widest text-gray-600 hover:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-3 group"
             >
               <Plus size={16} className="group-hover:rotate-90 transition-transform duration-300" /> Add Custom Print/Task
             </button>
@@ -155,7 +155,7 @@ export default function HomeworkEditor({
           <div className="pt-2">
             <button 
               onClick={(e) => { e.stopPropagation(); onClose(); }} 
-              className="w-full bg-blue-600 py-5 rounded-[1.5rem] font-black text-[13px] uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/40 hover:bg-blue-500 active:scale-[0.98] transition-all text-white border border-blue-400/20"
+              className="w-full bg-blue-600 py-5 rounded-sm font-black text-[13px] uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/40 hover:bg-blue-500 active:scale-[0.98] transition-all text-white border border-blue-400/20"
             >
               Confirm and Save
             </button>
@@ -194,7 +194,7 @@ function HomeworkRow({
   };
 
   return (
-    <div className="flex items-center gap-2 p-2 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 rounded-xl transition-all group">
+    <div className="flex items-center gap-2 p-2 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 rounded-[2px] transition-all group">
       <div className="w-[120px] shrink-0 flex items-center gap-1.5 overflow-hidden">
         <BookOpen size={12} className="text-blue-500/40 shrink-0" />
         {hw.type === 'custom' ? (

@@ -9,11 +9,12 @@ interface AddStudentModalProps {
   onClose: () => void;
   onSave: (studentData: any) => Promise<void>;
   masterTextbooks: TextbookOption[];
+  teachers?: any[]; // 💡 추가
 }
 
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
-export default function AddStudentModal({ onClose, onSave, masterTextbooks }: AddStudentModalProps) {
+export default function AddStudentModal({ onClose, onSave, masterTextbooks, teachers = [] }: AddStudentModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
   
@@ -24,6 +25,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
     course: 'C' as 'E' | 'D' | 'C' | 'B' | 'A',
     class_name: '일반반',
     phone: '',
+    teacher_id: '', // 💡 추가
     class_days: [] as string[],
     day_schedules: {} as { [key: string]: number[] },
     assigned_books: [] as string[],
@@ -108,10 +110,10 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/85 backdrop-blur-md">
       <motion.div initial={{ opacity: 0, scale: 0.95, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-        className="bg-[#0f0f0f] border border-white/10 rounded-3xl w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+        className="bg-[#0f0f0f] border border-white/10 rounded-[4px] w-full max-w-5xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
         <div className="p-6 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-600/20"><UserPlus className="text-white" size={24} /></div>
+            <div className="w-12 h-12 bg-blue-600 rounded-[2px] flex items-center justify-center shadow-lg shadow-blue-600/20"><UserPlus className="text-white" size={24} /></div>
             <div>
               <h2 className="text-xl font-black text-white uppercase tracking-tight">Register New Student</h2>
               <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest mt-1">학생 정보 및 교재 일괄 선택</p>
@@ -124,29 +126,29 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
             <div className="space-y-6">
               <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1"><UserPlus size={14} /> Basic Info</h3>
-              <div className="bg-white/5 border border-white/5 rounded-2xl p-5 space-y-4 shadow-inner">
+              <div className="bg-white/5 border border-white/5 rounded-[4px] p-5 space-y-4 shadow-inner">
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Name</label>
                   <input required type="text" placeholder="학생 이름" value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-gray-500 uppercase ml-1">School</label>
                   <input type="text" placeholder="학교명" value={formData.school} onChange={(e) => setFormData({...formData, school: e.target.value})}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Grade</label>
                     <select value={formData.grade} onChange={(e) => setFormData({...formData, grade: e.target.value})}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer">
+                      className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer">
                       {['초5','초6','중1','중2','중3','고1','고2','고3'].map(g => <option key={g} value={g} className="bg-[#121212]">{g}</option>)}
                     </select>
                   </div>
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Course</label>
                     <select value={formData.course} onChange={(e) => setFormData({...formData, course: e.target.value as any})}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer font-black text-blue-500">
+                      className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer font-black text-blue-500">
                       {[
                         { l: 'E', p: '100%' },
                         { l: 'D', p: '90%' },
@@ -159,13 +161,24 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                   <div className="space-y-1.5">
                     <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Class</label>
                     <input type="text" placeholder="반" value={formData.class_name} onChange={(e) => setFormData({...formData, class_name: e.target.value})}
-                      className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
+                      className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all" />
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Assigned Teacher</label>
+                  <select 
+                    value={formData.teacher_id} 
+                    onChange={(e) => setFormData({...formData, teacher_id: e.target.value})}
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer font-bold text-blue-400"
+                  >
+                    <option value="" className="bg-[#121212]">미배정 (전체 노출)</option>
+                    {teachers.map(t => <option key={t.id} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                  </select>
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Phone (Password)</label>
                   <input required type="tel" placeholder="010-0000-0000" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full bg-black/40 border border-white/10 rounded-xl py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
                 </div>
               </div>
             </div>
@@ -173,9 +186,9 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
             <div className="space-y-6 flex flex-col h-full">
               <h3 className="text-[11px] font-black text-emerald-500 uppercase tracking-[0.2em] flex items-center justify-between px-1">
                 <span className="flex items-center gap-2"><BookOpen size={14} /> Textbooks</span>
-                <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-full">{formData.assigned_books.length} Selected</span>
+                <span className="text-[10px] bg-emerald-500/10 text-emerald-500 px-2 py-0.5 rounded-[2px]">{formData.assigned_books.length} Selected</span>
               </h3>
-              <div className="bg-white/5 border border-white/5 rounded-2xl flex flex-col overflow-hidden h-[400px] shadow-inner">
+              <div className="bg-white/5 border border-white/5 rounded-[4px] flex flex-col overflow-hidden h-[400px] shadow-inner">
                 <div className="p-3 border-b border-white/5 bg-black/20 flex items-center gap-2">
                   <Search size={14} className="text-gray-500" />
                   <input type="text" placeholder="Search textbooks..." value={bookSearch} onChange={(e) => setBookSearch(e.target.value)}
@@ -186,7 +199,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                     const isSelected = formData.assigned_books.includes(book.bookcode);
                     const bookCourse = formData.book_courses[book.bookcode] || formData.course;
                     return (
-                      <div key={book.bookcode} className={`p-3 rounded-xl transition-all border ${isSelected ? 'bg-emerald-500/10 border-emerald-500/30' : 'hover:bg-white/5 border-transparent'}`}>
+                      <div key={book.bookcode} className={`p-3 rounded-[2px] transition-all border ${isSelected ? 'bg-emerald-500/10 border-emerald-500/30' : 'hover:bg-white/5 border-transparent'}`}>
                         <div className="flex items-center justify-between cursor-pointer" onClick={() => toggleBookSelection(book.bookcode)}>
                           <div>
                             <h4 className={`text-[11px] font-bold ${isSelected ? 'text-emerald-400' : 'text-gray-300'}`}>{book.title}</h4>
@@ -204,7 +217,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                                   key={c}
                                   type="button"
                                   onClick={() => updateBookCourse(book.bookcode, c as any)}
-                                  className={`w-6 h-5 rounded text-[9px] font-black transition-all ${
+                                  className={`w-6 h-5 rounded-[2px] text-[9px] font-black transition-all ${
                                     bookCourse === c ? 'bg-emerald-500 text-black shadow-lg shadow-emerald-500/20' : 'bg-white/5 text-gray-600 hover:bg-white/10'
                                   }`}
                                 >
@@ -224,7 +237,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
 
             <div className="space-y-6">
               <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1"><Calendar size={14} /> Schedule</h3>
-              <div className="bg-white/5 border border-white/5 rounded-2xl p-4 shadow-inner">
+              <div className="bg-white/5 border border-white/5 rounded-[4px] p-4 shadow-inner">
                 <div className="grid grid-cols-7 gap-1">
                   {DAYS.map(day => {
                     const activeHours = formData.day_schedules[day] || [];
@@ -232,7 +245,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
                     return (
                       <div key={day} className="flex flex-col items-center gap-3">
                         <button type="button" onClick={() => handleDayToggle(day)}
-                          className={`text-[9px] font-black w-7 h-7 rounded-lg flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-500'}`}>{day}</button>
+                          className={`text-[9px] font-black w-7 h-7 rounded-[2px] flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-500'}`}>{day}</button>
                         <div className="flex flex-col gap-1 w-full">
                           {[16, 17, 18, 19, 20, 21].map((h, idx) => {
                             const isNormal = activeHours.includes(h);
@@ -254,9 +267,9 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks }: Ad
         </form>
 
         <div className="p-6 border-t border-white/5 bg-white/[0.01] flex justify-end items-center gap-4 px-10">
-          <button type="button" onClick={onClose} className="px-6 py-3 rounded-2xl text-[11px] font-black uppercase text-gray-500 hover:text-white transition-all">Cancel</button>
+          <button type="button" onClick={onClose} className="px-6 py-3 rounded-[2px] text-[11px] font-black uppercase text-gray-500 hover:text-white transition-all">Cancel</button>
           <button onClick={handleSubmit} disabled={isSaving || !formData.name}
-            className="flex items-center gap-3 px-10 py-4 rounded-2xl bg-blue-600 text-white text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/20 hover:bg-blue-500 transition-all disabled:opacity-50">
+            className="flex items-center gap-3 px-10 py-4 rounded-[2px] bg-blue-600 text-white text-[12px] font-black uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/20 hover:bg-blue-500 transition-all disabled:opacity-50">
             {isSaving ? <Loader2 className="animate-spin" size={20} /> : <><Save size={20} /> Complete Registration</>}
           </button>
         </div>

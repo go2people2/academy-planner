@@ -14,6 +14,7 @@ import ProgressSequencer from '@/components/dashboard/ProgressSequencer';
 import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
 import StudentStudyReportDrawer from '@/components/dashboard/StudentStudyReportDrawer'; // 💡 추가
 import MonthlyChanges from '@/components/dashboard/MonthlyChanges';
+import SettingsView from '@/components/dashboard/SettingsView';
 
 // 공통 타입 임포트
 import { Student, SessionLog, StudentStatus, TextbookOption } from '@/types/dashboard';
@@ -23,7 +24,7 @@ const DAYS_KOR = ['일', '월', '화', '수', '목', '금', '토'];
 export default function DashboardPage() {
   const router = useRouter();
   const { slug } = useParams();
-  const [viewMode, setViewMode] = useState<'board' | 'todayTable' | 'progress' | 'studentEdit' | 'monthlyChanges'>('board');
+  const [viewMode, setViewMode] = useState<'board' | 'todayTable' | 'progress' | 'studentEdit' | 'monthlyChanges' | 'settings'>('board');
   const [academy, setAcademy] = useState<any>(null);
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedDays, setSelectedDays] = useState<string[]>([]); // 💡 요일 다중 선택 상태 추가
@@ -31,7 +32,19 @@ export default function DashboardPage() {
   const [filterTarget, setFilterTarget] = useState<'all' | 'today' | 'rest'>('rest'); // 💡 필터 적용 범위 추가
   const [searchQuery, setSearchQuery] = useState('');
   const [students, setStudents] = useState<Student[]>([]);
+  const [teachers, setTeachers] = useState<any[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null); // 💡 추가
   const [isLoading, setIsLoading] = useState(true);
+
+  // 💡 세션 체크 추가
+  useEffect(() => {
+    const userJson = localStorage.getItem('ams_user');
+    if (!userJson) {
+      router.push(`/${slug}/login`);
+      return;
+    }
+    setCurrentUser(JSON.parse(userJson));
+  }, [slug, router]);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
@@ -56,6 +69,17 @@ export default function DashboardPage() {
     return DAYS_KOR[d.getDay()];
   }, [selectedDate]);
 
+  const fetchTeachers = useCallback(async (academyId: string) => {
+    try {
+      const { data, error } = await supabase
+        .from('ams_teachers')
+        .select('*')
+        .eq('academy_id', academyId)
+        .order('name', { ascending: true });
+      if (!error) setTeachers(data || []);
+    } catch (e) { console.error('Fetch teachers error:', e); }
+  }, []);
+
   const refreshTextbooks = useCallback(async () => {
     setIsRefreshingBooks(true);
     try {
@@ -70,18 +94,36 @@ export default function DashboardPage() {
       // 💡 1. 학원 정보 먼저 조회 (슬러그 기반)
       let currentAcademy = academy;
       if (!currentAcademy) {
-        const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', slug).single();
+        console.log('Fetching academy for slug:', slug);
+        const { data: acData, error: acErr } = await supabase.from('ams_academies').select('*').eq('slug', slug).single();
+        
+        if (acErr) {
+          console.error('Supabase Academy Fetch Error:', acErr);
+        }
+
         if (acData) {
           setAcademy(acData);
           currentAcademy = acData;
+          await fetchTeachers(acData.id);
         } else {
-          console.error('Academy not found for slug:', slug);
+          console.error('Academy not found for slug:', slug, '. Error details:', acErr?.message);
           setIsLoading(false);
           return;
         }
+      } else {
+        await fetchTeachers(currentAcademy.id);
       }
 
-      const { data: studentsData, error: sErr } = await supabase.from('ams_students').select('*').eq('academy_id', currentAcademy.id);
+      let studentsQuery = supabase.from('ams_students').select('*').eq('academy_id', currentAcademy.id);
+      
+      // 💡 선생님 계정으로 로그인한 경우: 담당 학생만 필터링
+      const userJson = localStorage.getItem('ams_user');
+      const user = userJson ? JSON.parse(userJson) : null;
+      if (user && user.role === 'teacher') {
+        studentsQuery = studentsQuery.eq('teacher_id', user.id);
+      }
+
+      const { data: studentsData, error: sErr } = await studentsQuery;
       if (sErr) throw sErr;
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
@@ -96,7 +138,9 @@ export default function DashboardPage() {
         const history = logs.filter(l => l.date < selectedDate).slice(0, 5).map(l => l.status);
         while (history.length < 5) history.push('none');
         return {
-          id: s.id, academy_id: s.academy_id, name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', 
+          id: s.id, academy_id: s.academy_id, 
+          teacher_id: s.teacher_id, // 💡 추가
+          name: s.name, school: s.school || '미지정', grade: s.grade || '미지정', 
           course: s.course || 'C',
           book_courses: s.book_courses || {},
           class: s.class_name || '일반반',
@@ -112,7 +156,7 @@ export default function DashboardPage() {
       setStudents(enriched);
       await refreshTextbooks();
     } catch (error) { console.error('Data load error:', error); } finally { setIsLoading(false); }
-  }, [selectedDate, refreshTextbooks, slug, academy]);
+  }, [selectedDate, refreshTextbooks, slug, academy, fetchTeachers]);
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -164,14 +208,14 @@ export default function DashboardPage() {
     try {
       const { error } = await supabase.from('ams_students').insert([{
         academy_id: academy.id,
-        name: data.name, school: data.school, grade: data.grade, 
+        name: data.name, school: data.school, grade: data.grade,
         course: data.course,
         book_courses: data.book_courses || {},
-        class_name: data.class_name, phone: data.phone, 
+        class_name: data.class_name, phone: data.phone,
+        teacher_id: data.teacher_id || null, // 💡 추가
         class_days: data.class_days, day_schedules: data.day_schedules, assigned_books: data.assigned_books, is_deleted: false
       }]);
-      if (error) throw error;
-      await fetchAllData();
+      if (error) throw error;      await fetchAllData();
     } catch (e) { console.error('Add student error:', e); }
   };
 
@@ -274,6 +318,30 @@ export default function DashboardPage() {
     } catch (e) { console.error('Update student error:', e); }
   };
 
+  const handleAddNewTeacherAccount = async (teacherData: any) => {
+    if (!academy) return;
+    try {
+      const { error } = await supabase.from('ams_teachers').insert([{
+        academy_id: academy.id,
+        name: teacherData.name,
+        login_id: teacherData.login_id,
+        password: teacherData.password,
+        role: teacherData.role || 'teacher'
+      }]);
+      if (error) throw error;
+      await fetchTeachers(academy.id);
+    } catch (e) { console.error('Add teacher error:', e); alert('선생님 등록 중 오류가 발생했습니다.'); }
+  };
+
+  const handleDeleteTeacher = async (teacherId: string) => {
+    if (!confirm('정말로 이 선생님 계정을 삭제하시겠습니까?')) return;
+    try {
+      const { error } = await supabase.from('ams_teachers').delete().eq('id', teacherId);
+      if (error) throw error;
+      if (academy) await fetchTeachers(academy.id);
+    } catch (e) { console.error('Delete teacher error:', e); }
+  };
+
   const todayStudents = useMemo(() => students.filter(s => {
     if (s.is_deleted) return false;
 
@@ -358,6 +426,7 @@ export default function DashboardPage() {
         selectedDays={selectedDays} setSelectedDays={setSelectedDays} // 💡 추가된 프롭
         isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} // 💡 추가된 프롭
         filterTarget={filterTarget} setFilterTarget={setFilterTarget} // 💡 추가된 프롭
+        academyInfo={academy} // 💡 추가
       />
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
         {isLoading ? (
@@ -378,6 +447,7 @@ export default function DashboardPage() {
                 onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
                 masterTextbooks={availableTextbooks}
+                teachers={teachers} // 💡 추가
               />
             )}
             {viewMode === 'studentEdit' && (
@@ -392,6 +462,7 @@ export default function DashboardPage() {
                 onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday}
                 onAddNewStudent={handleAddNewStudent}
                 masterTextbooks={availableTextbooks}
+                teachers={teachers} // 💡 추가
                 title="전체 학생 정보 관리" 
                 showAddButton={true} 
                 hideTodaySection={true} 
@@ -415,6 +486,14 @@ export default function DashboardPage() {
               />
             )}
             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
+            {viewMode === 'settings' && (
+              <SettingsView 
+                teachers={teachers} 
+                onAddTeacher={handleAddNewTeacherAccount} 
+                onDeleteTeacher={handleDeleteTeacher}
+                academyInfo={academy}
+              />
+            )}
           </div>
         )}
       </main>
@@ -429,7 +508,8 @@ export default function DashboardPage() {
                 onRefreshBooks={refreshTextbooks} 
                 onUpdateInfo={updateStudentInfo} 
                 onAddToToday={addStudentToToday} 
-                onClose={() => setSelectedStudentId(null)} 
+                onClose={() => setSelectedStudentId(null)}
+                teachers={teachers} // 💡 추가
               />
             ) : (
               <StudentStudyReportDrawer 

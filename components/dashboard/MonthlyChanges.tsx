@@ -85,14 +85,14 @@ export default function MonthlyChanges({ students }: MonthlyChangesProps) {
             {currentYear}년 {currentMonth + 1}월 주요 학생 현황 및 수업 변경 기록
           </p>
         </div>
-        <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-lg border border-white/10">
+        <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-[2px] border border-white/10">
           <Calendar size={14} className="text-blue-500" />
           <span className="text-[11px] font-black text-gray-300">{currentMonth + 1}월 리포트</span>
         </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4">
-        <div className="bg-[#0f0f0f] border border-white/10 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="bg-[#0f0f0f] border border-white/10 rounded-sm overflow-hidden shadow-2xl">
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="bg-white/[0.03] border-b border-white/5">
@@ -115,7 +115,7 @@ export default function MonthlyChanges({ students }: MonthlyChangesProps) {
                     {change.date.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}
                   </td>
                   <td className="py-4 px-4">
-                    <span className={`flex items-center gap-1.5 text-[10px] font-black px-2 py-0.5 rounded-full border w-fit ${
+                    <span className={`flex items-center gap-1.5 text-[10px] font-black px-2 py-0.5 rounded-[2px] border w-fit ${
                       change.type === '신입' ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20' :
                       change.type === '퇴원' ? 'bg-red-500/10 text-red-500 border-red-500/20' :
                       change.type === '보강' ? 'bg-blue-500/10 text-blue-500 border-blue-500/20' :
@@ -159,7 +159,7 @@ export default function MonthlyChanges({ students }: MonthlyChangesProps) {
 
 function StatsCard({ label, count, color }: any) {
   return (
-    <div className="bg-[#0f0f0f] border border-white/10 rounded-2xl p-5 space-y-2 shadow-xl border-t-2" style={{ borderTopColor: 'currentColor' }}>
+    <div className="bg-[#0f0f0f] border border-white/10 rounded-sm p-5 space-y-2 shadow-xl border-t-2" style={{ borderTopColor: 'currentColor' }}>
       <p className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{label}</p>
       <div className={`text-3xl font-black tabular-nums ${color}`}>{count}<span className="text-xs ml-1 text-gray-600">건</span></div>
     </div>

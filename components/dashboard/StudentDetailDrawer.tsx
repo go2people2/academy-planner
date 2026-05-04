@@ -6,6 +6,7 @@ import { Student, TextbookOption } from '@/types/dashboard';
 interface StudentDetailDrawerProps {
   student: Student;
   availableTextbooks: TextbookOption[];
+  teachers: any[]; // 💡 추가
   isRefreshingBooks: boolean;
   onRefreshBooks: () => void;
   onUpdateInfo: (studentId: string, field: string, value: any) => void;
@@ -16,7 +17,7 @@ interface StudentDetailDrawerProps {
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 export default function StudentDetailDrawer({
-  student, availableTextbooks, isRefreshingBooks, onRefreshBooks, onUpdateInfo, onAddToToday, onClose
+  student, availableTextbooks, teachers, isRefreshingBooks, onRefreshBooks, onUpdateInfo, onAddToToday, onClose
 }: StudentDetailDrawerProps) {
   const [localSchedules, setLocalSchedules] = useState<{[key: string]: number[]}>(student.day_schedules || {});
   const [localDays, setLocalDays] = useState<string[]>(student.class_days || []);
@@ -27,6 +28,7 @@ export default function StudentDetailDrawer({
   const [localBookCourses, setLocalBookCourses] = useState<Record<string, 'E' | 'D' | 'C' | 'B' | 'A'>>(student.book_courses || {});
   const [localClass, setLocalClass] = useState(student.class);
   const [localPhone, setLocalPhone] = useState(student.phone || '');
+  const [localTeacherId, setLocalTeacherId] = useState(student.teacher_id || ''); // 💡 추가
   const [bookSearch, setBookSearch] = useState('');
   
   // 삭제 확인 팝업 상태
@@ -42,7 +44,8 @@ export default function StudentDetailDrawer({
     setLocalBookCourses(student.book_courses || {});
     setLocalClass(student.class);
     setLocalPhone(student.phone || '');
-  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone]);
+    setLocalTeacherId(student.teacher_id || ''); // 💡 추가
+  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone, student.teacher_id]);
 
   const filteredBooks = useMemo(() => {
     return (availableTextbooks || []).filter(b => 
@@ -97,35 +100,52 @@ export default function StudentDetailDrawer({
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-2 px-1">
           <h3 className="text-sm font-black text-gray-500 uppercase tracking-[0.2em]">Student Profile</h3>
-          {student.is_deleted && <span className="bg-red-500/10 text-red-500 text-[9px] font-black px-2 py-0.5 rounded-full border border-red-500/20">퇴원생</span>}
+          {student.is_deleted && <span className="bg-red-500/10 text-red-500 text-[9px] font-black px-2 py-0.5 rounded-[2px] border border-red-500/20">퇴원생</span>}
         </div>
         <button onClick={onClose} className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-white/10 transition-colors"><X size={18} /></button>
       </div>
       
       <div className="flex-1 space-y-10">
         {/* 1. 기본 정보 */}
-        <section className="bg-white/5 border border-white/5 rounded-2xl p-4 space-y-4 shadow-inner">
+        <section className="bg-white/5 border border-white/5 rounded-[4px] p-4 space-y-4 shadow-inner">
           <div className="grid grid-cols-12 gap-2">
             <div className="col-span-4">
               <input type="text" value={localName} placeholder="Name" onChange={(e) => setLocalName(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'name', localName)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-3 py-3 text-lg font-black text-white outline-none focus:border-blue-500 transition-all" />
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-3 text-lg font-black text-white outline-none focus:border-blue-500 transition-all" />
             </div>
             <div className="col-span-2">
               <input type="text" value={localGrade} placeholder="Grade" onChange={(e) => setLocalGrade(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'grade', localGrade)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-3 text-xs font-bold text-blue-400 text-center outline-none focus:border-blue-500 transition-all" title="Grade" />
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-3 text-xs font-bold text-blue-400 text-center outline-none focus:border-blue-500 transition-all" title="Grade" />
             </div>
             <div className="col-span-3">
               <select value={localCourse} onChange={(e) => {
                 const val = e.target.value as any;
                 setLocalCourse(val);
                 onUpdateInfo(student.id, 'course', val);
-              }} className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-3 text-xs font-black text-blue-500 text-center outline-none appearance-none cursor-pointer">
+              }} className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-3 text-xs font-black text-blue-500 text-center outline-none appearance-none cursor-pointer">
                 {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c} Course</option>)}
               </select>
             </div>
             <div className="col-span-3">
               <input type="text" value={localClass} placeholder="Class" onChange={(e) => setLocalClass(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'class_name', localClass)}
-                className="w-full bg-black/40 border border-white/10 rounded-xl px-2 py-3 text-xs font-bold text-gray-400 text-center outline-none focus:border-blue-500 transition-all" />
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-3 text-xs font-bold text-gray-400 text-center outline-none focus:border-blue-500 transition-all" />
+            </div>
+            <div className="col-span-12">
+              <div className="flex items-center gap-2 bg-white/5 border border-white/5 rounded-[2px] px-3 py-2">
+                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest shrink-0">Manager:</span>
+                <select 
+                  value={localTeacherId} 
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setLocalTeacherId(val);
+                    onUpdateInfo(student.id, 'teacher_id', val || null);
+                  }}
+                  className="flex-1 bg-transparent text-[11px] font-black text-blue-400 outline-none cursor-pointer"
+                >
+                  <option value="" className="bg-[#121212]">미배정 (전체 노출)</option>
+                  {teachers.map(t => <option key={t.id} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -138,7 +158,7 @@ export default function StudentDetailDrawer({
                   const book = availableTextbooks.find(b => b.bookcode === code);
                   const bookCourse = localBookCourses[code] || localCourse;
                   return (
-                    <div key={code} className={`flex items-center gap-1.5 px-2 py-1 rounded-lg group border ${book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
+                    <div key={code} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
                       <span className={`text-[9px] font-black px-1.5 ${book ? 'text-gray-400' : 'text-red-400'}`}>
                         {book ? book.title : `(${code})`}
                       </span>
@@ -149,7 +169,7 @@ export default function StudentDetailDrawer({
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
                         }}
-                        className="bg-blue-600/20 text-blue-500 text-[10px] font-black rounded px-1 py-0.5 outline-none appearance-none cursor-pointer hover:bg-blue-600 hover:text-white transition-all"
+                        className="bg-blue-600/20 text-blue-500 text-[10px] font-black rounded-[2px] px-1 py-0.5 outline-none appearance-none cursor-pointer hover:bg-blue-600 hover:text-white transition-all"
                       >
                         {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c}</option>)}
                       </select>
@@ -169,11 +189,11 @@ export default function StudentDetailDrawer({
           <div className="grid grid-cols-2 gap-2">
             <div className="relative group">
               <input type="text" value={localSchool} placeholder="School Name" onChange={(e) => setLocalSchool(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'school', localSchool)}
-                className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-400 outline-none focus:border-blue-500/50 transition-all font-bold" />
+                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-400 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
             <div className="relative group">
               <input type="tel" value={localPhone} placeholder="Phone Number" onChange={(e) => setLocalPhone(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'phone', localPhone)}
-                className="w-full bg-black/20 border border-white/5 rounded-xl px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
+                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
           </div>
         </section>
@@ -181,14 +201,14 @@ export default function StudentDetailDrawer({
         {/* 2. 스케줄 설정 */}
         <section className="space-y-4">
           <h5 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2 px-1"><Calendar size={14} /> Weekly Schedule</h5>
-          <div className="bg-white/5 border border-white/5 rounded-2xl p-4 shadow-inner">
+          <div className="bg-white/5 border border-white/5 rounded-[4px] p-4 shadow-inner">
             <div className="grid grid-cols-7 gap-1">
               {DAYS.map(day => {
                 const activeHours = localSchedules[day] || [];
                 const isDaySelected = localDays.includes(day);
                 return (
                   <div key={day} className="flex flex-col items-center gap-3">
-                    <button onClick={() => handleDayToggle(day)} className={`text-[10px] font-black w-8 h-8 rounded-lg flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:text-gray-300'}`}>{day}</button>
+                    <button onClick={() => handleDayToggle(day)} className={`text-[10px] font-black w-8 h-8 rounded-[2px] flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:text-gray-300'}`}>{day}</button>
                     <div className="flex flex-col gap-1 w-full px-1">
                       {[16, 17, 18, 19, 20, 21].map((h, idx) => {
                         const isNormal = activeHours.includes(h);
@@ -214,7 +234,7 @@ export default function StudentDetailDrawer({
             <button onClick={onRefreshBooks} className="text-gray-500 hover:text-white transition-all"><RefreshCw size={12} className={isRefreshingBooks ? 'animate-spin' : ''} /></button>
           </div>
 
-          <div className="bg-white/5 border border-white/5 rounded-2xl flex flex-col overflow-hidden h-[300px] shadow-inner">
+          <div className="bg-white/5 border border-white/5 rounded-[4px] flex flex-col overflow-hidden h-[300px] shadow-inner">
             <div className="p-3 border-b border-white/5 bg-black/20 flex items-center gap-2">
               <Search size={14} className="text-gray-500" />
               <input type="text" placeholder="Search textbooks..." value={bookSearch} onChange={(e) => setBookSearch(e.target.value)}
@@ -225,7 +245,7 @@ export default function StudentDetailDrawer({
                 const isSelected = student.assigned_books.includes(book.bookcode);
                 return (
                   <div key={book.bookcode} onClick={() => toggleBookSelection(book.bookcode)}
-                    className={`flex items-center justify-between p-2.5 rounded-xl cursor-pointer transition-all border ${isSelected ? 'bg-blue-600/10 border-blue-500/30' : 'hover:bg-white/5 border-transparent'}`}>
+                    className={`flex items-center justify-between p-2.5 rounded-[2px] cursor-pointer transition-all border ${isSelected ? 'bg-blue-600/10 border-blue-500/30' : 'hover:bg-white/5 border-transparent'}`}>
                     <div>
                       <h4 className={`text-[11px] font-bold ${isSelected ? 'text-blue-400' : 'text-gray-300'}`}>{book.title}</h4>
                       <p className="text-[9px] text-gray-500">{book.grade} · {book.ePeriod}</p>
@@ -251,7 +271,7 @@ export default function StudentDetailDrawer({
                     onUpdateInfo(student.id, 'phone', `${student.phone || ''} (퇴원: ${reason})`);
                   }
                 }}
-                className="flex items-center justify-center gap-2 w-full py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"
+                className="flex items-center justify-center gap-2 w-full py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"
               >
                 <UserMinus size={14} /> 학생 퇴원 처리 및 보관
               </button>
@@ -259,19 +279,19 @@ export default function StudentDetailDrawer({
               <div className="space-y-3">
                 <button 
                   onClick={() => onUpdateInfo(student.id, 'is_deleted', false)}
-                  className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600/10 text-emerald-500 border border-emerald-500/20 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all"
+                  className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600/10 text-emerald-500 border border-emerald-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all"
                 >
                   <UserCheck size={14} /> 재원생으로 복구
                 </button>
                 
-                <div className="p-4 rounded-2xl bg-red-500/5 border border-red-500/10 space-y-3">
+                <div className="p-4 rounded-[4px] bg-red-500/5 border border-red-500/10 space-y-3">
                   <p className="text-[9px] text-gray-500 leading-relaxed font-medium">
                     * 리포트(PDF) 출력 후 개인정보 파기가 필요한 경우 아래 버튼을 사용하세요.<br/>
                     * 프로필은 삭제되지만 과거 수업/테스트 통계 기록은 DB에 익명으로 보존됩니다.
                   </p>
                   <button 
                     onClick={() => setShowDeleteConfirm(true)}
-                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20"
+                    className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20"
                   >
                     <Trash2 size={12} /> 프로필 영구 삭제 (개인정보 파기)
                   </button>
@@ -286,7 +306,7 @@ export default function StudentDetailDrawer({
       <AnimatePresence>
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-[#1a1a1a] border border-white/10 p-6 rounded-2xl max-w-sm w-full shadow-2xl text-center space-y-4">
+            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-[#1a1a1a] border border-white/10 p-6 rounded-[4px] max-w-sm w-full shadow-2xl text-center space-y-4">
               <div className="w-12 h-12 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto"><Trash2 size={24} /></div>
               <h4 className="text-white font-black">개인정보를 영구 파기할까요?</h4>
               <p className="text-[11px] text-gray-500 leading-relaxed">
@@ -294,14 +314,14 @@ export default function StudentDetailDrawer({
                 (수업 통계 데이터는 익명화되어 보존됩니다.)
               </p>
               <div className="flex gap-2 pt-2">
-                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 bg-white/5 text-gray-500 rounded-xl text-[10px] font-black uppercase">취소</button>
+                <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 bg-white/5 text-gray-500 rounded-[2px] text-[10px] font-black uppercase">취소</button>
                 <button 
                   onClick={async () => {
                     onUpdateInfo(student.id, 'PERMANENT_DELETE', true); 
                     setShowDeleteConfirm(false);
                     onClose();
                   }}
-                  className="flex-1 py-3 bg-red-600 text-white rounded-xl text-[10px] font-black uppercase shadow-lg shadow-red-600/20"
+                  className="flex-1 py-3 bg-red-600 text-white rounded-[2px] text-[10px] font-black uppercase shadow-lg shadow-red-600/20"
                 >
                   파기 확인
                 </button>
