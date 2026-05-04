@@ -1,11 +1,13 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { User, Lock, ArrowRight, Loader2 } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { supabase } from '@/lib/supabase';
 
-export default function LoginForm() {
+export default function LoginForm({ academy }: { academy: any }) {
+  const { slug } = useParams();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -13,27 +15,43 @@ export default function LoginForm() {
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!academy) {
+      alert('학원 정보가 없습니다. 관리자에게 문의하세요.');
+      return;
+    }
     setIsLoading(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      // 1. 관리자(선생님) 로그인 체크
-      if (username === 'hokma-admin' && password === 'hokma1234') {
-        console.log('Teacher Login successful');
+
+    try {
+      // 1. 원장님 관리자 모드 체크 (ID: admin, PW: academy.admin_password)
+      if (username === 'admin' && password === academy.admin_password) {
+        console.log('Admin Master Login successful');
         setIsLoading(false);
-        router.push('/dashboard');
-      } 
-      // 2. 학생 로그인 체크 (임시 로직: 이름 + '1234'로 테스트)
-      else if (password === '1234') { 
-        console.log('Student Login successful');
-        setIsLoading(false);
-        router.push('/student');
+        router.push(`/${slug}/dashboard`);
+        return;
       }
-      else {
-        alert('Invalid ID or Password.');
+
+      // 2. 개별 선생님 로그인 체크 (ams_teachers 테이블 조회)
+      const { data: teacher, error } = await supabase
+        .from('ams_teachers')
+        .select('*')
+        .eq('academy_id', academy.id)
+        .eq('login_id', username)
+        .eq('password', password) // 💡 나중에는 Hash 암호화 비교로 업그레이드 필요
+        .single();
+
+      if (teacher) {
+        console.log('Teacher Login successful:', teacher.name);
+        setIsLoading(false);
+        router.push(`/${slug}/dashboard`);
+      } else {
+        alert('ID 또는 비밀번호가 올바르지 않습니다.');
         setIsLoading(false);
       }
-    }, 1000);
+    } catch (err) {
+      console.error('Login error:', err);
+      alert('로그인 처리 중 오류가 발생했습니다.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -45,16 +63,17 @@ export default function LoginForm() {
     >
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-white tracking-tight mb-2 uppercase">
-          {process.env.NEXT_PUBLIC_ACADEMY_NAME || 'Academy'}
+          {academy?.academy_name || 'Hokma'}
         </h1>
-        <p className="text-gray-400 text-sm">Teacher Management Portal</p>
+        <p className="text-gray-400 text-sm">{academy?.welcome_message || 'Teacher Management Portal'}</p>
       </div>
 
       <form onSubmit={handleLogin} className="space-y-6">
         <div className="space-y-2">
           <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
-            Teacher ID
+            Teacher ID / admin
           </label>
+...
           <div className="relative group">
             <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
             <input 

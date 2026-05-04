@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -22,7 +22,9 @@ const DAYS_KOR = ['일', '월', '화', '수', '목', '금', '토'];
 
 export default function DashboardPage() {
   const router = useRouter();
+  const { slug } = useParams();
   const [viewMode, setViewMode] = useState<'board' | 'todayTable' | 'progress' | 'studentEdit' | 'monthlyChanges'>('board');
+  const [academy, setAcademy] = useState<any>(null);
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedDays, setSelectedDays] = useState<string[]>([]); // 💡 요일 다중 선택 상태 추가
   const [isAndFilter, setIsAndFilter] = useState(false); // 💡 AND/OR 필터 조건 추가
@@ -65,7 +67,21 @@ export default function DashboardPage() {
   const fetchAllData = useCallback(async () => {
     setIsLoading(true);
     try {
-      const { data: studentsData, error: sErr } = await supabase.from('ams_students').select('*');
+      // 💡 1. 학원 정보 먼저 조회 (슬러그 기반)
+      let currentAcademy = academy;
+      if (!currentAcademy) {
+        const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', slug).single();
+        if (acData) {
+          setAcademy(acData);
+          currentAcademy = acData;
+        } else {
+          console.error('Academy not found for slug:', slug);
+          setIsLoading(false);
+          return;
+        }
+      }
+
+      const { data: studentsData, error: sErr } = await supabase.from('ams_students').select('*').eq('academy_id', currentAcademy.id);
       if (sErr) throw sErr;
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
@@ -96,13 +112,13 @@ export default function DashboardPage() {
       setStudents(enriched);
       await refreshTextbooks();
     } catch (error) { console.error('Data load error:', error); } finally { setIsLoading(false); }
-  }, [selectedDate, refreshTextbooks]);
+  }, [selectedDate, refreshTextbooks, slug, academy]);
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
   const saveTodaySession = async (studentId: string, sessionData: Partial<SessionLog>) => {
     const student = students.find(s => s.id === studentId);
-    if (!student) return false;
+    if (!student || !academy) return false;
     let sessionId = student.todaySession?.id;
 
     // 💡 DB 스키마에 없을 수 있는 필드들을 안전하게 제거
@@ -112,7 +128,7 @@ export default function DashboardPage() {
       if (!sessionId) {
         const { data, error } = await supabase.from('ams_session_logs').insert([{
           student_id: studentId, 
-          academy_id: student.academy_id, 
+          academy_id: academy.id, 
           session_date: selectedDate, 
           ...dbCompatibleData, 
           status: sessionData.status || 'none'
@@ -144,9 +160,10 @@ export default function DashboardPage() {
   };
 
   const handleAddNewStudent = async (data: any) => {
+    if (!academy) return;
     try {
       const { error } = await supabase.from('ams_students').insert([{
-        academy_id: students[0]?.academy_id || 'hokma-math',
+        academy_id: academy.id,
         name: data.name, school: data.school, grade: data.grade, 
         course: data.course,
         book_courses: data.book_courses || {},
@@ -165,6 +182,7 @@ export default function DashboardPage() {
   };
 
   const batchAddStudents = async (studentIds: string[], reasons: Record<string, string> = {}) => {
+    if (!academy) return;
     setIsLoading(true);
     try {
       const timestamp = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
@@ -189,7 +207,7 @@ export default function DashboardPage() {
         return { 
           student_id: id, 
           student_name: s?.name,
-          academy_id: s?.academy_id, 
+          academy_id: academy.id, 
           session_date: selectedDate, 
           attendance_status: '보강', 
           status: 'none',
@@ -204,7 +222,7 @@ export default function DashboardPage() {
 
   const removeStudentFromToday = async (studentId: string, reason: string = '') => {
     const student = students.find(s => s.id === studentId);
-    if (!student) return;
+    if (!student || !academy) return;
 
     try {
       const timestamp = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
@@ -231,7 +249,7 @@ export default function DashboardPage() {
           .insert([{
             student_id: studentId,
             student_name: student.name, // 💡 이름 저장
-            academy_id: student.academy_id,
+            academy_id: academy.id,
             session_date: selectedDate,
             attendance_status: '수업제외',
             special_notes: newNotes,

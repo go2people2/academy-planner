@@ -146,7 +146,15 @@ export default function Overview({
                 </span>
               </h3>
 
-              <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative">
+              <div 
+                onClick={(e) => {
+                  const input = e.currentTarget.querySelector('input');
+                  if (input && 'showPicker' in input) {
+                    try { (input as any).showPicker(); } catch (err) { console.error(err); }
+                  }
+                }}
+                className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative cursor-pointer"
+              >
                 <Calendar size={12} className="group-hover/date:text-blue-500" />
                 <span className="text-[10px] font-black uppercase tracking-tighter">
                   {selectedDate.replace(/-/g, '.')}
@@ -155,7 +163,7 @@ export default function Overview({
                   type="date" 
                   value={selectedDate}
                   onChange={(e) => onDateChange(e.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark]"
+                  className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark] z-10"
                 />
               </div>
             </div>

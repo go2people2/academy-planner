@@ -1,10 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter, useParams } from 'next/navigation';
 import { motion } from 'framer-motion';
 import { BookOpen, ClipboardCheck, Bell, User, LogOut, ChevronRight } from 'lucide-react';
 
 export default function StudentPortal() {
+  const router = useRouter();
+  const { slug } = useParams();
   const [studentInfo, setStudentInfo] = useState<any>({
     name: '김학생',
     grade: '중3',
@@ -29,7 +32,7 @@ export default function StudentPortal() {
             <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">{studentInfo.grade} · {studentInfo.class}</p>
           </div>
         </div>
-        <button className="p-2 text-gray-500 hover:text-white transition-colors">
+        <button onClick={() => router.push(`/${slug}/login`)} className="p-2 text-gray-500 hover:text-white transition-all active:scale-95">
           <LogOut size={20} />
         </button>
       </header>

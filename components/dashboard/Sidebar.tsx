@@ -4,7 +4,7 @@ import {
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight 
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { useRouter } from 'next/navigation';
+import { useRouter, useParams } from 'next/navigation';
 
 interface SidebarProps {
   viewMode: string;
@@ -29,10 +29,11 @@ export default function Sidebar({
   filterTarget, setFilterTarget
 }: SidebarProps) {
   const router = useRouter();
+  const { slug } = useParams();
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
-    router.push('/login');
+    router.push(`/${slug}/login`);
   };
 
   const toggleDay = (day: string) => {

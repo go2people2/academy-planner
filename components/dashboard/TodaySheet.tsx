@@ -401,7 +401,15 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-gray-400 hover:text-white transition-all group">
+          <div 
+            onClick={(e) => {
+              const input = e.currentTarget.querySelector('input');
+              if (input && 'showPicker' in input) {
+                try { (input as any).showPicker(); } catch (err) { console.error(err); }
+              }
+            }}
+            className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-lg px-3 py-1.5 text-gray-400 hover:text-white transition-all group cursor-pointer"
+          >
             <CalendarIcon size={12} className="group-hover:text-blue-500" />
             <input 
               type="date" 
