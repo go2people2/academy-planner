@@ -156,23 +156,42 @@ export default function StudentDetailDrawer({
               <div className="flex flex-wrap gap-1.5">
                 {student.assigned_books.map(code => {
                   const book = availableTextbooks.find(b => b.bookcode === code);
-                  const bookCourse = localBookCourses[code] || localCourse;
+                  const rawCourseValue = localBookCourses[code] || localCourse;
+                  const isKeep = String(rawCourseValue).endsWith('-keep');
+                  const currentCourse = isKeep ? rawCourseValue.replace('-keep', '') : rawCourseValue;
+
                   return (
-                    <div key={code} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
-                      <span className={`text-[9px] font-black px-1.5 ${book ? 'text-gray-400' : 'text-red-400'}`}>
+                    <div key={code} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${isKeep ? 'bg-amber-500/5 border-amber-500/20' : book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
+                      <span className={`text-[9px] font-black px-1.5 ${isKeep ? 'text-amber-500' : book ? 'text-gray-400' : 'text-red-400'}`}>
                         {book ? book.title : `(${code})`}
+                        {isKeep && <span className="ml-1 text-[7px] bg-amber-500 text-black px-1 rounded-sm uppercase tracking-tighter">Keep</span>}
                       </span>
                       <select 
-                        value={bookCourse}
+                        value={currentCourse}
                         onChange={(e) => {
-                          const newCourses = { ...localBookCourses, [code]: e.target.value as any };
+                          const newVal = isKeep ? `${e.target.value}-keep` : e.target.value;
+                          const newCourses = { ...localBookCourses, [code]: newVal as any };
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
                         }}
-                        className="bg-blue-600/20 text-blue-500 text-[10px] font-black rounded-[2px] px-1 py-0.5 outline-none appearance-none cursor-pointer hover:bg-blue-600 hover:text-white transition-all"
+                        className={`bg-blue-600/20 text-blue-500 text-[10px] font-black rounded-[2px] px-1 py-0.5 outline-none appearance-none cursor-pointer hover:bg-blue-600 hover:text-white transition-all ${isKeep ? 'opacity-50' : ''}`}
                       >
                         {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c}</option>)}
                       </select>
+                      
+                      {/* 💡 Keep 토글 버튼 추가 */}
+                      <button 
+                        onClick={() => {
+                          const newVal = isKeep ? currentCourse : `${currentCourse}-keep`;
+                          const newCourses = { ...localBookCourses, [code]: newVal as any };
+                          setLocalBookCourses(newCourses);
+                          onUpdateInfo(student.id, 'book_courses', newCourses);
+                        }}
+                        className={`text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all ${isKeep ? 'bg-amber-500 text-black' : 'bg-white/5 text-gray-500 hover:bg-amber-500/20 hover:text-amber-500 border border-transparent'}`}
+                      >
+                        KEEP
+                      </button>
+
                       <button 
                         onClick={() => toggleBookSelection(code)}
                         className="text-gray-600 hover:text-red-500 transition-colors ml-1"

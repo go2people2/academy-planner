@@ -428,8 +428,11 @@ function StudentRowItem({
         </div>
 
         {student.assigned_books && student.assigned_books.length > 0 && (
-          <div className="flex flex-wrap gap-1">
-            {student.assigned_books.map(code => {
+          <div className="flex flex-wrap gap-1 items-center">
+            {student.assigned_books.filter(code => {
+              const bookCourse = student.book_courses?.[code];
+              return !String(bookCourse).endsWith('-keep');
+            }).map(code => {
               const book = masterTextbooks.find(m => m.bookcode === code);
               if (!book) return null;
               return (
@@ -440,6 +443,18 @@ function StudentRowItem({
                 </span>
               );
             })}
+            {/* 💡 Keep 중인 교재 수 표시 (초소형 1K, 2K... 형태) */}
+            {(() => {
+              const keepCount = student.assigned_books.filter(code => String(student.book_courses?.[code]).endsWith('-keep')).length;
+              if (keepCount === 0) return null;
+              return (
+                <span className={`text-[7px] font-black px-1 py-0.5 rounded-[2px] tracking-tighter uppercase border ${
+                  isSelected || isChecked ? 'bg-white/20 text-white border-white/20' : 'text-gray-600 border-white/5 bg-white/[0.02]'
+                }`}>
+                  {keepCount}K
+                </span>
+              );
+            })()}
           </div>
         )}
 

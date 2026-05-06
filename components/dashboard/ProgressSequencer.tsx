@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ChevronRight, BookOpen, User, Calendar, TrendingUp, Search, 
-  CheckCircle2, AlertCircle, ChevronLeft
+  CheckCircle2, AlertCircle, ChevronLeft, Video, ClipboardCheck, RotateCcw, Flag
 } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 
@@ -61,7 +61,7 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
         </div>
       </div>
 
-      {/* 2. 오른쪽: 전체 교재 목록 (좌우 스크롤 구조 복구) */}
+      {/* 2. 오른쪽: 전체 교재 목록 */}
       <div className="flex-1 flex flex-col overflow-hidden bg-[#080808]">
         {selectedStudent ? (
           <div className="flex-1 overflow-y-auto custom-scrollbar-v p-8 space-y-12">
@@ -100,13 +100,30 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
 function BookProgressRow({ student, bookCode, textbook }: { student: Student, bookCode: string, textbook: any }) {
   const [units, setUnits] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [stepStates, setStepStates] = useState<Record<string, boolean[]>>({});
+
+  useEffect(() => {
+    const saved = localStorage.getItem(`progress_${student.id}_${bookCode}`);
+    if (saved) {
+      try { setStepStates(JSON.parse(saved)); } catch (e) { console.error(e); }
+    }
+  }, [student.id, bookCode]);
+
+  const toggleStep = (unitName: string, stepIdx: number) => {
+    const newState = { ...stepStates };
+    const currentSteps = newState[unitName] || [false, false, false, false];
+    const updatedSteps = [...currentSteps];
+    updatedSteps[stepIdx] = !updatedSteps[stepIdx];
+    newState[unitName] = updatedSteps;
+    setStepStates(newState);
+    localStorage.setItem(`progress_${student.id}_${bookCode}`, JSON.stringify(newState));
+  };
 
   useEffect(() => {
     async function fetchUnits() {
-      if (!textbook?.title) return; // 💡 제목이 없으면 중단
+      if (!textbook?.title) return;
       setIsLoading(true);
       try {
-        // 💡 교재 제목에 공백/특수문자가 있을 수 있으므로 인코딩 필수
         const safeTabName = encodeURIComponent(textbook.title);
         const res = await fetch(`/api/textbooks/${safeTabName}`);
         if (res.ok) {
@@ -161,18 +178,23 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
     return names;
   }, [student.allLogs, bookCode]);
 
-  const targetGrade = student.book_courses?.[bookCode] || student.course || 'C';
+  const targetGradeRaw = student.book_courses?.[bookCode] || student.course || 'C';
+  const isKeep = String(targetGradeRaw).endsWith('-keep');
+  const targetGrade = isKeep ? String(targetGradeRaw).replace('-keep', '') : targetGradeRaw;
 
   return (
-    <div className="space-y-4">
+    <div className={`space-y-4 transition-opacity ${isKeep ? 'opacity-70' : ''}`}>
       {/* 교재 제목 바 */}
       <div className="flex items-center justify-between px-1">
         <div className="flex items-center gap-3">
-          <div className="w-8 h-8 bg-blue-600/20 rounded flex items-center justify-center text-blue-500 border border-blue-500/20">
+          <div className={`w-8 h-8 rounded flex items-center justify-center border transition-colors ${isKeep ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-blue-600/20 text-blue-500 border-blue-500/20'}`}>
             <BookOpen size={16} />
           </div>
           <div>
-            <h3 className="text-sm font-black text-white">{textbook?.title || bookCode}</h3>
+            <div className="flex items-center gap-2">
+              <h3 className="text-sm font-black text-white">{textbook?.title || bookCode}</h3>
+              {isKeep && <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-tighter shadow-lg shadow-amber-500/10">KEEP</span>}
+            </div>
             <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Target Grade: {targetGrade}</span>
           </div>
         </div>
@@ -184,7 +206,7 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
         </div>
       </div>
 
-      {/* 💡 단원 리스트 (좌우 스크롤 구조 복구) */}
+      {/* 단원 리스트 */}
       <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar-h -mx-1 px-1">
         {isLoading ? (
           [...Array(6)].map((_, i) => <div key={i} className="min-w-[180px] h-24 bg-white/[0.02] animate-pulse rounded-[4px]" />)
@@ -204,7 +226,6 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
               >
                 <div className="flex justify-between items-start mb-3">
                   <div className="space-y-0.5">
-                    <span className="text-[7px] font-black text-gray-600 block uppercase">{String(idx+1).padStart(2, '0')}</span>
                     <h4 className={`text-[11px] font-black tracking-tight truncate w-32 ${isCompleted ? 'text-emerald-400' : 'text-gray-300'}`} title={u.unit}>{u.unit}</h4>
                   </div>
                   {isCompleted && <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />}
@@ -215,8 +236,8 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
                   <span className="text-[7px] font-bold text-gray-600 tabular-nums uppercase">p.{startP} ~ {endP}</span>
                 </div>
 
-                {/* 💡 10단계 정밀 눈금 적용 */}
-                <div className="h-1.5 flex gap-[1px]">
+                {/* 10단계 정밀 눈금 */}
+                <div className="h-1.5 flex gap-[1px] mb-3">
                   {[...Array(10)].map((_, i) => {
                     const threshold = (i + 1) * 10;
                     const currentProgress = Math.round(progressRatio * 100);
@@ -230,6 +251,31 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
                             : 'bg-white/[0.05]'
                         }`} 
                       />
+                    );
+                  })}
+                </div>
+
+                {/* 하단 4개 체크리스트 박스 복원 */}
+                <div className="grid grid-cols-4 gap-1 h-6">
+                  {[
+                    { id: 'video', icon: <Video size={10} />, label: '강의 시청' },
+                    { id: 'test', icon: <ClipboardCheck size={10} />, label: '단원 평가' },
+                    { id: 'retry', icon: <RotateCcw size={10} />, label: '오답 풀이' },
+                    { id: 'final', icon: <Flag size={10} />, label: '최종 마무리' }
+                  ].map((step, sIdx) => {
+                    const isStepDone = stepStates[u.unit]?.[sIdx] || (isCompleted && sIdx < 4);
+                    return (
+                      <button 
+                        key={step.id} title={step.label}
+                        onClick={(e) => { e.stopPropagation(); toggleStep(u.unit, sIdx); }}
+                        className={`rounded-[2px] border border-white/5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
+                          isStepDone 
+                            ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 
+                            : 'bg-white/[0.02] text-gray-700 hover:text-gray-400 hover:bg-white/5'
+                        }`}
+                      >
+                        {step.icon}
+                      </button>
                     );
                   })}
                 </div>
