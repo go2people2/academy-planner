@@ -13,12 +13,15 @@ export default function LoginPage() {
 
   useEffect(() => {
     async function fetchAcademy() {
-      const { data } = await supabase
+      if (!slug) return;
+      const normalizedSlug = Array.isArray(slug) ? slug[0] : slug;
+      const { data, error } = await supabase
         .from('ams_academies')
         .select('*')
-        .eq('slug', slug)
+        .eq('slug', normalizedSlug.toLowerCase())
         .single();
       
+      if (error) console.error('Fetch academy error:', error);
       if (data) setAcademy(data);
       setLoading(false);
     }

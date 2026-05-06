@@ -115,7 +115,8 @@ export default function DashboardPage() {
     try {
       let currentAcademy = academy;
       if (!currentAcademy) {
-        const { data: acData, error: acErr } = await supabase.from('ams_academies').select('*').eq('slug', slug).single();
+        const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
+        const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
         if (acData) { setAcademy(acData); currentAcademy = acData; await fetchTeachers(acData.id); }
         else { setIsLoading(false); return; }
       } else { await fetchTeachers(currentAcademy.id); }
