@@ -6,16 +6,18 @@ import {
   UserCircle, Shield, Key, Trash2, UserPlus, Save, X, Loader2,
   Lock, Settings as SettingsIcon, Users, Check
 } from 'lucide-react';
+import { supabase } from '@/lib/supabase';
 
 interface SettingsViewProps {
   teachers: any[];
   onAddTeacher: (data: any) => Promise<void>;
   onDeleteTeacher: (id: string) => Promise<void>;
   academyInfo: any;
+  currentUser: any;
 }
 
-export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, academyInfo }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy'>('teachers');
+export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, academyInfo, currentUser }: SettingsViewProps) {
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account'>('teachers');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
@@ -35,43 +37,59 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
     setNewTeacher({ name: '', login_id: '', password: '', role: 'teacher' });
   };
 
+  const isAdmin = currentUser?.role === 'admin';
+
   return (
     <div className="p-6 space-y-6 bg-[#080808] min-h-full">
       <div className="flex items-center justify-between border-b border-white/5 pb-4">
         <div>
           <h2 className="text-xl font-black text-white uppercase tracking-tight flex items-center gap-3">
             <SettingsIcon size={24} className="text-blue-500" />
-            Academy Settings
+            Settings
           </h2>
           <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.2em] mt-1">
-            학원 정보 및 선생님 계정 관리
+            학원 설정 및 개인 상용구 관리
           </p>
         </div>
       </div>
 
       {/* 탭 메뉴 */}
       <div className="flex gap-4 border-b border-white/5">
+        {isAdmin && (
+          <>
+            <button 
+              onClick={() => setActiveTab('teachers')}
+              className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'teachers' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}
+            >
+              <div className="flex items-center gap-2">
+                <Users size={14} /> Teacher Management
+              </div>
+              {activeTab === 'teachers' && <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
+            </button>
+            <button 
+              onClick={() => setActiveTab('academy')}
+              className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'academy' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}
+            >
+              <div className="flex items-center gap-2">
+                <Shield size={14} /> Academy Info
+              </div>
+              {activeTab === 'academy' && <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
+            </button>
+          </>
+        )}
         <button 
-          onClick={() => setActiveTab('teachers')}
-          className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'teachers' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}
+          onClick={() => setActiveTab('account')}
+          className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'account' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}
         >
           <div className="flex items-center gap-2">
-            <Users size={14} /> Teacher Management
+            <UserCircle size={14} /> My Feedback Presets
           </div>
-          {activeTab === 'teachers' && <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
-        </button>
-        <button 
-          onClick={() => setActiveTab('academy')}
-          className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'academy' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}
-        >
-          <div className="flex items-center gap-2">
-            <Shield size={14} /> Academy Info
-          </div>
-          {activeTab === 'academy' && <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
+          {activeTab === 'account' && <motion.div layoutId="tab-active" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
         </button>
       </div>
 
-      {activeTab === 'teachers' && (
+      {/* 1. 선생님 관리 탭 */}
+      {activeTab === 'teachers' && isAdmin && (
         <div className="space-y-6">
           <div className="flex justify-between items-center px-1">
             <h3 className="text-[11px] font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
@@ -117,39 +135,116 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
         </div>
       )}
 
-      {activeTab === 'academy' && (
-        <div className="max-w-2xl bg-[#0f0f0f] border border-white/10 rounded-[4px] p-8 space-y-8">
-          <div className="space-y-6">
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] border-l-2 border-blue-500 pl-3">Basic Information</h3>
-            <div className="grid grid-cols-2 gap-6">
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Academy Name</label>
-                <div className="px-4 py-3 bg-black/40 border border-white/10 rounded-[2px] text-sm font-bold text-white">
-                  {academyInfo?.academy_name}
+      {/* 2. 학원 정보 탭 */}
+      {activeTab === 'academy' && isAdmin && (
+        <div className="max-w-2xl space-y-8">
+          <div className="bg-[#0f0f0f] border border-white/10 rounded-[4px] p-8 space-y-8">
+            <div className="space-y-6">
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] border-l-2 border-blue-500 pl-3">Basic Information</h3>
+              <div className="grid grid-cols-2 gap-6">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Academy Name</label>
+                  <div className="px-4 py-3 bg-black/40 border border-white/10 rounded-[2px] text-sm font-bold text-white">
+                    {academyInfo?.academy_name}
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Academy Slug</label>
+                  <div className="px-4 py-3 bg-black/40 border border-white/10 rounded-[2px] text-sm font-bold text-blue-500">
+                    {academyInfo?.slug}
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Academy Slug</label>
-                <div className="px-4 py-3 bg-black/40 border border-white/10 rounded-[2px] text-sm font-bold text-blue-500">
-                  {academyInfo?.slug}
+            </div>
+
+            <div className="space-y-6 pt-4 border-t border-white/5">
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] border-l-2 border-emerald-500 pl-3">Management Settings</h3>
+              <div className="bg-white/[0.02] border border-white/5 p-6 rounded-[4px] space-y-6">
+                <div className="flex items-center justify-between">
+                  <div className="space-y-1">
+                    <h4 className="text-[11px] font-black text-white uppercase tracking-widest flex items-center gap-2">
+                      <Users size={14} className="text-emerald-500" />
+                      Regular Consultation Cycle
+                    </h4>
+                    <p className="text-[10px] text-gray-500 font-medium leading-relaxed">
+                      마지막 상담일로부터 설정된 기간이 지나면 대시보드에 알림이 표시됩니다.
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="relative">
+                      <input 
+                        type="number" 
+                        defaultValue={academyInfo?.consultation_cycle || 21}
+                        onBlur={async (e) => {
+                          const val = parseInt(e.target.value);
+                          if (val > 0) {
+                            setIsSaving(true);
+                            const { error } = await supabase
+                              .from('ams_academies')
+                              .update({ consultation_cycle: val })
+                              .eq('id', academyInfo.id);
+                            setIsSaving(false);
+                            if (!error) alert('상담 주기가 변경되었습니다.');
+                          }
+                        }}
+                        className="w-20 bg-black border border-white/10 rounded-[2px] py-2 px-3 text-center text-sm font-black text-emerald-400 outline-none focus:border-emerald-500 transition-all" 
+                      />
+                      <span className="absolute -right-6 top-1/2 -translate-y-1/2 text-[10px] font-black text-gray-600 uppercase">Days</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
+        </div>
+      )}
 
-          <div className="space-y-6">
-            <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] border-l-2 border-blue-500 pl-3">Security</h3>
-            <div className="bg-amber-500/5 border border-amber-500/10 rounded-[4px] p-4 flex items-start gap-4">
-              <Shield className="text-amber-500 shrink-0" size={20} />
-              <div>
-                <h4 className="text-[11px] font-black text-amber-500 uppercase tracking-widest">Admin Master Password</h4>
-                <p className="text-[10px] text-gray-500 font-medium leading-relaxed mt-1">
-                  이 비밀번호는 'admin' 아이디로 로그인할 때 사용되는 최상위 권한 암호입니다.
-                </p>
-                <div className="mt-3 font-black text-lg text-white tracking-[0.3em]">
-                  ••••••••
+      {/* 3. 내 피드백 설정 탭 (누구나 접근 가능) */}
+      {activeTab === 'account' && (
+        <div className="max-w-2xl space-y-8">
+          <div className="bg-[#0f0f0f] border border-white/10 rounded-[4px] p-8 space-y-8">
+            <div className="space-y-2">
+              <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] border-l-2 border-amber-500 pl-3">Homework Feedback Presets</h3>
+              <p className="text-[10px] text-gray-500 font-medium ml-3">과제 평가 버튼을 눌렀을 때 특이사항에 자동으로 입력될 문구를 설정합니다.</p>
+            </div>
+
+            <div className="space-y-4 pt-2">
+              {[
+                { key: 'perfect', label: 'S (Perfect)', color: 'bg-emerald-500', desc: '숙제를 아주 완벽하게 잘 해왔습니다.' },
+                { key: 'good', label: 'A (Good)', color: 'bg-blue-500', desc: '숙제를 잘 수행했습니다.' },
+                { key: 'neutral', label: 'B (Neutral)', color: 'bg-white/20', desc: '숙제 수행이 보통입니다.' },
+                { key: 'poor', label: 'C (Poor)', color: 'bg-amber-500', desc: '숙제가 미흡한 부분이 있습니다.' },
+                { key: 'bad', label: 'F (Bad)', color: 'bg-red-500', desc: '숙제를 거의 해오지 않았습니다.' },
+              ].map((preset) => (
+                <div key={preset.key} className="flex items-start gap-4 p-4 bg-white/[0.02] border border-white/5 rounded-[4px] group hover:border-white/10 transition-all">
+                  <div className={`w-10 h-10 rounded-[2px] ${preset.color} flex items-center justify-center text-white font-black text-sm shrink-0`}>
+                    {preset.label[0]}
+                  </div>
+                  <div className="flex-1 space-y-2">
+                    <label className="text-[10px] font-black text-gray-500 uppercase">{preset.label}</label>
+                    <textarea 
+                      defaultValue={currentUser?.homework_presets?.[preset.key] || preset.desc}
+                      placeholder="버튼 클릭 시 입력될 문구를 작성하세요"
+                      onBlur={async (e) => {
+                        const val = e.target.value;
+                        const newPresets = { ...(currentUser?.homework_presets || {}), [preset.key]: val };
+                        setIsSaving(true);
+                        const { error } = await supabase
+                          .from('ams_teachers')
+                          .update({ homework_presets: newPresets })
+                          .eq('id', currentUser.id);
+                        if (!error) {
+                          const updatedUser = { ...currentUser, homework_presets: newPresets };
+                          localStorage.setItem('ams_user', JSON.stringify(updatedUser));
+                          alert(`${preset.label} 문구가 저장되었습니다.`);
+                        }
+                        setIsSaving(false);
+                      }}
+                      className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[12px] font-bold text-gray-300 outline-none focus:border-amber-500 transition-all min-h-[60px] resize-none"
+                    />
+                  </div>
                 </div>
-              </div>
+              ))}
             </div>
           </div>
         </div>

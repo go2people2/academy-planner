@@ -8,9 +8,9 @@ export async function GET(
   try {
     // Next.js 15 규칙에 따라 params를 await로 풀어줍니다.
     const resolvedParams = await params;
-    const tabName = resolvedParams.tabName;
+    const bookTitle = resolvedParams.tabName; // URL 파라미터는 tabName이지만 실제로는 교재 제목
     
-    const units = await fetchTextbookUnits(tabName);
+    const units = await fetchTextbookUnits(bookTitle);
     return NextResponse.json(units);
   } catch (error) {
     console.error('API Route Error:', error);

@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { 
-  LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle 
+  LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
+  ChevronLeft, ChevronRight, Bell
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
@@ -14,22 +15,22 @@ interface SidebarProps {
   students: any[];
   selectedFilter: string;
   setSelectedFilter: (filter: string) => void;
-  selectedDays: string[]; // 💡 추가
-  setSelectedDays: (days: string[]) => void; // 💡 추가
-  isAndFilter: boolean; // 💡 추가
-  setIsAndFilter: (val: boolean) => void; // 💡 추가
+  selectedDays: string[]; 
+  setSelectedDays: (days: string[]) => void; 
+  isAndFilter: boolean; 
+  setIsAndFilter: (val: boolean) => void; 
   filterTarget: 'all' | 'today' | 'rest';
   setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
-  academyInfo: any; // 💡 추가
+  academyInfo: any; 
 }
 
 const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
 
 export default function Sidebar({ 
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
-  selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, // 💡 추가
+  selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, 
   filterTarget, setFilterTarget,
-  academyInfo // 💡 추가
+  academyInfo 
 }: SidebarProps) {
   const router = useRouter();
   const { slug } = useParams();
@@ -72,6 +73,24 @@ export default function Sidebar({
 
   return (
     <aside className="w-52 border-r border-white/5 bg-[#0a0a0a]/90 backdrop-blur-2xl flex flex-col p-3 sticky top-0 h-screen z-30">
+      {/* 0. 내비게이션 제어 (Notion 스타일 - 크게 확장) */}
+      <div className="flex items-stretch gap-1 mb-6">
+        <button 
+          onClick={() => window.history.back()} 
+          className="flex-1 py-3 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center"
+          title="뒤로 가기 (Ctrl + [)"
+        >
+          <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+        </button>
+        <button 
+          onClick={() => window.history.forward()} 
+          className="flex-1 py-3 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center"
+          title="앞으로 가기 (Ctrl + ])"
+        >
+          <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+        </button>
+      </div>
+
       <div className="mb-6 px-1 space-y-3">
         {/* 1. 학원 브랜딩 */}
         <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode('board')}>
@@ -123,6 +142,12 @@ export default function Sidebar({
             onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} 
           />
           <SidebarLink 
+            icon={<Bell size={14} />} 
+            label="Notifications" 
+            active={viewMode === 'notifications'} 
+            onClick={() => { setViewMode('notifications'); setSelectedFilter('All'); }} 
+          />
+          <SidebarLink 
             icon={<TableIcon size={14} />} 
             label="Daily Sheet" 
             active={viewMode === 'todayTable'} 
@@ -147,7 +172,6 @@ export default function Sidebar({
             active={viewMode === 'monthlyChanges'} 
             onClick={() => { setViewMode('monthlyChanges'); setSelectedFilter('All'); }} 
           />
-          {/* 💡 퇴원생 보관소 추가 */}
           <SidebarLink 
             icon={<UserX size={14} />} 
             label="Discharged" 
@@ -181,7 +205,6 @@ export default function Sidebar({
           <FilterItem label="MS (중등)" count={students.filter(s => !s.is_deleted && s.grade.includes('중')).length} active={selectedFilter === '중'} onClick={() => setSelectedFilter('중')} />
           <FilterItem label="ES (초등)" count={students.filter(s => !s.is_deleted && s.grade.includes('초')).length} active={selectedFilter === '초'} onClick={() => setSelectedFilter('초')} />
           
-          {/* 💡 요일 다중 선택 필터 추가 */}
           <div className="pt-2 px-1">
             <h3 className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-2 flex items-center justify-between">
               Day Filter

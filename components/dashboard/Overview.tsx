@@ -23,10 +23,11 @@ interface OverviewProps {
   onRemoveFromToday: (id: string, reason: string) => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
   masterTextbooks: TextbookOption[];
-  teachers?: any[]; // 💡 추가
+  teachers?: any[]; 
   title?: string;
   showAddButton?: boolean;
   hideTodaySection?: boolean;
+  consultationCycle?: number; // 💡 추가
 }
 
 export default function Overview({ 
@@ -35,10 +36,11 @@ export default function Overview({
   selectedDate, onDateChange,
   todayKey,
   selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, masterTextbooks = [],
-  teachers = [], // 💡 추가
+  teachers = [],
   title,
   showAddButton = false,
-  hideTodaySection = false 
+  hideTodaySection = false,
+  consultationCycle = 21 // 💡 추가
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
@@ -190,6 +192,7 @@ export default function Overview({
                   currentDay={todayKey}
                   masterTextbooks={masterTextbooks}
                   onViewProgress={onViewProgress}
+                  consultationCycle={consultationCycle}
                   onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)}
                 />
               );
@@ -270,6 +273,7 @@ export default function Overview({
                 currentDay={todayKey}
                 masterTextbooks={masterTextbooks}
                 onViewProgress={onViewProgress}
+                consultationCycle={consultationCycle}
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)} 
               />
             );
@@ -353,12 +357,28 @@ export default function Overview({
 }
 
 function StudentRowItem({ 
-  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks 
+  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21
 }: { 
-  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[] 
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   const isMakeup = student.todaySession?.attendance_status === '보강';
+
+  // 💡 정기 상담 알림 로직 (단계별 색상)
+  const consultationStatus = useMemo(() => {
+    if (!student.last_consulted_at) return { needs: true, color: 'text-red-500', bg: 'bg-red-500/20', border: 'border-red-500/20' };
+    
+    const lastDate = new Date(student.last_consulted_at);
+    const today = new Date();
+    const diffTime = Math.abs(today.getTime() - lastDate.getTime());
+    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+
+    if (diffDays >= 35) return { needs: true, color: 'text-red-500', bg: 'bg-red-500/20', border: 'border-red-500/20' }; // 5주 이상: 빨강
+    if (diffDays >= 28) return { needs: true, color: 'text-amber-500', bg: 'bg-amber-500/20', border: 'border-amber-500/20' }; // 4주 이상: 노랑
+    if (diffDays >= 21) return { needs: true, color: 'text-emerald-500', bg: 'bg-emerald-500/20', border: 'border-emerald-500/20' }; // 3주 이상: 초록
+    
+    return { needs: false };
+  }, [student.last_consulted_at]);
 
   return (
     <motion.div 
@@ -380,6 +400,11 @@ function StudentRowItem({
           <h4 className={`text-[13px] font-black tracking-tight shrink-0 ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-gray-100'}`}>
             {student.name}
           </h4>
+          {consultationStatus.needs && !isBatchMode && (
+            <span className={`${consultationStatus.bg} ${consultationStatus.color} ${consultationStatus.border} text-[8px] font-black px-1 py-0.5 rounded border uppercase tracking-tighter shrink-0 animate-pulse`}>
+              상담
+            </span>
+          )}
           {!isBatchMode && onViewProgress && (
             <button 
               onClick={(e) => {

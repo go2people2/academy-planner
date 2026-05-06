@@ -1,10 +1,10 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Users, BookOpen, FileText, CheckCircle, Play, Settings, Loader2,
-  Video, ClipboardCheck, RotateCcw, Flag
+  ChevronRight, BookOpen, User, Calendar, TrendingUp, Search, 
+  CheckCircle2, AlertCircle, ChevronLeft
 } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 
@@ -14,159 +14,134 @@ interface ProgressSequencerProps {
   initialStudentId?: string | null;
 }
 
-const COURSE_TARGETS = {
-  'E': 100,
-  'D': 90,
-  'C': 80,
-  'B': 70,
-  'A': 50
-};
-
 export default function ProgressSequencer({ students, masterTextbooks, initialStudentId }: ProgressSequencerProps) {
-  const [activeStudentId, setActiveStudentId] = useState<string | null>(initialStudentId || students[0]?.id || null);
+  const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || (students[0]?.id || null));
+  const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
-  useEffect(() => {
-    if (initialStudentId) {
-      setActiveStudentId(initialStudentId);
-    }
-  }, [initialStudentId]);
-
-  const activeStudent = students.find(s => s.id === activeStudentId);
+  if (!selectedStudentId || students.length === 0) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-4">
+        <AlertCircle size={48} className="opacity-20" />
+        <p className="text-[10px] font-black uppercase tracking-[0.4em]">No students available</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="flex h-full overflow-hidden bg-[#050505]">
-      {/* Track Selector (Left) */}
-      <div className="w-56 border-r border-white/10 flex flex-col h-full bg-[#0a0a0a] z-20">
-        <div className="p-5 border-b border-white/10 bg-white/[0.02] font-black text-[9px] uppercase text-blue-500 tracking-widest italic flex items-center justify-between">
-          <span>Tracks</span>
-          <Users size={12} />
+    <div className="flex h-full bg-[#050505] overflow-hidden">
+      {/* 1. 왼쪽: 학생 목록 */}
+      <div className="w-64 border-r border-white/5 flex flex-col bg-black/20">
+        <div className="p-4 border-b border-white/5">
+          <h3 className="text-[10px] font-black text-blue-500 uppercase tracking-widest mb-3 flex items-center gap-2">
+            <User size={14} /> Student Progress
+          </h3>
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={12} />
+            <input 
+              type="text" 
+              placeholder="학생 검색..."
+              className="w-full bg-white/5 border border-white/10 rounded-[4px] py-2 pl-9 pr-3 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-all font-bold"
+            />
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto custom-scrollbar">
-          {students.map(s => {
-            const target = COURSE_TARGETS[s.course || 'C'];
-            return (
-              <div key={s.id} onClick={() => setActiveStudentId(s.id)} className={`p-4 border-b border-white/[0.05] cursor-pointer transition-all relative ${activeStudentId === s.id ? 'bg-blue-600/20' : 'hover:bg-white/[0.03]'}`}>
-                {activeStudentId === s.id && <div className="absolute left-0 top-0 bottom-0 w-1 bg-blue-500 shadow-[0_0_15px_rgba(59,130,246,0.8)]" />}
-                <div className="flex justify-between items-start mb-0.5">
-                  <p className={`font-black text-[11px] ${activeStudentId === s.id ? 'text-white' : 'text-gray-500'}`}>{s.name}</p>
-                  <span className={`text-[8px] font-black px-1 rounded ${activeStudentId === s.id ? 'bg-blue-500 text-white' : 'bg-white/10 text-gray-500'}`}>
-                    {s.course || 'C'}
-                  </span>
-                </div>
-                <div className="flex items-center justify-between">
-                  <p className="text-[9px] text-gray-600 font-bold uppercase">{s.grade}</p>
-                  <p className="text-[8px] text-gray-700 font-black italic">Target: {target}%</p>
-                </div>
+        <div className="flex-1 overflow-y-auto custom-scrollbar-v p-2 space-y-1">
+          {students.map(s => (
+            <button
+              key={s.id}
+              onClick={() => setSelectedStudentId(s.id)}
+              className={`w-full flex items-center justify-between p-3 rounded-[2px] transition-all group ${selectedStudentId === s.id ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
+            >
+              <div className="flex flex-col items-start min-w-0">
+                <span className="text-[13px] font-black truncate w-full text-left">{s.name}</span>
+                <span className={`text-[8px] font-bold uppercase tracking-tighter ${selectedStudentId === s.id ? 'text-blue-100' : 'text-gray-600'}`}>{s.grade} · {s.course}</span>
               </div>
-            );
-          })}
+              <ChevronRight size={14} className={`transition-transform ${selectedStudentId === s.id ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100'}`} />
+            </button>
+          ))}
         </div>
       </div>
 
-      {/* Timeline (Right) */}
-      <div className="flex-1 flex flex-col h-full overflow-hidden relative">
-        {activeStudent ? (
-          <>
-            <div className="h-14 border-b border-white/10 bg-[#0d0d0d] flex items-center px-8 justify-between z-10 shadow-xl">
-              <div className="flex items-center gap-6">
-                <div className="flex items-center gap-2">
-                  <div className="w-2 h-2 rounded-[2px] bg-emerald-500 animate-pulse" />
-                  <span className="font-black text-[10px] uppercase tracking-wider text-white">{activeStudent.name}&apos;s Master Sequence</span>
-                </div>
-                <div className="flex items-center gap-3 bg-white/5 px-3 py-1 rounded-[2px] border border-white/5">
-                  <span className="text-[9px] font-black text-blue-500 uppercase tracking-widest">{activeStudent.course || 'C'} Course</span>
-                  <div className="w-px h-2.5 bg-white/10" />
-                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Target: {COURSE_TARGETS[activeStudent.course || 'C']}%</span>
-                </div>
+      {/* 2. 오른쪽: 전체 교재 목록 (좌우 스크롤 구조 복구) */}
+      <div className="flex-1 flex flex-col overflow-hidden bg-[#080808]">
+        {selectedStudent ? (
+          <div className="flex-1 overflow-y-auto custom-scrollbar-v p-8 space-y-12">
+            <div className="space-y-1 mb-8">
+              <h2 className="text-2xl font-black text-white uppercase tracking-tight">{selectedStudent.name} 학생 진도표</h2>
+              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em]">배정된 모든 교재의 학습 진행도를 한눈에 확인합니다.</p>
+            </div>
+
+            {selectedStudent.assigned_books.length > 0 ? (
+              selectedStudent.assigned_books.map(bookCode => {
+                const textbook = masterTextbooks.find(m => m.bookcode === bookCode);
+                return (
+                  <BookProgressRow 
+                    key={bookCode}
+                    student={selectedStudent}
+                    bookCode={bookCode}
+                    textbook={textbook}
+                  />
+                );
+              })
+            ) : (
+              <div className="flex flex-col items-center justify-center py-20 text-gray-700 gap-2">
+                <BookOpen size={48} className="opacity-10 mb-2" />
+                <p className="text-[10px] font-black uppercase tracking-widest">배정된 교재가 없습니다</p>
               </div>
-            </div>
-            <div className="flex-1 overflow-auto p-6 space-y-6 relative bg-[#080808] custom-scrollbar">
-              <div className="absolute inset-0 pointer-events-none" style={{ backgroundSize: '40px 40px', backgroundImage: 'linear-gradient(to right, rgba(255,255,255,0.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,0.02) 1px, transparent 1px)' }} />
-              {activeStudent.assigned_books.map((bookCode, i) => (
-                <ProgressTrack key={i} bookCode={bookCode} student={activeStudent} masterTextbooks={masterTextbooks} />
-              ))}
-            </div>
-          </>
+            )}
+          </div>
         ) : (
-          <div className="flex items-center justify-center h-full text-gray-800 uppercase font-black tracking-[0.5em]">Select track</div>
+          <div className="flex-1 flex items-center justify-center text-gray-600">학생을 선택해주세요</div>
         )}
       </div>
     </div>
   );
 }
 
-function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: string, student: Student, masterTextbooks: TextbookOption[] }) {
+function BookProgressRow({ student, bookCode, textbook }: { student: Student, bookCode: string, textbook: any }) {
   const [units, setUnits] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
-  const textbook = masterTextbooks.find((m:any) => m.bookcode === bookCode);
-
-  // 💡 체크리스트 상태 관리 (임시로 localStorage 사용)
-  const [stepStates, setStepStates] = useState<Record<string, boolean[]>>({});
+  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    const saved = localStorage.getItem(`progress_${student.id}_${bookCode}`);
-    if (saved) {
-      try { setStepStates(JSON.parse(saved)); } catch (e) { console.error(e); }
+    async function fetchUnits() {
+      if (!textbook?.title) return; // 💡 제목이 없으면 중단
+      setIsLoading(true);
+      try {
+        // 💡 교재 제목에 공백/특수문자가 있을 수 있으므로 인코딩 필수
+        const safeTabName = encodeURIComponent(textbook.title);
+        const res = await fetch(`/api/textbooks/${safeTabName}`);
+        if (res.ok) {
+          const data = await res.json();
+          setUnits(data || []);
+        }
+      } catch (e) { console.error('Fetch units error:', e); } finally { setIsLoading(false); }
     }
-  }, [student.id, bookCode]);
+    fetchUnits();
+  }, [textbook]);
 
-  const toggleStep = (unitName: string, stepIdx: number) => {
-    const newState = { ...stepStates };
-    const currentSteps = newState[unitName] || [false, false, false, false];
-    const updatedSteps = [...currentSteps];
-    updatedSteps[stepIdx] = !updatedSteps[stepIdx];
-    newState[unitName] = updatedSteps;
-    setStepStates(newState);
-    localStorage.setItem(`progress_${student.id}_${bookCode}`, JSON.stringify(newState));
-  };
-
-  useEffect(() => {
-    setLoading(true);
-    fetch('/api/textbooks/unit-page')
-      .then(res => res.json())
-      .then(allUnits => { 
-        const filtered = allUnits.filter((u: any[]) => u[0] === bookCode);
-        setUnits(filtered); 
-        setLoading(false); 
-      })
-      .catch(e => {
-        console.error('ProgressTrack fetch error:', e);
-        setLoading(false);
-      });
-  }, [bookCode]);
-
-  // 해당 교재의 모든 숙제 수행 페이지 추출
   const bookHistoryPages = useMemo(() => {
     const pages = new Set<number>();
     student.allLogs.forEach((log: any) => {
-      // 1. JSON 데이터에서 추출 (정밀함)
-      (log.homework_json || []).forEach((h: any) => {
+      const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];
+      combinedJson.forEach((h: any) => {
         if (h.book_name === bookCode && h.range) {
-          // 💡 단원 번호(01.)와 겹치지 않게 'p' 뒤의 숫자만 추출
           const matches = h.range.match(/p(\d+)\s*[~-]\s*p(\d+)/i) || h.range.match(/p(\d+)\s*[~-]\s*(\d+)/i);
           if (matches) {
             const s = parseInt(matches[1]);
             const e = parseInt(matches[2]);
-            if (!isNaN(s) && !isNaN(e)) {
-              for (let i = s; i <= e; i++) pages.add(i);
-            }
+            if (!isNaN(s) && !isNaN(e)) { for (let i = s; i <= e; i++) pages.add(i); }
           }
         }
       });
-
-      // 2. 텍스트 데이터에서 보완 추출 (수동 입력 대비)
-      if (log.homework_text) {
-        const lines = log.homework_text.split('\n');
+      const combinedText = `${log.classwork_text || ''}\n${log.homework_text || ''}`;
+      if (combinedText.trim()) {
+        const lines = combinedText.split('\n');
         lines.forEach((line: string) => {
-          // 현재 교재명이 포함된 줄인지 확인
           if (line.includes(textbook?.title || bookCode)) {
             const matches = line.match(/p(\d+)\s*[~-]\s*p(\d+)/i) || line.match(/p(\d+)\s*[~-]\s*(\d+)/i);
             if (matches) {
               const s = parseInt(matches[1]);
               const e = parseInt(matches[2]);
-              if (!isNaN(s) && !isNaN(e)) {
-                for (let i = s; i <= e; i++) pages.add(i);
-              }
+              if (!isNaN(s) && !isNaN(e)) { for (let i = s; i <= e; i++) pages.add(i); }
             }
           }
         });
@@ -175,163 +150,88 @@ function ProgressTrack({ bookCode, student, masterTextbooks }: { bookCode: strin
     return Array.from(pages);
   }, [student.allLogs, bookCode, textbook?.title]);
 
-
   const completedUnitNames = useMemo(() => {
     const names = new Set<string>();
     student.allLogs.forEach((log: any) => {
-      (log.homework_json || []).forEach((h: any) => {
-        if (h.book_name === bookCode && h.units) {
-          h.units.forEach((u: string) => names.add(u));
-        }
+      const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];
+      combinedJson.forEach((h: any) => {
+        if (h.book_name === bookCode && h.units) { h.units.forEach((u: string) => names.add(u)); }
       });
     });
     return names;
   }, [student.allLogs, bookCode]);
 
-  // 해당 교재의 각 단원별 최고 테스트 점수 추출
-  const unitTestScores = useMemo(() => {
-    const scores: Record<string, number> = {};
-    student.allLogs.forEach((log: any) => {
-      if (log.test_score !== undefined && log.homework_json) {
-        log.homework_json.forEach((h: any) => {
-          if (h.book_name === bookCode && h.units) {
-            h.units.forEach((u: string) => {
-              scores[u] = Math.max(scores[u] || 0, log.test_score);
-            });
-          }
-        });
-      }
-    });
-    return scores;
-  }, [student.allLogs, bookCode]);
-
-  const targetPercentage = useMemo(() => {
-    const bookCourse = student.book_courses?.[bookCode] || student.course || 'C';
-    return COURSE_TARGETS[bookCourse as keyof typeof COURSE_TARGETS] || 80;
-  }, [student.book_courses, student.course, bookCode]);
+  const targetGrade = student.book_courses?.[bookCode] || student.course || 'C';
 
   return (
-    <div className="space-y-3 relative z-10">
-      <div className="flex items-center gap-3 bg-white/[0.03] w-fit pr-6 pl-2 py-1.5 rounded-sm border border-white/5 shadow-inner">
-        <div className="w-7 h-7 rounded-[2px] bg-blue-600 flex items-center justify-center text-white shadow-lg"><BookOpen size={14} /></div>
-        <div className="flex flex-col">
-          <h3 className="font-black text-[11px] text-white tracking-tight leading-none mb-0.5">{textbook?.title || bookCode}</h3>
-          <div className="flex items-center gap-2">
-            <span className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">{bookCode}</span>
-            <span className="w-1 h-1 rounded-[2px] bg-white/20" />
-            <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest">{student.book_courses?.[bookCode] || student.course || 'C'} Course</span>
+    <div className="space-y-4">
+      {/* 교재 제목 바 */}
+      <div className="flex items-center justify-between px-1">
+        <div className="flex items-center gap-3">
+          <div className="w-8 h-8 bg-blue-600/20 rounded flex items-center justify-center text-blue-500 border border-blue-500/20">
+            <BookOpen size={16} />
+          </div>
+          <div>
+            <h3 className="text-sm font-black text-white">{textbook?.title || bookCode}</h3>
+            <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Target Grade: {targetGrade}</span>
           </div>
         </div>
+        <div className="text-right">
+          <span className="text-[14px] font-black text-white tabular-nums">
+            {units.length > 0 ? Math.round((completedUnitNames.size / units.length) * 100) : 0}%
+          </span>
+          <span className="text-[8px] font-bold text-gray-600 uppercase ml-2">Completed</span>
+        </div>
       </div>
-      
-      <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar-h px-1">
-        {loading ? (
-          <div className="flex gap-3">{Array.from({length: 6}).map((_, i) => <div key={i} className="min-w-[200px] h-32 rounded-sm bg-white/[0.02] border border-white/10 animate-pulse" />)}</div>
-        ) : units.length === 0 ? (
-          <div className="p-8 border border-dashed border-white/5 rounded-sm text-[9px] text-gray-700 font-bold uppercase tracking-widest italic bg-white/[0.01]">
-            unit-page에 단원 정보가 없습니다. ({bookCode})
-          </div>
+
+      {/* 💡 단원 리스트 (좌우 스크롤 구조 복구) */}
+      <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar-h -mx-1 px-1">
+        {isLoading ? (
+          [...Array(6)].map((_, i) => <div key={i} className="min-w-[180px] h-24 bg-white/[0.02] animate-pulse rounded-[4px]" />)
         ) : (
           units.map((u, idx) => {
-            const unitName = u[2];
-            const startP = Number(u[3]); 
-            const endP = Number(u[4]);
-            
-            const unitScore = unitTestScores[unitName] || 0;
-            const isTargetMet = unitScore >= targetPercentage;
-            const isDone = completedUnitNames.has(unitName) && isTargetMet;
-            
-            const totalInUnit = endP - startP + 1;
+            const isCompleted = completedUnitNames.has(u.unit);
+            const startP = parseInt(u.start_page || '0');
+            const endP = parseInt(u.end_page || '0');
+            const totalInUnit = Math.max(1, endP - startP + 1);
             const pagesInUnit = bookHistoryPages.filter(p => p >= startP && p <= endP);
-            const maxPageInUnit = pagesInUnit.length > 0 ? Math.max(...pagesInUnit) : 0;
-            const progressRatio = maxPageInUnit > 0 ? (maxPageInUnit - startP + 1) / totalInUnit : 0;
+            const progressRatio = Math.min(1, pagesInUnit.length / totalInUnit);
 
             return (
               <motion.div 
-                key={idx} 
-                whileHover={{ scale: 1.02, y: -2 }} 
-                className={`min-w-[200px] h-[175px] rounded-sm border flex flex-col relative overflow-hidden transition-all duration-300 ${
-                  isDone 
-                    ? 'bg-[#1a1a1a] border-emerald-500/50 shadow-[0_10px_30px_rgba(16,185,129,0.1)]' 
-                    : isTargetMet && unitScore > 0
-                      ? 'bg-[#1a1a1a] border-blue-500/50'
-                      : 'bg-[#0a0a0a] border-white/5 hover:border-white/10'
-                }`}
+                key={idx}
+                className={`min-w-[180px] p-4 rounded-[4px] border transition-all relative overflow-hidden shrink-0 ${isCompleted ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-[#0f0f0f] border-white/5'}`}
               >
-                <div className="flex-1 flex flex-col p-4 gap-3">
-                  <div className="flex justify-between items-start gap-2">
-                    <p className={`font-black text-[12px] leading-[1.3] line-clamp-2 ${isDone ? 'text-white' : 'text-gray-300'}`}>
-                      {unitName}
-                    </p>
-                    {isDone ? (
-                      <CheckCircle size={12} className="text-emerald-500 shrink-0 mt-0.5" />
-                    ) : unitScore > 0 && (
-                      <div className={`text-[9px] font-black px-1.5 py-0.5 rounded ${isTargetMet ? 'bg-blue-500 text-white' : 'bg-red-500/20 text-red-500'}`}>
-                        {unitScore}%
-                      </div>
-                    )}
+                <div className="flex justify-between items-start mb-3">
+                  <div className="space-y-0.5">
+                    <span className="text-[7px] font-black text-gray-600 block uppercase">{String(idx+1).padStart(2, '0')}</span>
+                    <h4 className={`text-[11px] font-black tracking-tight truncate w-32 ${isCompleted ? 'text-emerald-400' : 'text-gray-300'}`} title={u.unit}>{u.unit}</h4>
                   </div>
-
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-1.5">
-                      <span className="text-[8px] font-black text-gray-500 bg-white/5 px-1.5 py-0.5 rounded border border-white/5 uppercase">Page</span>
-                      <span className="text-[10px] font-bold text-gray-400">P.{startP} ~ P.{endP}</span>
-                    </div>
-                    {unitScore > 0 && (
-                      <span className="text-[8px] font-black text-gray-600 uppercase italic">Target: {targetPercentage}%</span>
-                    )}
-                  </div>
-
-                  {/* 3행: 진도 및 성취율 시각화 */}
-                  <div className="space-y-1.5">
-                    <div className="grid grid-cols-4 gap-1 h-1.5">
-                      {[0, 1, 2, 3].map(i => {
-                        const threshold = (i + 1) * 0.25;
-                        const startThreshold = i * 0.25;
-                        let bgColor = 'bg-white/[0.02]';
-                        if (isDone || progressRatio >= threshold) bgColor = 'bg-blue-500/40 border-blue-400/20';
-                        else if (progressRatio > startThreshold) bgColor = 'bg-blue-500/20 border-blue-400/10 animate-pulse';
-                        return <div key={`r3-${i}`} className={`rounded-[1px] border border-white/5 transition-all duration-500 ${bgColor}`} />;
-                      })}
-                    </div>
-                    {/* 테스트 성취율 바 */}
-                    <div className="relative h-1 bg-white/[0.03] rounded-[2px] overflow-hidden border border-white/5">
-                      <div className={`absolute top-0 left-0 h-full transition-all duration-1000 ${isTargetMet ? 'bg-emerald-500' : 'bg-red-500'}`} style={{ width: `${unitScore}%` }} />
-                      {/* 목표선 표시 */}
-                      <div className="absolute top-0 h-full w-0.5 bg-white/40 z-10" style={{ left: `${targetPercentage}%` }} />
-                    </div>
-                  </div>
-
-
-                  <div className="grid grid-cols-4 gap-1 h-6">
-                    {[
-                      { id: 'video', icon: <Video size={10} />, label: '강의 시청' },
-                      { id: 'test', icon: <ClipboardCheck size={10} />, label: '단원 평가' },
-                      { id: 'retry', icon: <RotateCcw size={10} />, label: '오답 풀이' },
-                      { id: 'final', icon: <Flag size={10} />, label: '최종 마무리' }
-                    ].map((step, sIdx) => {
-                      const isStepDone = stepStates[unitName]?.[sIdx] || (isDone && sIdx < 4);
-                      return (
-                        <button 
-                          key={step.id} title={step.label}
-                          onClick={(e) => { e.stopPropagation(); toggleStep(unitName, sIdx); }}
-                          className={`rounded-[2px] border border-white/5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
-                            isStepDone 
-                              ? 'bg-emerald-500/40 text-emerald-300 border-emerald-400/30 shadow-[0_0_10px_rgba(16,185,129,0.2)]' 
-                              : 'bg-white/[0.02] text-gray-700 hover:text-gray-400 hover:bg-white/5'
-                          }`}
-                        >
-                          {step.icon}
-                        </button>
-                      );
-                    })}
-                  </div>
+                  {isCompleted && <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />}
                 </div>
-                
-                <div className="h-1 w-full bg-black/40 flex items-center">
-                  <div className={`h-full transition-all duration-1000 ${
-                    isDone ? 'bg-gradient-to-r from-emerald-600 to-teal-500 w-full' : isTargetMet && unitScore > 0 ? 'bg-blue-500 w-full' : 'w-0'
-                  }`} />
+
+                <div className="flex justify-between items-end mb-2">
+                  <span className="text-[12px] font-black text-white tabular-nums">{Math.round(progressRatio * 100)}%</span>
+                  <span className="text-[7px] font-bold text-gray-600 tabular-nums uppercase">p.{startP} ~ {endP}</span>
+                </div>
+
+                {/* 💡 10단계 정밀 눈금 적용 */}
+                <div className="h-1.5 flex gap-[1px]">
+                  {[...Array(10)].map((_, i) => {
+                    const threshold = (i + 1) * 10;
+                    const currentProgress = Math.round(progressRatio * 100);
+                    const isActive = isCompleted || currentProgress >= threshold;
+                    return (
+                      <div 
+                        key={i} 
+                        className={`flex-1 rounded-[0.5px] transition-all duration-500 ${
+                          isActive 
+                            ? (isCompleted ? 'bg-emerald-500' : 'bg-blue-600') 
+                            : 'bg-white/[0.05]'
+                        }`} 
+                      />
+                    );
+                  })}
                 </div>
               </motion.div>
             );

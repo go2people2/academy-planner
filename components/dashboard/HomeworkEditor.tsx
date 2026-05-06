@@ -7,6 +7,7 @@ import { X, ClipboardList, Plus, BookOpen, ChevronRight, RefreshCcw } from 'luci
 import { HomeworkItem, TextbookOption } from '@/types/dashboard';
 
 interface HomeworkEditorProps {
+  title?: string;
   homeworkJson: HomeworkItem[];
   masterTextbooks: TextbookOption[];
   onUpdate: (newHw: HomeworkItem[]) => void;
@@ -14,7 +15,7 @@ interface HomeworkEditorProps {
 }
 
 export default function HomeworkEditor({ 
-  homeworkJson, masterTextbooks, onUpdate, onClose 
+  title = "Smart Study Editor", homeworkJson, masterTextbooks, onUpdate, onClose 
 }: HomeworkEditorProps) {
   const [mounted, setMounted] = useState(false);
   const [unitDataMap, setUnitDataMap] = useState<Record<string, any[]>>({});
@@ -95,7 +96,7 @@ export default function HomeworkEditor({
               <ClipboardList size={16} className="text-blue-400" />
             </div>
             <div>
-              <h4 className="font-black text-[13px] uppercase tracking-[0.2em] text-white">Smart Homework Editor</h4>
+              <h4 className="font-black text-[13px] uppercase tracking-[0.2em] text-white">{title}</h4>
               <p className="text-[9px] text-blue-400/60 font-bold uppercase tracking-wider mt-0.5">Automated Unit Discovery Enabled</p>
             </div>
           </div>

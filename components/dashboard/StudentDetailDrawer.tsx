@@ -196,6 +196,27 @@ export default function StudentDetailDrawer({
                 className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
           </div>
+
+          {/* 💡 상담 관리 섹션 추가 */}
+          <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-4">
+            <div className="flex flex-col">
+              <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">Last Consulted</span>
+              <span className="text-[10px] font-bold text-gray-400">
+                {student.last_consulted_at ? student.last_consulted_at.replace(/-/g, '.') : '기록 없음'}
+              </span>
+            </div>
+            <button 
+              onClick={() => {
+                const today = new Date();
+                const offset = today.getTimezoneOffset() * 60000;
+                const localToday = new Date(today.getTime() - offset).toISOString().split('T')[0];
+                onUpdateInfo(student.id, 'last_consulted_at', localToday);
+              }}
+              className="px-4 py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all shadow-lg shadow-amber-500/5 flex items-center gap-2"
+            >
+              <UserCheck size={12} /> 오늘 상담 완료
+            </button>
+          </div>
         </section>
 
         {/* 2. 스케줄 설정 */}
