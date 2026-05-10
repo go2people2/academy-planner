@@ -22,6 +22,9 @@ interface SidebarProps {
   filterTarget: 'all' | 'today' | 'rest';
   setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
   academyInfo: any; 
+  teachers: any[]; // 💡 추가
+  selectedTeacherId: string; // 💡 추가
+  setSelectedTeacherId: (id: string) => void; // 💡 추가
 }
 
 const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
@@ -30,7 +33,8 @@ export default function Sidebar({
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
   selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, 
   filterTarget, setFilterTarget,
-  academyInfo 
+  academyInfo,
+  teachers, selectedTeacherId, setSelectedTeacherId // 💡 추가
 }: SidebarProps) {
   const router = useRouter();
   const { slug } = useParams();
@@ -200,20 +204,64 @@ export default function Sidebar({
               ))}
             </div>
           </div>
-          <FilterItem label="Total" count={students.filter(s => !s.is_deleted).length} active={selectedFilter === 'All'} onClick={() => setSelectedFilter('All')} />
-          <FilterItem label="HS (고등)" count={students.filter(s => !s.is_deleted && s.grade.includes('고')).length} active={selectedFilter === '고'} onClick={() => setSelectedFilter('고')} />
-          <FilterItem label="MS (중등)" count={students.filter(s => !s.is_deleted && s.grade.includes('중')).length} active={selectedFilter === '중'} onClick={() => setSelectedFilter('중')} />
-          <FilterItem label="ES (초등)" count={students.filter(s => !s.is_deleted && s.grade.includes('초')).length} active={selectedFilter === '초'} onClick={() => setSelectedFilter('초')} />
-          
-          <div className="pt-2 px-1">
-            <h3 className="text-[8px] font-black text-gray-600 uppercase tracking-widest mb-2 flex items-center justify-between">
-              Day Filter
-              <div className="flex items-center gap-1.5">
-                {selectedDays.length >= 1 && (
+
+          <div className="px-1 space-y-3">
+            {/* 1. 학년 필터 (4개) */}
+            <div className="flex bg-white/5 rounded-[2px] p-0.5 border border-white/5 w-full">
+              {[
+                { label: 'ALL', key: 'All', title: '전체' },
+                { label: 'HS', key: '고', title: '고등' },
+                { label: 'MS', key: '중', title: '중등' },
+                { label: 'ES', key: '초', title: '초등' }
+              ].map((g) => (
+                <button
+                  key={g.key}
+                  onClick={() => setSelectedFilter(g.key)}
+                  className={`flex-1 flex flex-col items-center py-1 rounded-[1px] transition-all ${
+                    selectedFilter === g.key 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : 'text-gray-600 hover:text-gray-400'
+                  }`}
+                  title={g.title}
+                >
+                  <span className="text-[9px] font-black uppercase">{g.label}</span>
+                  <span className={`text-[7px] font-bold opacity-40 ${selectedFilter === g.key ? 'text-white' : 'text-gray-500'}`}>
+                    {g.key === 'All' 
+                      ? students.filter(s => !s.is_deleted).length 
+                      : students.filter(s => !s.is_deleted && s.grade.includes(g.key)).length}
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            {/* 2. 요일 필터 (7개) */}
+            <div className="space-y-2">
+              <div className="flex gap-[3px] w-full">
+                {DAYS_SHORT.map((day) => {
+                  const isActive = selectedDays.includes(day);
+                  return (
+                    <button
+                      key={day}
+                      onClick={() => toggleDay(day)}
+                      className={`flex-1 h-[22px] rounded-[2px] text-[9px] font-black transition-all border ${
+                        isActive 
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' 
+                          : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-400'
+                      }`}
+                    >
+                      {day}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 💡 요일 모드/리셋 컨트롤 */}
+              {(selectedDays.length > 0) && (
+                <div className="flex items-center justify-between px-0.5">
                   <div className="flex items-center gap-0.5 bg-white/5 p-0.5 rounded-[2px] border border-white/5">
                     <button 
                       onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} 
-                      className={`px-1 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${
+                      className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${
                         isMultiMode && isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'
                       }`}
                     >
@@ -221,36 +269,35 @@ export default function Sidebar({
                     </button>
                     <button 
                       onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} 
-                      className={`px-1 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${
+                      className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${
                         isMultiMode && !isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'
                       }`}
                     >
                       OR
                     </button>
                   </div>
-                )}
-                {selectedDays.length > 0 && (
-                  <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal text-[8px]">reset</button>
-                )}
+                  <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal text-[8px] px-1">reset</button>
+                </div>
+              )}
+            </div>
+
+            {/* 3. 선생님 필터 (드롭다운 형태) */}
+            <div className="pt-1">
+              <div className="relative group">
+                <select 
+                  value={selectedTeacherId}
+                  onChange={(e) => setSelectedTeacherId(e.target.value)}
+                  className="w-full bg-white/5 border border-white/10 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-400 outline-none appearance-none cursor-pointer hover:bg-white/10 hover:text-white hover:border-white/20 transition-all"
+                >
+                  <option value="All" className="bg-[#121212]">All Teachers (전체)</option>
+                  {(teachers || []).map(t => (
+                    <option key={t.id} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>
+                  ))}
+                </select>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors">
+                  <UserCircle size={12} />
+                </div>
               </div>
-            </h3>
-            <div className="flex flex-wrap gap-[3px]">
-              {DAYS_SHORT.map((day) => {
-                const isActive = selectedDays.includes(day);
-                return (
-                  <button
-                    key={day}
-                    onClick={() => toggleDay(day)}
-                    className={`w-[21px] h-[21px] rounded-[2px] text-[9px] font-black transition-all border ${
-                      isActive 
-                        ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' 
-                        : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-400'
-                    }`}
-                  >
-                    {day}
-                  </button>
-                );
-              })}
             </div>
           </div>
         </nav>

@@ -64,10 +64,10 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
       {/* 2. 오른쪽: 전체 교재 목록 */}
       <div className="flex-1 flex flex-col overflow-hidden bg-[#080808]">
         {selectedStudent ? (
-          <div className="flex-1 overflow-y-auto custom-scrollbar-v p-8 space-y-12">
-            <div className="space-y-1 mb-8">
-              <h2 className="text-2xl font-black text-white uppercase tracking-tight">{selectedStudent.name} 학생 진도표</h2>
-              <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em]">배정된 모든 교재의 학습 진행도를 한눈에 확인합니다.</p>
+          <div className="flex-1 overflow-y-auto custom-scrollbar-v p-5 space-y-8">
+            <div className="space-y-0.5 mb-6">
+              <h2 className="text-xl font-black text-white uppercase tracking-tight">{selectedStudent.name} 학생 진도표</h2>
+              <p className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em]">학습 진행도를 확인합니다.</p>
             </div>
 
             {selectedStudent.assigned_books.length > 0 ? (
@@ -121,11 +121,10 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
 
   useEffect(() => {
     async function fetchUnits() {
-      if (!textbook?.title) return;
+      if (!textbook) return;
       setIsLoading(true);
       try {
-        const safeTabName = encodeURIComponent(textbook.title);
-        const res = await fetch(`/api/textbooks/${safeTabName}`);
+        const res = await fetch(`/api/textbooks/${bookCode}`);
         if (res.ok) {
           const data = await res.json();
           setUnits(data || []);
@@ -133,7 +132,7 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
       } catch (e) { console.error('Fetch units error:', e); } finally { setIsLoading(false); }
     }
     fetchUnits();
-  }, [textbook]);
+  }, [bookCode, textbook]);
 
   const bookHistoryPages = useMemo(() => {
     const pages = new Set<number>();
@@ -183,33 +182,33 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
   const targetGrade = isKeep ? String(targetGradeRaw).replace('-keep', '') : targetGradeRaw;
 
   return (
-    <div className={`space-y-4 transition-opacity ${isKeep ? 'opacity-70' : ''}`}>
+    <div className={`space-y-2 transition-opacity ${isKeep ? 'opacity-70' : ''}`}>
       {/* 교재 제목 바 */}
       <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-3">
-          <div className={`w-8 h-8 rounded flex items-center justify-center border transition-colors ${isKeep ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-blue-600/20 text-blue-500 border-blue-500/20'}`}>
-            <BookOpen size={16} />
+        <div className="flex items-center gap-2">
+          <div className={`w-7 h-7 rounded flex items-center justify-center border transition-colors ${isKeep ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-blue-600/20 text-blue-500 border-blue-500/20'}`}>
+            <BookOpen size={14} />
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <h3 className="text-sm font-black text-white">{textbook?.title || bookCode}</h3>
-              {isKeep && <span className="bg-amber-500 text-black text-[8px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-tighter shadow-lg shadow-amber-500/10">KEEP</span>}
+            <div className="flex items-center gap-1.5">
+              <h3 className="text-[13px] font-black text-white">{textbook?.title || bookCode}</h3>
+              {isKeep && <span className="bg-amber-500 text-black text-[7px] font-black px-1.5 py-0.5 rounded-sm uppercase tracking-tighter shadow-lg shadow-amber-500/10">KEEP</span>}
             </div>
-            <span className="text-[8px] font-black text-gray-500 uppercase tracking-widest">Target Grade: {targetGrade}</span>
+            <span className="text-[7px] font-black text-gray-500 uppercase tracking-widest">Target Grade: {targetGrade}</span>
           </div>
         </div>
         <div className="text-right">
-          <span className="text-[14px] font-black text-white tabular-nums">
+          <span className="text-[12px] font-black text-white tabular-nums">
             {units.length > 0 ? Math.round((completedUnitNames.size / units.length) * 100) : 0}%
           </span>
-          <span className="text-[8px] font-bold text-gray-600 uppercase ml-2">Completed</span>
+          <span className="text-[7px] font-bold text-gray-600 uppercase ml-1.5">Done</span>
         </div>
       </div>
 
       {/* 단원 리스트 */}
-      <div className="flex gap-3 overflow-x-auto pb-4 custom-scrollbar-h -mx-1 px-1">
+      <div className="flex gap-2.5 overflow-x-auto pb-2 custom-scrollbar-h -mx-0.5 px-0.5">
         {isLoading ? (
-          [...Array(6)].map((_, i) => <div key={i} className="min-w-[180px] h-24 bg-white/[0.02] animate-pulse rounded-[4px]" />)
+          [...Array(6)].map((_, i) => <div key={i} className="min-w-[170px] h-20 bg-white/[0.02] animate-pulse rounded-[4px]" />)
         ) : (
           units.map((u, idx) => {
             const isCompleted = completedUnitNames.has(u.unit);
@@ -222,22 +221,22 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
             return (
               <motion.div 
                 key={idx}
-                className={`min-w-[180px] p-4 rounded-[4px] border transition-all relative overflow-hidden shrink-0 ${isCompleted ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-[#0f0f0f] border-white/5'}`}
+                className={`min-w-[170px] p-3 rounded-[4px] border transition-all relative overflow-hidden shrink-0 ${isCompleted ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-[#0f0f0f] border-white/5'}`}
               >
-                <div className="flex justify-between items-start mb-3">
+                <div className="flex justify-between items-start mb-2">
                   <div className="space-y-0.5">
-                    <h4 className={`text-[11px] font-black tracking-tight truncate w-32 ${isCompleted ? 'text-emerald-400' : 'text-gray-300'}`} title={u.unit}>{u.unit}</h4>
+                    <h4 className={`text-[10px] font-black tracking-tight truncate w-28 ${isCompleted ? 'text-emerald-400' : 'text-gray-300'}`} title={u.unit}>{u.unit}</h4>
                   </div>
-                  {isCompleted && <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />}
+                  {isCompleted && <CheckCircle2 size={10} className="text-emerald-500 shrink-0" />}
                 </div>
 
-                <div className="flex justify-between items-end mb-2">
-                  <span className="text-[12px] font-black text-white tabular-nums">{Math.round(progressRatio * 100)}%</span>
+                <div className="flex justify-between items-end mb-1.5">
+                  <span className="text-[11px] font-black text-white tabular-nums">{Math.round(progressRatio * 100)}%</span>
                   <span className="text-[7px] font-bold text-gray-600 tabular-nums uppercase">p.{startP} ~ {endP}</span>
                 </div>
 
                 {/* 10단계 정밀 눈금 */}
-                <div className="h-1.5 flex gap-[1px] mb-3">
+                <div className="h-1 flex gap-[1px] mb-2">
                   {[...Array(10)].map((_, i) => {
                     const threshold = (i + 1) * 10;
                     const currentProgress = Math.round(progressRatio * 100);
@@ -256,12 +255,12 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
                 </div>
 
                 {/* 하단 4개 체크리스트 박스 복원 */}
-                <div className="grid grid-cols-4 gap-1 h-6">
+                <div className="grid grid-cols-4 gap-1 h-5">
                   {[
-                    { id: 'video', icon: <Video size={10} />, label: '강의 시청' },
-                    { id: 'test', icon: <ClipboardCheck size={10} />, label: '단원 평가' },
-                    { id: 'retry', icon: <RotateCcw size={10} />, label: '오답 풀이' },
-                    { id: 'final', icon: <Flag size={10} />, label: '최종 마무리' }
+                    { id: 'video', icon: <Video size={8} />, label: '강의 시청' },
+                    { id: 'test', icon: <ClipboardCheck size={8} />, label: '단원 평가' },
+                    { id: 'retry', icon: <RotateCcw size={8} />, label: '오답 풀이' },
+                    { id: 'final', icon: <Flag size={8} />, label: '최종 마무리' }
                   ].map((step, sIdx) => {
                     const isStepDone = stepStates[u.unit]?.[sIdx] || (isCompleted && sIdx < 4);
                     return (

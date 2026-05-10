@@ -17,20 +17,33 @@ export interface TextbookMaster {
  */
 function parseCsv(text: string): string[][] {
   const rows: string[][] = [];
-  // 따옴표로 감싸진 경우와 쉼표만 있는 경우 모두 대응
   const lines = text.split(/\r?\n/);
   
   for (const line of lines) {
     if (!line.trim()) continue;
     
-    // 단순 split 대신 정규식을 사용하여 따옴표 내부 쉼표 보호
-    const row = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g);
-    if (row) {
-      rows.push(row.map(cell => cell.replace(/^"|"$/g, '').trim()));
-    } else {
-      // 정규식 실패 시 기본 split 시도
-      rows.push(line.split(',').map(cell => cell.replace(/^"|"$/g, '').trim()));
+    const row: string[] = [];
+    let currentCell = '';
+    let inQuotes = false;
+    
+    for (let i = 0; i < line.length; i++) {
+      const char = line[i];
+      const nextChar = line[i + 1];
+      
+      if (char === '"' && inQuotes && nextChar === '"') {
+        currentCell += '"';
+        i++;
+      } else if (char === '"') {
+        inQuotes = !inQuotes;
+      } else if (char === ',' && !inQuotes) {
+        row.push(currentCell.trim());
+        currentCell = '';
+      } else {
+        currentCell += char;
+      }
     }
+    row.push(currentCell.trim());
+    rows.push(row.map(cell => cell.replace(/^"|"$/g, '').trim()));
   }
   return rows;
 }
@@ -76,34 +89,41 @@ export async function fetchTextbookMasterList(): Promise<TextbookMaster[]> {
 }
 
 /**
- * 💡 유연한 unit-page 필터링 로직
+ * 💡 모든 교재의 단원 데이터를 가져옵니다. (에디터 등에서 사용)
  */
-export async function fetchTextbookUnits(bookTitle: string) {
+export async function fetchAllTextbookUnits() {
   const rows = await fetchSheetAsCsv('unit-page');
   if (!rows || rows.length <= 1) return [];
 
-  const searchTitle = bookTitle.trim().toLowerCase();
+  return rows.slice(1).filter(row => row[0]).map(row => ({
+    bookcode: (row[0] || '').trim().toLowerCase(),
+    unit: (row[2] || '').replace(/^"|"$/g, '').trim(),
+    start_page: (row[3] || '0').replace(/[^0-9]/g, '').trim() || '0',
+    end_page: (row[4] || '0').replace(/[^0-9]/g, '').trim() || '0'
+  }));
+}
+
+/**
+ * 💡 유연한 unit-page 필터링 로직 (Bookcode 기준 정밀 매칭)
+ */
+export async function fetchTextbookUnits(bookCode: string) {
+  const rows = await fetchSheetAsCsv('unit-page');
+  if (!rows || rows.length <= 1) return [];
+
+  const targetCode = bookCode.trim().toLowerCase();
   
-  // 💡 교재명이 0번 또는 1번 열에 있을 수 있음을 고려하여 유연하게 필터링
-  // 구조 A: [0]교재명 [1]단원명 [2]시작P [3]끝P
-  // 구조 B: [0]코드 [1]교재명 [2]단원명 [3]시작P [4]끝P
+  // 💡 [0]번 열의 bookcode와 정확히 일치하는 행만 추출
   const filtered = rows.slice(1).filter(row => {
-    const col0 = (row[0] || '').toLowerCase();
-    const col1 = (row[1] || '').toLowerCase();
-    return col0 === searchTitle || col1 === searchTitle;
+    const rowCode = (row[0] || '').trim().toLowerCase();
+    return rowCode === targetCode;
   }).map(row => {
-    // 💡 교재명이 0번에 있으면 [1,2,3] 사용, 1번에 있으면 [2,3,4] 사용
-    const isCol0Match = (row[0] || '').toLowerCase() === searchTitle;
-    const offset = isCol0Match ? 0 : 1;
-    
     return {
-      unit: (row[offset + 1] || '').replace(/^"|"$/g, '').trim(),
-      // 💡 숫자가 아닌 문자(p, P, ., 공백 등)를 모두 제거하여 순수 숫자만 추출
-      start_page: (row[offset + 2] || '0').replace(/[^0-9]/g, '').trim() || '0',
-      end_page: (row[offset + 3] || '0').replace(/[^0-9]/g, '').trim() || '0'
+      unit: (row[2] || '').replace(/^"|"$/g, '').trim(), // [2]번 열이 단원명
+      start_page: (row[3] || '0').replace(/[^0-9]/g, '').trim() || '0', // [3]번 열이 시작P
+      end_page: (row[4] || '0').replace(/[^0-9]/g, '').trim() || '0'    // [4]번 열이 끝P
     };
   });
 
-  console.log(`✅ [GoogleSheets] Found ${filtered.length} units for: ${bookTitle}`);
+  console.log(`✅ [GoogleSheets] Found ${filtered.length} units for bookcode: ${bookCode}`);
   return filtered;
 }

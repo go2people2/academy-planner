@@ -136,19 +136,50 @@ export default function Overview({
     }
   };
 
+  // 💡 학년별 학생 수 통계 복구
+  const getGradeStats = (studentList: Student[]) => {
+    const stats: Record<string, number> = {};
+    const grades = ['초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'];
+    grades.forEach(g => stats[g] = 0);
+    studentList.forEach(s => {
+      const g = s.grade || '';
+      if (stats[g] !== undefined) stats[g]++;
+    });
+    return Object.entries(stats).filter(([_, count]) => count > 0);
+  };
+
+  const todayGradeStats = useMemo(() => getGradeStats(todayStudents), [todayStudents]);
+  const otherGradeStats = useMemo(() => getGradeStats(studentsToDisplay), [studentsToDisplay]);
+
   return (
     <div className="p-2 space-y-6 relative">
       {!isArchiveMode && !hideTodaySection && (
         <section className="space-y-2">
           <div className="flex items-center justify-between gap-4 mb-2">
             <div className="flex items-center gap-3">
-              <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
-                {todayKey === getDayOfWeek(new Date().toISOString().split('T')[0]) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
-                <span className="ml-1 text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
-                  {todayStudents.length} Students
-                </span>
-              </h3>
+              <div className="flex flex-col gap-0.5">
+                <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
+                  <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
+                  {todayKey === getDayOfWeek(new Date().toISOString().split('T')[0]) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
+                </h3>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
+                    {todayStudents.length} Students
+                  </span>
+                  {todayGradeStats.map(([grade, count]) => {
+                    const isES = grade.includes('초');
+                    const isMS = grade.includes('중');
+                    const isHS = grade.includes('고');
+                    const colorClass = isES ? 'text-emerald-500/80' : isHS ? 'text-amber-500/80' : 'text-blue-500/80';
+                    return (
+                      <div key={grade} className="flex items-center gap-1 bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded-[2px]">
+                        <span className="text-[7px] font-bold text-gray-600 uppercase">{grade}</span>
+                        <span className={`text-[7px] font-black ${colorClass}`}>{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
 
               <div 
                 onClick={(e) => {
@@ -206,10 +237,31 @@ export default function Overview({
 
       <section className={`space-y-2 ${todayStudents.length > 0 ? 'pt-4 border-t border-white/5' : ''}`}>
         <div className="flex items-center justify-between px-1">
-          <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
-            <Users size={14} /> 
-            {title ? title : (isArchiveMode ? 'Discharged Students Archive' : 'Rest of Students')}
-          </h3>
+          <div className="flex flex-col gap-0.5">
+            <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+              <Users size={14} /> 
+              {title ? title : (isArchiveMode ? 'Discharged Students Archive' : 'Rest of Students')}
+            </h3>
+            {!isArchiveMode && (
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-[9px] text-gray-700 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
+                  {studentsToDisplay.length} Students
+                </span>
+                {otherGradeStats.map(([grade, count]) => {
+                  const isES = grade.includes('초');
+                  const isMS = grade.includes('중');
+                  const isHS = grade.includes('고');
+                  const colorClass = isES ? 'text-emerald-500/40' : isHS ? 'text-amber-500/40' : 'text-blue-500/40';
+                  return (
+                    <div key={grade} className="flex items-center gap-1 bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded-[2px]">
+                      <span className="text-[7px] font-bold text-gray-700 uppercase">{grade}</span>
+                      <span className={`text-[7px] font-black ${colorClass}`}>{count}</span>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
 
           <div className="flex gap-2">
             {!isBatchMode && !isArchiveMode && showAddButton && (

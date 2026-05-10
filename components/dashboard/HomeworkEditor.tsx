@@ -33,15 +33,16 @@ export default function HomeworkEditor({
       if (res.ok) {
         const allUnits = await res.json();
         const mapped: Record<string, any[]> = {};
-        allUnits.forEach((u: any[]) => {
-          const code = u[0];
+        // 💡 API가 반환하는 객체 배열 형태 처리
+        allUnits.forEach((u: any) => {
+          const code = u.bookcode; 
           if (!mapped[code]) mapped[code] = [];
           mapped[code].push(u);
         });
         setUnitDataMap(mapped);
       }
-    } catch (e) { 
-      console.error('Failed to fetch unit-page:', e); 
+    } catch (e) {
+      console.error('Failed to fetch unit-page:', e);
     } finally {
       setIsLoadingUnits(false);
     }
@@ -53,32 +54,31 @@ export default function HomeworkEditor({
     const newHw = [...homeworkJson];
     const item = newHw[idx];
     const units = unitDataMap[item.book_name] || [];
-    
+
     const sNum = parseInt(start);
     const eNum = parseInt(end);
 
     if (!isNaN(sNum) && !isNaN(eNum)) {
       if (units.length === 0 && !isLoadingUnits) {
-        item.range = `unit-page에서 교재를 찾을 수 없습니다 p${start} ~ p${end}`;
+        item.range = `p${start}~${end}`; // 💡 p45~60 형태로 축소
         item.units = [];
       } else {
         const matchedUnits = units.filter(u => {
-          const uStart = parseInt(u[3]); 
-          const uEnd = parseInt(u[4]);
+          const uStart = parseInt(u.start_page);
+          const uEnd = parseInt(u.end_page);
           return (uStart <= eNum && uEnd >= sNum);
         });
 
-        const uniqueUnitNames = Array.from(new Set(matchedUnits.map(u => u[2]))).join(', ');
-        item.range = uniqueUnitNames ? `${uniqueUnitNames} p${start} ~ p${end}` : `p${start} ~ p${end}`;
-        item.units = Array.from(new Set(matchedUnits.map(u => u[2])));
+        const uniqueUnitNames = Array.from(new Set(matchedUnits.map(u => u.unit))).join(', ');
+        item.range = uniqueUnitNames ? `${uniqueUnitNames} p${start}~${end}` : `p${start}~${end}`;
+        item.units = Array.from(new Set(matchedUnits.map(u => u.unit)));
       }
     } else {
-      item.range = `p${start}${end ? ' ~ p' + end : ''}`;
+      item.range = `p${start}${end ? '~' + end : ''}`;
     }
-    
+
     onUpdate(newHw);
   };
-
   return createPortal(
     <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center">
       <motion.div 
@@ -177,7 +177,8 @@ function HomeworkRow({
   const [endPage, setEndPage] = useState('');
 
   useEffect(() => {
-    const match = hw.range.match(/p(\d+)\s*~\s*p(\d+)/);
+    // 💡 p45~60 또는 p45 ~ p60 모두 대응 가능한 정규식
+    const match = hw.range.match(/p(\d+)\s*[~-]\s*p?(\d+)/i);
     if (match) {
       setStartPage(match[1]);
       setEndPage(match[2]);

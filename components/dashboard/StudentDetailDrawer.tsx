@@ -6,10 +6,10 @@ import { Student, TextbookOption } from '@/types/dashboard';
 interface StudentDetailDrawerProps {
   student: Student;
   availableTextbooks: TextbookOption[];
-  teachers: any[]; // 💡 추가
+  teachers: any[]; 
   isRefreshingBooks: boolean;
   onRefreshBooks: () => void;
-  onUpdateInfo: (studentId: string, field: string, value: any) => void;
+  onUpdateInfo: (studentId: string, fieldOrUpdates: string | any, value?: any) => void;
   onAddToToday: (studentId: string) => void;
   onClose: () => void;
 }
@@ -307,8 +307,11 @@ export default function StudentDetailDrawer({
                 onClick={() => {
                   const reason = prompt(`${student.name} 학생의 퇴원 사유를 입력해주세요.`);
                   if (reason !== null) {
-                    onUpdateInfo(student.id, 'is_deleted', true);
-                    onUpdateInfo(student.id, 'phone', `${student.phone || ''} (퇴원: ${reason})`);
+                    onUpdateInfo(student.id, {
+                      is_deleted: true,
+                      phone: `${student.phone || ''} (퇴원: ${reason})`
+                    });
+                    onClose(); // 💡 퇴원 처리 후 창 닫기
                   }
                 }}
                 className="flex items-center justify-center gap-2 w-full py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"

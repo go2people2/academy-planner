@@ -17,8 +17,14 @@ export interface SessionLog {
   classwork_json: HomeworkItem[];
   homework_text: string;
   homework_json: HomeworkItem[];
+  next_quiz_text?: string; // 💡 추가
+  next_quiz_json?: HomeworkItem[]; // 💡 추가
+  next_quiz_cut?: string | number; // 💡 추가 (0~4개 커트라인)
+  next_quiz_trial?: number; // 💡 추가 (1차, 2차...)
   test_id?: string;
   test_score?: number | string;
+  test_score_type?: 'score' | 'count'; // 💡 추가
+  test_result?: string;
   report_sent_at?: string;
 }
 

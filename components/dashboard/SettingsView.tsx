@@ -12,14 +12,18 @@ interface SettingsViewProps {
   teachers: any[];
   onAddTeacher: (data: any) => Promise<void>;
   onDeleteTeacher: (id: string) => Promise<void>;
+  onUpdateTeacher: (id: string, updates: any) => Promise<void>;
+  onUpdateCurrentUser: (updates: any) => void;
   academyInfo: any;
   currentUser: any;
 }
 
-export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, academyInfo, currentUser }: SettingsViewProps) {
+export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, academyInfo, currentUser }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account'>('teachers');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [tempName, setLocalTempName] = useState('');
 
   const [newTeacher, setNewTeacher] = useState({
     name: '',
@@ -107,16 +111,53 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
             {teachers.map((t) => (
               <motion.div layout key={t.id} className="bg-[#0f0f0f] border border-white/10 p-5 rounded-[4px] space-y-4 hover:border-white/20 transition-all group">
                 <div className="flex justify-between items-start">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-white/5 rounded-[2px] flex items-center justify-center text-gray-400 group-hover:text-blue-400 transition-colors">
+                  <div className="flex items-center gap-3 min-w-0 flex-1">
+                    <div className="w-10 h-10 bg-white/5 rounded-[2px] flex items-center justify-center text-gray-400 group-hover:text-blue-400 transition-colors shrink-0">
                       <UserCircle size={24} />
                     </div>
-                    <div>
-                      <h4 className="text-sm font-black text-white">{t.name}</h4>
+                    <div className="min-w-0 flex-1">
+                      {editingId === t.id ? (
+                        <input 
+                          autoFocus
+                          value={tempName}
+                          onChange={(e) => setLocalTempName(e.target.value)}
+                          onBlur={async () => {
+                            if (tempName && tempName !== t.name) {
+                              setIsSaving(true);
+                              await onUpdateTeacher(t.id, { name: tempName });
+                              setIsSaving(false);
+                            }
+                            setEditingId(null);
+                          }}
+                          onKeyDown={async (e) => {
+                            if (e.key === 'Enter') {
+                              if (tempName && tempName !== t.name) {
+                                setIsSaving(true);
+                                await onUpdateTeacher(t.id, { name: tempName });
+                                setIsSaving(false);
+                              }
+                              setEditingId(null);
+                            }
+                            if (e.key === 'Escape') setEditingId(null);
+                          }}
+                          className="w-full bg-black/40 border border-blue-500/50 rounded-[2px] px-2 py-0.5 text-sm font-black text-white outline-none"
+                        />
+                      ) : (
+                        <h4 
+                          className="text-sm font-black text-white truncate cursor-pointer hover:text-blue-400 transition-colors flex items-center gap-1"
+                          onClick={() => {
+                            setEditingId(t.id);
+                            setLocalTempName(t.name);
+                          }}
+                          title="클릭하여 이름 수정"
+                        >
+                          {t.name}
+                        </h4>
+                      )}
                       <p className="text-[9px] text-gray-500 font-bold uppercase tracking-tighter">ID: {t.login_id}</p>
                     </div>
                   </div>
-                  <span className={`text-[8px] font-black px-2 py-0.5 rounded-[2px] border ${t.role === 'admin' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'}`}>
+                  <span className={`text-[8px] font-black px-2 py-0.5 rounded-[2px] border shrink-0 ${t.role === 'admin' ? 'bg-amber-500/10 text-amber-500 border-amber-500/20' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'}`}>
                     {t.role.toUpperCase()}
                   </span>
                 </div>
@@ -234,8 +275,7 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
                           .update({ homework_presets: newPresets })
                           .eq('id', currentUser.id);
                         if (!error) {
-                          const updatedUser = { ...currentUser, homework_presets: newPresets };
-                          localStorage.setItem('ams_user', JSON.stringify(updatedUser));
+                          onUpdateCurrentUser({ homework_presets: newPresets });
                           alert(`${preset.label} 문구가 저장되었습니다.`);
                         }
                         setIsSaving(false);

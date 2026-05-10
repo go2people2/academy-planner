@@ -5,11 +5,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, Loader2, CheckCircle, Wand2, Settings2, Check, ClipboardList, 
   Calendar as CalendarIcon, History as HistoryIcon, TrendingUp, MessageSquare, 
-  LayoutGrid, Table as TableIcon, Share2, AlertCircle, X, Percent
+  LayoutGrid, Table as TableIcon, Share2, AlertCircle, X, Percent, ArrowLeft, Hash
 } from 'lucide-react';
 import { HomeworkItem, SessionLog, StudentStatus } from '@/types/dashboard';
 import HomeworkEditor from './HomeworkEditor';
 import TestAnswerModal from './TestAnswerModal';
+import TestEditor from './TestEditor';
 
 interface ColumnConfig {
   id: string;
@@ -25,6 +26,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'attendance', label: '출결', minWidth: 60, canHide: true },
   { id: 'test_id', label: '테스트명', minWidth: 140, canHide: true },
   { id: 'test_score', label: '점수', minWidth: 60, canHide: true },
+  { id: 'next_quiz', label: '예정 테스트', minWidth: 200, canHide: true },
   { id: 'review', label: '과제확인', minWidth: 180, canHide: true },
   { id: 'classwork', label: '오늘진도', minWidth: 220, canHide: false },
   { id: 'assign', label: '오늘숙제', minWidth: 220, canHide: false },
@@ -34,7 +36,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 // --- Sub-components ---
 
-function TodaySheetHeader({ colWidths, activeColumns, onMouseDown }: any) {
+function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCut }: any) {
   return (
     <tr className="bg-black border-b border-white/20 select-none">
       {activeColumns.map((col: any) => {
@@ -48,8 +50,27 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown }: any) {
         };
         return (
           <th key={col.id} style={styles} className="py-3 px-3 text-[11px] font-black uppercase tracking-widest text-gray-400 text-center border-r border-white/10 bg-black">
-            <div className="flex items-center justify-center group relative">
+            <div className="flex items-center justify-center group relative gap-1.5">
               {col.label}
+              
+              {/* 💡 예정 테스트 헤더에 일괄 설정 버튼 추가 (디자인 개선) */}
+              {col.id === 'next_quiz' && onBatchQuizCut && (
+                <div className="relative group/batch" title="모든 학생 커트라인 일괄 설정">
+                  <select 
+                    onChange={(e) => onBatchQuizCut(parseInt(e.target.value))}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    defaultValue=""
+                  >
+                    <option value="" disabled>전체 설정</option>
+                    {[...Array(11)].map((_, i) => <option key={i} value={i} className="bg-[#121212]">{i}개</option>)}
+                  </select>
+                  <div className="flex items-center gap-1 bg-indigo-500/20 hover:bg-indigo-500 hover:text-white px-1.5 py-0.5 rounded-[2px] border border-indigo-500/30 transition-all cursor-pointer">
+                    <span className="text-[7px] font-black tracking-tighter">SET ALL</span>
+                    <Percent size={8} strokeWidth={4} />
+                  </div>
+                </div>
+              )}
+
               <div 
                 onMouseDown={(e) => onMouseDown(e, col.id)}
                 className="absolute right-[-12px] w-1.5 h-5 cursor-col-resize hover:bg-blue-500/50 rounded transition-colors opacity-0 group-hover:opacity-100" 
@@ -76,10 +97,12 @@ function HistoryRows({ student, activeColumns, colWidths, isExpanded }: any) {
         if (col.id === 'test_id') return <td key={col.id} style={styles} className="py-2 px-2 border-r border-white/5 text-gray-600 truncate text-left">{log.test_id}</td>;
         if (col.id === 'test_score') return <td key={col.id} style={styles} className="py-2 px-2 border-r border-white/5 text-center text-gray-600 font-bold">{log.test_score}%</td>;
         if (col.id === 'review') return <td key={col.id} style={styles} className="py-2 px-2 border-r border-white/5 text-gray-500 italic truncate bg-[#050505]">Prev: {log.status}</td>;
+        if (col.id === 'classwork') return <td key={col.id} style={styles} className="py-2 px-2 border-r border-white/5 text-gray-500 italic whitespace-pre-wrap leading-tight text-left">{log.classwork_text}</td>;
         if (col.id === 'assign') return <td key={col.id} style={styles} className="py-2 px-2 border-r border-white/5 text-gray-500 italic whitespace-pre-wrap leading-tight text-left">{log.homework_text}</td>;
+        if (col.id === 'next_quiz') return <td key={col.id} style={styles} className="py-2 px-2 border-r border-white/5 text-gray-600 italic whitespace-pre-wrap leading-tight text-left">{log.next_quiz_text} {log.next_quiz_cut !== undefined ? `(Cut: ${log.next_quiz_cut})` : ''}</td>;
         if (col.id === 'notes') return <td key={col.id} style={styles} className="py-2 px-2 border-r border-white/5 text-gray-600 italic truncate text-left">{log.special_notes}</td>;
         if (col.id === 'action') return <td key={col.id} style={styles} className="py-2 sticky right-0 bg-[#050505] z-20 border-l border-white/10 text-center text-gray-700">-</td>;
-        return null;
+        return <td key={col.id} style={styles}></td>;
       })}
     </tr>
   ));
@@ -88,29 +111,37 @@ function HistoryRows({ student, activeColumns, colWidths, isExpanded }: any) {
 function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWidths, activeColumns, selectedDate, isHistoryExpanded, onToggleHistory, currentUser }: any) {
   const [isHwEditorOpen, setIsHwEditorOpen] = useState(false);
   const [isCwEditorOpen, setIsCwEditorOpen] = useState(false);
+  const [isNqEditorOpen, setIsNqEditorOpen] = useState(false);
+  const [isTestEditorOpen, setIsTestEditorOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isFeedbackOpen, setIsFeedbackOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'success' | 'error'>('idle');
   const [rowDate, setRowDate] = useState(selectedDate);
+  const [undoStack, setUndoStack] = useState<any[]>([]); // 💡 실행 취소용 스택
 
   const getSession = (date: string) => (student.allLogs || []).find((l: any) => l.date === date);
   const hasSession = useMemo(() => !!getSession(rowDate), [student.allLogs, rowDate]);
 
   const getInitialFormData = (date: string) => {
     const session = getSession(date);
-    const initialBookJson = (student.assigned_books || []).map((b:any) => ({ type: 'book', book_name: b, range: '', units: [] }));
+    const getFreshBookJson = () => (student.assigned_books || []).map((b:any) => ({ type: 'book', book_name: b, range: '', units: [] }));
     
     return {
       attendance_status: session?.attendance_status || '출석',
       status: session?.status || 'none',
       special_notes: session?.special_notes || '',
       classwork_text: session?.classwork_text || '',
-      classwork_json: session?.classwork_json?.length ? session.classwork_json : initialBookJson,
+      classwork_json: session?.classwork_json?.length ? session.classwork_json : getFreshBookJson(),
       homework_text: session?.homework_text || '',
-      homework_json: session?.homework_json?.length ? session.homework_json : initialBookJson,
+      homework_json: session?.homework_json?.length ? session.homework_json : getFreshBookJson(),
+      next_quiz_text: session?.next_quiz_text || '',
+      next_quiz_json: session?.next_quiz_json?.length ? session.next_quiz_json : getFreshBookJson(),
+      next_quiz_cut: session?.next_quiz_cut || 0,
+      next_quiz_trial: session?.next_quiz_trial || 1, // 💡 추가 (기본 1차)
       test_id: session?.test_id || '',
-      test_score: session?.test_score || ''
+      test_score: session?.test_score || '',
+      test_score_type: session?.test_score_type || 'score'
     };
   };
 
@@ -118,6 +149,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
   const testRef = useRef<HTMLTextAreaElement>(null);
   const cwRef = useRef<HTMLTextAreaElement>(null);
   const hwRef = useRef<HTMLTextAreaElement>(null);
+  const nqRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
 
   const isDirty = useMemo(() => {
@@ -128,12 +160,28 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
       formData.special_notes !== initial.special_notes ||
       formData.classwork_text !== initial.classwork_text ||
       formData.homework_text !== initial.homework_text ||
+      formData.next_quiz_text !== initial.next_quiz_text ||
+      String(formData.next_quiz_cut) !== String(initial.next_quiz_cut) ||
+      formData.next_quiz_trial !== initial.next_quiz_trial ||
       formData.test_id !== initial.test_id ||
-      String(formData.test_score) !== String(initial.test_score)
+      String(formData.test_score) !== String(initial.test_score) ||
+      formData.test_score_type !== initial.test_score_type
     );
   }, [formData, rowDate, student.allLogs]);
 
   const isCompleted = hasSession && !isDirty;
+
+  // 💡 상태 변경 전 현재 상태 저장
+  const pushUndo = (currentState: any) => {
+    setUndoStack(prev => [JSON.parse(JSON.stringify(currentState)), ...prev].slice(0, 20));
+  };
+
+  const performUndo = () => {
+    if (undoStack.length === 0) return;
+    const [lastState, ...rest] = undoStack;
+    setFormData(lastState);
+    setUndoStack(rest);
+  };
 
   useEffect(() => {
     const adjustHeight = (ref: React.RefObject<HTMLTextAreaElement>) => {
@@ -146,13 +194,19 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
     adjustHeight(testRef);
     adjustHeight(cwRef);
     adjustHeight(hwRef);
+    adjustHeight(nqRef);
     adjustHeight(notesRef);
-  }, [formData.test_id, formData.classwork_text, formData.homework_text, formData.special_notes]);
+  }, [formData.test_id, formData.classwork_text, formData.homework_text, formData.next_quiz_text, formData.special_notes]);
 
   useEffect(() => {
     setRowDate(selectedDate);
     setFormData(getInitialFormData(selectedDate));
   }, [selectedDate, student.allLogs]);
+
+  const handleDateChange = (newDate: string) => {
+    setRowDate(newDate);
+    setFormData(getInitialFormData(newDate));
+  };
 
   const handleSave = async (extraData = {}) => {
     if (isSaving) return;
@@ -160,11 +214,16 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
     setIsSaving(true);
     const success = await onSave(student.id, finalData);
     setIsSaving(false);
-    if (success) { setSaveStatus('success'); setTimeout(() => setSaveStatus('idle'), 2000); }
+    if (success) { 
+      setSaveStatus('success'); 
+      setUndoStack([]); // 💡 저장 성공 시 스택 초기화
+      setTimeout(() => setSaveStatus('idle'), 2000); 
+    }
     else { setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 2000); }
   };
 
   const selectFeedback = (status: StudentStatus) => {
+    pushUndo(formData); // 💡 취소 지점 저장
     const presets = currentUser?.homework_presets || {
       'perfect': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*',
       'good': '숙제를 잘 수행했습니다.',
@@ -193,12 +252,13 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
     setIsFeedbackOpen(false);
   };
 
-  const syncTextFromData = (newJson: HomeworkItem[], fieldPrefix: 'classwork' | 'homework') => {
+  const syncTextFromData = (newJson: HomeworkItem[], fieldPrefix: 'classwork' | 'homework' | 'next_quiz') => {
+    pushUndo(formData); // 💡 취소 지점 저장
     const assignedBookTitles = newJson.map(h => {
       const bookInfo = masterTextbooks.find((m: any) => m.bookcode === h.book_name);
       return bookInfo?.title || h.book_name;
     });
-    const currentText = fieldPrefix === 'classwork' ? formData.classwork_text : formData.homework_text;
+    const currentText = (formData as any)[`${fieldPrefix}_text`];
     const manualNotes = (currentText || '').split('\n').filter((line: string) => {
       const trimmedLine = line.trim();
       if (!trimmedLine) return false;
@@ -214,6 +274,20 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    // 💡 Ctrl+Z 또는 Cmd+Z 감지 (실행 취소)
+    if ((e.ctrlKey || e.metaKey) && e.key === 'z') {
+      e.preventDefault();
+      performUndo();
+      return;
+    }
+
+    // 💡 Ctrl+S 또는 Cmd+S 감지 (현재 행 저장)
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      e.preventDefault();
+      handleSave();
+      return;
+    }
+
     // 💡 textarea 내부에서는 Enter 기본 동작(줄바꿈) 허용
     if (e.key === 'Enter' && (e.target as any).tagName === 'TEXTAREA') {
       return; 
@@ -224,6 +298,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
   };
 
   const handleTestSave = (answers: any) => {
+    pushUndo(formData); // 💡 취소 지점 저장
     handleSave({ test_answers: answers });
     setIsTestModalOpen(false);
   };
@@ -295,15 +370,32 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
                   <div className="relative w-full h-full flex items-center group/cell">
                     <textarea ref={testRef} value={formData.test_id || ''} onChange={(e) => setFormData({ ...formData, test_id: e.target.value })} onKeyDown={handleKeyDown} placeholder="-"
                       className={`w-full bg-transparent border-none px-3 py-4 text-[12px] text-left text-white focus:outline-none focus:bg-blue-500/5 transition-all font-bold resize-none overflow-y-auto custom-scrollbar-v block`} />
-                    <button onClick={() => setIsTestModalOpen(true)} className="absolute right-1 top-1 w-6 h-6 rounded-[2px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center opacity-0 group-hover/cell:opacity-100 shadow-sm z-10" title="테스트 상세 입력"><ClipboardList size={12} /></button>
+                    
+                    <div className="absolute right-1 top-1 flex flex-col gap-1 opacity-0 group-hover/cell:opacity-100 transition-opacity z-10">
+                      <button onClick={() => setIsTestEditorOpen(true)} className="w-6 h-6 rounded-[2px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center shadow-sm" title="테스트 다중 입력"><Wand2 size={12} /></button>
+                      <button onClick={() => setIsTestModalOpen(true)} className="w-6 h-6 rounded-[2px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm" title="테스트 상세 채점"><ClipboardList size={12} /></button>
+                    </div>
                   </div>
                 )}
 
                 {col.id === 'test_score' && (
-                  <div className="relative w-full h-full flex items-center justify-center">
+                  <div className="relative w-full h-full flex items-center justify-center group/score">
                     <input type="text" value={formData.test_score || ''} onChange={(e) => setFormData({ ...formData, test_score: e.target.value })} onKeyDown={handleKeyDown} placeholder="-"
                       className="w-full bg-transparent border-none px-1 text-[14px] text-center text-emerald-400 focus:outline-none focus:bg-emerald-500/5 transition-all font-black pr-4" />
-                    {formData.test_score && <span className="absolute right-1 text-[10px] font-black text-emerald-600/50">%</span>}
+                    
+                    {/* 💡 점수/개수 타입 토글 */}
+                    <div className="absolute right-1 flex flex-col gap-0.5">
+                      <button 
+                        onClick={() => setFormData({ ...formData, test_score_type: formData.test_score_type === 'score' ? 'count' : 'score' })}
+                        className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${formData.test_score_type === 'score' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-blue-500/20 text-blue-400'}`}
+                        title={formData.test_score_type === 'score' ? '점수(%) 모드' : '개수(ea) 모드'}
+                      >
+                        {formData.test_score_type === 'score' ? <Percent size={8} strokeWidth={4} /> : <Hash size={8} strokeWidth={4} />}
+                      </button>
+                      <span className="text-[7px] font-black text-gray-600/50 text-center uppercase">
+                        {formData.test_score_type === 'score' ? '%' : 'ea'}
+                      </span>
+                    </div>
                   </div>
                 )}
 
@@ -320,9 +412,9 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
                         {isFeedbackOpen && (
                           <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }}
                             className="absolute right-full top-0 mr-2 flex gap-1 bg-[#1a1a1a] p-1 rounded-md border border-white/10 shadow-2xl z-[100]">
-                            {(['perfect', 'good', 'neutral', 'poor', 'bad', 'none'] as const).map((key) => (
-                              <button key={key} onClick={() => selectFeedback(key)} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-black transition-all hover:scale-110 ${statusMap[key].color} shadow-md`}>
-                                {statusMap[key].label}
+                            {(['perfect', 'good', 'neutral', 'poor', 'bad', 'none'] as const).map((k) => (
+                              <button key={k} onClick={() => selectFeedback(k)} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-black transition-all hover:scale-110 ${statusMap[k as keyof typeof statusMap].color} shadow-md`}>
+                                {statusMap[k as keyof typeof statusMap].label}
                               </button>
                             ))}
                             <button onClick={() => setIsFeedbackOpen(false)} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-white"><X size={14} /></button>
@@ -349,6 +441,73 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
                   </div>
                 )}
 
+                {col.id === 'next_quiz' && (
+                  <div className="relative w-full h-full flex items-center group/cell">
+                    <div className="flex flex-col w-full h-full">
+                      <textarea ref={nqRef} value={formData.next_quiz_text} onChange={(e) => setFormData({ ...formData, next_quiz_text: e.target.value })} onKeyDown={handleKeyDown} placeholder="Next Quiz..."
+                        className="w-full bg-transparent border-none px-4 pt-4 pb-1 text-[13px] text-indigo-200 font-semibold text-left focus:outline-none focus:bg-indigo-500/5 transition-all resize-none overflow-y-auto custom-scrollbar-v flex-1" />
+                      
+                      {/* 💡 도구 모음: 회차(1~5차) 선택 */}
+                      <div className="flex items-center gap-1.5 px-4 pb-2 shrink-0">
+                        <span className="text-[8px] font-black text-indigo-500/50 uppercase tracking-tighter">Trial:</span>
+                        <div className="flex gap-1">
+                          {[1, 2, 3, 4, 5].map(num => (
+                            <button 
+                              key={num}
+                              onClick={() => setFormData({ ...formData, next_quiz_trial: num })}
+                              className={`w-5 h-5 rounded-[2px] flex items-center justify-center text-[9px] font-black transition-all ${
+                                formData.next_quiz_trial === num 
+                                  ? 'bg-amber-500 text-black shadow-lg shadow-amber-900/30 scale-110' 
+                                  : 'bg-white/5 text-indigo-300/40 hover:bg-white/10'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 💡 도구 모음: 편집 + 실행 + 커트라인 */}
+                    <div className="absolute right-1 top-1 flex flex-col gap-1 z-10">
+                      <div className="flex flex-col gap-1 opacity-0 group-hover/cell:opacity-100 transition-opacity">
+                        <button onClick={() => setIsNqEditorOpen(true)} className="w-6 h-6 rounded-[2px] bg-indigo-600/30 text-indigo-400 border border-indigo-500/40 hover:bg-indigo-600 hover:text-white transition-all flex items-center justify-center shadow-sm" title="예정 테스트 정밀 편집"><Wand2 size={12} /></button>
+                        
+                        <button 
+                          onClick={() => {
+                            if (!formData.next_quiz_text) return;
+                            const isAlreadyDone = formData.next_quiz_text.startsWith('✅');
+                            const trialText = (!isAlreadyDone && formData.next_quiz_trial > 1) ? ` (${formData.next_quiz_trial}차)` : '';
+                            setFormData({
+                              ...formData,
+                              test_id: isAlreadyDone ? formData.test_id : `${formData.next_quiz_text}${trialText}`,
+                              next_quiz_text: isAlreadyDone ? formData.next_quiz_text : `✅ ${formData.next_quiz_text}`
+                            });
+                          }}
+                          className="w-6 h-6 rounded-[2px] bg-emerald-600/20 text-emerald-500 border border-emerald-500/30 hover:bg-emerald-500 hover:text-white transition-all flex items-center justify-center shadow-sm"
+                          title="테스트 실행 (오늘 테스트명으로 복사)"
+                        >
+                          <ArrowLeft size={12} strokeWidth={3} />
+                        </button>
+                      </div>
+                      
+                      <div className="relative group/cut" title="커트라인(오답 허용 개수) 설정">
+                        <select 
+                          value={formData.next_quiz_cut} 
+                          onChange={(e) => setFormData({ ...formData, next_quiz_cut: parseInt(e.target.value) })}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-20"
+                        >
+                          {[...Array(11)].map((_, i) => <option key={i} value={i} className="bg-[#121212]">{i}개</option>)}
+                        </select>
+                        <div className="w-6 h-6 rounded-[2px] bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 flex flex-col items-center justify-center transition-all group-hover/cut:bg-indigo-500/20 group-hover/cut:border-indigo-500/40 shadow-sm shadow-indigo-900/10">
+                          <span className="text-[5px] font-black leading-none opacity-40 mb-0.5">CUT</span>
+                          <span className="text-[10px] font-black leading-none">{formData.next_quiz_cut}</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 {col.id === 'notes' && (
                   <textarea ref={notesRef} value={formData.special_notes} onChange={(e) => setFormData({ ...formData, special_notes: e.target.value })} onKeyDown={handleKeyDown} placeholder="..."
                     className="w-full bg-transparent border-none px-4 py-4 text-[12px] text-gray-400 text-left focus:outline-none focus:bg-white/5 transition-all font-medium resize-none overflow-y-auto custom-scrollbar-v" />
@@ -360,6 +519,58 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
                       className={`w-full h-10 rounded-[4px] flex items-center justify-center transition-all shadow-lg ${isSaving ? 'bg-blue-600/50 cursor-wait' : saveStatus === 'success' ? 'bg-emerald-500 text-white shadow-emerald-500/40' : saveStatus === 'error' ? 'bg-red-500 text-white shadow-red-500/40' : (!hasSession || isDirty) ? 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-blue-900/40' : 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/40'}`}>
                       {isSaving ? <Loader2 size={16} className="animate-spin" /> : (saveStatus === 'success' || isCompleted) ? <Check size={18} className="stroke-[4px]" /> : saveStatus === 'error' ? <CheckCircle size={16} /> : <Send size={16} />}
                     </button>
+
+                    {/* 💡 모달 에디터들을 td 내부로 이동하여 HTML 유효성 확보 (포털 사용하므로 시각적 차이 없음) */}
+                    <AnimatePresence>
+                      {isCwEditorOpen && (
+                        <HomeworkEditor
+                          title="Smart Classwork Editor"
+                          homeworkJson={formData.classwork_json || []}
+                          masterTextbooks={masterTextbooks}
+                          onUpdate={(newJson) => syncTextFromData(newJson, 'classwork')}
+                          onClose={() => setIsCwEditorOpen(false)}
+                        />
+                      )}
+                      {isHwEditorOpen && (
+                        <HomeworkEditor
+                          title="Smart Homework Editor"
+                          homeworkJson={formData.homework_json || []}
+                          masterTextbooks={masterTextbooks}
+                          onUpdate={(newJson) => syncTextFromData(newJson, 'homework')}
+                          onClose={() => setIsHwEditorOpen(false)}
+                        />
+                      )}
+                      {isNqEditorOpen && (
+                        <HomeworkEditor
+                          title="Next Quiz Range Editor"
+                          homeworkJson={formData.next_quiz_json || []}
+                          masterTextbooks={masterTextbooks}
+                          onUpdate={(newJson) => syncTextFromData(newJson, 'next_quiz')}
+                          onClose={() => setIsNqEditorOpen(false)}
+                        />
+                      )}
+                      {isTestEditorOpen && (
+                        <TestEditor 
+                          testData={formData.test_id}
+                          onUpdate={(formattedText, averageScore) => {
+                            setFormData({ 
+                              ...formData, 
+                              test_id: formattedText,
+                              test_score: averageScore !== null ? String(averageScore) : formData.test_score
+                            });
+                          }}
+                          onClose={() => setIsTestEditorOpen(false)}
+                        />
+                      )}
+                      {isTestModalOpen && (
+                        <TestAnswerModal
+                          testId={formData.test_id}
+                          studentName={student.name}
+                          onClose={() => setIsTestModalOpen(false)}
+                          onSave={handleTestSave}
+                        />
+                      )}
+                    </AnimatePresence>
                   </div>
                 )}
 
@@ -368,35 +579,6 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
           );
         })}
       </tr>
-
-      <AnimatePresence>
-        {isCwEditorOpen && (
-          <HomeworkEditor
-            title="Smart Classwork Editor"
-            homeworkJson={formData.classwork_json || []}
-            masterTextbooks={masterTextbooks}
-            onUpdate={(newJson) => syncTextFromData(newJson, 'classwork')}
-            onClose={() => setIsCwEditorOpen(false)}
-          />
-        )}
-        {isHwEditorOpen && (
-          <HomeworkEditor
-            title="Smart Homework Editor"
-            homeworkJson={formData.homework_json || []}
-            masterTextbooks={masterTextbooks}
-            onUpdate={(newJson) => syncTextFromData(newJson, 'homework')}
-            onClose={() => setIsHwEditorOpen(false)}
-          />
-        )}
-        {isTestModalOpen && (
-          <TestAnswerModal
-            testId={formData.test_id}
-            studentName={student.name}
-            onClose={() => setIsTestModalOpen(false)}
-            onSave={handleTestSave}
-          />
-        )}
-      </AnimatePresence>
     </>
   );
 }
@@ -413,7 +595,27 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
     return defaultWidths;
   });
   
-  const [visibleColumns, setVisibleColumns] = useState<string[]>(DEFAULT_COLUMNS.map(c => c.id));
+  // 💡 프리셋 초기값 및 관리 로직 (사용자 요청 패턴 반영)
+  const defaultCols = DEFAULT_COLUMNS.map(c => c.id);
+  const [presets, setPresets] = useState<Record<string, string[]>>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`todaySheetPresets_${currentUser?.id || 'default'}`);
+      if (saved) return JSON.parse(saved);
+    }
+    return { 
+      '1': ['name', 'review', 'classwork', 'assign', 'action'], // 과제 집중
+      '2': ['name', 'test_id', 'test_score', 'notes', 'action'], // 테스트/특이사항
+      '3': ['name', 'next_quiz', 'action'], // 자료 준비 (Next Quiz)
+      '4': defaultCols // 전체 보기
+    };
+  });
+
+  const [activeSet, setActiveSet] = useState<string>(() => {
+    if (typeof window !== 'undefined') return localStorage.getItem(`todaySheetActiveSet_${currentUser?.id || 'default'}`) || '1';
+    return '1';
+  });
+
+  const visibleColumns = useMemo(() => presets[activeSet] || defaultCols, [presets, activeSet]);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [expandedHistory, setExpandedHistory] = useState<Record<string, number>>({});
   const [isSendingReport, setIsSendingReport] = useState<string | null>(null);
@@ -445,7 +647,22 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
   const activeColumns = useMemo(() => DEFAULT_COLUMNS.filter(col => visibleColumns.includes(col.id)), [visibleColumns]);
   const totalWidth = useMemo(() => activeColumns.reduce((acc, col) => acc + (colWidths[col.id] || col.minWidth), 0), [activeColumns, colWidths]);
 
-  const toggleColumn = (id: string) => { setVisibleColumns(prev => prev.includes(id) ? prev.filter(c => c !== id) : [...prev, id]); };
+  // 💡 열 토글 시 현재 활성화된 세트에 즉시 저장
+  const toggleColumn = (id: string) => {
+    const currentCols = presets[activeSet] || defaultCols;
+    const newCols = currentCols.includes(id) 
+      ? currentCols.filter(c => c !== id) 
+      : [...currentCols, id];
+    
+    const newPresets = { ...presets, [activeSet]: newCols };
+    setPresets(newPresets);
+    localStorage.setItem(`todaySheetPresets_${currentUser?.id || 'default'}`, JSON.stringify(newPresets));
+  };
+
+  const handleSetSwitch = (setId: string) => {
+    setActiveSet(setId);
+    localStorage.setItem(`todaySheetActiveSet_${currentUser?.id || 'default'}`, setId);
+  };
 
   const handleSendIndividual = async (studentId: string) => {
     setIsSendingReport(studentId);
@@ -464,15 +681,67 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
     setIsSendingReport(null);
   };
 
+  // 💡 예정 테스트 커트라인 일괄 설정
+  const handleBatchQuizCut = async (cut: number) => {
+    const activeStudents = students.filter((s: any) => !s.is_deleted);
+    if (activeStudents.length === 0) return;
+    if (!confirm(`현재 목록의 ${activeStudents.length}명 학생 모두 커트라인을 ${cut}개로 변경하시겠습니까?\n(이미 저장된 데이터도 즉시 업데이트됩니다)`)) return;
+
+    setIsSendingReport('batch-cut'); // 로딩 상태 재활용
+    try {
+      await Promise.all(activeStudents.map((s: any) => 
+        onSave(s.id, { 
+          ...s.todaySession,
+          next_quiz_cut: cut 
+        })
+      ));
+      alert(`모든 학생의 커트라인이 ${cut}개로 변경되었습니다.`);
+    } catch (e) {
+      console.error(e);
+      alert('일괄 변경 중 오류가 발생했습니다.');
+    } finally {
+      setIsSendingReport(null);
+    }
+  };
+
+  // 💡 학년별 학생 수 통계 복구
+  const gradeStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    const grades = ['초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'];
+    grades.forEach(g => stats[g] = 0);
+    students.forEach((s: any) => {
+      const g = s.grade || '';
+      if (stats[g] !== undefined) stats[g]++;
+    });
+    return stats;
+  }, [students]);
+
   return (
     <div className="p-3 space-y-4 relative flex flex-col h-full overflow-hidden bg-[#050505] text-center">
       {/* 1. 상단 컨트롤 바 */}
-      <div className="flex items-center justify-between px-3 py-2.5 bg-black/50 border border-white/10 rounded-lg shrink-0">
-        <div className="flex flex-col gap-1">
-          <h3 className="text-[14px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-3">
-            <TableIcon size={18} /> Daily Learning Sheet
-            <span className="ml-2 text-[11px] text-gray-500 bg-white/5 px-2.5 py-1 rounded-[3px] border border-white/10 uppercase font-black">{students.length} Students</span>
-          </h3>
+      <div className="flex items-center justify-between px-3 py-2 bg-black/50 border border-white/10 rounded-lg shrink-0">
+        <div className="flex items-center gap-6">
+          <div className="flex flex-col gap-0.5 items-start">
+            <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5">
+              <TableIcon size={16} /> Daily Sheet
+            </h3>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              <span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter mr-1">{students.length} Total</span>
+              {Object.entries(gradeStats).filter(([_, count]) => count > 0).map(([grade, count]) => {
+                const isES = grade.includes('초');
+                const isMS = grade.includes('중');
+                const isHS = grade.includes('고');
+                const colorClass = isES ? 'text-emerald-500/80' : isHS ? 'text-amber-500/80' : 'text-blue-500/80';
+                
+                return (
+                  <div key={grade} className="flex items-center gap-1 bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded-[2px]">
+                    <span className="text-[8px] font-bold text-gray-600 uppercase">{grade}</span>
+                    <span className={`text-[8px] font-black ${colorClass}`}>{count}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="flex items-center gap-4 text-center">
@@ -503,9 +772,22 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
             <AnimatePresence>
               {isSettingsOpen && (
                 <motion.div initial={{ opacity: 0, y: 10, scale: 0.95 }} animate={{ opacity: 1, y: 0, scale: 1 }} exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                  className="absolute right-0 mt-3 w-56 bg-[#121212] border border-white/15 rounded-[6px] shadow-2xl p-3 z-[60]">
-                  <h4 className="text-[11px] font-black uppercase text-gray-500 mb-2 px-2 tracking-widest border-b border-white/10 pb-2">Columns Settings</h4>
-                  <div className="space-y-0.5 max-h-[350px] overflow-y-auto custom-scrollbar-v pt-2">
+                  className="absolute right-0 mt-3 w-64 bg-[#121212] border border-white/15 rounded-[6px] shadow-2xl p-3 z-[60]">
+                  {/* 💡 세트 선택/편집 전환 섹션 */}
+                  <div className="border-b border-white/10 pb-3 mb-3">
+                    <h4 className="text-[10px] font-black uppercase text-gray-500 mb-2 px-1 tracking-[0.2em]">Select Set to Edit</h4>
+                    <div className="flex gap-1">
+                      {['1', '2', '3', '4'].map(setId => (
+                        <button key={setId} onClick={() => handleSetSwitch(setId)}
+                          className={`flex-1 py-1.5 rounded-[2px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-600 hover:bg-white/10'}`}>
+                          SET {setId}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <h4 className="text-[10px] font-black uppercase text-gray-500 mb-2 px-1 tracking-[0.2em]">Visible Columns</h4>
+                  <div className="space-y-0.5 max-h-[300px] overflow-y-auto custom-scrollbar-v pt-1">
                     {DEFAULT_COLUMNS.filter(c => c.canHide).map(col => (
                       <div key={col.id} onClick={() => toggleColumn(col.id)} className={`flex items-center justify-between px-3 py-2.5 rounded-md transition-all cursor-pointer group ${visibleColumns.includes(col.id) ? 'bg-blue-600/20' : 'hover:bg-white/5'}`}>
                         <span className={`text-[12px] font-bold ${visibleColumns.includes(col.id) ? 'text-blue-400' : 'text-gray-500'}`}>{col.label}</span>
@@ -513,6 +795,7 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
                       </div>
                     ))}
                   </div>
+                  <p className="mt-3 text-[9px] text-gray-600 italic px-1 font-medium">* 선택 시 현재 Set에 자동 저장됩니다.</p>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -521,12 +804,12 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
       </div>
 
       {/* 2. TOP 섹션 (Data Entry Table) */}
-      <div className={`bg-black border border-white/20 rounded-lg overflow-hidden shadow-2xl custom-scrollbar-h overflow-x-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1'}`}>
+      <div className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'}`}>
         <table style={{ width: totalWidth, minWidth: '100%' }} className="border-collapse table-fixed text-xs text-center">
-          <thead><TodaySheetHeader colWidths={colWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} /></thead>
+          <thead><TodaySheetHeader colWidths={colWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onBatchQuizCut={handleBatchQuizCut} /></thead>
           <tbody className="divide-y divide-white/10">
-            {students.map((s: any) => (
-              <React.Fragment key={s.id}>
+            {students.map((s: any, idx: number) => (
+              <React.Fragment key={`${s.id}-${idx}`}>
                 <TodaySheetRow student={s} masterTextbooks={masterTextbooks} onSave={onSave} onViewProgress={onViewProgress} colWidths={colWidths} activeColumns={activeColumns} selectedDate={selectedDate} isHistoryExpanded={!!expandedHistory[s.id]} onToggleHistory={toggleHistory} currentUser={currentUser} />
                 <HistoryRows student={s} activeColumns={activeColumns} colWidths={colWidths} isExpanded={!!expandedHistory[s.id]} />
               </React.Fragment>
@@ -556,13 +839,13 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
 
             <div className="flex-1 overflow-y-auto custom-scrollbar-v pr-1">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 2xl:grid-cols-6 gap-5 pb-20 px-2 text-center">
-                {students.map((s: any) => {
+                {students.map((s: any, idx: number) => {
                   const session = s.todaySession;
                   const hasData = session && (session.classwork_text || session.homework_text || session.test_id);
                   const isSent = !!session?.report_sent_at;
 
                   return (
-                    <div key={s.id} className="flex flex-col gap-2.5 w-full max-w-[220px] mx-auto group text-center">
+                    <div key={`${s.id}-${idx}`} className="flex flex-col gap-2.5 w-full max-w-[220px] mx-auto group text-center">
                       <div className={`w-full aspect-[9/16] bg-[#bacee0] rounded-[28px] p-2.5 shadow-xl border-[4px] border-[#1a1a1a] relative overflow-hidden flex flex-col transition-all duration-300 ${!hasData ? 'opacity-30' : 'group-hover:translate-y-[-4px] group-hover:shadow-2xl'}`}>
                         <div className="flex justify-between items-center px-4 pt-1 pb-1.5 shrink-0">
                           <span className="text-[8px] font-black text-[#1a1a1a]/40">12:30</span>
@@ -593,6 +876,14 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
                                         <p>🏠 <span className="text-black/60 font-black">과제:</span> {session.homework_text || '-'}</p>
                                         {(session.test_id || session.test_score) && (
                                           <p>📝 <span className="text-black/60 font-black">테스트:</span> {session.test_id} {session.test_score ? `(${session.test_score}%)` : ''}</p>
+                                        )}
+                                        {session.next_quiz_text && (
+                                          <div className="flex flex-col">
+                                            <p>🔔 <span className="text-black/60 font-black">예정:</span> {session.next_quiz_text}</p>
+                                            <p className="ml-5 text-[8px] text-indigo-700/70 font-black italic">
+                                              (목표: 오답 {session.next_quiz_cut || 0}개 이하 통과)
+                                            </p>
+                                          </div>
                                         )}
                                       </div>
                                     </div>
