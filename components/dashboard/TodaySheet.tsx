@@ -40,16 +40,19 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
   return (
     <tr className="bg-black border-b border-white/20 select-none">
       {activeColumns.map((col: any) => {
+        const isStickyHorizontally = col.id === 'name' || col.id === 'action';
         const styles: React.CSSProperties = {
           width: colWidths[col.id] || col.minWidth,
           minWidth: colWidths[col.id] || col.minWidth,
-          position: col.isSticky ? 'sticky' : 'relative',
+          position: 'sticky', // 💡 상하/좌우 모두 sticky 적용
+          top: 0, // 💡 상단 고정
           left: col.id === 'name' ? 0 : 'auto',
           right: col.id === 'action' ? 0 : 'auto',
-          zIndex: col.isSticky ? 30 : 1,
+          zIndex: isStickyHorizontally ? 50 : 40, // 💡 본문(20)보다 높게, 교차점은 가장 높게
+          backgroundColor: '#000000', // 💡 투명하면 본문이 비치므로 검정 배경 고정
         };
         return (
-          <th key={col.id} style={styles} className="py-3 px-3 text-[11px] font-black uppercase tracking-widest text-gray-400 text-center border-r border-white/10 bg-black">
+          <th key={col.id} style={styles} className="py-3 px-3 text-[11px] font-black uppercase tracking-widest text-gray-400 text-center border-r border-white/10 shadow-[0_1px_0_rgba(255,255,255,0.1)]">
             <div className="flex items-center justify-center group relative gap-1.5">
               {col.label}
               
