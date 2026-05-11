@@ -95,14 +95,24 @@ export default function DashboardPage() {
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
         const { data: logsData } = await supabase.from('ams_session_logs').select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(20);
         const logs: SessionLog[] = (logsData || []).map(l => {
-          // 💡 test_result에서 타입과 회차 정보를 안전하게 추출 (JSON 또는 기존 문자열 대응)
+          // 💡 homework_to에서 예정 테스트 통합 정보 추출 (JSON)
+          let nqText = '', nqCut = 0, nqTrial = 1, nqJson = [];
+          try {
+            if (l.homework_to?.startsWith('{')) {
+              const parsed = JSON.parse(l.homework_to);
+              nqText = parsed.text || '';
+              nqCut = parsed.cut || 0;
+              nqTrial = parsed.trial || 1;
+              nqJson = parsed.json || [];
+            }
+          } catch (e) {}
+
+          // 💡 test_result에서 점수 타입 정보 추출
           let scoreType: 'score' | 'count' = 'score';
-          let trial = 1;
           try {
             if (l.test_result?.startsWith('{')) {
               const res = JSON.parse(l.test_result);
               scoreType = res.type || 'score';
-              trial = res.trial || 1;
             } else if (l.test_result === 'count') {
               scoreType = 'count';
             }
@@ -113,10 +123,10 @@ export default function DashboardPage() {
             attendance_status: l.attendance_status || '출석', special_notes: l.special_notes || '',
             classwork_text: l.classwork_text || '', classwork_json: l.classwork_json || [],
             homework_text: l.homework_text || '', homework_json: l.homework_json || [],
-            next_quiz_text: l.unit_info || '', 
-            next_quiz_json: l.homework_to ? JSON.parse(l.homework_to) : [],
-            next_quiz_cut: l.homework_from || 0,
-            next_quiz_trial: trial,
+            next_quiz_text: nqText, 
+            next_quiz_json: nqJson,
+            next_quiz_cut: nqCut,
+            next_quiz_trial: nqTrial,
             test_id: l.test_status || '', 
             test_score: l.test_score, 
             test_score_type: scoreType,
@@ -150,40 +160,34 @@ export default function DashboardPage() {
     if (!student || !academy) return false;
     let sessionId = student.todaySession?.id;
 
-    // 💡 DB 컬럼 선별 (material_1 사용 배제하여 타입 에러 방지)
+    // 💡 DB 컬럼 선별 (타입 에러 유발 컬럼 unit_info, homework_from, material_1 배제)
     const ALLOWED_COLUMNS = [
       'status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 
       'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 
-      'session_date', 'academy_id', 'student_id',
-      'unit_info', 'homework_from', 'homework_to'
+      'session_date', 'academy_id', 'student_id', 'homework_to'
     ];
 
     const filteredData: any = {};
     
-    // 💡 복합 데이터 처리 (test_result에 JSON으로 통합 저장)
-    const currentRes = student.todaySession?.test_result;
-    let resObj = { type: 'score', trial: 1 };
-    try {
-      if (currentRes?.startsWith('{')) resObj = JSON.parse(currentRes);
-      else if (currentRes === 'count') resObj.type = 'count';
-    } catch(e) {}
-    
-    if (sessionData.test_score_type) resObj.type = sessionData.test_score_type;
-    if (sessionData.next_quiz_trial !== undefined) resObj.trial = Number(sessionData.next_quiz_trial);
-    filteredData['test_result'] = JSON.stringify(resObj);
+    // 💡 1. 예정 테스트 통합 저장 (homework_to 활용 - 문자열/JSON 안전 컬럼)
+    const nqObj = {
+      text: sessionData.next_quiz_text ?? student.todaySession?.next_quiz_text ?? '',
+      cut: sessionData.next_quiz_cut ?? student.todaySession?.next_quiz_cut ?? 0,
+      trial: sessionData.next_quiz_trial ?? student.todaySession?.next_quiz_trial ?? 1,
+      json: sessionData.next_quiz_json ?? student.todaySession?.next_quiz_json ?? []
+    };
+    filteredData['homework_to'] = JSON.stringify(nqObj);
+
+    // 💡 2. 점수 타입 저장 (test_result 활용)
+    const scoreType = sessionData.test_score_type || student.todaySession?.test_score_type || 'score';
+    filteredData['test_result'] = JSON.stringify({ type: scoreType });
 
     Object.keys(sessionData).forEach(key => {
       let dbKey = key === 'date' ? 'session_date' : key;
       if (dbKey === 'test_id') dbKey = 'test_status';
-      if (dbKey === 'test_score_type' || dbKey === 'next_quiz_trial' || dbKey === 'test_result') return; 
       
-      if (dbKey === 'next_quiz_text') dbKey = 'unit_info';
-      if (dbKey === 'next_quiz_cut') dbKey = 'homework_from';
-      if (dbKey === 'next_quiz_json') {
-        dbKey = 'homework_to';
-        filteredData[dbKey] = JSON.stringify((sessionData as any)[key]);
-        return;
-      }
+      // 이미 위에서 통합 처리된 필드들 건너뛰기
+      if (['next_quiz_text', 'next_quiz_cut', 'next_quiz_trial', 'next_quiz_json', 'test_score_type', 'test_result', 'homework_to'].includes(dbKey)) return;
 
       if (ALLOWED_COLUMNS.includes(dbKey)) {
         let val = (sessionData as any)[key];
