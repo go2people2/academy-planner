@@ -50,6 +50,7 @@ export default function DashboardPage() {
   const [isBatchMode, setIsBatchMode] = useState(false);
 
   const navigateTo = (mode: string) => { setViewMode(mode); setSelectedStudentId(null); };
+  
   const handleUpdateCurrentUser = (updates: any) => {
     const updated = { ...currentUser, ...updates };
     setCurrentUser(updated);
@@ -85,8 +86,7 @@ export default function DashboardPage() {
       } else { await fetchTeachers(currentAcademy.id); }
 
       let studentsQuery = supabase.from('ams_students').select('*').eq('academy_id', currentAcademy.id);
-      const userJson = localStorage.getItem('ams_user');
-      const user = userJson ? JSON.parse(userJson) : null;
+      const user = currentUser || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('ams_user') || 'null') : null);
       if (user && user.role === 'teacher') { studentsQuery = studentsQuery.eq('teacher_id', user.id); }
 
       const { data: studentsData, error: sErr } = await studentsQuery;
@@ -94,20 +94,35 @@ export default function DashboardPage() {
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
         const { data: logsData } = await supabase.from('ams_session_logs').select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(20);
-        const logs: SessionLog[] = (logsData || []).map(l => ({
-          id: l.id, date: l.session_date, status: (l.status || 'none') as StudentStatus,
-          attendance_status: l.attendance_status || '출석', special_notes: l.special_notes || '',
-          classwork_text: l.classwork_text || '', classwork_json: l.classwork_json || [],
-          homework_text: l.homework_text || '', homework_json: l.homework_json || [],
-          next_quiz_text: l.unit_info || '', 
-          next_quiz_json: l.homework_to ? JSON.parse(l.homework_to) : [],
-          next_quiz_cut: l.homework_from || 0,
-          next_quiz_trial: l.material_1 || 1,
-          test_id: l.test_status || '', 
-          test_score: l.test_score, 
-          test_score_type: l.test_result === 'count' ? 'count' : 'score', // 💡 test_result를 타입 저장용으로 임시 활용
-          report_sent_at: l.report_sent_at
-        }));
+        const logs: SessionLog[] = (logsData || []).map(l => {
+          // 💡 test_result에서 타입과 회차 정보를 안전하게 추출 (JSON 또는 기존 문자열 대응)
+          let scoreType: 'score' | 'count' = 'score';
+          let trial = 1;
+          try {
+            if (l.test_result?.startsWith('{')) {
+              const res = JSON.parse(l.test_result);
+              scoreType = res.type || 'score';
+              trial = res.trial || 1;
+            } else if (l.test_result === 'count') {
+              scoreType = 'count';
+            }
+          } catch (e) {}
+
+          return {
+            id: l.id, date: l.session_date, status: (l.status || 'none') as StudentStatus,
+            attendance_status: l.attendance_status || '출석', special_notes: l.special_notes || '',
+            classwork_text: l.classwork_text || '', classwork_json: l.classwork_json || [],
+            homework_text: l.homework_text || '', homework_json: l.homework_json || [],
+            next_quiz_text: l.unit_info || '', 
+            next_quiz_json: l.homework_to ? JSON.parse(l.homework_to) : [],
+            next_quiz_cut: l.homework_from || 0,
+            next_quiz_trial: trial,
+            test_id: l.test_status || '', 
+            test_score: l.test_score, 
+            test_score_type: scoreType,
+            report_sent_at: l.report_sent_at
+          };
+        });
         const history = logs.filter(l => l.date < selectedDate).slice(0, 5).map(l => l.status);
         while (history.length < 5) history.push('none');
         return {
@@ -126,7 +141,7 @@ export default function DashboardPage() {
       setStudents(enriched);
       await refreshTextbooks();
     } catch (error) { console.error(error); } finally { setIsLoading(false); }
-  }, [selectedDate, refreshTextbooks, slug, academy, fetchTeachers]);
+  }, [selectedDate, refreshTextbooks, slug, academy, fetchTeachers, currentUser]);
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
@@ -135,22 +150,35 @@ export default function DashboardPage() {
     if (!student || !academy) return false;
     let sessionId = student.todaySession?.id;
 
+    // 💡 DB 컬럼 선별 (material_1 사용 배제하여 타입 에러 방지)
     const ALLOWED_COLUMNS = [
       'status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 
       'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 
       'session_date', 'academy_id', 'student_id',
-      'unit_info', 'homework_from', 'homework_to', 'material_1'
+      'unit_info', 'homework_from', 'homework_to'
     ];
 
     const filteredData: any = {};
+    
+    // 💡 복합 데이터 처리 (test_result에 JSON으로 통합 저장)
+    const currentRes = student.todaySession?.test_result;
+    let resObj = { type: 'score', trial: 1 };
+    try {
+      if (currentRes?.startsWith('{')) resObj = JSON.parse(currentRes);
+      else if (currentRes === 'count') resObj.type = 'count';
+    } catch(e) {}
+    
+    if (sessionData.test_score_type) resObj.type = sessionData.test_score_type;
+    if (sessionData.next_quiz_trial !== undefined) resObj.trial = Number(sessionData.next_quiz_trial);
+    filteredData['test_result'] = JSON.stringify(resObj);
+
     Object.keys(sessionData).forEach(key => {
       let dbKey = key === 'date' ? 'session_date' : key;
       if (dbKey === 'test_id') dbKey = 'test_status';
-      if (dbKey === 'test_score_type') dbKey = 'test_result'; // 💡 타입 저장
+      if (dbKey === 'test_score_type' || dbKey === 'next_quiz_trial' || dbKey === 'test_result') return; 
       
       if (dbKey === 'next_quiz_text') dbKey = 'unit_info';
       if (dbKey === 'next_quiz_cut') dbKey = 'homework_from';
-      if (dbKey === 'next_quiz_trial') dbKey = 'material_1';
       if (dbKey === 'next_quiz_json') {
         dbKey = 'homework_to';
         filteredData[dbKey] = JSON.stringify((sessionData as any)[key]);
@@ -179,7 +207,7 @@ export default function DashboardPage() {
       }
       await fetchAllData(false);
       return true;
-    } catch (e) { console.error(e); return false; }
+    } catch (e) { console.error('Save error detailed:', e); return false; }
   };
 
   const handleAddNewStudent = async (data: any) => {
