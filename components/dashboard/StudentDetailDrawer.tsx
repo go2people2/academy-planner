@@ -87,6 +87,10 @@ export default function StudentDetailDrawer({
 
   const toggleBookSelection = (bookcode: string) => {
     const isSelected = student.assigned_books.includes(bookcode);
+    if (isSelected) {
+      const book = availableTextbooks.find(b => b.bookcode === bookcode);
+      if (!confirm(`[${book?.title || bookcode}] 교재 배정을 취소하시겠습니까?`)) return;
+    }
     const newBooks = isSelected 
       ? student.assigned_books.filter(b => b !== bookcode)
       : [...student.assigned_books, bookcode];

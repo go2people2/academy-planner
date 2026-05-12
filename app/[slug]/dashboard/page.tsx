@@ -93,8 +93,19 @@ export default function DashboardPage() {
       if (sErr) throw sErr;
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
-        const { data: logsData } = await supabase.from('ams_session_logs').select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(20);
-        const logs: SessionLog[] = (logsData || []).map(l => {
+        // 💡 최근 로그 20개와 레거시(진도) 로그 1개를 동시에 가져옴
+        const [recentRes, legacyRes] = await Promise.all([
+          supabase.from('ams_session_logs').select('*').eq('student_id', s.id).neq('session_date', '1900-01-01').order('session_date', { ascending: false }).limit(20),
+          supabase.from('ams_session_logs').select('*').eq('student_id', s.id).eq('session_date', '1900-01-01').maybeSingle()
+        ]);
+
+        const rawLogs = recentRes.data || [];
+        if (legacyRes.data) rawLogs.push(legacyRes.data);
+        
+        // 날짜 기준 내림차순 정렬 (최신이 위로)
+        rawLogs.sort((a, b) => b.session_date.localeCompare(a.session_date));
+
+        const logs: SessionLog[] = rawLogs.map(l => {
           // 💡 homework_to에서 예정 테스트 통합 정보 추출 (JSON)
           let nqText = '', nqCut = 0, nqTrial = 1, nqJson = [];
           try {
@@ -155,7 +166,7 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
-  const saveTodaySession = async (studentId: string, sessionData: Partial<SessionLog>) => {
+  const saveTodaySession = useCallback(async (studentId: string, sessionData: Partial<SessionLog>) => {
     const student = students.find(s => s.id === studentId);
     if (!student || !academy) return false;
     let sessionId = student.todaySession?.id;
@@ -164,7 +175,7 @@ export default function DashboardPage() {
     const ALLOWED_COLUMNS = [
       'status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 
       'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 
-      'session_date', 'academy_id', 'student_id', 'homework_to'
+      'session_date', 'academy_id', 'student_id', 'homework_to', 'report_sent_at', 'test_answers'
     ];
 
     const filteredData: any = {};
@@ -194,6 +205,10 @@ export default function DashboardPage() {
         if (dbKey === 'test_score') {
           val = (val === '' || val === undefined || val === null) ? null : parseInt(String(val), 10);
         }
+        // 💡 status가 'none'이면 DB에는 null로 저장 (제약 조건 위반 방지)
+        if (dbKey === 'status' && val === 'none') {
+          val = null;
+        }
         filteredData[dbKey] = val;
       }
     });
@@ -202,7 +217,8 @@ export default function DashboardPage() {
       if (!sessionId) {
         const { error } = await supabase.from('ams_session_logs').insert([{
           student_id: studentId, academy_id: academy.id, session_date: selectedDate, 
-          ...filteredData, status: sessionData.status || 'none'
+          ...filteredData, 
+          status: (sessionData.status && sessionData.status !== 'none') ? sessionData.status : null
         }]);
         if (error) throw error;
       } else {
@@ -212,7 +228,65 @@ export default function DashboardPage() {
       await fetchAllData(false);
       return true;
     } catch (e) { console.error('Save error detailed:', e); return false; }
-  };
+  }, [students, academy, selectedDate, fetchAllData]);
+
+  const handleSaveLegacyProgress = useCallback(async (studentId: string, bookCode: string, unitName: string) => {
+    if (!academy) return false;
+    try {
+      // 1. 기존 레거시 로그 조회
+      const { data: existingLog } = await supabase
+        .from('ams_session_logs')
+        .select('*')
+        .eq('student_id', studentId)
+        .eq('session_date', '1900-01-01')
+        .maybeSingle();
+
+      let currentCwJson: any[] = [];
+      if (existingLog && existingLog.classwork_json) {
+        currentCwJson = [...(existingLog.classwork_json as any[])];
+      }
+
+      // 2. 해당 교재의 엔트리 찾기 또는 생성
+      const bookIdx = currentCwJson.findIndex(j => j.book_name === bookCode);
+      
+      if (bookIdx > -1) {
+        // 기존 교재 기록에 단원 추가
+        const currentUnits = currentCwJson[bookIdx].units || [];
+        if (!currentUnits.includes(unitName)) {
+          currentCwJson[bookIdx].units = [...currentUnits, unitName];
+        }
+      } else {
+        // 새로운 교재 엔트리 추가
+        currentCwJson.push({
+          type: 'book',
+          book_name: bookCode,
+          range: 'Legacy Completion',
+          units: [unitName]
+        });
+      }
+
+      // 3. 전체 목록 저장
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .upsert([
+          {
+            student_id: studentId,
+            academy_id: academy.id,
+            session_date: '1900-01-01',
+            classwork_text: `[LEGACY] 진도 수동 보정 데이터`,
+            classwork_json: currentCwJson,
+            status: null
+          }
+        ], { onConflict: 'student_id, session_date' });
+      
+      if (error) throw error;
+      await fetchAllData(false);
+      return true;
+    } catch (e) {
+      console.error('Legacy progress save error:', e);
+      return false;
+    }
+  }, [academy, fetchAllData]);
 
   const handleAddNewStudent = async (data: any) => {
     if (!academy) return;
@@ -244,7 +318,7 @@ export default function DashboardPage() {
         const formatted = reason ? `[${timestamp}] ${reason}` : '';
         const exist = s?.todaySession?.special_notes || '';
         const notes = exist ? `${exist}\n${formatted}`.trim() : formatted;
-        return { student_id: id, student_name: s?.name, academy_id: academy.id, session_date: selectedDate, attendance_status: '보강', status: 'none', special_notes: notes };
+        return { student_id: id, student_name: s?.name, academy_id: academy.id, session_date: selectedDate, attendance_status: '보강', status: null, special_notes: notes };
       });
       const { error } = await supabase.from('ams_session_logs').upsert(newLogs, { onConflict: 'student_id, session_date' });
       if (error) throw error;
@@ -263,7 +337,7 @@ export default function DashboardPage() {
       const notes = exist ? `${exist}\n${formatted}`.trim() : formatted;
       const { error } = await supabase.from('ams_session_logs').upsert([{ 
         student_id: studentId, student_name: student.name, academy_id: academy.id, 
-        session_date: selectedDate, attendance_status: '수업제외', special_notes: notes, status: 'none' 
+        session_date: selectedDate, attendance_status: '수업제외', special_notes: notes, status: null 
       }], { onConflict: 'student_id, session_date' });
       if (error) throw error;
       await fetchAllData();
@@ -370,7 +444,7 @@ export default function DashboardPage() {
             {viewMode === 'board' && <Overview todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} />}
             {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={filteredAllStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} />}
             {viewMode === 'todayTable' && <TodaySheet students={todayStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} masterTextbooks={availableTextbooks} onSave={saveTodaySession} academyInfo={academy} currentUser={currentUser} />}
-            {viewMode === 'progress' && <ProgressSequencer students={filteredAllStudents} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} />}
+            {viewMode === 'progress' && <ProgressSequencer students={filteredAllStudents} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
             {viewMode === 'notifications' && <NotificationsView academyInfo={academy} students={students} currentUser={currentUser} />}
             {viewMode === 'settings' && <SettingsView teachers={teachers} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} academyInfo={academy} currentUser={currentUser} />}

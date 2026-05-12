@@ -11,9 +11,9 @@ import { Student, SessionLog, TextbookOption } from '@/types/dashboard';
 
 interface StudentStudyReportDrawerProps {
   student: Student;
-  availableTextbooks: TextbookOption[]; // 💡 추가
+  availableTextbooks: TextbookOption[];
   onClose: () => void;
-  onEditMode: () => void; // 정보 수정 모드로 전환 (선택 사항)
+  onEditMode: () => void;
 }
 
 type TabType = 'summary' | 'history' | 'stats' | 'roadmap' | 'journal';
@@ -21,14 +21,26 @@ type TabType = 'summary' | 'history' | 'stats' | 'roadmap' | 'journal';
 export default function StudentStudyReportDrawer({ student, availableTextbooks, onClose, onEditMode }: StudentStudyReportDrawerProps) {
   const [activeTab, setActiveTab] = useState<TabType>('summary');
 
-  // 데이터 가공 (실제 데이터 + 더미 데이터 혼합)
+  // 💡 실데이터 기반 통계 계산
   const stats = useMemo(() => {
     const logs = student.allLogs || [];
-    const attendanceRate = 95; // 더미
-    const homeworkRate = 88; // 더미
-    const avgTestScore = 82; // 더미
+    const recentLogs = logs.slice(0, 20);
+    
+    // 1. 출석률 계산
+    const attendances = recentLogs.filter(l => l.attendance_status === '출석' || l.attendance_status === '보강' || l.attendance_status === '온라인');
+    const attendanceRate = recentLogs.length > 0 ? Math.round((attendances.length / recentLogs.length) * 100) : 0;
 
-    return { attendanceRate, homeworkRate, avgTestScore };
+    // 2. 숙제 이행률 (등급 기반)
+    const statusWeight = { 'perfect': 100, 'good': 85, 'neutral': 70, 'poor': 40, 'bad': 20, 'none': 0 };
+    const validHomeworkLogs = recentLogs.filter(l => l.status && l.status !== 'none');
+    const totalHwScore = validHomeworkLogs.reduce((acc, l) => acc + (statusWeight[l.status as keyof typeof statusWeight] || 0), 0);
+    const homeworkRate = validHomeworkLogs.length > 0 ? Math.round(totalHwScore / validHomeworkLogs.length) : 0;
+
+    // 3. 테스트 평균 (최근 5회)
+    const testLogs = logs.filter(l => l.test_score !== null && l.test_score !== undefined).slice(0, 5);
+    const avgTestScore = testLogs.length > 0 ? Math.round(testLogs.reduce((acc, l) => acc + (l.test_score || 0), 0) / testLogs.length) : 0;
+
+    return { attendanceRate, homeworkRate, avgTestScore, testCount: testLogs.length };
   }, [student.allLogs]);
 
   return (
@@ -85,14 +97,14 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
       <div className="flex-1 overflow-y-auto custom-scrollbar-v p-8">
         <AnimatePresence mode="wait">
           {activeTab === 'summary' && <SummaryTab key="summary" student={student} stats={stats} availableTextbooks={availableTextbooks} />}
-          {activeTab === 'history' && <HistoryTab key="history" student={student} />}
+          {activeTab === 'history' && <HistoryTab key="history" student={student} availableTextbooks={availableTextbooks} />}
           {activeTab === 'stats' && <StatsTab key="stats" student={student} />}
           {activeTab === 'roadmap' && <RoadmapTab key="roadmap" student={student} />}
           {activeTab === 'journal' && <JournalTab key="journal" student={student} />}
         </AnimatePresence>
       </div>
 
-      {/* 4. 하단 버튼 (수정 모드 접근) */}
+      {/* 4. 하단 버튼 */}
       <div className="p-6 border-t border-white/5 bg-[#0a0a0a]/50 flex gap-3">
         <button onClick={onClose} className="flex-1 py-3 px-4 bg-white/5 text-gray-400 rounded-[2px] text-[11px] font-black uppercase hover:bg-white/10 transition-all border border-white/5">
           Close Report
@@ -121,25 +133,23 @@ function TabButton({ active, onClick, icon, label }: any) {
   );
 }
 
-// --- 탭별 서브 컴포넌트들 ---
-
 function SummaryTab({ student, stats, availableTextbooks }: any) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-      {/* 주요 지표 */}
       <div className="grid grid-cols-3 gap-4">
         <MetricCard label="평균 출석률" value={`${stats.attendanceRate}%`} sub="최근 20세션" color="text-emerald-500" icon={<CheckCircle2 size={16}/>} />
         <MetricCard label="숙제 이행률" value={`${stats.homeworkRate}%`} sub="최근 4주" color="text-blue-500" icon={<BookOpen size={16}/>} />
         <MetricCard label="테스트 평균" value={`${stats.avgTestScore}점`} sub="최근 5회" color="text-orange-500" icon={<BarChart3 size={16}/>} />
       </div>
 
-      {/* 현재 진행 교재 */}
       <section className="space-y-4">
         <SectionTitle title="현재 학습 중인 교재" />
         <div className="space-y-2">
           {student.assigned_books.map((bookCode: string) => {
             const bookInfo = availableTextbooks?.find((b: any) => b.bookcode === bookCode);
             const bookTitle = bookInfo?.title || bookCode;
+            const bookLogs = student.allLogs.filter((l: any) => l.classwork_text?.includes(bookTitle) || l.homework_text?.includes(bookTitle));
+            const progress = Math.min(Math.round((bookLogs.length / 15) * 100), 95) || 5;
 
             return (
               <div key={bookCode} className="bg-white/5 border border-white/5 p-4 rounded-[4px] flex items-center justify-between group hover:border-blue-500/30 transition-all">
@@ -149,13 +159,15 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
                   </div>
                   <div>
                     <h4 className="text-[13px] font-black text-white">{bookTitle}</h4>
-                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">Expected completion: 2 weeks left</p>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                      {bookLogs.length > 0 ? `최근 ${bookLogs.length}회 세션 학습` : '최근 학습 기록 없음'}
+                    </p>
                   </div>
                 </div>
                 <div className="text-right">
-                  <div className="text-[14px] font-black text-blue-500">65%</div>
+                  <div className="text-[14px] font-black text-blue-500">{progress}%</div>
                   <div className="w-24 h-1 bg-white/10 rounded-[2px] mt-1 overflow-hidden">
-                    <div className="h-full bg-blue-500" style={{ width: '65%' }} />
+                    <motion.div initial={{ width: 0 }} animate={{ width: `${progress}%` }} className="h-full bg-blue-500" />
                   </div>
                 </div>
               </div>
@@ -164,7 +176,6 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
         </div>
       </section>
 
-      {/* 최근 상담 요약 */}
       <section className="space-y-4">
         <SectionTitle title="최근 특이사항" />
         <div className="bg-white/[0.02] border border-white/5 rounded-[4px] p-5 space-y-4">
@@ -174,80 +185,96 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
               <p className="text-[11px] font-medium text-gray-400 leading-relaxed italic">"{log.special_notes}"</p>
             </div>
           ))}
-          {student.allLogs.filter((l: any) => l.special_notes).length === 0 && (
-            <p className="text-[10px] text-gray-700 font-bold uppercase text-center py-4 tracking-widest">기록된 상담 내용이 없습니다.</p>
-          )}
         </div>
       </section>
     </motion.div>
   );
 }
 
-function HistoryTab({ student }: any) {
+function HistoryTab({ student, availableTextbooks }: any) {
+  const bookHistory = useMemo(() => {
+    const historyMap: Record<string, { title: string, firstDate: string, lastDate: string, count: number }> = {};
+    (student.allLogs || []).forEach((log: any) => {
+      student.assigned_books.forEach((bookCode: string) => {
+        const bookInfo = availableTextbooks?.find((b: any) => b.bookcode === bookCode);
+        const title = bookInfo?.title || bookCode;
+        if (log.classwork_text?.includes(title) || log.homework_text?.includes(title)) {
+          if (!historyMap[bookCode]) { historyMap[bookCode] = { title, firstDate: log.date, lastDate: log.date, count: 1 }; }
+          else {
+            if (log.date > historyMap[bookCode].lastDate) historyMap[bookCode].lastDate = log.date;
+            if (log.date < historyMap[bookCode].firstDate) historyMap[bookCode].firstDate = log.date;
+            historyMap[bookCode].count++;
+          }
+        }
+      });
+    });
+    return Object.values(historyMap).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
+  }, [student.allLogs, student.assigned_books, availableTextbooks]);
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <SectionTitle title="누적 교재 히스토리" />
-      <div className="relative pl-8 space-y-8 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-white/5">
-        {[
-          { date: '2026.03.15', title: '고등 수학 (상) 기본', status: '완료', result: '성취도 우수' },
-          { date: '2026.02.01', title: '중학 수학 3-2 심화', status: '완료', result: '오답 정리 필요' },
-          { date: '2025.12.10', title: '중학 수학 3-1 기본', status: '완료', result: '성취도 보통' },
-        ].map((item, i) => (
-          <div key={i} className="relative">
-            <div className="absolute -left-[30px] top-1 w-6 h-6 rounded-full bg-[#080808] border-2 border-blue-500 flex items-center justify-center z-10 shadow-lg shadow-blue-500/20">
-              <CheckCircle2 size={12} className="text-blue-500" />
-            </div>
-            <div className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2 group hover:bg-white/[0.08] transition-all">
-              <div className="flex justify-between items-center">
-                <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">{item.date}</span>
-                <span className="text-[9px] font-black px-1.5 py-0.5 bg-emerald-500/10 text-emerald-500 border border-emerald-500/20 rounded-[2px] uppercase">{item.status}</span>
+      <SectionTitle title="학습 교재 타임라인" />
+      {bookHistory.length > 0 ? (
+        <div className="relative pl-8 space-y-8 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-white/5">
+          {bookHistory.map((item, i) => (
+            <div key={i} className="relative">
+              <div className="absolute -left-[30px] top-1 w-6 h-6 rounded-full bg-[#080808] border-2 border-blue-500 flex items-center justify-center z-10 shadow-lg shadow-blue-500/20">
+                {i === 0 ? <Clock size={12} className="text-blue-500 animate-pulse" /> : <CheckCircle2 size={12} className="text-blue-500" />}
               </div>
-              <h4 className="text-[13px] font-black text-white tracking-tight">{item.title}</h4>
-              <p className="text-[11px] font-bold text-gray-500 italic">마지막 성취도: {item.result}</p>
+              <div className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2 group hover:bg-white/[0.08] transition-all">
+                <div className="flex justify-between items-center">
+                  <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">{item.firstDate.replace(/-/g, '.')} ~ {item.lastDate.replace(/-/g, '.')}</span>
+                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-[2px] uppercase ${i === 0 ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-500'}`}>{i === 0 ? 'In Progress' : 'Completed'}</span>
+                </div>
+                <h4 className="text-[13px] font-black text-white tracking-tight">{item.title}</h4>
+                <p className="text-[11px] font-bold text-gray-500 italic">총 {item.count}회 세션 학습됨</p>
+              </div>
             </div>
-          </div>
-        ))}
-        <div className="text-center pt-4">
-          <button className="text-[10px] font-black text-gray-600 uppercase tracking-[0.2em] hover:text-blue-500 transition-colors">기록 더 보기</button>
+          ))}
         </div>
-      </div>
+      ) : <p className="text-[10px] text-gray-700 font-bold uppercase text-center py-20 tracking-widest">학습 이력이 없습니다.</p>}
     </motion.div>
   );
 }
 
 function StatsTab({ student }: any) {
+  const testData = useMemo(() => (student.allLogs || []).filter((l: any) => l.test_score !== null).slice(0, 10).reverse(), [student.allLogs]);
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 text-center py-20">
-      <div className="w-20 h-20 bg-blue-600/10 text-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-        <BarChart3 size={40} />
-      </div>
-      <h3 className="text-sm font-black text-white uppercase tracking-widest">학습 통계 분석 엔진 준비 중</h3>
-      <p className="text-[11px] text-gray-500 leading-relaxed font-bold uppercase tracking-tight">
-        최근 테스트 결과와 숙제 데이터를 분석하여<br />성취도 그래프를 생성하고 있습니다.
-      </p>
-      <div className="flex justify-center gap-2 mt-10">
-        {[40, 70, 50, 90, 60, 80].map((h, i) => (
-          <div key={i} className="w-4 bg-blue-600/20 rounded-t-[2px] relative flex items-end h-20 overflow-hidden border border-white/5">
-            <motion.div 
-              initial={{ height: 0 }} animate={{ height: `${h}%` }} 
-              transition={{ delay: i * 0.1, duration: 1 }}
-              className="w-full bg-blue-500" 
-            />
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-10">
+      <section className="space-y-6">
+        <SectionTitle title="최근 테스트 점수 추이" />
+        {testData.length > 0 ? (
+          <div className="bg-white/[0.02] border border-white/5 p-8 rounded-[4px]">
+            <div className="flex items-end justify-between gap-2 h-40 mb-4">
+              {testData.map((log: any, i: number) => (
+                <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
+                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-[2px] opacity-0 group-hover:opacity-100 transition-all z-20 whitespace-nowrap">{log.test_score}점</div>
+                  <div className="w-full bg-blue-600/10 rounded-t-[2px] relative flex items-end h-32 overflow-hidden border border-white/5">
+                    <motion.div initial={{ height: 0 }} animate={{ height: `${log.test_score}%` }} className={`w-full ${log.test_score >= 80 ? 'bg-blue-500' : log.test_score >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} />
+                  </div>
+                  <span className="text-[8px] font-black text-gray-600 rotate-45 origin-left ml-2 mt-1">{log.date.slice(5)}</span>
+                </div>
+              ))}
+            </div>
           </div>
-        ))}
-      </div>
+        ) : <p className="text-[10px] text-gray-700 font-bold uppercase text-center py-20 tracking-widest">기록된 점수가 없습니다.</p>}
+      </section>
     </motion.div>
   );
 }
 
 function RoadmapTab({ student }: any) {
+  const roadmap = useMemo(() => {
+    const grade = student.grade || '';
+    if (grade.includes('초6')) return [{ month: '5월', task: '중등 1-1 기초', sub: '소인수분해 및 정수', active: true }, { month: '6월', task: '중등 1-1 발전', sub: '일차방정식 정복' }, { month: '7월', task: '중등 1-2 선행', sub: '기본 도형 학습' }];
+    if (grade.includes('중3')) return [{ month: '5월', task: '고등 수학(상) 시작', sub: '다항식 및 나머지 정리', active: true }, { month: '6월', task: '기말고사 대비', sub: '이차함수 및 통계' }, { month: '7월', task: '고등 수학(상) 심화', sub: '복소수 및 이차방정식' }];
+    return [{ month: '5월', task: '현재 과정 심화', sub: '오답 정밀 분석', active: true }, { month: '6월', task: '다음 단원 선행', sub: '기본 예제 학습' }, { month: '7월', task: '여름방학 특강', sub: '취약 단원 보강' }];
+  }, [student.grade]);
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
-      <SectionTitle title="학습 로드맵 예상 (2026 상반기)" />
+      <SectionTitle title={`학습 로드맵 (${student.grade})`} />
       <div className="space-y-4">
-        <RoadmapItem month="5월" task="고등 수학 (상) 심화" sub="오답 정밀 타격 및 고난도 유형 정복" active />
-        <RoadmapItem month="6월" task="고등 수학 (하) 선행" sub="집합과 명제 기본 개념 확립" />
-        <RoadmapItem month="7월" task="여름방학 특강 (수학 I)" sub="삼각함수 및 수열 집중 학습" />
+        {roadmap.map((item, i) => <RoadmapItem key={i} month={item.month} task={item.task} sub={item.sub} active={item.active} />)}
       </div>
     </motion.div>
   );
@@ -262,7 +289,6 @@ function JournalTab({ student }: any) {
           <div key={log.id} className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black text-gray-500 flex items-center gap-1.5"><Clock size={12}/> {log.date}</span>
-              <span className="text-[9px] font-bold text-blue-500 bg-blue-500/5 px-2 py-0.5 rounded-[2px] border border-blue-500/10 italic">Session Log</span>
             </div>
             <p className="text-[11px] font-bold text-gray-300 leading-relaxed">{log.special_notes}</p>
           </div>
@@ -271,8 +297,6 @@ function JournalTab({ student }: any) {
     </motion.div>
   );
 }
-
-// --- 보조 컴포넌트 ---
 
 function MetricCard({ label, value, sub, color, icon }: any) {
   return (

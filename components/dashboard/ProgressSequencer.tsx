@@ -12,9 +12,10 @@ interface ProgressSequencerProps {
   students: Student[];
   masterTextbooks: TextbookOption[];
   initialStudentId?: string | null;
+  onSaveLegacy?: (studentId: string, bookCode: string, unitName: string) => Promise<boolean>;
 }
 
-export default function ProgressSequencer({ students, masterTextbooks, initialStudentId }: ProgressSequencerProps) {
+export default function ProgressSequencer({ students, masterTextbooks, initialStudentId, onSaveLegacy }: ProgressSequencerProps) {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || (students[0]?.id || null));
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
@@ -79,6 +80,7 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
                     student={selectedStudent}
                     bookCode={bookCode}
                     textbook={textbook}
+                    onSaveLegacy={onSaveLegacy}
                   />
                 );
               })
@@ -97,9 +99,10 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
   );
 }
 
-function BookProgressRow({ student, bookCode, textbook }: { student: Student, bookCode: string, textbook: any }) {
+function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { student: Student, bookCode: string, textbook: any, onSaveLegacy?: any }) {
   const [units, setUnits] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  const [isSavingLegacy, setIsSavingLegacy] = useState<string | null>(null);
   const [stepStates, setStepStates] = useState<Record<string, boolean[]>>({});
 
   useEffect(() => {
@@ -133,6 +136,22 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
     }
     fetchUnits();
   }, [bookCode, textbook]);
+
+  const handleFlagClick = async (targetUnitIdx: number) => {
+    if (!onSaveLegacy || isSavingLegacy) return;
+    
+    const targetUnitName = units[targetUnitIdx].unit;
+
+    if (!confirm(`[${targetUnitName}] 단원을 완료 처리하시겠습니까?\n(기존 기록이 없어도 완료바가 100% 차게 됩니다)`)) return;
+
+    setIsSavingLegacy(targetUnitName);
+    const success = await onSaveLegacy(student.id, bookCode, targetUnitName);
+    setIsSavingLegacy(null);
+
+    if (success) {
+      alert(`[${targetUnitName}] 단원이 완료 처리되었습니다.`);
+    }
+  };
 
   const bookHistoryPages = useMemo(() => {
     const pages = new Set<number>();
@@ -225,9 +244,26 @@ function BookProgressRow({ student, bookCode, textbook }: { student: Student, bo
               >
                 <div className="flex justify-between items-start mb-2">
                   <div className="space-y-0.5">
-                    <h4 className={`text-[10px] font-black tracking-tight truncate w-28 ${isCompleted ? 'text-emerald-400' : 'text-gray-300'}`} title={u.unit}>{u.unit}</h4>
+                    <h4 className={`text-[10px] font-black tracking-tight truncate w-24 ${isCompleted ? 'text-emerald-400' : 'text-gray-300'}`} title={u.unit}>{u.unit}</h4>
                   </div>
-                  {isCompleted && <CheckCircle2 size={10} className="text-emerald-500 shrink-0" />}
+                  <div className="flex items-center gap-1.5">
+                    {isCompleted ? (
+                      <CheckCircle2 size={12} className="text-emerald-500 shrink-0" />
+                    ) : (
+                      <button 
+                        onClick={() => handleFlagClick(idx)}
+                        disabled={!!isSavingLegacy}
+                        className="text-gray-600 hover:text-blue-500 transition-colors p-0.5"
+                        title="이 단원까지 일괄 완료 처리 (Flag)"
+                      >
+                        {isSavingLegacy === u.unit ? (
+                          <RotateCcw size={10} className="animate-spin" />
+                        ) : (
+                          <Flag size={10} />
+                        )}
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 <div className="flex justify-between items-end mb-1.5">

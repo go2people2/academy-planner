@@ -175,6 +175,7 @@ function HomeworkRow({
 }) {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
+  const [isUnitsExpanded, setIsUnitsExpanded] = useState(false);
 
   useEffect(() => {
     // 💡 p45~60 또는 p45 ~ p60 모두 대응 가능한 정규식
@@ -195,68 +196,130 @@ function HomeworkRow({
     onPageChange(startPage, val);
   };
 
+  const toggleUnit = (unitName: string) => {
+    const currentUnits = hw.units || [];
+    const newUnits = currentUnits.includes(unitName) 
+      ? currentUnits.filter(u => u !== unitName)
+      : [...currentUnits, unitName];
+    
+    // 💡 정렬 유지 (원래 단원 순서대로)
+    const sortedUnits = unitData.filter(u => newUnits.includes(u.unit)).map(u => u.unit);
+    
+    // 💡 텍스트 업데이트
+    const unitText = sortedUnits.join(', ');
+    const pageText = (startPage || endPage) ? ` p${startPage}~${endPage}` : '';
+    
+    onUpdate({
+      ...hw,
+      units: sortedUnits,
+      range: `${unitText}${pageText}`.trim()
+    });
+  };
+
   return (
-    <div className="flex items-center gap-2 p-2 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 rounded-[2px] transition-all group">
-      <div className="w-[120px] shrink-0 flex items-center gap-1.5 overflow-hidden">
-        <BookOpen size={12} className="text-blue-500/40 shrink-0" />
-        {hw.type === 'custom' ? (
-          <input 
-            type="text"
-            value={hw.book_name}
-            placeholder="기타 과제"
-            onChange={(e) => onUpdate({ ...hw, book_name: e.target.value })}
-            className="bg-transparent border-b border-white/10 text-[10px] font-bold text-blue-400 outline-none focus:border-blue-500 w-full"
-          />
+    <div className="space-y-2">
+      <div className="flex items-center gap-2 p-2 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 rounded-[2px] transition-all group">
+        <div className="w-[120px] shrink-0 flex items-center gap-1.5 overflow-hidden">
+          <BookOpen size={12} className="text-blue-500/40 shrink-0" />
+          {hw.type === 'custom' ? (
+            <input 
+              type="text"
+              value={hw.book_name}
+              placeholder="기타 과제"
+              onChange={(e) => onUpdate({ ...hw, book_name: e.target.value })}
+              className="bg-transparent border-b border-white/10 text-[10px] font-bold text-blue-400 outline-none focus:border-blue-500 w-full"
+            />
+          ) : (
+            <span 
+              onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}
+              className="text-[10px] font-black text-gray-200 truncate cursor-pointer hover:text-blue-400 transition-colors" 
+              title="단원 리스트 보기"
+            >
+              {masterTextbooks.find(m => m.bookcode === hw.book_name)?.title || hw.book_name}
+            </span>
+          )}
+        </div>
+
+        {hw.type === 'book' ? (
+          <div className="flex items-center gap-1 shrink-0">
+            <input 
+              type="text" 
+              value={startPage} 
+              onChange={(e) => handleStartChange(e.target.value)}
+              placeholder="Start"
+              className="w-10 bg-black/40 border border-white/5 rounded-md py-1 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
+            />
+            <span className="text-gray-700 text-[10px]">-</span>
+            <input 
+              type="text" 
+              value={endPage} 
+              onChange={(e) => handleEndChange(e.target.value)}
+              placeholder="End"
+              className="w-10 bg-black/40 border border-white/5 rounded-md py-1 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
+            />
+          </div>
         ) : (
-          <span className="text-[10px] font-black text-gray-200 truncate" title={masterTextbooks.find(m => m.bookcode === hw.book_name)?.title || hw.book_name}>
-            {masterTextbooks.find(m => m.bookcode === hw.book_name)?.title || hw.book_name}
-          </span>
+          <input 
+            type="text" 
+            value={hw.range} 
+            placeholder="상세 내용" 
+            onChange={(e) => onUpdate({ ...hw, range: e.target.value })}
+            className="flex-1 bg-black/40 border border-white/5 rounded-md px-2 py-1 text-[10px] outline-none text-white focus:border-blue-500" 
+          />
         )}
+
+        {hw.type === 'book' && (
+          <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden" onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}>
+            <ChevronRight size={10} className="text-blue-500/50 shrink-0" />
+            <p className="text-[9px] font-bold text-gray-500 truncate italic cursor-pointer">
+              {hw.range || '페이지를 입력하세요'}
+            </p>
+          </div>
+        )}
+
+        <button 
+          onClick={onDelete}
+          className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center"
+        >
+          <X size={12} />
+        </button>
       </div>
 
-      {hw.type === 'book' ? (
-        <div className="flex items-center gap-1 shrink-0">
-          <input 
-            type="text" 
-            value={startPage} 
-            onChange={(e) => handleStartChange(e.target.value)}
-            placeholder="Start"
-            className="w-10 bg-black/40 border border-white/5 rounded-md py-1 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
-          />
-          <span className="text-gray-700 text-[10px]">-</span>
-          <input 
-            type="text" 
-            value={endPage} 
-            onChange={(e) => handleEndChange(e.target.value)}
-            placeholder="End"
-            className="w-10 bg-black/40 border border-white/5 rounded-md py-1 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
-          />
-        </div>
-      ) : (
-        <input 
-          type="text" 
-          value={hw.range} 
-          placeholder="상세 내용" 
-          onChange={(e) => onUpdate({ ...hw, range: e.target.value })}
-          className="flex-1 bg-black/40 border border-white/5 rounded-md px-2 py-1 text-[10px] outline-none text-white focus:border-blue-500" 
-        />
-      )}
-
-      {hw.type === 'book' && (
-        <div className="flex-1 min-w-0 flex items-center gap-1 overflow-hidden">
-          <ChevronRight size={10} className="text-blue-500/50 shrink-0" />
-          <p className="text-[9px] font-bold text-gray-500 truncate italic">
-            {hw.range || '페이지를 입력하세요'}
-          </p>
-        </div>
-      )}
-
-      <button 
-        onClick={onDelete}
-        className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center"
-      >
-        <X size={12} />
-      </button>
+      {/* 💡 단원 리스트 (확장 영역) */}
+      <AnimatePresence>
+        {isUnitsExpanded && hw.type === 'book' && (
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            className="overflow-hidden bg-white/[0.01] border-x border-b border-white/5 rounded-b-[2px] mx-2"
+          >
+            <div className="p-3 grid grid-cols-1 gap-1">
+              {unitData.map((u, i) => {
+                const isSelected = hw.units?.includes(u.unit);
+                const isInRange = parseInt(startPage) <= parseInt(u.end_page) && parseInt(endPage) >= parseInt(u.start_page);
+                
+                return (
+                  <button 
+                    key={i}
+                    onClick={() => toggleUnit(u.unit)}
+                    className={`flex items-center justify-between px-3 py-1.5 rounded-[2px] text-[10px] font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-600 hover:bg-white/5 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-500/60' : ''}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-500' : isInRange ? 'bg-emerald-500/30' : 'bg-transparent border border-white/10'}`} />
+                      <span className="truncate max-w-[200px]">{u.unit}</span>
+                    </div>
+                    <span className="text-[8px] opacity-40 italic tabular-nums">p{u.start_page}~{u.end_page}</span>
+                  </button>
+                );
+              })}
+              {unitData.length === 0 && (
+                <p className="text-[9px] text-gray-700 font-bold uppercase text-center py-4 tracking-widest italic">No unit data available</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

@@ -1,11 +1,11 @@
 'use client';
 
-import React, { useState, useMemo, useEffect, useRef } from 'react';
+import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, Loader2, CheckCircle, Wand2, Settings2, Check, ClipboardList, 
   Calendar as CalendarIcon, History as HistoryIcon, TrendingUp, MessageSquare, 
-  LayoutGrid, Table as TableIcon, Share2, AlertCircle, X, Percent, ArrowLeft, Hash
+  LayoutGrid, Table as TableIcon, Share2, AlertCircle, X, Percent, ArrowLeft, Hash, FileText
 } from 'lucide-react';
 import { HomeworkItem, SessionLog, StudentStatus } from '@/types/dashboard';
 import HomeworkEditor from './HomeworkEditor';
@@ -126,8 +126,9 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
   const getSession = (date: string) => (student.allLogs || []).find((l: any) => l.date === date);
   const hasSession = useMemo(() => !!getSession(rowDate), [student.allLogs, rowDate]);
 
-  const getInitialFormData = (date: string) => {
-    const session = getSession(date);
+  const getInitialFormData = useCallback((date: string) => {
+    const getSessionInternal = (d: string) => (student.allLogs || []).find((l: any) => l.date === d);
+    const session = getSessionInternal(date);
     const getFreshBookJson = () => (student.assigned_books || []).map((b:any) => ({ type: 'book', book_name: b, range: '', units: [] }));
     
     return {
@@ -141,12 +142,12 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
       next_quiz_text: session?.next_quiz_text || '',
       next_quiz_json: session?.next_quiz_json?.length ? session.next_quiz_json : getFreshBookJson(),
       next_quiz_cut: session?.next_quiz_cut || 0,
-      next_quiz_trial: session?.next_quiz_trial || 1, // 💡 추가 (기본 1차)
+      next_quiz_trial: session?.next_quiz_trial || 1,
       test_id: session?.test_id || '',
       test_score: session?.test_score || '',
       test_score_type: session?.test_score_type || 'score'
     };
-  };
+  }, [student.allLogs, student.assigned_books]);
 
   const [formData, setFormData] = useState<any>(() => getInitialFormData(selectedDate));
   const testRef = useRef<HTMLTextAreaElement>(null);
@@ -170,7 +171,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
       String(formData.test_score) !== String(initial.test_score) ||
       formData.test_score_type !== initial.test_score_type
     );
-  }, [formData, rowDate, student.allLogs]);
+  }, [formData, rowDate, getInitialFormData]);
 
   const isCompleted = hasSession && !isDirty;
 
@@ -185,6 +186,30 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
     setFormData(lastState);
     setUndoStack(rest);
   };
+
+  const handleSave = useCallback(async (extraData = {}) => {
+    if (isSaving) return;
+    const finalData = { ...formData, ...extraData, session_date: rowDate };
+    
+    // 💡 변경 사항이 있을 때만 서버에 전송
+    const initial = getInitialFormData(rowDate);
+    const hasChanged = Object.keys(finalData).some(key => {
+      if (key === 'session_date') return false;
+      return String((finalData as any)[key]) !== String((initial as any)[key]);
+    });
+
+    if (!hasChanged && Object.keys(extraData).length === 0) return;
+
+    setIsSaving(true);
+    const success = await onSave(student.id, finalData);
+    setIsSaving(false);
+    if (success) { 
+      setSaveStatus('success'); 
+      setUndoStack([]); // 💡 저장 성공 시 스택 초기화
+      setTimeout(() => setSaveStatus('idle'), 2000); 
+    }
+    else { setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 2000); }
+  }, [formData, rowDate, student.id, isSaving, onSave, getInitialFormData]);
 
   useEffect(() => {
     const adjustHeight = (ref: React.RefObject<HTMLTextAreaElement>) => {
@@ -202,28 +227,28 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
   }, [formData.test_id, formData.classwork_text, formData.homework_text, formData.next_quiz_text, formData.special_notes]);
 
   useEffect(() => {
-    setRowDate(selectedDate);
-    setFormData(getInitialFormData(selectedDate));
-  }, [selectedDate, student.allLogs]);
-
-  const handleDateChange = (newDate: string) => {
-    setRowDate(newDate);
-    setFormData(getInitialFormData(newDate));
-  };
-
-  const handleSave = async (extraData = {}) => {
-    if (isSaving) return;
-    const finalData = { ...formData, ...extraData, session_date: rowDate };
-    setIsSaving(true);
-    const success = await onSave(student.id, finalData);
-    setIsSaving(false);
-    if (success) { 
-      setSaveStatus('success'); 
-      setUndoStack([]); // 💡 저장 성공 시 스택 초기화
-      setTimeout(() => setSaveStatus('idle'), 2000); 
+    const isActuallyDirty = isDirty;
+    if (rowDate !== selectedDate) {
+      setRowDate(selectedDate);
+      setFormData(getInitialFormData(selectedDate));
+    } else if (!isActuallyDirty) {
+      // 💡 날짜는 같지만, 외부에서 학생 정보(교재 등)가 바뀌었고 아직 수정한 내용이 없다면 최신화
+      setFormData(getInitialFormData(selectedDate));
     }
-    else { setSaveStatus('error'); setTimeout(() => setSaveStatus('idle'), 2000); }
-  };
+  }, [selectedDate, getInitialFormData, rowDate, isDirty]);
+
+  // 💡 실시간 자동 저장 (디바운스)
+  useEffect(() => {
+    if (!hasSession && !isDirty) return;
+    
+    const timer = setTimeout(() => {
+      if (isDirty) {
+        handleSave();
+      }
+    }, 800);
+
+    return () => clearTimeout(timer);
+  }, [formData, isDirty, hasSession, handleSave]);
 
   const selectFeedback = (status: StudentStatus) => {
     pushUndo(formData); // 💡 취소 지점 저장
@@ -251,7 +276,10 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
     if (!found && newComment) {
       updatedNotes = currentNotes ? `${currentNotes}\n${newComment}`.trim() : newComment;
     }
-    setFormData({ ...formData, status, special_notes: updatedNotes });
+    
+    const newData = { ...formData, status, special_notes: updatedNotes };
+    setFormData(newData);
+    handleSave(newData); // 💡 상태 선택 시 즉시 저장
     setIsFeedbackOpen(false);
   };
 
@@ -371,10 +399,19 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
 
                 {col.id === 'test_id' && (
                   <div className="relative w-full h-full flex items-center group/cell">
-                    <textarea ref={testRef} value={formData.test_id || ''} onChange={(e) => setFormData({ ...formData, test_id: e.target.value })} onKeyDown={handleKeyDown} placeholder="-"
+                    <textarea ref={testRef} value={formData.test_id || ''} onChange={(e) => setFormData({ ...formData, test_id: e.target.value })} onKeyDown={handleKeyDown} onBlur={() => handleSave()} placeholder="-"
                       className={`w-full bg-transparent border-none px-3 py-4 text-[12px] text-left text-white focus:outline-none focus:bg-blue-500/5 transition-all font-bold resize-none overflow-y-auto custom-scrollbar-v block`} />
                     
                     <div className="absolute right-1 top-1 flex flex-col gap-1 opacity-0 group-hover/cell:opacity-100 transition-opacity z-10">
+                      {formData.test_id && (
+                        <button 
+                          onClick={() => window.open(`/api/pdf/${formData.test_id}`, '_blank')}
+                          className="w-6 h-6 rounded-[2px] bg-red-600/30 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white transition-all flex items-center justify-center shadow-sm" 
+                          title="로컬 PDF 열기"
+                        >
+                          <FileText size={12} />
+                        </button>
+                      )}
                       <button onClick={() => setIsTestEditorOpen(true)} className="w-6 h-6 rounded-[2px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center shadow-sm" title="테스트 다중 입력"><Wand2 size={12} /></button>
                       <button onClick={() => setIsTestModalOpen(true)} className="w-6 h-6 rounded-[2px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm" title="테스트 상세 채점"><ClipboardList size={12} /></button>
                     </div>
@@ -383,7 +420,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
 
                 {col.id === 'test_score' && (
                   <div className="relative w-full h-full flex items-center justify-center group/score">
-                    <input type="text" value={formData.test_score || ''} onChange={(e) => setFormData({ ...formData, test_score: e.target.value })} onKeyDown={handleKeyDown} placeholder="-"
+                    <input type="text" value={formData.test_score || ''} onChange={(e) => setFormData({ ...formData, test_score: e.target.value })} onKeyDown={handleKeyDown} onBlur={() => handleSave()} placeholder="-"
                       className="w-full bg-transparent border-none px-1 text-[14px] text-center text-emerald-400 focus:outline-none focus:bg-emerald-500/5 transition-all font-black pr-4" />
                     
                     {/* 💡 점수/개수 타입 토글 */}
@@ -430,7 +467,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
 
                 {col.id === 'classwork' && (
                   <div className="relative w-full h-full flex items-center group/cell">
-                    <textarea ref={cwRef} value={formData.classwork_text} onChange={(e) => setFormData({ ...formData, classwork_text: e.target.value })} onKeyDown={handleKeyDown}
+                    <textarea ref={cwRef} value={formData.classwork_text} onChange={(e) => setFormData({ ...formData, classwork_text: e.target.value })} onKeyDown={handleKeyDown} onBlur={() => handleSave()}
                       className="w-full bg-transparent border-none px-4 py-4 text-[13px] text-emerald-50 font-semibold text-left focus:outline-none focus:bg-emerald-500/5 transition-all resize-none overflow-y-auto custom-scrollbar-v" />
                     <button onClick={() => setIsCwEditorOpen(true)} className="absolute right-1 top-1 w-6 h-6 rounded-[2px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center opacity-0 group-hover/cell:opacity-100 shadow-sm z-10" title="진도 정밀 편집"><Wand2 size={12} /></button>
                   </div>
@@ -438,7 +475,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
 
                 {col.id === 'assign' && (
                   <div className="relative w-full h-full flex items-center group/cell">
-                    <textarea ref={hwRef} value={formData.homework_text} onChange={(e) => setFormData({ ...formData, homework_text: e.target.value })} onKeyDown={handleKeyDown}
+                    <textarea ref={hwRef} value={formData.homework_text} onChange={(e) => setFormData({ ...formData, homework_text: e.target.value })} onKeyDown={handleKeyDown} onBlur={() => handleSave()}
                       className="w-full bg-transparent border-none px-4 py-4 text-[13px] text-white font-semibold text-left focus:outline-none focus:bg-blue-500/5 transition-all resize-none overflow-y-auto custom-scrollbar-v" />
                     <button onClick={() => setIsHwEditorOpen(true)} className="absolute right-1 top-1 w-6 h-6 rounded-[2px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center opacity-0 group-hover/cell:opacity-100 shadow-sm z-10" title="숙제 정밀 편집"><Wand2 size={12} /></button>
                   </div>
@@ -447,7 +484,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
                 {col.id === 'next_quiz' && (
                   <div className="relative w-full h-full flex items-center group/cell">
                     <div className="flex flex-col w-full h-full">
-                      <textarea ref={nqRef} value={formData.next_quiz_text} onChange={(e) => setFormData({ ...formData, next_quiz_text: e.target.value })} onKeyDown={handleKeyDown} placeholder="Next Quiz..."
+                      <textarea ref={nqRef} value={formData.next_quiz_text} onChange={(e) => setFormData({ ...formData, next_quiz_text: e.target.value })} onKeyDown={handleKeyDown} onBlur={() => handleSave()} placeholder="Next Quiz..."
                         className="w-full bg-transparent border-none px-4 pt-4 pb-1 text-[13px] text-indigo-200 font-semibold text-left focus:outline-none focus:bg-indigo-500/5 transition-all resize-none overflow-y-auto custom-scrollbar-v flex-1" />
                       
                       {/* 💡 도구 모음: 회차(1~5차) 선택 */}
@@ -512,7 +549,7 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
                 )}
 
                 {col.id === 'notes' && (
-                  <textarea ref={notesRef} value={formData.special_notes} onChange={(e) => setFormData({ ...formData, special_notes: e.target.value })} onKeyDown={handleKeyDown} placeholder="..."
+                  <textarea ref={notesRef} value={formData.special_notes} onChange={(e) => setFormData({ ...formData, special_notes: e.target.value })} onKeyDown={handleKeyDown} onBlur={() => handleSave()} placeholder="..."
                     className="w-full bg-transparent border-none px-4 py-4 text-[12px] text-gray-400 text-left focus:outline-none focus:bg-white/5 transition-all font-medium resize-none overflow-y-auto custom-scrollbar-v" />
                 )}
 
@@ -668,19 +705,80 @@ export default function TodaySheet({ students, masterTextbooks, onSave, selected
   };
 
   const handleSendIndividual = async (studentId: string) => {
+    const student = students.find((s: any) => s.id === studentId);
+    if (!student || !student.todaySession) return;
+
     setIsSendingReport(studentId);
-    await new Promise(resolve => setTimeout(resolve, 1000));
-    alert('카카오톡 리포트가 전송되었습니다.');
-    setIsSendingReport(null);
+    try {
+      const response = await fetch('/api/report', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentName: student.name,
+          phone: student.phone,
+          sessionData: student.todaySession,
+          academyName: academyInfo?.academy_name
+        }),
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        // 💡 전송 성공 시 DB에 전송 시간 기록
+        await onSave(studentId, { 
+          ...student.todaySession, 
+          report_sent_at: new Date().toISOString() 
+        });
+        alert(`${student.name} 학생의 리포트가 전송되었습니다.`);
+      } else {
+        alert('발송 실패: ' + result.error);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('전송 중 오류가 발생했습니다.');
+    } finally {
+      setIsSendingReport(null);
+    }
   };
 
   const handleSendAll = async () => {
-    const unsent = students.filter((s: any) => s.todaySession && !s.todaySession.report_sent_at);
-    if (unsent.length === 0) return alert('이미 모든 리포트가 전송되었거나 전송할 리포트가 없습니다.');
+    const unsent = students.filter((s: any) => {
+      const hasData = s.todaySession && (s.todaySession.classwork_text || s.todaySession.homework_text || s.todaySession.test_id);
+      return hasData && !s.todaySession.report_sent_at;
+    });
+
+    if (unsent.length === 0) return alert('전송할 새 리포트가 없습니다.');
     if (!confirm(`${unsent.length}명의 학부모님께 일괄 전송하시겠습니까?`)) return;
+
     setIsSendingReport('all');
-    await new Promise(resolve => setTimeout(resolve, 2000));
-    alert('전체 리포트 전송이 완료되었습니다.');
+    let successCount = 0;
+
+    for (const student of unsent) {
+      try {
+        const response = await fetch('/api/report', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            studentName: student.name,
+            phone: student.phone,
+            sessionData: student.todaySession,
+            academyName: academyInfo?.academy_name
+          }),
+        });
+
+        const result = await response.json();
+        if (result.success) {
+          await onSave(student.id, { 
+            ...student.todaySession, 
+            report_sent_at: new Date().toISOString() 
+          });
+          successCount++;
+        }
+      } catch (e) {
+        console.error(`${student.name} 전송 실패:`, e);
+      }
+    }
+
+    alert(`${successCount}명의 리포트 전송이 완료되었습니다.`);
     setIsSendingReport(null);
   };
 

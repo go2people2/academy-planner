@@ -127,3 +127,25 @@ export async function fetchTextbookUnits(bookCode: string) {
   console.log(`✅ [GoogleSheets] Found ${filtered.length} units for bookcode: ${bookCode}`);
   return filtered;
 }
+
+/**
+ * 💡 구글 시트에서 테스트 정답 데이터를 가져옵니다.
+ * 탭 이름: 'tests'
+ * 구조: [0]test_id, [1]title, [2]mc_answers (쉼표 구분), [3]desc_count
+ */
+export async function fetchTestAnswers(testId: string) {
+  const rows = await fetchSheetAsCsv('tests');
+  if (!rows || rows.length <= 1) return null;
+
+  const targetId = testId.trim();
+  const row = rows.slice(1).find(r => (r[0] || '').trim() === targetId);
+
+  if (!row) return null;
+
+  return {
+    testId: row[0],
+    title: row[1] || `테스트 #${row[0]}`,
+    mcAnswers: (row[2] || '').split(',').map(a => a.trim()).filter(a => a),
+    descCount: parseInt(row[3] || '0') || 0
+  };
+}
