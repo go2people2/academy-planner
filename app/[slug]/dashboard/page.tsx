@@ -13,6 +13,7 @@ import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
 import StudentStudyReportDrawer from '@/components/dashboard/StudentStudyReportDrawer';
 import MorningBriefingModal from '@/components/dashboard/MorningBriefingModal';
 import { supabase } from '@/lib/supabase';
+import { getTodayStr, getDayOfWeek } from '@/lib/utils';
 import { Student, SessionLog, StudentStatus, TextbookOption } from '@/types/dashboard';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -32,11 +33,7 @@ export default function DashboardPage() {
   }, [slug, router]);
 
   const [academy, setAcademy] = useState<any>(null);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const now = new Date();
-    const offset = now.getTimezoneOffset() * 60000;
-    return new Date(now.getTime() - offset).toISOString().split('T')[0];
-  });
+  const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('All');
@@ -84,17 +81,11 @@ export default function DashboardPage() {
         const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
         const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
         if (acData) { 
-          // 💡 실제 사용 가능한 컬럼 디버깅 (브라우저 콘솔 확인용)
-          console.log("🏫 Academy Table Keys:", Object.keys(acData));
-          
-          // 💡 announcements 정보를 안전하게 로드 (welcome_message 컬럼을 대체 활용)
-          let announcements = {};
-          try {
-            if (acData.welcome_message?.startsWith('{')) {
-              announcements = JSON.parse(acData.welcome_message);
-            }
-          } catch (e) {}
-          
+          // 💡 정식 announcements (jsonb) 컬럼 데이터 로드
+          const announcements = { 
+            monthly: '', weekly: '', daily: '', 
+            ...(acData.announcements || {}) 
+          };
           const enrichedAcademy = { ...acData, announcements };
           setAcademy(enrichedAcademy); 
           currentAcademy = enrichedAcademy; 
@@ -166,12 +157,24 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
+  // 💡 하루 한 번 모닝 브리핑 노출 체크 (세션 기준)
   useEffect(() => {
-    const hasSeenBriefing = sessionStorage.getItem(`ams_briefing_${selectedDate}`);
-    if (!hasSeenBriefing && !isLoading && academy) {
-      setShowMorningBriefing(true);
-    }
-  }, [isLoading, academy, selectedDate]);
+    if (isLoading || !academy) return;
+    
+    const checkBriefing = () => {
+      const hasSeenBriefing = sessionStorage.getItem(`ams_briefing_${selectedDate}`);
+      if (hasSeenBriefing) return;
+
+      const hasNotes = students.some(s => s.management_notes?.trim());
+      const hasAnnouncements = Object.values(academy.announcements || {}).some(v => String(v).trim());
+
+      if (hasNotes || hasAnnouncements) {
+        setShowMorningBriefing(true);
+      }
+    };
+
+    checkBriefing();
+  }, [isLoading, !!academy, selectedDate, students.length]); // 💡 배열 길이를 의존성으로 사용하여 안정성 확보
 
   const saveTodaySession = useCallback(async (studentId: string, sessionData: Partial<SessionLog>) => {
     const student = students.find(s => s.id === studentId);
@@ -223,16 +226,12 @@ export default function DashboardPage() {
   const handleUpdateAcademyInfo = async (updates: any) => {
     if (!academy) return;
     try {
-      const dbUpdates = { ...updates };
-      // 💡 announcements를 welcome_message 컬럼에 매핑 (description 컬럼 부재 대응)
-      if (dbUpdates.announcements) {
-        dbUpdates.welcome_message = JSON.stringify(dbUpdates.announcements);
-        delete dbUpdates.announcements;
-      }
-
-      const { error } = await supabase.from('ams_academies').update(dbUpdates).eq('id', academy.id);
+      // 💡 정식 announcements 컬럼에 직접 저장 (jsonb 타입이므로 변환 불필요)
+      const { error } = await supabase.from('ams_academies').update(updates).eq('id', academy.id);
       if (error) throw error;
-      setAcademy({ ...academy, ...updates });
+      
+      // 💡 로컬 상태 즉시 갱신
+      setAcademy(prev => ({ ...prev, ...updates }));
     } catch (e) { console.error('Update academy error:', e); }
   };
 
@@ -355,7 +354,6 @@ export default function DashboardPage() {
     } catch (e) { console.error(e); }
   };
 
-  function getDayOfWeek(dateStr: string) { const days = ['일', '월', '화', '수', '목', '금', '토']; return days[new Date(dateStr).getDay()]; }
   const selectedDayKey = getDayOfWeek(selectedDate);
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
@@ -399,7 +397,15 @@ export default function DashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] flex font-sans selection:bg-blue-500/30 overflow-hidden text-xs">
-      <Sidebar viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} filterTarget={filterTarget} setFilterTarget={setFilterTarget} academyInfo={academy} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} />
+      <Sidebar 
+        viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} 
+        selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} 
+        selectedDays={selectedDays} setSelectedDays={setSelectedDays} 
+        isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} 
+        filterTarget={filterTarget} setFilterTarget={setFilterTarget} 
+        academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo}
+        teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} 
+      />
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-gray-500"><Loader2 className="animate-spin mb-4" size={32} /><p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Academy Data...</p></div>

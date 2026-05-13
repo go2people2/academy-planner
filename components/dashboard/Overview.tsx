@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
+import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import AddStudentModal from './AddStudentModal';
 
 interface OverviewProps {
@@ -126,16 +127,6 @@ export default function Overview({
     return studentsToDisplay.find(s => s.id === id)?.name || todayStudents.find(s => s.id === id)?.name || 'Student';
   };
 
-  const getDayOfWeek = (dateStr: string) => {
-    try {
-      const days = ['일', '월', '화', '수', '목', '금', '토'];
-      const date = new Date(dateStr);
-      return isNaN(date.getTime()) ? dateStr : days[date.getDay()];
-    } catch {
-      return dateStr || '';
-    }
-  };
-
   // 💡 학년별 학생 수 통계 복구
   const getGradeStats = (studentList: Student[]) => {
     const stats: Record<string, number> = {};
@@ -160,7 +151,7 @@ export default function Overview({
               <div className="flex flex-col gap-0.5">
                 <h3 className="text-[11px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse shadow-[0_0_8px_rgba(16,185,129,0.5)]" /> 
-                  {todayKey === getDayOfWeek(new Date().toISOString().split('T')[0]) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
+                  {todayKey === getDayOfWeek(getTodayStr()) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
