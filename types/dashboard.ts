@@ -45,6 +45,7 @@ export interface Student {
   class_days: string[];
   assigned_books: string[];
   day_schedules: Record<string, number[]>;
+  management_notes?: string; // 💡 추가 (선생님 전용 관리 메모)
   history: StudentStatus[];
   isRedLight: boolean;
   lastSession?: SessionLog;

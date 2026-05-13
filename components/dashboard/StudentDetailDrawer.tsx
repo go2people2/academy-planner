@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck } from 'lucide-react';
+import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck, ClipboardCheck } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 
 interface StudentDetailDrawerProps {
@@ -25,13 +25,13 @@ export default function StudentDetailDrawer({
   const [localSchool, setLocalSchool] = useState(student.school || '');
   const [localGrade, setLocalGrade] = useState(student.grade);
   const [localCourse, setLocalCourse] = useState(student.course || 'C');
-  const [localBookCourses, setLocalBookCourses] = useState<Record<string, 'E' | 'D' | 'C' | 'B' | 'A'>>(student.book_courses || {});
+  const [localBookCourses, setLocalBookCourses] = useState<Record<string, string>>(student.book_courses || {});
   const [localClass, setLocalClass] = useState(student.class);
   const [localPhone, setLocalPhone] = useState(student.phone || '');
-  const [localTeacherId, setLocalTeacherId] = useState(student.teacher_id || ''); // 💡 추가
+  const [localTeacherId, setLocalTeacherId] = useState(student.teacher_id || '');
+  const [localManagementNotes, setLocalManagementNotes] = useState(student.management_notes || ''); // 💡 추가
   const [bookSearch, setBookSearch] = useState('');
   
-  // 삭제 확인 팝업 상태
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   useEffect(() => {
@@ -44,8 +44,9 @@ export default function StudentDetailDrawer({
     setLocalBookCourses(student.book_courses || {});
     setLocalClass(student.class);
     setLocalPhone(student.phone || '');
-    setLocalTeacherId(student.teacher_id || ''); // 💡 추가
-  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone, student.teacher_id]);
+    setLocalTeacherId(student.teacher_id || '');
+    setLocalManagementNotes(student.management_notes || ''); // 💡 동기화
+  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone, student.teacher_id, student.management_notes]);
 
   const filteredBooks = useMemo(() => {
     return (availableTextbooks || []).filter(b => 
@@ -153,7 +154,6 @@ export default function StudentDetailDrawer({
             </div>
           </div>
 
-          {/* 💡 배정 교재 요약 (이름과 전화번호 사이로 이동) */}
           {student.assigned_books.length > 0 && (
             <div className="flex flex-col gap-2 py-1 border-y border-white/5 mx-1">
               <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest px-1">Book Courses (Overridable)</label>
@@ -174,7 +174,7 @@ export default function StudentDetailDrawer({
                         value={currentCourse}
                         onChange={(e) => {
                           const newVal = isKeep ? `${e.target.value}-keep` : e.target.value;
-                          const newCourses = { ...localBookCourses, [code]: newVal as any };
+                          const newCourses = { ...localBookCourses, [code]: newVal };
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
                         }}
@@ -183,11 +183,10 @@ export default function StudentDetailDrawer({
                         {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c}</option>)}
                       </select>
                       
-                      {/* 💡 Keep 토글 버튼 추가 */}
                       <button 
                         onClick={() => {
                           const newVal = isKeep ? currentCourse : `${currentCourse}-keep`;
-                          const newCourses = { ...localBookCourses, [code]: newVal as any };
+                          const newCourses = { ...localBookCourses, [code]: newVal };
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
                         }}
@@ -196,12 +195,7 @@ export default function StudentDetailDrawer({
                         KEEP
                       </button>
 
-                      <button 
-                        onClick={() => toggleBookSelection(code)}
-                        className="text-gray-600 hover:text-red-500 transition-colors ml-1"
-                      >
-                        <X size={10} strokeWidth={3} />
-                      </button>
+                      <button onClick={() => toggleBookSelection(code)} className="text-gray-600 hover:text-red-500 transition-colors ml-1"><X size={10} strokeWidth={3} /></button>
                     </div>
                   );
                 })}
@@ -220,19 +214,16 @@ export default function StudentDetailDrawer({
             </div>
           </div>
 
-          {/* 💡 상담 관리 섹션 추가 */}
           <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-4">
             <div className="flex flex-col">
               <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">Last Consulted</span>
-              <span className="text-[10px] font-bold text-gray-400">
-                {student.last_consulted_at ? student.last_consulted_at.replace(/-/g, '.') : '기록 없음'}
-              </span>
+              <span className="text-[10px] font-bold text-gray-400">{student.last_consulted_at ? student.last_consulted_at.replace(/-/g, '.') : '기록 없음'}</span>
             </div>
             <button 
               onClick={() => {
-                const today = new Date();
-                const offset = today.getTimezoneOffset() * 60000;
-                const localToday = new Date(today.getTime() - offset).toISOString().split('T')[0];
+                const now = new Date();
+                const offset = now.getTimezoneOffset() * 60000;
+                const localToday = new Date(now.getTime() - offset).toISOString().split('T')[0];
                 onUpdateInfo(student.id, 'last_consulted_at', localToday);
               }}
               className="px-4 py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 hover:text-white transition-all shadow-lg shadow-amber-500/5 flex items-center gap-2"
@@ -252,7 +243,7 @@ export default function StudentDetailDrawer({
                 const isDaySelected = localDays.includes(day);
                 return (
                   <div key={day} className="flex flex-col items-center gap-3">
-                    <button onClick={() => handleDayToggle(day)} className={`text-[10px] font-black w-8 h-8 rounded-[2px] flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:text-gray-300'}`}>{day}</button>
+                    <button onClick={() => handleDayToggle(day)} className={`text-[10px] font-black w-8 h-8 rounded-[2px] flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:bg-gray-300'}`}>{day}</button>
                     <div className="flex flex-col gap-1 w-full px-1">
                       {[16, 17, 18, 19, 20, 21].map((h, idx) => {
                         const isNormal = activeHours.includes(h);
@@ -286,7 +277,7 @@ export default function StudentDetailDrawer({
             </div>
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar-v space-y-1">
               {filteredBooks.map((book) => {
-                const isSelected = student.assigned_books.includes(book.bookcode);
+                const isSelected = (student.assigned_books || []).includes(book.bookcode);
                 return (
                   <div key={book.bookcode} onClick={() => toggleBookSelection(book.bookcode)}
                     className={`flex items-center justify-between p-2.5 rounded-[2px] cursor-pointer transition-all border ${isSelected ? 'bg-blue-600/10 border-blue-500/30' : 'hover:bg-white/5 border-transparent'}`}>
@@ -302,7 +293,43 @@ export default function StudentDetailDrawer({
           </div>
         </section>
 
-        {/* 4. 💡 학생 관리 (재원, 퇴원) */}
+        {/* 4. 💡 선생님 전용 관리 메모 (포스트잇 스타일) */}
+        <section className="space-y-3">
+          <div className="flex items-center justify-between px-1">
+            <h5 className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
+              <ClipboardCheck size={14} /> Teacher's Management Notes
+            </h5>
+            <span className="text-[8px] font-bold text-gray-600 uppercase">선생님간 공유 / 학생 비노출</span>
+          </div>
+          
+          <div className="relative group/postit">
+            {/* 💡 포스트잇 배경 및 질감 */}
+            <div className="absolute inset-0 bg-amber-200 rounded-sm shadow-[5px_5px_15px_rgba(0,0,0,0.3)] rotate-[-1deg] transition-transform group-hover/postit:rotate-0" />
+            
+            <div className="relative bg-amber-100/90 backdrop-blur-sm p-5 min-h-[160px] rounded-sm flex flex-col shadow-inner">
+              <textarea 
+                value={localManagementNotes}
+                maxLength={300}
+                onChange={(e) => setLocalManagementNotes(e.target.value)}
+                onBlur={() => onUpdateInfo(student.id, 'management_notes', localManagementNotes)}
+                placeholder="이 학생에 대해 꼭 기억해야 할 핵심 내용을 적어주세요 (숙제량, 성향 등)..."
+                className="w-full bg-transparent border-none text-[13px] font-bold text-amber-900/80 outline-none resize-none leading-relaxed placeholder:text-amber-700/30 flex-1 custom-scrollbar-v"
+              />
+              <div className="flex justify-between items-center mt-3 pt-2 border-t border-amber-900/10">
+                <span className="text-[8px] font-black text-amber-800/40 uppercase tracking-tighter">Sticky Note</span>
+                <span className={`text-[9px] font-black ${localManagementNotes.length >= 280 ? 'text-red-500' : 'text-amber-800/40'}`}>
+                  {localManagementNotes.length}/300
+                </span>
+              </div>
+            </div>
+            
+            {/* 💡 포스트잇 접힌 효과 (하단 구석) */}
+            <div className="absolute bottom-0 right-0 w-4 h-4 bg-amber-300/50 rounded-tl-full shadow-[-2px_-2px_5px_rgba(0,0,0,0.1)] pointer-events-none" />
+          </div>
+          <p className="text-[9px] text-gray-600 italic px-1 text-center">핵심 내용만 간결하게 기록하는 것을 권장합니다.</p>
+        </section>
+
+        {/* 5. 💡 학생 관리 (재원, 퇴원) */}
         <section className="space-y-4 pt-10 border-t border-white/5">
           <h5 className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2 px-1"><AlertTriangle size={14} /> Student Management</h5>
           <div className="flex flex-col gap-2">
@@ -311,11 +338,8 @@ export default function StudentDetailDrawer({
                 onClick={() => {
                   const reason = prompt(`${student.name} 학생의 퇴원 사유를 입력해주세요.`);
                   if (reason !== null) {
-                    onUpdateInfo(student.id, {
-                      is_deleted: true,
-                      phone: `${student.phone || ''} (퇴원: ${reason})`
-                    });
-                    onClose(); // 💡 퇴원 처리 후 창 닫기
+                    onUpdateInfo(student.id, { is_deleted: true, phone: `${student.phone || ''} (퇴원: ${reason})` });
+                    onClose();
                   }
                 }}
                 className="flex items-center justify-center gap-2 w-full py-3 bg-red-500/10 text-red-500 border border-red-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all shadow-lg shadow-red-500/5"
@@ -324,20 +348,15 @@ export default function StudentDetailDrawer({
               </button>
             ) : (
               <div className="space-y-3">
-                <button 
-                  onClick={() => onUpdateInfo(student.id, 'is_deleted', false)}
+                <button onClick={() => onUpdateInfo(student.id, 'is_deleted', false)}
                   className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600/10 text-emerald-500 border border-emerald-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all"
                 >
                   <UserCheck size={14} /> 재원생으로 복구
                 </button>
                 
                 <div className="p-4 rounded-[4px] bg-red-500/5 border border-red-500/10 space-y-3">
-                  <p className="text-[9px] text-gray-500 leading-relaxed font-medium">
-                    * 리포트(PDF) 출력 후 개인정보 파기가 필요한 경우 아래 버튼을 사용하세요.<br/>
-                    * 프로필은 삭제되지만 과거 수업/테스트 통계 기록은 DB에 익명으로 보존됩니다.
-                  </p>
-                  <button 
-                    onClick={() => setShowDeleteConfirm(true)}
+                  <p className="text-[9px] text-gray-500 leading-relaxed font-medium">* 리포트(PDF) 출력 후 개인정보 파기가 필요한 경우 아래 버튼을 사용하세요.</p>
+                  <button onClick={() => setShowDeleteConfirm(true)}
                     className="flex items-center justify-center gap-2 w-full py-2.5 bg-red-600 text-white rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20"
                   >
                     <Trash2 size={12} /> 프로필 영구 삭제 (개인정보 파기)
@@ -349,29 +368,18 @@ export default function StudentDetailDrawer({
         </section>
       </div>
 
-      {/* 영구 삭제 확인 모달 */}
       <AnimatePresence>
         {showDeleteConfirm && (
           <div className="fixed inset-0 z-[60] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
             <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-[#1a1a1a] border border-white/10 p-6 rounded-[4px] max-w-sm w-full shadow-2xl text-center space-y-4">
               <div className="w-12 h-12 bg-red-500/20 text-red-500 rounded-full flex items-center justify-center mx-auto"><Trash2 size={24} /></div>
               <h4 className="text-white font-black">개인정보를 영구 파기할까요?</h4>
-              <p className="text-[11px] text-gray-500 leading-relaxed">
-                학생의 이름, 연락처 등 프로필 정보가 완전히 삭제됩니다.<br/>
-                (수업 통계 데이터는 익명화되어 보존됩니다.)
-              </p>
+              <p className="text-[11px] text-gray-500 leading-relaxed">학생의 이름, 연락처 등 프로필 정보가 완전히 삭제됩니다.</p>
               <div className="flex gap-2 pt-2">
                 <button onClick={() => setShowDeleteConfirm(false)} className="flex-1 py-3 bg-white/5 text-gray-500 rounded-[2px] text-[10px] font-black uppercase">취소</button>
-                <button 
-                  onClick={async () => {
-                    onUpdateInfo(student.id, 'PERMANENT_DELETE', true); 
-                    setShowDeleteConfirm(false);
-                    onClose();
-                  }}
+                <button onClick={async () => { onUpdateInfo(student.id, 'PERMANENT_DELETE', true); setShowDeleteConfirm(false); onClose(); }}
                   className="flex-1 py-3 bg-red-600 text-white rounded-[2px] text-[10px] font-black uppercase shadow-lg shadow-red-600/20"
-                >
-                  파기 확인
-                </button>
+                >파기 확인</button>
               </div>
             </motion.div>
           </div>

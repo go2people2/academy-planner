@@ -16,7 +16,19 @@ interface ProgressSequencerProps {
 }
 
 export default function ProgressSequencer({ students, masterTextbooks, initialStudentId, onSaveLegacy }: ProgressSequencerProps) {
+  const [searchQuery, setSearchQuery] = useState(''); // 💡 검색어 상태
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(initialStudentId || (students[0]?.id || null));
+  
+  // 💡 검색 필터링 로직
+  const filteredStudents = useMemo(() => {
+    if (!searchQuery.trim()) return students;
+    const query = searchQuery.toLowerCase();
+    return students.filter(s => 
+      s.name.toLowerCase().includes(query) || 
+      s.grade.toLowerCase().includes(query)
+    );
+  }, [students, searchQuery]);
+
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
   if (!selectedStudentId || students.length === 0) {
@@ -41,12 +53,14 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
             <input 
               type="text" 
               placeholder="학생 검색..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full bg-white/5 border border-white/10 rounded-[4px] py-2 pl-9 pr-3 text-[11px] text-white focus:outline-none focus:border-blue-500 transition-all font-bold"
             />
           </div>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar-v p-2 space-y-1">
-          {students.map(s => (
+          {filteredStudents.map(s => (
             <button
               key={s.id}
               onClick={() => setSelectedStudentId(s.id)}
@@ -276,7 +290,9 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
                   {[...Array(10)].map((_, i) => {
                     const threshold = (i + 1) * 10;
                     const currentProgress = Math.round(progressRatio * 100);
-                    const isActive = isCompleted || currentProgress >= threshold;
+                    // 💡 4번째 플래그가 체크되어 있거나 서버에서 완료된 경우 무조건 100% (Active)
+                    const isStepFinalDone = stepStates[u.unit]?.[3];
+                    const isActive = isCompleted || isStepFinalDone || currentProgress >= threshold;
                     return (
                       <div 
                         key={i} 
@@ -302,7 +318,15 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
                     return (
                       <button 
                         key={step.id} title={step.label}
-                        onClick={(e) => { e.stopPropagation(); toggleStep(u.unit, sIdx); }}
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          // 💡 마지막 플래그(sIdx 3) 클릭 시 서버 완료 처리(Flag)와 연동 유도 가능
+                          // 여기서는 일단 요청하신 대로 UI 100% 변화에 집중
+                          toggleStep(u.unit, sIdx); 
+                          if (sIdx === 3 && !isStepDone) {
+                            handleFlagClick(idx); // 서버에 실제 완료 기록 남기기 (원장님 요청 연동)
+                          }
+                        }}
                         className={`rounded-[2px] border border-white/5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
                           isStepDone 
                             ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30' 

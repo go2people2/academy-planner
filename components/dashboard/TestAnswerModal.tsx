@@ -15,7 +15,7 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
   const [testId, setTestId] = useState(initialTestId || '');
   const [testInfo, setTestInfo] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, string>>({});
-  const [activeTab, setActiveTab] = useState<'mc' | 'desc'>('mc'); // Multiple Choice or Descriptive
+  const [activeTab, setActiveTab] = useState<'mc' | 'desc'>('mc'); 
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -23,14 +23,19 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
   // 💡 API를 통해 실제 시험 정보를 가져옵니다.
   useEffect(() => {
     async function fetchTestInfo() {
-      if (!testId || testId.length < 3) {
+      // 💡 쉼표(,)나 괄호가 포함된 경우(멀티 테스트)는 유효한 단일 ID가 아니라고 판단
+      const isValidId = testId && testId.length >= 2 && !testId.includes(',') && !testId.includes('(');
+      
+      if (!isValidId) {
         setTestInfo(null);
+        setError(null);
         return;
       }
+      
       setIsLoading(true);
       setError(null);
       try {
-        const res = await fetch(`/api/tests/${testId}`);
+        const res = await fetch(`/api/tests/${encodeURIComponent(testId.trim())}`);
         const data = await res.json();
         if (data.success) {
           setTestInfo({
@@ -41,9 +46,11 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
           });
         } else {
           setError(data.error || '시험 정보를 찾을 수 없습니다.');
+          setTestInfo(null);
         }
       } catch (e) {
         setError('서버 연동 중 오류가 발생했습니다.');
+        setTestInfo(null);
       } finally {
         setIsLoading(false);
       }
@@ -59,44 +66,67 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
   };
 
   const handleSubmit = () => {
-    // 💡 간단한 자동 채점 로직 (객관식 기준)
-    if (!testInfo || !testInfo.mcAnswers) return onSave(answers);
+    if (!testInfo) return;
 
     let correctCount = 0;
-    testInfo.mcAnswers.forEach((correct: string, i: number) => {
-      if (answers[`mc_${i}`] === correct) correctCount++;
-    });
+    if (testInfo.mcAnswers) {
+      testInfo.mcAnswers.forEach((correct: string, i: number) => {
+        if (answers[`mc_${i}`] === correct) correctCount++;
+      });
+    }
 
-    const totalQuestions = testInfo.mcCount + testInfo.descCount;
-    // 서술형은 수동 채점이 필요하므로 우선 객관식만 계산하거나 안내
-    const score = Math.round((correctCount / testInfo.mcCount) * 100);
+    const mcTotal = testInfo.mcCount || 0;
+    const score = mcTotal > 0 ? Math.round((correctCount / mcTotal) * 100) : 0;
 
-    if (confirm(`객관식 ${testInfo.mcCount}문항 중 ${correctCount}문항 정답입니다.\n예상 점수: ${score}점\n제출하시겠습니까?`)) {
+    if (confirm(`객관식 ${mcTotal}문항 중 ${correctCount}문항 정답입니다.\n예상 점수: ${score}점\n제출하시겠습니까?`)) {
       onSave({ 
         answers, 
         calculatedScore: score,
-        correctCount 
+        correctCount,
+        testId: testId.trim()
       });
     }
   };
 
   if (isLoading) return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <Loader2 className="animate-spin text-blue-500" size={40} />
-    </div>
-  );
-
-  if (error) return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
-      <div className="bg-[#121212] border border-red-500/20 p-8 rounded-[4px] text-center space-y-4">
-        <AlertCircle className="text-red-500 mx-auto" size={40} />
-        <p className="text-white text-sm font-bold">{error}</p>
-        <button onClick={onClose} className="px-6 py-2 bg-white/5 text-gray-400 text-[10px] font-black uppercase rounded-[2px]">Close</button>
+      <div className="bg-[#121212] border border-white/10 p-10 rounded-[4px] flex flex-col items-center gap-4 shadow-2xl">
+        <Loader2 className="animate-spin text-blue-500" size={32} />
+        <p className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em]">Fetching Test Metadata...</p>
       </div>
     </div>
   );
 
-  if (!testInfo) return null;
+  // 💡 에러 발생 시 또는 정보가 없을 때 ID 수동 입력을 허용하는 통합 UI
+  if (error || !testInfo) return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+      <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }}
+        className="bg-[#121212] border border-white/10 p-8 rounded-[4px] text-center space-y-6 w-full max-w-sm shadow-2xl">
+        {error ? <AlertCircle className="text-red-500 mx-auto" size={40} /> : <Hash className="text-blue-500 mx-auto opacity-50" size={40} />}
+        
+        <div className="space-y-1">
+          <h3 className="text-white text-sm font-black uppercase tracking-widest">{error ? 'Error' : 'Enter Test ID'}</h3>
+          <p className="text-[10px] text-gray-500 font-medium">{error || '상세 채점을 위해 유효한 테스트 번호를 입력하세요.'}</p>
+        </div>
+
+        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-2">
+          <Hash size={14} className="text-gray-500" />
+          <input 
+            type="text"
+            placeholder="시험 번호 입력 (예: 1001)"
+            value={testId}
+            autoFocus
+            onChange={(e) => setTestId(e.target.value)}
+            className="bg-transparent border-none text-[12px] text-white focus:outline-none w-full font-black"
+          />
+        </div>
+
+        <div className="flex gap-2 pt-2">
+          <button onClick={onClose} className="flex-1 py-3 bg-white/5 text-gray-400 text-[10px] font-black uppercase rounded-[2px] hover:bg-white/10 transition-all border border-white/5">Cancel</button>
+        </div>
+      </motion.div>
+    </div>
+  );
 
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
@@ -118,9 +148,14 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
               </p>
             </div>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
-            <X size={18} className="text-gray-500" />
-          </button>
+          <div className="flex items-center gap-2">
+             <button onClick={() => setTestInfo(null)} className="p-2 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white" title="다른 시험 번호 입력">
+                <Hash size={16} />
+             </button>
+             <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors">
+                <X size={18} className="text-gray-500" />
+             </button>
+          </div>
         </div>
 
         {/* 탭 메뉴 */}
@@ -187,19 +222,6 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
 
         {/* 푸터 */}
         <div className="p-4 border-t border-white/5 bg-white/[0.01] flex justify-end gap-3">
-          {/* 테스트 번호 수동 입력 (testId가 처음에 없었을 경우) */}
-          {!initialTestId && !testInfo && (
-            <div className="flex-1 flex items-center gap-2">
-              <Hash size={14} className="text-gray-500" />
-              <input 
-                type="text"
-                placeholder="시험 번호 입력"
-                value={testId}
-                onChange={(e) => setTestId(e.target.value)}
-                className="bg-white/5 border border-white/10 rounded-[2px] px-3 py-1.5 text-[10px] text-white focus:outline-none focus:border-blue-500 w-32"
-              />
-            </div>
-          )}
           <button 
             onClick={onClose}
             className="px-4 py-2 rounded-[2px] text-[10px] font-black uppercase text-gray-500 hover:bg-white/5 transition-all"

@@ -328,9 +328,16 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
     }
   };
 
-  const handleTestSave = (answers: any) => {
-    pushUndo(formData); // 💡 취소 지점 저장
-    handleSave({ test_answers: answers });
+  const handleTestSave = (result: any) => {
+    pushUndo(formData);
+    const updatedData = {
+      ...formData,
+      test_id: result.testId || formData.test_id,
+      test_score: result.calculatedScore !== undefined ? String(result.calculatedScore) : formData.test_score,
+      test_answers: result.answers
+    };
+    setFormData(updatedData);
+    handleSave(updatedData);
     setIsTestModalOpen(false);
   };
 
@@ -376,7 +383,28 @@ function TodaySheetRow({ student, masterTextbooks, onSave, onViewProgress, colWi
                 )}
 
                 {col.id === 'name' && (
-                  <div className="flex items-center justify-between gap-3 px-4 py-2.5 w-full">
+                  <div className="flex items-center justify-between gap-3 px-4 py-2.5 w-full relative group/namecell">
+                    {/* 💡 관리자 메모 인디케이터 (오른쪽 상단 삼각형) */}
+                    {student.management_notes && (
+                      <div className="absolute top-0 right-0 group/note">
+                        <div className="w-0 h-0 border-t-[8px] border-l-[8px] border-t-amber-500/60 border-l-transparent" />
+                        
+                        {/* 💡 호버 시 나타나는 포스트잇 툴팁 */}
+                        <div className="absolute top-2 right-2 w-48 opacity-0 pointer-events-none group-hover/note:opacity-100 transition-all duration-300 z-[100] translate-x-2 group-hover/note:translate-x-0">
+                          <div className="bg-amber-100 p-4 rounded-sm shadow-2xl border border-amber-200 rotate-1 relative">
+                            <div className="flex items-center gap-1.5 mb-2 pb-1 border-b border-amber-900/10">
+                              <ClipboardCheck size={10} className="text-amber-700" />
+                              <span className="text-[9px] font-black text-amber-900/60 uppercase">Management Note</span>
+                            </div>
+                            <p className="text-[11px] font-bold text-amber-900/80 leading-relaxed whitespace-pre-wrap italic">
+                              {student.management_notes}
+                            </p>
+                            <div className="absolute bottom-0 right-0 w-3 h-3 bg-amber-200/50 rounded-tl-full" />
+                          </div>
+                        </div>
+                      </div>
+                    )}
+
                     <div className="flex flex-col min-w-0 overflow-hidden items-start text-left">
                       <div className="flex items-center gap-2">
                         <span className="font-black text-white text-[14px] tracking-tight truncate">{student.name}</span>
