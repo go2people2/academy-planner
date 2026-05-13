@@ -60,17 +60,25 @@ export default function MorningBriefingModal({ academyInfo, todayStudents, onClo
                 { label: '이번 달 주안점', key: 'monthly', icon: <Calendar size={14} />, color: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' },
                 { label: '이번 주 목표', key: 'weekly', icon: <TrendingUp size={14} />, color: 'bg-blue-500/10 border-blue-500/20 text-blue-400' },
                 { label: '오늘의 한마디', key: 'daily', icon: <MessageSquare size={14} />, color: 'bg-amber-500/10 border-amber-500/20 text-amber-400' }
-              ].map(item => (
+              ].filter(item => announcements[item.key]?.trim()).map(item => (
                 <div key={item.key} className={`${item.color} border rounded-[4px] p-5 flex flex-col gap-2 shadow-sm`}>
                   <div className="flex items-center gap-2 opacity-60">
                     {item.icon}
                     <span className="text-[9px] font-black uppercase tracking-widest">{item.label}</span>
                   </div>
                   <p className="text-[13px] font-bold leading-relaxed whitespace-pre-wrap">
-                    {announcements[item.key] || '설정된 공지가 없습니다.'}
+                    {announcements[item.key]}
                   </p>
                 </div>
               ))}
+
+              {/* 💡 모든 공지가 없을 경우 안내 */}
+              {Object.values(announcements).every(v => !String(v).trim()) && (
+                <div className="py-12 text-center border border-dashed border-white/5 rounded-[4px] bg-white/[0.01]">
+                  <MessageSquare size={24} className="text-gray-800 mx-auto mb-2 opacity-20" />
+                  <p className="text-[10px] text-gray-700 font-black uppercase tracking-widest">No active notices</p>
+                </div>
+              )}
             </div>
           </div>
 

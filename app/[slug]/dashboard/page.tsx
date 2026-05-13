@@ -11,7 +11,7 @@ import SettingsView from '@/components/dashboard/SettingsView';
 import NotificationsView from '@/components/dashboard/NotificationsView';
 import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
 import StudentStudyReportDrawer from '@/components/dashboard/StudentStudyReportDrawer';
-import MorningBriefingModal from '@/components/dashboard/MorningBriefingModal'; // 💡 추가
+import MorningBriefingModal from '@/components/dashboard/MorningBriefingModal';
 import { supabase } from '@/lib/supabase';
 import { Student, SessionLog, StudentStatus, TextbookOption } from '@/types/dashboard';
 import { Loader2 } from 'lucide-react';
@@ -49,7 +49,7 @@ export default function DashboardPage() {
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [isBatchMode, setIsBatchMode] = useState(false);
-  const [showMorningBriefing, setShowMorningBriefing] = useState(false); // 💡 추가
+  const [showMorningBriefing, setShowMorningBriefing] = useState(false);
 
   const navigateTo = (mode: string) => { setViewMode(mode); setSelectedStudentId(null); };
   
@@ -83,7 +83,23 @@ export default function DashboardPage() {
       if (!currentAcademy) {
         const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
         const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
-        if (acData) { setAcademy(acData); currentAcademy = acData; await fetchTeachers(acData.id); }
+        if (acData) { 
+          // 💡 실제 사용 가능한 컬럼 디버깅 (브라우저 콘솔 확인용)
+          console.log("🏫 Academy Table Keys:", Object.keys(acData));
+          
+          // 💡 announcements 정보를 안전하게 로드 (welcome_message 컬럼을 대체 활용)
+          let announcements = {};
+          try {
+            if (acData.welcome_message?.startsWith('{')) {
+              announcements = JSON.parse(acData.welcome_message);
+            }
+          } catch (e) {}
+          
+          const enrichedAcademy = { ...acData, announcements };
+          setAcademy(enrichedAcademy); 
+          currentAcademy = enrichedAcademy; 
+          await fetchTeachers(acData.id); 
+        }
         else { setIsLoading(false); return; }
       } else { await fetchTeachers(currentAcademy.id); }
 
@@ -137,7 +153,7 @@ export default function DashboardPage() {
           last_consulted_at: s.last_consulted_at, created_at: s.created_at,
           status_changed_at: s.status_changed_at || s.updated_at,
           class_days: s.class_days || [], assigned_books: s.assigned_books || [], day_schedules: s.day_schedules || {},
-          management_notes: s.management_notes || '', // 💡 추가
+          management_notes: s.management_notes || '',
           history, isRedLight: history.includes('poor') || history.includes('bad'),
           lastSession: logs.filter(l => l.date < selectedDate)[0], todaySession: logs.find(l => l.date === selectedDate),
           allLogs: logs
@@ -150,7 +166,6 @@ export default function DashboardPage() {
 
   useEffect(() => { fetchAllData(); }, [fetchAllData]);
 
-  // 💡 하루 한 번 모닝 브리핑 노출 체크 (세션 기준)
   useEffect(() => {
     const hasSeenBriefing = sessionStorage.getItem(`ams_briefing_${selectedDate}`);
     if (!hasSeenBriefing && !isLoading && academy) {
@@ -208,7 +223,14 @@ export default function DashboardPage() {
   const handleUpdateAcademyInfo = async (updates: any) => {
     if (!academy) return;
     try {
-      const { error } = await supabase.from('ams_academies').update(updates).eq('id', academy.id);
+      const dbUpdates = { ...updates };
+      // 💡 announcements를 welcome_message 컬럼에 매핑 (description 컬럼 부재 대응)
+      if (dbUpdates.announcements) {
+        dbUpdates.welcome_message = JSON.stringify(dbUpdates.announcements);
+        delete dbUpdates.announcements;
+      }
+
+      const { error } = await supabase.from('ams_academies').update(dbUpdates).eq('id', academy.id);
       if (error) throw error;
       setAcademy({ ...academy, ...updates });
     } catch (e) { console.error('Update academy error:', e); }
