@@ -146,7 +146,8 @@ export default function DashboardPage() {
           class_days: s.class_days || [], assigned_books: s.assigned_books || [], day_schedules: s.day_schedules || {},
           management_notes: s.management_notes || '',
           history, isRedLight: history.includes('poor') || history.includes('bad'),
-          lastSession: logs.filter(l => l.date < selectedDate)[0], todaySession: logs.find(l => l.date === selectedDate),
+          lastSession: logs.filter(l => l.date < selectedDate).find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || logs.filter(l => l.date < selectedDate)[0], 
+          todaySession: logs.find(l => l.date === selectedDate),
           allLogs: logs
         };
       }));

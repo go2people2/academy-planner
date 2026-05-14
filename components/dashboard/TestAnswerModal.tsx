@@ -177,19 +177,19 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
         {/* 입력 영역 */}
         <div className="flex-1 overflow-y-auto p-6 custom-scrollbar-v">
           {activeTab === 'mc' ? (
-            <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-x-8 gap-y-6">
               {Array.from({ length: testInfo.mcCount }).map((_, i) => (
-                <div key={i} className="space-y-2">
-                  <label className="text-[9px] font-black text-gray-600 uppercase">Q{i + 1}</label>
-                  <div className="flex gap-1">
+                <div key={i} className="flex items-center justify-between bg-white/[0.02] border border-white/5 p-3 rounded-[4px] hover:border-white/10 transition-colors">
+                  <label className="text-[11px] font-black text-gray-500 uppercase w-8">Q{i + 1}</label>
+                  <div className="flex gap-2">
                     {[1, 2, 3, 4, 5].map(num => (
                       <button
                         key={num}
                         onClick={() => handleAnswerChange('mc', i, String(num))}
-                        className={`w-7 h-7 rounded-[2px] text-[10px] font-black transition-all border ${
+                        className={`w-10 h-10 rounded-[4px] text-[13px] font-black transition-all border-2 ${
                           answers[`mc_${i}`] === String(num) 
-                            ? 'bg-blue-600 border-blue-500 text-white shadow-lg' 
-                            : 'bg-white/5 border-white/5 text-gray-500 hover:border-white/20'
+                            ? 'bg-blue-600 border-blue-400 text-white shadow-[0_0_15px_rgba(59,130,246,0.5)] scale-110' 
+                            : 'bg-white/5 border-white/10 text-gray-500 hover:border-white/20'
                         }`}
                       >
                         {num}

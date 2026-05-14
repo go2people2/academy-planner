@@ -363,7 +363,14 @@ export function TodaySheetRow({
 
                 {col.id === 'review' && (
                   <div className="flex items-center justify-between gap-2 px-4 py-3 w-full relative group/review">
-                    <div className="flex-1 text-[11px] text-gray-400 font-bold whitespace-pre-wrap leading-snug text-left truncate">{student.lastSession?.homework_text || '-'}</div>
+                    <div className="flex-1 text-[11px] text-gray-400 font-bold whitespace-pre-wrap leading-snug text-left truncate">
+                      {student.lastSession ? (
+                        <>
+                          <div className="text-[9px] text-blue-500/60 font-black mb-0.5">{student.lastSession.date.slice(5).replace('-', '/')}</div>
+                          {student.lastSession.homework_text || '-'}
+                        </>
+                      ) : '-'}
+                    </div>
                     <div className="relative">
                       <button onClick={() => setIsFeedbackOpen(!isFeedbackOpen)} className={`w-8 h-8 rounded-[3px] flex items-center justify-center text-[12px] font-black shrink-0 transition-all shadow-lg active:scale-90 ${statusMap[formData.status as keyof typeof statusMap].color}`}>{statusMap[formData.status as keyof typeof statusMap].label}</button>
                       <AnimatePresence>

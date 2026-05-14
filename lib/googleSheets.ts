@@ -134,10 +134,11 @@ export async function fetchTextbookUnits(bookCode: string) {
  * 구조: [0]test_id, [1]title, [2]mc_answers (쉼표 구분), [3]desc_count
  */
 export async function fetchTestAnswers(testId: string) {
-  const rows = await fetchSheetAsCsv('tests');
+  if (!testId) return null;
+  const rows = await fetchSheetData('tests');
   if (!rows || rows.length <= 1) return null;
 
-  const targetId = testId.trim();
+  const targetId = String(testId).trim();
   const row = rows.slice(1).find(r => (r[0] || '').trim() === targetId);
 
   if (!row) return null;
