@@ -1,12 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   UserCircle, Shield, Key, Trash2, UserPlus, Save, X, Loader2,
-  Lock, Settings as SettingsIcon, Users, Check, Calendar, TrendingUp, MessageSquare
+  Lock, Settings as SettingsIcon, Users, Check, Calendar, TrendingUp, MessageSquare,
+  Clock, AlertTriangle, BookOpen, Hash
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import TestContentEditor from './TestContentEditor';
 
 interface SettingsViewProps {
   teachers: any[];
@@ -20,11 +22,79 @@ interface SettingsViewProps {
 }
 
 export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'tests'>('teachers');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempName, setLocalTempName] = useState('');
+
+  // 💡 테스트 관리 전용 상태
+  const [tests, setTests] = useState<any[]>([]);
+  const [isTestEditorOpen, setIsTestEditorOpen] = useState(false);
+  const [editingTest, setEditingTest] = useState<any>(null);
+
+  // 학원 운영 설정 로컬 상태 (제어 컴포넌트용)
+  const [opSettings, setOpSettings] = useState({
+    first_period_time: "",
+    late_threshold: 0,
+    alert_threshold: 0,
+    timer_presets: [] as number[]
+  });
+
+  // 데이터 로드 여부 추적
+  const [isDataInitialized, setIsDataInitialized] = useState(false);
+
+  // academyInfo 변경 시 로컬 상태 동기화 (최초 1회 또는 값이 있을 때만 안전하게 업데이트)
+  useEffect(() => {
+    const dbSettings = academyInfo?.operation_settings;
+    if (dbSettings && !isDataInitialized) {
+      setOpSettings({
+        first_period_time: dbSettings.first_period_time || "",
+        late_threshold: dbSettings.late_threshold ?? 10,
+        alert_threshold: dbSettings.alert_threshold ?? 15,
+        timer_presets: dbSettings.timer_presets || []
+      });
+      setIsDataInitialized(true);
+    }
+  }, [academyInfo, isDataInitialized]);
+const updateOpSetting = async (key: string, value: any) => {
+  if (!onUpdateAcademyInfo || !academyInfo) return;
+
+  // 💡 중요: 상위의 academyInfo 대신 현재 로컬 상태(opSettings)를 기준으로 병합해야 함
+  // (상태 업데이트가 비동기이므로, 즉시 반영될 새 상태를 직접 계산)
+  const nextSettings = { 
+    ...opSettings, 
+    [key]: value 
+  };
+
+  setOpSettings(nextSettings); // 로컬 UI 즉시 갱신
+  await onUpdateAcademyInfo({ operation_settings: nextSettings });
+};
+
+const updateTimerPreset = async (index: number, value: number) => {
+  if (!onUpdateAcademyInfo || !academyInfo) return;
+  const newPresets = [...opSettings.timer_presets];
+  newPresets[index] = value;
+  const nextSettings = { ...opSettings, timer_presets: newPresets };
+  setOpSettings(nextSettings);
+  await onUpdateAcademyInfo({ operation_settings: nextSettings });
+};
+
+
+  const fetchTests = async () => {
+    const { data, error } = await supabase.from('ams_tests').select('*').order('created_at', { ascending: false });
+    if (!error && data) setTests(data);
+  };
+
+  useEffect(() => {
+    if (activeTab === 'tests') fetchTests();
+  }, [activeTab]);
+
+  const handleDeleteTest = async (id: string) => {
+    if (!confirm('정말 이 테스트를 삭제하시겠습니까? 관련 데이터가 모두 삭제됩니다.')) return;
+    const { error } = await supabase.from('ams_tests').delete().eq('id', id);
+    if (!error) fetchTests();
+  };
 
   const [formData, setFormData] = useState({
     login_id: '',
@@ -64,6 +134,10 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
             <button onClick={() => setActiveTab('notices')} className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'notices' ? 'text-amber-500' : 'text-gray-600 hover:text-gray-400'}`}>
               Notices
               {activeTab === 'notices' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-amber-500" />}
+            </button>
+            <button onClick={() => setActiveTab('tests')} className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'tests' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}>
+              Tests
+              {activeTab === 'tests' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
             </button>
             <button onClick={() => setActiveTab('teachers')} className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'teachers' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}>
               Teachers
@@ -115,6 +189,55 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
                   </div>
                 );
               })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* 💡 테스트 및 정답지 관리 탭 */}
+        {activeTab === 'tests' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><BookOpen size={16} /> Test Content Management</h3>
+              <button 
+                onClick={() => { setEditingTest(null); setIsTestEditorOpen(true); }} 
+                className="px-4 py-2 bg-blue-600 rounded-[2px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20"
+              >
+                <UserPlus size={14} /> Register New Test
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {tests.length === 0 ? (
+                <div className="col-span-full py-20 text-center bg-white/[0.02] border border-white/5 rounded-lg border-dashed">
+                  <BookOpen size={40} className="text-gray-800 mx-auto mb-4 opacity-20" />
+                  <p className="text-xs font-black text-gray-600 uppercase tracking-widest">No tests registered yet</p>
+                </div>
+              ) : (
+                tests.map(test => (
+                  <div key={test.id} className="bg-white/5 border border-white/10 rounded-[4px] p-5 flex flex-col justify-between group hover:border-blue-500/30 transition-all relative overflow-hidden">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-10 h-10 rounded-[4px] bg-blue-600/10 flex items-center justify-center border border-blue-500/20">
+                        <Hash className="text-blue-400" size={18} />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-black text-white truncate group-hover:text-blue-400 transition-colors">{test.title}</h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[9px] font-black text-blue-500 uppercase px-1.5 py-0.5 bg-blue-500/10 rounded-[2px]">{test.test_code}</span>
+                          <span className="text-[9px] font-bold text-gray-600 uppercase tracking-tighter">{test.total_questions} Questions</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                      <p className="text-[8px] font-bold text-gray-600 italic">Created at {new Date(test.created_at).toLocaleDateString()}</p>
+                      <div className="flex gap-2">
+                        <button onClick={() => { setEditingTest(test); setIsTestEditorOpen(true); }} className="px-3 py-1.5 bg-white/5 hover:bg-blue-600 text-[9px] font-black uppercase text-gray-400 hover:text-white rounded-[2px] transition-all">Edit Solutions</button>
+                        <button onClick={() => handleDeleteTest(test.id)} className="p-1.5 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded transition-all"><Trash2 size={14} /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </motion.div>
         )}
@@ -179,6 +302,85 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
                         alert('상담 주기가 변경되었습니다.');
                      }}
                      className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-blue-400 outline-none focus:border-blue-500 transition-all" />
+                </div>
+
+                <div className="pt-6 border-t border-white/5 space-y-6">
+                  <div className="flex items-center gap-3">
+                    <Clock className="text-amber-500" size={20} />
+                    <h3 className="text-sm font-black text-white uppercase tracking-widest">Live Mode & Policy</h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">1교시 시작 시각</label>
+                      <input 
+                        type="time"
+                        value={opSettings.first_period_time || ""}
+                        onChange={(e) => setOpSettings(prev => ({ ...prev, first_period_time: e.target.value }))}
+                        onBlur={(e) => updateOpSetting('first_period_time', e.target.value)}
+                        className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-amber-500 outline-none focus:border-amber-500 transition-all cursor-pointer [color-scheme:dark]"
+                      />
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">지각 기준 (분)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          value={opSettings.late_threshold || 0}
+                          onChange={(e) => setOpSettings(prev => ({ ...prev, late_threshold: parseInt(e.target.value) || 0 }))}
+                          onBlur={(e) => updateOpSetting('late_threshold', parseInt(e.target.value) || 0)}
+                          className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-blue-400 outline-none focus:border-blue-500 transition-all" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-600">분</span>
+                      </div>
+                    </div>
+
+                    <div className="space-y-1">
+                      <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">연락 알림 (분)</label>
+                      <div className="relative">
+                        <input 
+                          type="number" 
+                          value={opSettings.alert_threshold || 0}
+                          onChange={(e) => setOpSettings(prev => ({ ...prev, alert_threshold: parseInt(e.target.value) || 0 }))}
+                          onBlur={(e) => updateOpSetting('alert_threshold', parseInt(e.target.value) || 0)}
+                          className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-red-400 outline-none focus:border-red-500 transition-all" 
+                        />
+                        <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-600">분</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="pt-6 border-t border-white/5">
+                    <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
+                      <Clock size={12} className="text-indigo-500" /> Timer Presets Configuration
+                    </h4>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      {[0, 1, 2].map((idx) => (
+                        <div key={idx} className="space-y-1">
+                          <label className="text-[8px] font-black text-gray-600 uppercase tracking-widest ml-1">Preset {idx + 1} (분)</label>
+                          <input 
+                            type="number" 
+                            value={opSettings.timer_presets[idx] || 0}
+                            onChange={(e) => {
+                              const newPresets = [...opSettings.timer_presets];
+                              newPresets[idx] = parseInt(e.target.value) || 0;
+                              setOpSettings(prev => ({ ...prev, timer_presets: newPresets }));
+                            }}
+                            onBlur={(e) => updateTimerPreset(idx, parseInt(e.target.value) || 0)}
+                            className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-indigo-400 outline-none focus:border-indigo-500 transition-all"
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[10px] text-gray-600 font-medium mt-3 ml-1">
+                      * 라이브 모드의 타이머 탭에서 사용할 3개의 자주 쓰는 시간을 설정할 수 있습니다. 4번째 칸은 라이브 모드에서 직접 입력이 가능합니다.
+                    </p>
+                  </div>
+                  <p className="text-[9px] text-gray-600 italic">
+                    * 1교시 시작 시각은 시간표의 파랑/주황 색상 구분(3교시 단위)의 기준이 됩니다.<br/>
+                    * 지각 및 연락 알림 설정은 수업 시작 (LIVE) 모드에서 실시간으로 반영됩니다.
+                  </p>
                 </div>
              </div>
           </motion.div>
@@ -249,6 +451,17 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
         )}
       </div>
 
+      {/* 테스트 콘텐츠 에디터 모달 */}
+      <AnimatePresence>
+        {isTestEditorOpen && (
+          <TestContentEditor 
+            test={editingTest}
+            onSave={fetchTests}
+            onClose={() => setIsTestEditorOpen(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* 강사 추가 모달 */}
       <AnimatePresence>
         {isAddModalOpen && (
@@ -267,7 +480,7 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Login ID</label>
                     <div className="relative">
-                      <input required value={formData.login_id} onChange={e => setFormData({ ...formData, login_id: e.target.value })}
+                      <input required value={formData.login_id || ''} onChange={e => setFormData({ ...formData, login_id: e.target.value })}
                         className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all" placeholder="ID" />
                       <Key className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
                     </div>
@@ -275,7 +488,7 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Password</label>
                     <div className="relative">
-                      <input required type="password" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })}
+                      <input required type="password" value={formData.password || ''} onChange={e => setFormData({ ...formData, password: e.target.value })}
                         className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all" placeholder="Password" />
                       <Lock className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
                     </div>
@@ -283,7 +496,7 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Teacher Name</label>
                     <div className="relative">
-                      <input required value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })}
+                      <input required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })}
                         className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all" placeholder="Name" />
                       <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
                     </div>

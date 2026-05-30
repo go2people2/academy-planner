@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { fetchTestAnswers } from '@/lib/googleSheets';
+import { supabase } from '@/lib/supabase';
 
 /**
- * 💡 테스트 ID(고유번호)를 기반으로 정답 데이터를 반환하는 API
- * 구글 시트 'tests' 탭에서 데이터를 가져옵니다.
+ * 💡 테스트 코드(test_code)를 기반으로 정답 데이터를 반환하는 API
+ * Supabase 'ams_tests' 테이블에서 데이터를 가져옵니다.
  */
 export async function GET(
   request: Request,
@@ -12,8 +12,14 @@ export async function GET(
   try {
     const { testId } = await params;
 
-    // 💡 구글 시트에서 실제 데이터 조회
-    const testData = await fetchTestAnswers(testId);
+    // 💡 Supabase에서 ams_tests 테이블 조회 (대소문자 구분 없이 검색)
+    const { data: testData, error } = await supabase
+      .from('ams_tests')
+      .select('*')
+      .ilike('test_code', testId.trim())
+      .maybeSingle();
+
+    if (error) throw error;
 
     if (!testData) {
       return NextResponse.json({ error: '존재하지 않는 테스트 번호입니다.' }, { status: 404 });
@@ -21,7 +27,12 @@ export async function GET(
 
     return NextResponse.json({
       success: true,
-      ...testData
+      title: testData.title,
+      mcCount: testData.total_questions,
+      // 💡 단순 정답 배열이 아닌, 문제별 메타데이터 전체를 전달
+      // 구조: [{ ans: "1", video: "...", pdf: "...", desc: "..." }, ...]
+      mcAnswers: testData.answers, 
+      descCount: 0 
     });
 
   } catch (error: any) {

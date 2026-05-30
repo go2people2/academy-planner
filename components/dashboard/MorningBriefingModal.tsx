@@ -91,8 +91,8 @@ export default function MorningBriefingModal({ academyInfo, todayStudents, onClo
 
             <div className="space-y-3">
               {specialCareStudents.length > 0 ? (
-                specialCareStudents.map(s => (
-                  <div key={s.id} className="bg-white/5 border border-white/5 rounded-[4px] p-4 group hover:bg-white/[0.08] transition-all">
+                specialCareStudents.map((s, idx) => (
+                  <div key={s.id || idx} className="bg-white/5 border border-white/5 rounded-[4px] p-4 group hover:bg-white/[0.08] transition-all">
                     <div className="flex items-center justify-between mb-2 pb-2 border-b border-white/5">
                       <div className="flex items-center gap-2">
                         <span className="text-[13px] font-black text-white">{s.name}</span>

@@ -172,7 +172,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                     className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer font-bold text-blue-400"
                   >
                     <option value="" className="bg-[#121212]">미배정 (전체 노출)</option>
-                    {teachers.map(t => <option key={t.id} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                    {teachers.map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
                   </select>
                 </div>
                 <div className="space-y-1.5">
@@ -195,7 +195,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                     className="bg-transparent border-none text-xs text-white outline-none w-full" />
                 </div>
                 <div className="flex-1 overflow-y-auto p-2 custom-scrollbar-v space-y-1">
-                  {filteredBooks.map((book) => {
+                  {filteredBooks.filter(b => !!b.bookcode).map((book) => {
                     const isSelected = formData.assigned_books.includes(book.bookcode);
                     const bookCourse = formData.book_courses[book.bookcode] || formData.course;
                     return (

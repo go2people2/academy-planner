@@ -60,9 +60,9 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
           </div>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar-v p-2 space-y-1">
-          {filteredStudents.map(s => (
+          {filteredStudents.map((s, idx) => (
             <button
-              key={s.id}
+              key={s.id || idx}
               onClick={() => setSelectedStudentId(s.id)}
               className={`w-full flex items-center justify-between p-3 rounded-[2px] transition-all group ${selectedStudentId === s.id ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
             >
@@ -86,8 +86,13 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
             </div>
 
             {selectedStudent.assigned_books.length > 0 ? (
-              selectedStudent.assigned_books.map(bookCode => {
-                const textbook = masterTextbooks.find(m => m.bookcode === bookCode);
+              selectedStudent.assigned_books
+                .filter(code => !!code) // 💡 빈 문자열(코드)은 건너뛰어 중복 키 에러 방지
+                .map(bookCode => {
+                // 💡 더욱 유연한 교재 매칭 (정확히 일치하지 않아도 코드 앞부분이 같으면 매칭 시도)
+                const textbook = masterTextbooks.find(m => m.bookcode === bookCode) || 
+                                masterTextbooks.find(m => m.bookcode.toLowerCase().startsWith(bookCode.toLowerCase())) ||
+                                masterTextbooks.find(m => bookCode.toLowerCase().startsWith(m.bookcode.toLowerCase()));
                 return (
                   <BookProgressRow 
                     key={bookCode}
@@ -141,7 +146,8 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
       if (!textbook) return;
       setIsLoading(true);
       try {
-        const res = await fetch(`/api/textbooks/${bookCode}`);
+        // 💡 학생에게 저장된 코드(bookCode)가 아닌, 마스터 리스트의 실제 코드(textbook.bookcode)로 요청
+        const res = await fetch(`/api/textbooks/${textbook.bookcode}`);
         if (res.ok) {
           const data = await res.json();
           setUnits(data || []);
@@ -149,7 +155,7 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
       } catch (e) { console.error('Fetch units error:', e); } finally { setIsLoading(false); }
     }
     fetchUnits();
-  }, [bookCode, textbook]);
+  }, [textbook]); // textbook.bookcode가 변경되면 다시 호출
 
   const handleFlagClick = async (targetUnitIdx: number) => {
     if (!onSaveLegacy || isSavingLegacy) return;
@@ -159,7 +165,8 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
     if (!confirm(`[${targetUnitName}] 단원을 완료 처리하시겠습니까?\n(기존 기록이 없어도 완료바가 100% 차게 됩니다)`)) return;
 
     setIsSavingLegacy(targetUnitName);
-    const success = await onSaveLegacy(student.id, bookCode, targetUnitName);
+    // 💡 저장 시에도 마스터 리스트의 실제 코드를 사용
+    const success = await onSaveLegacy(student.id, textbook.bookcode, targetUnitName);
     setIsSavingLegacy(null);
 
     if (success) {
@@ -169,10 +176,13 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
 
   const bookHistoryPages = useMemo(() => {
     const pages = new Set<number>();
+    const actualBookCode = textbook?.bookcode || bookCode;
+
     student.allLogs.forEach((log: any) => {
       const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];
       combinedJson.forEach((h: any) => {
-        if (h.book_name === bookCode && h.range) {
+        // 💡 이전 코드와 새 코드 모두에서 히스토리를 찾을 수 있도록 함
+        if ((h.book_name === bookCode || h.book_name === actualBookCode) && h.range) {
           const matches = h.range.match(/p(\d+)\s*[~-]\s*p(\d+)/i) || h.range.match(/p(\d+)\s*[~-]\s*(\d+)/i);
           if (matches) {
             const s = parseInt(matches[1]);
@@ -197,18 +207,54 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
       }
     });
     return Array.from(pages);
-  }, [student.allLogs, bookCode, textbook?.title]);
+  }, [student.allLogs, bookCode, textbook]);
 
   const completedUnitNames = useMemo(() => {
     const names = new Set<string>();
+    const actualBookCode = textbook?.bookcode || bookCode;
+
     student.allLogs.forEach((log: any) => {
-      const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];
-      combinedJson.forEach((h: any) => {
-        if (h.book_name === bookCode && h.units) { h.units.forEach((u: string) => names.add(u)); }
-      });
+      if (log.session_date === '1900-01-01') {
+        const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];
+        combinedJson.forEach((h: any) => {
+          if ((h.book_name === bookCode || h.book_name === actualBookCode) && h.units) { h.units.forEach((u: string) => names.add(u)); }
+        });
+      }
     });
     return names;
-  }, [student.allLogs, bookCode]);
+  }, [student.allLogs, bookCode, textbook]);
+
+  // 💡 누락된 페이지 범위를 계산하는 도우미 함수
+  const getMissingRanges = (start: number, end: number) => {
+    const missing: number[] = [];
+    for (let i = start; i <= end; i++) {
+      if (!bookHistoryPages.includes(i)) missing.push(i);
+    }
+    if (missing.length === 0) return [];
+    
+    // 연속된 숫자를 범위로 묶기 (예: [1, 2, 3, 5, 6] -> ["1~3", "5~6"])
+    const ranges: string[] = [];
+    if (missing.length > 0) {
+      let rStart = missing[0];
+      let rEnd = missing[0];
+      for (let i = 1; i <= missing.length; i++) {
+        if (i < missing.length && missing[i] === rEnd + 1) {
+          rEnd = missing[i];
+        } else {
+          ranges.push(rStart === rEnd ? `${rStart}` : `${rStart}~${rEnd}`);
+          if (i < missing.length) {
+            rStart = missing[i];
+            rEnd = missing[i];
+          }
+        }
+      }
+    }
+    return ranges;
+  };
+
+  const handleSupplement = (unit: string, range: string) => {
+    alert(`[${unit}] 단원의 누락된 p.${range} 내용을 보충 기록해야 진도율이 100%가 됩니다.`);
+  };
 
   const targetGradeRaw = student.book_courses?.[bookCode] || student.course || 'C';
   const isKeep = String(targetGradeRaw).endsWith('-keep');
@@ -285,12 +331,27 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
                   <span className="text-[7px] font-bold text-gray-600 tabular-nums uppercase">p.{startP} ~ {endP}</span>
                 </div>
 
+                {/* 💡 누락 페이지 탐지 표시 */}
+                {!isCompleted && progressRatio < 1 && progressRatio > 0 && (
+                  <div className="mb-2 px-1 py-0.5 bg-red-500/10 border border-red-500/20 rounded-[2px] flex items-center justify-between group/missing">
+                    <span className="text-[7px] font-black text-red-400 uppercase tracking-tighter">
+                      Gap: p.{getMissingRanges(startP, endP).join(', ')}
+                    </span>
+                    <button 
+                      onClick={() => handleSupplement(u.unit, getMissingRanges(startP, endP).join(', '))}
+                      className="text-[6px] font-black bg-red-500 text-white px-1 rounded-[1px] opacity-0 group-hover/missing:opacity-100 transition-opacity"
+                    >
+                      FILL
+                    </button>
+                  </div>
+                )}
+
                 {/* 10단계 정밀 눈금 */}
                 <div className="h-1 flex gap-[1px] mb-2">
                   {[...Array(10)].map((_, i) => {
                     const threshold = (i + 1) * 10;
                     const currentProgress = Math.round(progressRatio * 100);
-                    // 💡 4번째 플래그가 체크되어 있거나 서버에서 완료된 경우 무조건 100% (Active)
+                    // 💡 4번째 플래그가 체크되어 있거나 서버에서 완료된 경우(isCompleted) 무조건 100% (Active)
                     const isStepFinalDone = stepStates[u.unit]?.[3];
                     const isActive = isCompleted || isStepFinalDone || currentProgress >= threshold;
                     return (
@@ -298,7 +359,7 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
                         key={i} 
                         className={`flex-1 rounded-[0.5px] transition-all duration-500 ${
                           isActive 
-                            ? (isCompleted ? 'bg-emerald-500' : 'bg-blue-600') 
+                            ? (isCompleted || isStepFinalDone ? 'bg-emerald-500' : 'bg-blue-600') 
                             : 'bg-white/[0.05]'
                         }`} 
                       />
@@ -346,3 +407,4 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
     </div>
   );
 }
+

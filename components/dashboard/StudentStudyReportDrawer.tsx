@@ -145,7 +145,7 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
       <section className="space-y-4">
         <SectionTitle title="현재 학습 중인 교재" />
         <div className="space-y-2">
-          {student.assigned_books.map((bookCode: string) => {
+          {student.assigned_books.filter(code => !!code).map((bookCode: string) => {
             const bookInfo = availableTextbooks?.find((b: any) => b.bookcode === bookCode);
             const bookTitle = bookInfo?.title || bookCode;
             const bookLogs = student.allLogs.filter((l: any) => l.classwork_text?.includes(bookTitle) || l.homework_text?.includes(bookTitle));
@@ -179,8 +179,8 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
       <section className="space-y-4">
         <SectionTitle title="최근 특이사항" />
         <div className="bg-white/[0.02] border border-white/5 rounded-[4px] p-5 space-y-4">
-          {student.allLogs.filter((l: any) => l.special_notes).slice(0, 2).map((log: any) => (
-            <div key={log.id} className="flex gap-4">
+          {student.allLogs.filter((l: any) => l.special_notes).slice(0, 2).map((log: any, idx: number) => (
+            <div key={log.id || `${log.date}-${idx}`} className="flex gap-4">
               <div className="shrink-0 text-[10px] font-black text-gray-600 tabular-nums pt-1">{log.date}</div>
               <p className="text-[11px] font-medium text-gray-400 leading-relaxed italic">"{log.special_notes}"</p>
             </div>
@@ -285,8 +285,8 @@ function JournalTab({ student }: any) {
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       <SectionTitle title="누적 상담 및 지도 일지" />
       <div className="space-y-3">
-        {student.allLogs.filter((l: any) => l.special_notes).map((log: any) => (
-          <div key={log.id} className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2">
+        {student.allLogs.filter((l: any) => l.special_notes).map((log: any, idx: number) => (
+          <div key={log.id || `${log.date}-${idx}`} className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2">
             <div className="flex justify-between items-center">
               <span className="text-[10px] font-black text-gray-500 flex items-center gap-1.5"><Clock size={12}/> {log.date}</span>
             </div>

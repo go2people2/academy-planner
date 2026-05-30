@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, Zap, StickyNote, Target } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import AddStudentModal from './AddStudentModal';
@@ -28,7 +28,9 @@ interface OverviewProps {
   title?: string;
   showAddButton?: boolean;
   hideTodaySection?: boolean;
-  consultationCycle?: number; // 💡 추가
+  consultationCycle?: number;
+  onStartClass?: () => void;
+  academyInfo?: any;
 }
 
 export default function Overview({ 
@@ -41,7 +43,9 @@ export default function Overview({
   title,
   showAddButton = false,
   hideTodaySection = false,
-  consultationCycle = 21 // 💡 추가
+  consultationCycle = 21,
+  onStartClass,
+  academyInfo
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
@@ -154,43 +158,54 @@ export default function Overview({
                   {todayKey === getDayOfWeek(getTodayStr()) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
                 </h3>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[9px] text-gray-600 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
+                  <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
                     {todayStudents.length} Students
                   </span>
-                  {todayGradeStats.map(([grade, count]) => {
+                  {todayGradeStats.map(([grade, count], idx) => {
                     const isES = grade.includes('초');
                     const isMS = grade.includes('중');
                     const isHS = grade.includes('고');
-                    const colorClass = isES ? 'text-emerald-500/80' : isHS ? 'text-amber-500/80' : 'text-blue-500/80';
+                    const colorClass = isES ? 'text-emerald-400' : isHS ? 'text-amber-400' : 'text-blue-400';
                     return (
-                      <div key={grade} className="flex items-center gap-1 bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded-[2px]">
-                        <span className="text-[7px] font-bold text-gray-600 uppercase">{grade}</span>
-                        <span className={`text-[7px] font-black ${colorClass}`}>{count}</span>
+                      <div key={grade || idx} className="flex items-center gap-1.5 bg-white/[0.04] border border-white/10 px-2 py-1 rounded-[2px] shadow-sm">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">{grade}</span>
+                        <span className={`text-[10px] font-black ${colorClass}`}>{count}</span>
                       </div>
                     );
                   })}
                 </div>
+
               </div>
 
-              <div 
-                onClick={(e) => {
-                  const input = e.currentTarget.querySelector('input');
-                  if (input && 'showPicker' in input) {
-                    try { (input as any).showPicker(); } catch (err) { console.error(err); }
-                  }
-                }}
-                className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative cursor-pointer"
-              >
-                <Calendar size={12} className="group-hover/date:text-blue-500" />
-                <span className="text-[10px] font-black uppercase tracking-tighter">
-                  {selectedDate.replace(/-/g, '.')}
-                </span>
-                <input 
-                  type="date" 
-                  value={selectedDate}
-                  onChange={(e) => onDateChange(e.target.value)}
-                  className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark] z-10"
-                />
+              <div className="flex items-center gap-2">
+                {!isBatchMode && onStartClass && (
+                  <button 
+                    onClick={onStartClass}
+                    className="flex items-center gap-2 px-4 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-blue-600 text-white shadow-lg shadow-blue-900/40 hover:bg-blue-500 transition-all border border-blue-400/20"
+                  >
+                    <Zap size={10} className="fill-current" /> 수업 시작 (LIVE)
+                  </button>
+                )}
+                <div 
+                  onClick={(e) => {
+                    const input = e.currentTarget.querySelector('input');
+                    if (input && 'showPicker' in input) {
+                      try { (input as any).showPicker(); } catch (err) { console.error(err); }
+                    }
+                  }}
+                  className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative cursor-pointer"
+                >
+                  <Calendar size={12} className="group-hover/date:text-blue-500" />
+                  <span className="text-[10px] font-black uppercase tracking-tighter">
+                    {selectedDate.replace(/-/g, '.')}
+                  </span>
+                  <input 
+                    type="date" 
+                    value={selectedDate}
+                    onChange={(e) => onDateChange(e.target.value)}
+                    className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark] z-10"
+                  />
+                </div>
               </div>
             </div>
 
@@ -202,11 +217,11 @@ export default function Overview({
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
-            {todayStudents.map((s) => {
+            {todayStudents.map((s, idx) => {
               const isChecked = selectedToRemove.includes(s.id);
               return (
                 <StudentRowItem
-                  key={s.id}
+                  key={s.id || idx}
                   student={s}
                   isSelected={selectedStudentId === s.id && !isBatchMode}
                   isChecked={isChecked}
@@ -216,6 +231,7 @@ export default function Overview({
                   onViewProgress={onViewProgress}
                   consultationCycle={consultationCycle}
                   onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)}
+                  academyInfo={academyInfo}
                 />
               );
             })}
@@ -229,24 +245,24 @@ export default function Overview({
       <section className={`space-y-2 ${todayStudents.length > 0 ? 'pt-4 border-t border-white/5' : ''}`}>
         <div className="flex items-center justify-between px-1">
           <div className="flex flex-col gap-0.5">
-            <h3 className="text-[11px] font-black uppercase tracking-widest text-gray-500 flex items-center gap-2">
+            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
               <Users size={14} /> 
               {title ? title : (isArchiveMode ? 'Discharged Students Archive' : 'Rest of Students')}
             </h3>
             {!isArchiveMode && (
               <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[9px] text-gray-700 bg-white/5 px-1.5 py-0.5 rounded-[2px] border border-white/5 uppercase font-bold">
+                <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
                   {studentsToDisplay.length} Students
                 </span>
-                {otherGradeStats.map(([grade, count]) => {
+                {otherGradeStats.map(([grade, count], idx) => {
                   const isES = grade.includes('초');
                   const isMS = grade.includes('중');
                   const isHS = grade.includes('고');
-                  const colorClass = isES ? 'text-emerald-500/40' : isHS ? 'text-amber-500/40' : 'text-blue-500/40';
+                  const colorClass = isES ? 'text-emerald-500/60' : isHS ? 'text-amber-500/60' : 'text-blue-500/60';
                   return (
-                    <div key={grade} className="flex items-center gap-1 bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded-[2px]">
-                      <span className="text-[7px] font-bold text-gray-700 uppercase">{grade}</span>
-                      <span className={`text-[7px] font-black ${colorClass}`}>{count}</span>
+                    <div key={grade || idx} className="flex items-center gap-1.5 bg-white/[0.03] border border-white/10 px-2 py-1 rounded-[2px] shadow-sm">
+                      <span className="text-[10px] font-bold text-gray-500 uppercase">{grade}</span>
+                      <span className={`text-[10px] font-black ${colorClass}`}>{count}</span>
                     </div>
                   );
                 })}
@@ -274,20 +290,22 @@ export default function Overview({
             )}
             
             {!isArchiveMode && !hideTodaySection && (
-              <button 
-                onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
-                className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all ${
-                  isBatchMode 
-                    ? 'bg-blue-600 text-white shadow-lg' 
-                    : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
-                }`}
-              >
-                {isBatchMode ? (
-                  <><Check size={10} /> {selectedForBatch.length + selectedToRemove.length} Confirm</>
-                ) : (
-                  <><Users size={10} /> 오늘 수업 변경</>
-                )}
-              </button>
+              <div className="flex gap-2">
+                <button 
+                  onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
+                  className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all ${
+                    isBatchMode 
+                      ? 'bg-blue-600 text-white shadow-lg' 
+                      : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {isBatchMode ? (
+                    <><Check size={10} /> {selectedForBatch.length + selectedToRemove.length} Confirm</>
+                  ) : (
+                    <><Users size={10} /> 오늘 수업 변경</>
+                  )}
+                </button>
+              </div>
             )}
           </div>
         </div>
@@ -304,11 +322,11 @@ export default function Overview({
         </AnimatePresence>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
-          {studentsToDisplay.map((s) => {
+          {studentsToDisplay.map((s, idx) => {
             const isChecked = selectedForBatch.includes(s.id);
             return (
               <StudentRowItem 
-                key={s.id} 
+                key={s.id || idx} 
                 student={s} 
                 isSelected={selectedStudentId === s.id && !isBatchMode} 
                 isChecked={isChecked}
@@ -400,12 +418,16 @@ export default function Overview({
 }
 
 function StudentRowItem({ 
-  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21
+  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21, academyInfo
 }: { 
-  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number, academyInfo?: any
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
-  const isMakeup = student.todaySession?.attendance_status === '보강';
+  const isMakeup = student.todaySession?.attendance_status?.startsWith('보강');
+  
+  const settings = academyInfo?.operation_settings || {};
+  const baseTime = settings.first_period_time || "";
+  const baseHour = baseTime ? parseInt(baseTime.split(':')[0]) : 99; // 최후의 보루
 
   // 💡 정기 상담 알림 로직 (단계별 색상)
   const consultationStatus = useMemo(() => {
@@ -465,21 +487,45 @@ function StudentRowItem({
               보강
             </span>
           )}
-          <span className={`text-[10px] font-bold truncate ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-500'}`}>
+          <span className={`text-[10px] font-bold truncate ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-400'}`}>
             {student.grade} · {student.course} · {student.class}
           </span>
+
+          {/* 💡 주의사항 및 미션 인디케이터 (Hover 시 내용 노출) */}
+          <div className="flex items-center gap-1.5 ml-1">
+            {student.management_notes && (
+              <div className="relative group/tooltip">
+                <StickyNote size={12} className="text-amber-500 opacity-60 group-hover/tooltip:opacity-100 transition-opacity" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-amber-100 text-amber-900 text-[10px] font-bold rounded shadow-xl opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-all z-50 border border-amber-200">
+                  <div className="flex items-center gap-1 mb-1 border-b border-amber-900/10 pb-1 text-[8px] uppercase tracking-tighter opacity-60"><StickyNote size={8} /> Teacher's Note</div>
+                  <div className="whitespace-pre-wrap leading-tight">{student.management_notes}</div>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-amber-100" />
+                </div>
+              </div>
+            )}
+            {student.recent_mission && (
+              <div className="relative group/tooltip">
+                <Target size={12} className="text-blue-500 opacity-60 group-hover/tooltip:opacity-100 transition-opacity" />
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-blue-600 text-white text-[10px] font-bold rounded shadow-xl opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-all z-50 border border-blue-400/30">
+                  <div className="flex items-center gap-1 mb-1 border-b border-white/20 pb-1 text-[8px] uppercase tracking-tighter opacity-60"><Target size={8} /> Current Mission</div>
+                  <div className="whitespace-pre-wrap leading-tight">{student.recent_mission}</div>
+                  <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-blue-600" />
+                </div>
+              </div>
+            )}
+          </div>
         </div>
 
         {student.assigned_books && student.assigned_books.length > 0 && (
           <div className="flex flex-wrap gap-1 items-center">
             {student.assigned_books.filter(code => {
               const bookCourse = student.book_courses?.[code];
-              return !String(bookCourse).endsWith('-keep');
-            }).map(code => {
+              return !!code && !String(bookCourse).endsWith('-keep');
+            }).map((code, idx) => {
               const book = masterTextbooks.find(m => m.bookcode === code);
               if (!book) return null;
               return (
-                <span key={code} className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold truncate max-w-[100px] ${
+                <span key={`${code}-${idx}`} className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold truncate max-w-[100px] ${
                   isSelected || isChecked ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-400 border border-white/5'
                 }`}>
                   {book.title}
@@ -511,7 +557,7 @@ function StudentRowItem({
             
             return (
               <div key={day} className={`flex items-center gap-0.5 px-1 py-0.5 rounded-md ${isToday ? 'bg-white/10 ring-1 ring-white/10' : ''}`}>
-                <span className={`text-[8px] mr-0.5 font-bold ${isToday ? 'text-emerald-400 font-black' : 'text-gray-600'}`}>{day}</span>
+                <span className={`text-[8px] mr-0.5 font-bold ${isToday ? 'text-emerald-400 font-black' : 'text-gray-500'}`}>{day}</span>
                 <div className="flex gap-0.5">
                   {activeHours.map(h => {
                     const isWhite = h >= 100;

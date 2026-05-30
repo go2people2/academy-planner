@@ -228,9 +228,8 @@ const consultationAlerts = useMemo(() => {
               {consultationAlerts.length === 0 ? (
                 <div className="p-10 text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest italic">All consultations up to date</div>
               ) : (
-                consultationAlerts.map(s => (
-                  <div key={s.id} className="p-4 flex items-center justify-between group hover:bg-white/[0.02] transition-colors">
-                    <div className="flex items-center gap-3">
+                consultationAlerts.map((s, idx) => (
+                 <div key={s.id || idx} className="p-4 flex items-center justify-between group hover:bg-white/[0.02] transition-colors">                    <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-[2px] bg-white/5 flex items-center justify-center text-gray-500"><UserCircle size={18} /></div>
                       <div>
                         <h5 className="text-[12px] font-black text-gray-200">{s.name}</h5>

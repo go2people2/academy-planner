@@ -5,7 +5,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   BookOpen, ClipboardCheck, Bell, User, LogOut, 
-  ChevronRight, Loader2, AlertCircle, CheckCircle2, Hash, Clock, TrendingUp, MessageSquare
+  ChevronRight, Loader2, AlertCircle, CheckCircle2, Hash, Clock, TrendingUp, MessageSquare, Target, Zap
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
@@ -29,14 +29,16 @@ export default function StudentPortal() {
   const fetchAllStudentData = useCallback(async (studentId: string) => {
     setIsLoading(true);
     try {
-      // 💡 1. 학원 정보 가져오기 (공지사항 포함)
+      // 💡 1. 학원 정보 가져오기
       const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
       const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
-      if (acData) {
-        setAcademy(acData);
-      }
+      if (acData) setAcademy(acData);
 
-      // 💡 2. 학생 로그 가져오기
+      // 💡 2. 최신 학생 기본 정보 가져오기 (미션 포함)
+      const { data: stData } = await supabase.from('ams_students').select('*').eq('id', studentId).single();
+      if (stData) setStudent(stData);
+
+      // 💡 3. 학생 로그 가져오기
       const { data: logs, error: sErr } = await supabase
         .from('ams_session_logs')
         .select('*')
@@ -165,6 +167,24 @@ export default function StudentPortal() {
         {/* ================================================================================================= */}
         <div className="w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-8 xl:p-12 space-y-10 relative">
           
+          {/* 💡 학생 개별 미션 (신규 추가) */}
+          {student?.recent_mission && (
+            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} className="bg-blue-600/10 border border-blue-500/30 p-6 rounded-lg flex items-center gap-6 shadow-[0_0_20px_rgba(37,99,235,0.15)] relative overflow-hidden group">
+              <div className="absolute top-0 right-0 p-2 opacity-5 group-hover:opacity-10 transition-opacity"><Target size={80} /></div>
+              <div className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-blue-900/40 border border-blue-400/50">
+                <Target className="text-white" size={28} />
+              </div>
+              <div className="relative z-10">
+                <h3 className="text-[10px] font-black text-blue-400 uppercase tracking-[0.3em] mb-1.5 flex items-center gap-2">
+                  <Zap size={10} className="fill-blue-400" /> Current Personal Mission
+                </h3>
+                <p className="text-[20px] font-black text-white leading-tight tracking-tight">
+                  {student.recent_mission}
+                </p>
+              </div>
+            </motion.div>
+          )}
+
           {/* 💡 학원 공지 (오늘의 한마디) 위젯 */}
           {academy?.announcements?.daily && (
             <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-blue-600/5 border border-blue-500/20 p-6 rounded-[4px] flex items-center gap-5 shadow-inner">

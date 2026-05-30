@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck, ClipboardCheck } from 'lucide-react';
+import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck, ClipboardCheck, TrendingUp } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 
 interface StudentDetailDrawerProps {
@@ -29,7 +29,8 @@ export default function StudentDetailDrawer({
   const [localClass, setLocalClass] = useState(student.class);
   const [localPhone, setLocalPhone] = useState(student.phone || '');
   const [localTeacherId, setLocalTeacherId] = useState(student.teacher_id || '');
-  const [localManagementNotes, setLocalManagementNotes] = useState(student.management_notes || ''); // 💡 추가
+  const [localManagementNotes, setLocalManagementNotes] = useState(student.management_notes || ''); 
+  const [localRecentMission, setLocalRecentMission] = useState(student.recent_mission || ''); // 💡 추가
   const [bookSearch, setBookSearch] = useState('');
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -45,8 +46,9 @@ export default function StudentDetailDrawer({
     setLocalClass(student.class);
     setLocalPhone(student.phone || '');
     setLocalTeacherId(student.teacher_id || '');
-    setLocalManagementNotes(student.management_notes || ''); // 💡 동기화
-  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone, student.teacher_id, student.management_notes]);
+    setLocalManagementNotes(student.management_notes || '');
+    setLocalRecentMission(student.recent_mission || ''); // 💡 동기화
+  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone, student.teacher_id, student.management_notes, student.recent_mission]);
 
   const filteredBooks = useMemo(() => {
     return (availableTextbooks || []).filter(b => 
@@ -148,7 +150,7 @@ export default function StudentDetailDrawer({
                   className="flex-1 bg-transparent text-[11px] font-black text-blue-400 outline-none cursor-pointer"
                 >
                   <option value="" className="bg-[#121212]">미배정 (전체 노출)</option>
-                  {teachers.map(t => <option key={t.id} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                  {teachers.map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
                 </select>
               </div>
             </div>
@@ -158,14 +160,14 @@ export default function StudentDetailDrawer({
             <div className="flex flex-col gap-2 py-1 border-y border-white/5 mx-1">
               <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest px-1">Book Courses (Overridable)</label>
               <div className="flex flex-wrap gap-1.5">
-                {student.assigned_books.map(code => {
+                {student.assigned_books.filter(code => !!code).map((code, idx) => {
                   const book = availableTextbooks.find(b => b.bookcode === code);
                   const rawCourseValue = localBookCourses[code] || localCourse;
                   const isKeep = String(rawCourseValue).endsWith('-keep');
                   const currentCourse = isKeep ? rawCourseValue.replace('-keep', '') : rawCourseValue;
 
                   return (
-                    <div key={code} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${isKeep ? 'bg-amber-500/5 border-amber-500/20' : book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
+                    <div key={`${code}-${idx}`} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${isKeep ? 'bg-amber-500/5 border-amber-500/20' : book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
                       <span className={`text-[9px] font-black px-1.5 ${isKeep ? 'text-amber-500' : book ? 'text-gray-400' : 'text-red-400'}`}>
                         {book ? book.title : `(${code})`}
                         {isKeep && <span className="ml-1 text-[7px] bg-amber-500 text-black px-1 rounded-sm uppercase tracking-tighter">Keep</span>}
@@ -276,8 +278,13 @@ export default function StudentDetailDrawer({
                 className="bg-transparent border-none text-[11px] text-white outline-none w-full" />
             </div>
             <div className="flex-1 overflow-y-auto p-2 custom-scrollbar-v space-y-1">
-              {filteredBooks.map((book) => {
-                const isSelected = (student.assigned_books || []).includes(book.bookcode);
+              {filteredBooks.filter(b => !!b.bookcode).map((book) => {
+                // 💡 더욱 유연한 선택 상태 판별 (이전 코드와 새 코드가 섞여 있어도 매칭되도록)
+                const isSelected = (student.assigned_books || []).some(code => 
+                  code === book.bookcode || 
+                  book.bookcode.toLowerCase().startsWith(code.toLowerCase()) ||
+                  code.toLowerCase().startsWith(book.bookcode.toLowerCase())
+                );
                 return (
                   <div key={book.bookcode} onClick={() => toggleBookSelection(book.bookcode)}
                     className={`flex items-center justify-between p-2.5 rounded-[2px] cursor-pointer transition-all border ${isSelected ? 'bg-blue-600/10 border-blue-500/30' : 'hover:bg-white/5 border-transparent'}`}>
@@ -303,16 +310,16 @@ export default function StudentDetailDrawer({
           </div>
           
           <div className="relative group/postit">
-            {/* 💡 포스트잇 배경 및 질감 */}
             <div className="absolute inset-0 bg-amber-200 rounded-sm shadow-[5px_5px_15px_rgba(0,0,0,0.3)] rotate-[-1deg] transition-transform group-hover/postit:rotate-0" />
-            
-            <div className="relative bg-amber-100/90 backdrop-blur-sm p-5 min-h-[160px] rounded-sm flex flex-col shadow-inner">
+            <div className="relative bg-amber-100/90 backdrop-blur-sm p-5 min-h-[120px] rounded-sm flex flex-col shadow-inner">
               <textarea 
                 value={localManagementNotes}
                 maxLength={300}
-                onChange={(e) => setLocalManagementNotes(e.target.value)}
-                onBlur={() => onUpdateInfo(student.id, 'management_notes', localManagementNotes)}
-                placeholder="이 학생에 대해 꼭 기억해야 할 핵심 내용을 적어주세요 (숙제량, 성향 등)..."
+                onChange={(e) => {
+                  setLocalManagementNotes(e.target.value);
+                  onUpdateInfo(student.id, 'management_notes', e.target.value);
+                }}
+                placeholder="이 학생에 대해 꼭 기억해야 할 핵심 내용을 적어주세요 (성향, 주의사항 등)..."
                 className="w-full bg-transparent border-none text-[13px] font-bold text-amber-900/80 outline-none resize-none leading-relaxed placeholder:text-amber-700/30 flex-1 custom-scrollbar-v"
               />
               <div className="flex justify-between items-center mt-3 pt-2 border-t border-amber-900/10">
@@ -322,14 +329,38 @@ export default function StudentDetailDrawer({
                 </span>
               </div>
             </div>
-            
-            {/* 💡 포스트잇 접힌 효과 (하단 구석) */}
             <div className="absolute bottom-0 right-0 w-4 h-4 bg-amber-300/50 rounded-tl-full shadow-[-2px_-2px_5px_rgba(0,0,0,0.1)] pointer-events-none" />
           </div>
-          <p className="text-[9px] text-gray-600 italic px-1 text-center">핵심 내용만 간결하게 기록하는 것을 권장합니다.</p>
         </section>
 
-        {/* 5. 💡 학생 관리 (재원, 퇴원) */}
+        {/* 5. 💡 학생 노출용 미션 설정 (블루 테마) */}
+        <section className="space-y-3 pt-4 border-t border-white/5">
+          <div className="flex items-center justify-between px-1">
+            <h5 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
+              <TrendingUp size={14} /> Student Recent Mission
+            </h5>
+            <span className="text-[8px] font-bold text-gray-600 uppercase">학생 대시보드에 상시 노출</span>
+          </div>
+          
+          <div className="relative group/mission">
+            <div className="relative bg-blue-600/5 border border-blue-500/20 p-5 min-h-[100px] rounded-sm flex flex-col shadow-inner">
+              <textarea 
+                value={localRecentMission}
+                onChange={(e) => {
+                  setLocalRecentMission(e.target.value);
+                  onUpdateInfo(student.id, 'recent_mission', e.target.value);
+                }}
+                placeholder="학생에게 전달할 이번 주 미션을 입력하세요..."
+                className="w-full bg-transparent border-none text-[12px] font-bold text-blue-100 placeholder:text-blue-500/30 outline-none resize-none flex-1 leading-relaxed"
+              />
+              <div className="absolute bottom-2 right-2 opacity-20 group-hover/mission:opacity-40 transition-opacity">
+                <TrendingUp size={32} className="text-blue-400" />
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* 6. 💡 학생 관리 (재원, 퇴원) */}
         <section className="space-y-4 pt-10 border-t border-white/5">
           <h5 className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2 px-1"><AlertTriangle size={14} /> Student Management</h5>
           <div className="flex flex-col gap-2">

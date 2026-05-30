@@ -7,7 +7,10 @@
  */
 export function getDayOfWeek(dateStr: string): string {
   const days = ['일', '월', '화', '수', '목', '금', '토'];
-  return days[new Date(dateStr).getDay()];
+  // 💡 new Date(dateStr)은 UTC로 처리되어 타임존에 따라 요일이 바뀔 수 있음
+  // 하이픈으로 분리하여 로컬 시각 기준으로 생성해야 정확함
+  const [year, month, day] = dateStr.split('-').map(Number);
+  return days[new Date(year, month - 1, day).getDay()];
 }
 
 /**

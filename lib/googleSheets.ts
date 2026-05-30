@@ -79,13 +79,21 @@ export async function fetchTextbookMasterList(): Promise<TextbookMaster[]> {
   if (!rows || rows.length <= 1) return [];
 
   // [0]bookcode, [1]book(title), [2]grade, [3]status, [4]e-period
-  return rows.slice(1).map((row) => ({
+  const list = rows.slice(1).map((row) => ({
     bookcode: row[0] || '',
     title: row[1] || '',
     grade: row[2] || '',
     status: row[3] || '',
     ePeriod: row[4] || '',
   })).filter(item => item.bookcode && item.status !== '비활성');
+
+  // 💡 중복된 bookcode 제거 (React Key 충돌 방지)
+  const uniqueMap = new Map();
+  list.forEach(item => {
+    uniqueMap.set(item.bookcode, item);
+  });
+  
+  return Array.from(uniqueMap.values());
 }
 
 /**

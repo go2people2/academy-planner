@@ -83,11 +83,11 @@ export default function Sidebar({
     <aside className="w-52 border-r border-white/5 bg-[#0a0a0a]/90 backdrop-blur-2xl flex flex-col p-3 sticky top-0 h-screen z-30">
       {/* 내비게이션 제어 */}
       <div className="flex items-stretch gap-1 mb-6">
-        <button onClick={() => window.history.back()} className="flex-1 py-3 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
-          <ChevronLeft size={16} className="group-hover:-translate-x-1 transition-transform" />
+        <button onClick={() => window.history.back()} className="flex-1 py-1.5 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
+          <ChevronLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
         </button>
-        <button onClick={() => window.history.forward()} className="flex-1 py-3 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
-          <ChevronRight size={16} className="group-hover:translate-x-1 transition-transform" />
+        <button onClick={() => window.history.forward()} className="flex-1 py-1.5 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
+          <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
 
@@ -237,7 +237,7 @@ export default function Sidebar({
               <div className="relative group">
                 <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-400 outline-none appearance-none cursor-pointer hover:bg-white/10 hover:text-white hover:border-white/20 transition-all">
                   <option value="All" className="bg-[#121212]">All Teachers (전체)</option>
-                  {(teachers || []).map(t => <option key={t.id} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                  {(teachers || []).map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
                 </select>
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors"><UserCircle size={12} /></div>
               </div>

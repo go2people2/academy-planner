@@ -24,6 +24,7 @@ export interface SessionLog {
   test_id?: string;
   test_score?: number | string;
   test_score_type?: 'score' | 'count'; // 💡 추가
+  test_total_count?: number; // 💡 신규 추가
   test_result?: string;
   report_sent_at?: string;
 }
@@ -46,6 +47,7 @@ export interface Student {
   assigned_books: string[];
   day_schedules: Record<string, number[]>;
   management_notes?: string; // 💡 추가 (선생님 전용 관리 메모)
+  recent_mission?: string; // 💡 추가 (학생용 개별 미션)
   history: StudentStatus[];
   isRedLight: boolean;
   lastSession?: SessionLog;
