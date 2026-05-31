@@ -166,8 +166,14 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       const day = getDayOfWeek(selectedDate);
       const hours = s.day_schedules?.[day] || [];
       const hasRegularSession = hours.length > 0;
-      const isMakeupOrManual = !!s.todaySession;
-      if (!((hasRegularSession || isMakeupOrManual) && status !== '수업제외')) return false;
+      
+      // 💡 '실제 수업' 판정 로직:
+      // 1. 정규 시간표가 있는 학생
+      // 2. 혹은 임시(temp)가 아닌 실제 DB 기록이 있는 학생
+      // 3. 혹은 오늘 수동으로 출결이나 보강 처리가 된 학생 (temp 이더라도 status가 있음)
+      const isRealSession = session && (session.id !== 'temp' || (status !== '' && status !== 'none'));
+      
+      if (!((hasRegularSession || isRealSession) && status !== '수업제외')) return false;
       if (selectedTeacherId && selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
       
       const studentHour = getStudentHour(s);
@@ -354,7 +360,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                       <div className={`px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] shadow-lg ${studentHour === 999 ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-400' : studentHour < currentHour ? 'bg-white/5 border-white/10 text-gray-600' : studentHour === currentHour ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-blue-600/20 border-blue-500/30 text-blue-400'}`}>
                         {studentHour === 999 ? '보강 / 기타 수업' : (studentHour >= 12 ? (studentHour === 12 ? `오후 12:${displayMinute}` : `오후 ${studentHour-12}:${displayMinute}`) : `오전 ${studentHour}:${displayMinute}`) + ' 수업'}
                       </div>
-                      {studentHour !== 999 && (studentHour <= currentHour || selectedDate !== getTodayStr()) && !isAnyMarked && (
+                      {studentHour !== 999 && (
                         <div className="flex items-center gap-2">
                           <span className={`text-[10px] font-black px-2 py-0.5 rounded border uppercase tracking-widest ${
                             selectedDate !== getTodayStr()

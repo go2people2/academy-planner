@@ -267,7 +267,11 @@ export default function TodaySheet({
       if (dataMatrix.length > 1 && dataMatrix[dataMatrix.length - 1].length === 1 && dataMatrix[dataMatrix.length - 1][0] === '') dataMatrix.pop();
       const isSingle = dataMatrix.length === 1 && dataMatrix[0].length === 1;
       const isEditing = !!editingCell;
-      if (isInputTarget && isEditing && isSingle) return;
+
+      // 💡 편집 중(입력창 활성 상태)일 때는 브라우저의 기본 붙여넣기 동작을 허용하여 
+      // 한 셀 내에 모든 내용이 들어가도록 합니다. (쪼개짐 방지)
+      if (isEditing) return;
+
       e.preventDefault();
       const updates: any[] = [];
       const startColIdx = activeColumns.findIndex(col => col.id === activeCell.columnId);
@@ -609,7 +613,6 @@ export default function TodaySheet({
                       onCellMouseDown={onCellMouseDown} 
                       onCellMouseEnter={onCellMouseEnter} 
                     />
-                    <HistoryRows student={s} activeColumns={activeColumns} colWidths={colWidths} isExpanded={!!expandedHistory[s.id]} />
                   </React.Fragment>
                 );
               });

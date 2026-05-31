@@ -1,9 +1,10 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
 import { getDayOfWeek } from '@/lib/utils';
@@ -60,8 +61,9 @@ interface TodaySheetCellProps {
   onOpenPdf: (e: React.MouseEvent) => void;
   onExecuteTest: (e: React.MouseEvent) => void;
   onSetNextQuizCut: (val: number) => void;
+  onSetTodayTestCut: (val: number) => void; // 💡 추가
   onSetNextQuizTrial: (num: number) => void;
-  onSave: () => void;
+  onSave: (data?: any) => void;
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
@@ -72,7 +74,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onCellMouseDown, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle, 
   onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback, 
   onOpenCwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal, 
-  onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetNextQuizTrial, onSave 
+  onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave 
 }: TodaySheetCellProps) {
   
   const colId = col.id;
@@ -105,6 +107,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       }
     });
   }, [isEditing, isActive, currentText, testRef, cwRef, hwRef, nqRef, missionRef, notesRef]);
+
+  // 💡 커트라인 픽커 전용 상태
+  const [isCutPickerOpen, setIsCutPickerOpen] = useState(false);
+  const [pickerCoords, setPickerCoords] = useState({ top: 0, left: 0 });
+
+  const handleOpenCutPicker = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    const rect = e.currentTarget.getBoundingClientRect();
+    setPickerCoords({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
+    setIsCutPickerOpen(true);
+  };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
   const commonTextStyle = `w-full text-[12px] leading-[18px] text-left text-white font-black px-4 ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
@@ -142,32 +155,24 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'name' && (
           <div className="flex items-center justify-between gap-3 px-4 py-2.5 w-full h-[56px] relative group/namecell">
-            <div className="flex flex-col min-w-0 overflow-hidden items-start text-left">
-              <div className="flex items-center gap-2">
-                <span className="font-black text-white text-[14px] tracking-tight truncate">{student.name}</span>
-                {isCompleted && <Check size={12} className="text-emerald-500 stroke-[3px]" />}
-              </div>
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[9px] font-black text-gray-500 uppercase tracking-tighter truncate">{student.grade}</span>
-                {/* 💡 실시간 시간표 진단 라벨 */}
-                {(() => {
-                  const dayKey = getDayOfWeek(displayDateShort.includes('.') ? `${new Date().getFullYear()}-${displayDateShort.replace('.', '-')}` : new Date().toISOString().split('T')[0]);
-                  const status = formData.attendance_status || '';
-                  let detectedTime = '';
-                  
-                  if (status.includes(':')) {
-                    detectedTime = `${status.split(':').pop()}시 (수동)`;
-                  } else {
-                    const hours = student.day_schedules?.[dayKey] || [];
-                    if (hours.length > 0) {
-                      const minH = Math.min(...hours.map((h: any) => h % 100));
-                      detectedTime = `${minH}시 (정규)`;
-                    } else {
-                      detectedTime = '시간표없음';
-                    }
-                  }
-                  return <span className="text-[8px] font-black text-blue-500/60 bg-blue-500/10 px-1.5 py-0.5 rounded-sm border border-blue-500/20 tabular-nums">[{dayKey}] {detectedTime}</span>;
-                })()}
+            <div className="absolute top-0 right-0 flex items-center gap-0">
+              {student.suggestions && student.suggestions.length > 0 && (
+                <div className="group/suggestion relative">
+                  <div className="w-0 h-0 border-t-[22px] border-t-blue-500 border-l-[22px] border-l-transparent shadow-md" />
+                </div>
+              )}
+              {student.management_notes && (
+                <div className="group/note relative">
+                  <div className="w-0 h-0 border-t-[22px] border-t-amber-500 border-l-[22px] border-l-transparent shadow-md" />
+                </div>
+              )}
+            </div>
+            <div className="flex flex-col min-w-0">
+              <span className="text-[13px] font-black text-white truncate group-hover/namecell:text-blue-400 transition-colors">
+                {student.name}-{student.teacher_initial || '?'}-{student.class_days?.join('') || '무'}
+              </span>
+              <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-tighter truncate text-gray-500">
+                {student.school} · {student.grade}
               </div>
             </div>
             {onViewProgress && (
@@ -177,15 +182,27 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'attendance' && (
-          <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-black cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${formData.attendance_status?.startsWith('출석') ? 'text-emerald-400' : formData.attendance_status?.startsWith('결석') ? 'text-red-400' : 'text-amber-400'}`}>
+          <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-black cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
+            (formData.attendance_status?.startsWith('출석') || !formData.attendance_status) ? 'text-emerald-400' : 
+            formData.attendance_status?.startsWith('결석') ? 'text-red-400' : 
+            'text-amber-400'
+          }`}>
             {formData.attendance_status?.split(':')[0] || '출석'}
           </div>
         )}
 
         {colId === 'review' && (
-          <div className="relative w-full h-full flex items-start justify-start py-2.5 px-4">
-            <div className="text-[12px] leading-[18px] text-gray-200 font-black whitespace-pre-wrap">
-              {student.lastSession?.homework_text || <span className="italic opacity-50 text-gray-600 font-medium">기존 숙제 없음</span>}
+          <div className="relative w-full h-full flex items-stretch justify-start bg-blue-600/[0.03]">
+            <div className="flex-1 py-3 px-4 flex flex-col justify-center text-left">
+              {student.lastSession?.homework_text ? (
+                <p className="text-[12px] font-bold text-blue-200 leading-tight italic whitespace-pre-wrap">
+                  <span className="text-blue-500/80 text-[16px] font-black mr-1">"</span>
+                  {student.lastSession.homework_text}
+                  <span className="text-blue-500/80 text-[16px] font-black ml-1">"</span>
+                </p>
+              ) : (
+                <span className="italic opacity-30 text-gray-500 font-medium text-[11px] px-2">기존 숙제 없음</span>
+              )}
             </div>
           </div>
         )}
@@ -198,7 +215,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 defaultValue={currentText || ''} 
                 autoFocus={isEditing} 
                 onKeyDown={(e) => handleKeyDown(e, colId)} 
-                onBlur={onSave} 
+                onBlur={() => onSave()} 
                 placeholder="-" 
                 className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block ${!isEditing ? 'opacity-0 pointer-events-none absolute inset-0' : 'relative z-10'}`} 
                 onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = `${t.scrollHeight}px`; }} 
@@ -208,6 +225,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             {!isEditing && (
               <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[56px] flex flex-col items-start justify-start`}>
                 <div className="w-full">{currentText || '-'}</div>
+                {colId === 'test_id' && formData.test_cut > 0 && (
+                  <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter">
+                    Cut: {formData.test_cut}개
+                  </div>
+                )}
                 {colId === 'next_quiz' && formData.next_quiz_cut > 0 && (
                   <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter">
                     Cut: {formData.next_quiz_cut}개
@@ -216,27 +238,53 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               </div>
             )}
             
-            <div className="absolute right-1 top-1 flex flex-col gap-1 opacity-0 group-hover/cell:opacity-100 transition-opacity z-30">
+            <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100 transition-opacity z-30">
               {colId === 'test_id' && (
                 <>
+                  <button 
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      let nextStatus: boolean | undefined = undefined;
+                      // 💡 cycle: 없음 -> 완료(true) -> 미완료(false) -> 없음
+                      if (formData.test_completed === undefined || formData.test_completed === null) nextStatus = true;
+                      else if (formData.test_completed === true) nextStatus = false;
+                      else nextStatus = undefined;
+                      onSave({ test_completed: nextStatus }); 
+                    }} 
+                    className={`w-5 h-5 rounded-[1px] border transition-all flex items-center justify-center shadow-sm ${
+                      formData.test_completed === true ? 'bg-emerald-600 text-white border-emerald-400' : 
+                      formData.test_completed === false ? 'bg-rose-600 text-white border-rose-500' : 
+                      'bg-white/10 text-gray-500 border-white/20 hover:bg-white/20'
+                    }`}
+                    title={
+                      formData.test_completed === true ? "테스트 완료 (다음 수업 시 새 테스트 준비)" : 
+                      formData.test_completed === false ? "미완료 (다음 수업 시 이 테스트를 다시 가져옴)" : 
+                      "테스트 없음 (클릭하여 완료/미완료 상태 지정)"
+                    }
+                  >
+                    {formData.test_completed === true ? <Check size={10} strokeWidth={4} /> : 
+                     formData.test_completed === false ? <Clock size={10} strokeWidth={4} /> : 
+                     <Circle size={8} fill="currentColor" className="opacity-30" />}
+                  </button>
+
+                  {/* 💡 오늘 테스트 커트라인 픽커 버튼 */}
+                  <div onClick={handleOpenCutPicker} className="relative cursor-pointer group/cut">
+                    <div className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 group-hover/cut:bg-emerald-600 group-hover/cut:text-white transition-all shadow-sm flex items-center justify-center">
+                      <span className="text-[10px] font-black">{formData.test_cut || 0}</span>
+                    </div>
+                  </div>
+
                   {formData.test_id && <button onClick={onOpenPdf} className="w-5 h-5 rounded-[1px] bg-red-600/30 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><FileText size={10} /></button>}
                   <button onClick={onOpenTestEditor} className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
-                  <button onClick={onOpenTestModal} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><ClipboardList size={10} /></button>
                 </>
               )}
               {colId === 'next_quiz' && (
                 <div className="flex items-center gap-1">
-                  <button onClick={(e) => { e.stopPropagation(); onExecuteTest(e); }} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm" title="오늘 테스트로 이동"><TrendingUp size={10} /></button>
                   <button onClick={onOpenNqEditor} className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
-                  <div className="relative group/cut">
-                    <select 
-                      value={formData.next_quiz_cut || 0} 
-                      onChange={(e) => onSetNextQuizCut(parseInt(e.target.value))} 
-                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                    >
-                      {[...Array(11)].map((_, i) => <option key={i} value={i} className="bg-[#121212]">{i}개</option>)}
-                    </select>
-                    <div className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all shadow-sm flex items-center justify-center">
+                  
+                  {/* 💡 다음 테스트 커스텀 커트라인 픽커 버튼 */}
+                  <div onClick={handleOpenCutPicker} className="relative cursor-pointer group/cut">
+                    <div className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 group-hover/cut:bg-emerald-600 group-hover/cut:text-white transition-all shadow-sm flex items-center justify-center">
                       <span className="text-[10px] font-black">{formData.next_quiz_cut || 0}</span>
                     </div>
                   </div>
@@ -245,6 +293,54 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               {(colId === 'classwork' || colId === 'assign') && (
                 <button onClick={colId === 'classwork' ? onOpenCwEditor : onOpenHwEditor} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
               )}
+
+              {/* 💡 [공용] 포탈로 띄우는 정사각형 픽커 */}
+              {isCutPickerOpen && createPortal(
+                <>
+                  <div className="fixed inset-0 z-[1000]" onClick={() => setIsCutPickerOpen(false)} />
+                  <motion.div 
+                    initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
+                    style={{ top: pickerCoords.top + 5, left: Math.min(pickerCoords.left, window.innerWidth - 180) }}
+                    className="fixed z-[1001] bg-[#121212] border border-emerald-500/30 rounded-lg shadow-2xl p-4 w-44 space-y-4"
+                  >
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {[0, 1, 2, 3, 4].map(num => (
+                        <button 
+                          key={num} 
+                          onClick={() => { 
+                            if (colId === 'test_id') onSetTodayTestCut(num);
+                            else onSetNextQuizCut(num);
+                            setIsCutPickerOpen(false); 
+                          }}
+                          className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black transition-all border ${Number(colId === 'test_id' ? formData.test_cut : formData.next_quiz_cut) === num ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-white/5 border-white/10 text-white hover:bg-emerald-500/30'}`}
+                        >
+                          {num}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="pt-3 border-t border-white/5 flex flex-col gap-2">
+                      <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Custom Cut</label>
+                      <input 
+                        type="number"
+                        autoFocus
+                        placeholder="직접 입력"
+                        defaultValue={colId === 'test_id' ? formData.test_cut : formData.next_quiz_cut}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            const val = parseInt((e.target as HTMLInputElement).value);
+                            const finalVal = isNaN(val) ? 0 : val;
+                            if (colId === 'test_id') onSetTodayTestCut(finalVal);
+                            else onSetNextQuizCut(finalVal);
+                            setIsCutPickerOpen(false);
+                          }
+                        }}
+                        className="w-full bg-black/40 border border-white/10 rounded-md px-3 py-2 text-xs font-bold text-white outline-none focus:border-emerald-500 [color-scheme:dark]"
+                      />
+                    </div>
+                  </motion.div>
+                </>,
+                document.body
+              )}
             </div>
           </div>
         )}
@@ -252,7 +348,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         {colId === 'test_score' && (
           <div className="relative w-full h-full flex items-center justify-start group/score">
             {(isEditing || isActive) && (
-              <input ref={scoreInputRef} type="text" defaultValue={formData.test_score || ''} autoFocus={isEditing} onKeyDown={(e) => handleKeyDown(e, colId)} onBlur={onSave} placeholder="-" className="w-full h-[56px] bg-transparent border-0 outline-none px-4 text-[14px] text-left text-emerald-400 font-black pr-4 m-0" />
+              <input ref={scoreInputRef} type="text" defaultValue={formData.test_score || ''} autoFocus={isEditing} onKeyDown={(e) => handleKeyDown(e, colId)} onBlur={() => onSave()} placeholder="-" className="w-full h-[56px] bg-transparent border-0 outline-none px-4 text-[14px] text-left text-emerald-400 font-black pr-4 m-0" />
             )}
             {!isEditing && (
               <div className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full h-[56px] flex items-center justify-start">

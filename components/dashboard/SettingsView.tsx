@@ -28,10 +28,19 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempName, setLocalTempName] = useState('');
 
-  // 💡 테스트 관리 전용 상태
+  // 💡 테스트 및 시험 관리 상태
   const [tests, setTests] = useState<any[]>([]);
+  const [examSchedules, setExamSchedules] = useState<any[]>([]);
   const [isTestEditorOpen, setIsTestEditorOpen] = useState(false);
   const [editingTest, setEditingTest] = useState<any>(null);
+
+  // 💡 신규 시험 일정 추가용 상태
+  const [newExam, setNewExam] = useState({
+    school_name: '',
+    grade: '',
+    exam_name: '',
+    target_date: new Date().toISOString().split('T')[0]
+  });
 
   // 학원 운영 설정 로컬 상태 (제어 컴포넌트용)
   const [opSettings, setOpSettings] = useState({
@@ -86,9 +95,38 @@ const updateTimerPreset = async (index: number, value: number) => {
     if (!error && data) setTests(data);
   };
 
+  const fetchExams = async () => {
+    const { data, error } = await supabase.from('ams_exam_schedules').select('*').order('target_date', { ascending: true });
+    if (!error && data) setExamSchedules(data);
+  };
+
   useEffect(() => {
     if (activeTab === 'tests') fetchTests();
+    if (activeTab === 'exams') fetchExams();
   }, [activeTab]);
+
+  const handleAddExam = async () => {
+    if (!newExam.school_name || !newExam.target_date || !academyInfo) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase.from('ams_exam_schedules').insert([{
+        academy_id: academyInfo.id,
+        school_name: newExam.school_name,
+        grade: newExam.grade || null,
+        exam_name: newExam.exam_name || '정기고사',
+        target_date: newExam.target_date
+      }]);
+      if (error) throw error;
+      setNewExam({ school_name: '', grade: '', exam_name: '', target_date: new Date().toISOString().split('T')[0] });
+      await fetchExams();
+    } catch (e) { console.error(e); alert('시험 일정 추가 중 오류가 발생했습니다.'); } finally { setIsSaving(false); }
+  };
+
+  const handleDeleteExam = async (id: string) => {
+    if (!confirm('정말 이 시험 일정을 삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('ams_exam_schedules').delete().eq('id', id);
+    if (!error) fetchExams();
+  };
 
   const handleDeleteTest = async (id: string) => {
     if (!confirm('정말 이 테스트를 삭제하시겠습니까? 관련 데이터가 모두 삭제됩니다.')) return;
@@ -138,6 +176,10 @@ const updateTimerPreset = async (index: number, value: number) => {
             <button onClick={() => setActiveTab('tests')} className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'tests' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}>
               Tests
               {activeTab === 'tests' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-blue-500" />}
+            </button>
+            <button onClick={() => setActiveTab('exams')} className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'exams' ? 'text-rose-500' : 'text-gray-600 hover:text-gray-400'}`}>
+              Exams
+              {activeTab === 'exams' && <motion.div layoutId="tab-underline" className="absolute bottom-0 left-0 right-0 h-0.5 bg-rose-500" />}
             </button>
             <button onClick={() => setActiveTab('teachers')} className={`pb-3 px-2 text-xs font-black uppercase tracking-widest transition-all relative ${activeTab === 'teachers' ? 'text-blue-500' : 'text-gray-600 hover:text-gray-400'}`}>
               Teachers
@@ -189,6 +231,80 @@ const updateTimerPreset = async (index: number, value: number) => {
                   </div>
                 );
               })}
+            </div>
+          </motion.div>
+        )}
+
+        {/* 💡 학교별 시험 일정 관리 탭 */}
+        {activeTab === 'exams' && (
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Calendar size={16} /> School Exam Schedules</h3>
+              <p className="text-[10px] text-gray-600 font-bold">학교명과 학년이 일치하는 학생에게 자동으로 디데이가 표시됩니다.</p>
+            </div>
+
+            {/* 신규 일정 추가 폼 */}
+            <div className="bg-rose-600/5 border border-rose-500/20 rounded-[4px] p-6 grid grid-cols-1 md:grid-cols-5 gap-4 items-end shadow-inner">
+              <div className="space-y-1 md:col-span-1">
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">학교 이름</label>
+                <input type="text" placeholder="예: 현대고" value={newExam.school_name} onChange={e => setNewExam({...newExam, school_name: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-rose-500 transition-all" />
+              </div>
+              <div className="space-y-1 md:col-span-1">
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">적용 학년 (선택)</label>
+                <input type="text" placeholder="예: 고1 (비워두면 전학년)" value={newExam.grade} onChange={e => setNewExam({...newExam, grade: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-rose-500 transition-all" />
+              </div>
+              <div className="space-y-1 md:col-span-1">
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">시험 명칭</label>
+                <input type="text" placeholder="예: 1학기 기말" value={newExam.exam_name} onChange={e => setNewExam({...newExam, exam_name: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-rose-500 transition-all" />
+              </div>
+              <div className="space-y-1 md:col-span-1">
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">시험 날짜</label>
+                <input type="date" value={newExam.target_date} onChange={e => setNewExam({...newExam, target_date: e.target.value})}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2.5 text-xs font-bold text-white outline-none focus:border-rose-500 transition-all [color-scheme:dark]" />
+              </div>
+              <button onClick={handleAddExam} disabled={isSaving} className="md:col-span-1 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-black rounded-[2px] uppercase tracking-widest transition-all shadow-lg shadow-rose-900/20 flex items-center justify-center gap-2">
+                {isSaving ? <Loader2 size={12} className="animate-spin" /> : <><Save size={12} /> Add Schedule</>}
+              </button>
+            </div>
+
+            {/* 일정 목록 */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {examSchedules.length === 0 ? (
+                <div className="col-span-full py-20 text-center bg-white/[0.02] border border-white/5 rounded-lg border-dashed">
+                  <Calendar size={40} className="text-gray-800 mx-auto mb-4 opacity-20" />
+                  <p className="text-xs font-black text-gray-600 uppercase tracking-widest">No exam schedules registered yet</p>
+                </div>
+              ) : (
+                examSchedules.map(exam => (
+                  <div key={exam.id} className="bg-white/5 border border-white/10 rounded-[4px] p-5 flex flex-col justify-between group hover:border-rose-500/30 transition-all relative overflow-hidden">
+                    <div className="flex items-center gap-4 mb-4">
+                      <div className="w-10 h-10 rounded-[4px] bg-rose-600/10 flex items-center justify-center border border-rose-500/20">
+                        <Calendar className="text-rose-400" size={18} />
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-sm font-black text-white truncate">{exam.school_name} <span className="text-rose-400 ml-1">{exam.grade || '전학년'}</span></h4>
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-[10px] font-black text-gray-300 uppercase">{exam.exam_name}</span>
+                          <span className="text-[10px] font-black text-rose-500 tabular-nums">{exam.target_date.replace(/-/g, '.')}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center justify-between border-t border-white/5 pt-4">
+                      <div className="flex items-center gap-2">
+                        <Clock size={12} className="text-gray-600" />
+                        <span className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter">
+                          {Math.ceil((new Date(exam.target_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24))} Days Left
+                        </span>
+                      </div>
+                      <button onClick={() => handleDeleteExam(exam.id)} className="p-1.5 text-gray-600 hover:text-red-500 hover:bg-red-500/10 rounded transition-all opacity-0 group-hover:opacity-100"><Trash2 size={14} /></button>
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           </motion.div>
         )}
@@ -302,6 +418,29 @@ const updateTimerPreset = async (index: number, value: number) => {
                         alert('상담 주기가 변경되었습니다.');
                      }}
                      className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-blue-400 outline-none focus:border-blue-500 transition-all" />
+                </div>
+
+                {/* 💡 학생 페이지 마스터 패스키 설정 추가 */}
+                <div className="space-y-1">
+                   <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Student Access Passkey (마스터 패스키)</label>
+                   <div className="relative group">
+                     <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-400 transition-colors" />
+                     <input 
+                       type="text" 
+                       maxLength={4}
+                       defaultValue={academyInfo?.student_passkey || '2324'}
+                       placeholder="4자리 숫자 입력"
+                       onBlur={async (e) => {
+                          if (!onUpdateAcademyInfo) return;
+                          const val = e.target.value.replace(/[^0-9]/g, '');
+                          if (val.length !== 4) { alert('패스키는 숫자 4자리여야 합니다.'); return; }
+                          await onUpdateAcademyInfo({ student_passkey: val });
+                          alert('학생 페이지 패스키가 변경되었습니다.');
+                       }}
+                       className="w-full bg-black/40 border border-white/10 rounded-[2px] pl-12 pr-4 py-3 text-sm font-black text-amber-400 outline-none focus:border-blue-500 transition-all" 
+                     />
+                   </div>
+                   <p className="text-[8px] text-gray-600 italic ml-1">* 이 번호를 입력하면 모든 학생의 페이지에 접속할 수 있습니다. (기본값: 2324)</p>
                 </div>
 
                 <div className="pt-6 border-t border-white/5 space-y-6">

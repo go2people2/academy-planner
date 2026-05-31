@@ -136,10 +136,19 @@ const consultationAlerts = useMemo(() => {
   });
 }, [students]);
 
+// 6. 학생 건의사항 알림 계산
+const suggestionAlerts = useMemo(() => {
+  return tasks.filter(t => t.title.startsWith('[건의]') && !t.is_completed);
+}, [tasks]);
+
   const filteredTasks = useMemo(() => {
     if (filterTab === 'all') return tasks;
-    return tasks.filter(t => t.display_period_type === filterTab);
+    return tasks.filter(t => t.display_period_type === filterTab && !t.title.startsWith('[건의]'));
   }, [tasks, filterTab]);
+
+  const mainTasks = useMemo(() => {
+    return filteredTasks.filter(t => !t.title.startsWith('[건의]'));
+  }, [filteredTasks]);
 
   return (
     <div className="p-8 space-y-10 bg-[#080808] min-h-full max-w-5xl mx-auto">
@@ -180,10 +189,10 @@ const consultationAlerts = useMemo(() => {
           <div className="space-y-3">
             {isLoading ? (
               <div className="py-20 text-center text-gray-600 animate-pulse text-[10px] font-black uppercase tracking-widest">Loading tasks...</div>
-            ) : filteredTasks.length === 0 ? (
+            ) : mainTasks.length === 0 ? (
               <div className="py-20 border border-dashed border-white/5 rounded-[4px] text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest">No tasks found in this period</div>
             ) : (
-              filteredTasks.map((task) => (
+              mainTasks.map((task) => (
                 <motion.div layout key={task.id} className={`group bg-[#0f0f0f] border rounded-[4px] p-4 transition-all ${task.is_completed ? 'border-white/5 opacity-50' : 'border-white/10 hover:border-blue-500/30'}`}>
                   <div className="flex items-start gap-4">
                     <button onClick={() => toggleTask(task)} className={`mt-1 transition-colors ${task.is_completed ? 'text-emerald-500' : 'text-gray-600 hover:text-blue-500'}`}>
@@ -211,11 +220,50 @@ const consultationAlerts = useMemo(() => {
           </div>
         </div>
 
-        {/* 오른쪽: 자동 알림 (상담) */}
+        {/* 오른쪽: 자동 알림 (상담 & 건의사항) */}
         <div className="lg:col-span-5 space-y-6">
           <h3 className="text-xs font-black text-gray-400 uppercase tracking-[0.2em] flex items-center gap-2 px-1">
             <AlertCircle size={14} className="text-amber-500" /> Auto Alerts
           </h3>
+
+          {/* 학생 건의사항 알림 */}
+          <div className="bg-[#0f0f0f] border border-blue-500/10 rounded-[4px] overflow-hidden divide-y divide-white/5">
+            <div className="p-4 bg-blue-500/5 flex justify-between items-center">
+              <div>
+                <h4 className="text-[10px] font-black text-blue-500 uppercase tracking-widest">학생 건의사항</h4>
+                <p className="text-[9px] text-gray-500 font-medium mt-1">학생들이 보낸 실시간 요청 사항입니다.</p>
+              </div>
+              <span className="text-[10px] font-black text-blue-500 bg-blue-500/10 px-2 py-0.5 rounded-full">{suggestionAlerts.length}</span>
+            </div>
+            <div className="max-h-[300px] overflow-y-auto custom-scrollbar-v">
+              {suggestionAlerts.length === 0 ? (
+                <div className="p-10 text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest italic">No new suggestions</div>
+              ) : (
+                suggestionAlerts.map((task) => (
+                  <div key={task.id} className="p-4 space-y-3 group hover:bg-white/[0.02] transition-colors">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <MessageSquare size={14} className="text-blue-500" />
+                        <span className="text-[12px] font-black text-white">{task.title.replace('[건의] ', '')}</span>
+                      </div>
+                      <span className="text-[9px] font-black text-gray-600 uppercase tabular-nums">{task.target_date.replace(/-/g, '.')}</span>
+                    </div>
+                    <p className="text-[11px] text-gray-400 leading-relaxed bg-black/30 p-2.5 rounded border border-white/5">{task.content}</p>
+                    <div className="flex justify-end">
+                      <button 
+                        onClick={() => toggleTask(task)}
+                        className="flex items-center gap-1.5 px-2.5 py-1 bg-blue-600/10 hover:bg-blue-600 text-blue-500 hover:text-white text-[9px] font-black rounded uppercase transition-all"
+                      >
+                        <Check size={12} strokeWidth={3} /> 확인 완료
+                      </button>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* 상담 누락 알림 */}
           <div className="bg-[#0f0f0f] border border-amber-500/10 rounded-[4px] overflow-hidden divide-y divide-white/5">
             <div className="p-4 bg-amber-500/5 flex justify-between items-center">
               <div>

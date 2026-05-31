@@ -87,7 +87,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
     };
     
     return {
-      attendance_status: session?.attendance_status || '출석',
+      attendance_status: session?.attendance_status || '',
       status: session?.status || 'none',
       special_notes: session?.special_notes || '',
       classwork_text: session?.classwork_text || '',
@@ -101,6 +101,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
       test_id: session?.test_id || '',
       test_score: session?.test_score || '',
       test_score_type: session?.test_score_type || 'score',
+      test_cut: session?.test_cut || 0, // 💡 추가
+      test_completed: session?.test_completed, // 💡 추가: 완료/미완료/없음 3상태 지원
       mission: student.recent_mission || ''
     };
   }, [student.allLogs, student.assigned_books, student.todaySession, student.recent_mission, selectedDate]);
@@ -124,6 +126,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
       formData.test_id !== initial.test_id ||
       String(formData.test_score) !== String(initial.test_score) ||
       formData.test_score_type !== initial.test_score_type ||
+      String(formData.test_cut) !== String(initial.test_cut) || // 💡 추가
+      formData.test_completed !== initial.test_completed || // 💡 추가
       formData.mission !== initial.mission
     );
   }, [formData, rowDate, getInitialFormData]);
@@ -139,7 +143,6 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
     const newData = getInitialFormData(rowDate);
     
     // 💡 변경 사항이 있을 때만 업데이트 (무한 루프 방지)
-    const initial = getInitialFormData(rowDate);
     const hasExternalChange = Object.keys(newData).some(key => 
       String(newData[key]) !== String(formData[key])
     );
@@ -397,7 +400,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
   // 8. Render
   return (
     <>
-      <tr className={`hover:bg-white/[0.04] transition-colors group ${isAbsent ? 'bg-white/[0.02]' : isCompleted ? 'bg-emerald-500/[0.04]' : ''}`}>
+      <tr className={`hover:bg-white/[0.04] transition-colors group ${isAbsent ? 'bg-white/[0.02]' : ''}`}>
         {activeColumns.map((col: any) => {
           const isActive = activeCell?.studentId === student.id && activeCell?.columnId === col.id;
           const isEditing = editingCell?.studentId === student.id && editingCell?.columnId === col.id;
@@ -491,6 +494,11 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
                 setFormData(prev => ({ ...prev, next_quiz_cut: val }));
                 handleSave({ next_quiz_cut: val });
               }}
+              onSetTodayTestCut={(val) => {
+                pushUndo(formData);
+                setFormData(prev => ({ ...prev, test_cut: val }));
+                handleSave({ test_cut: val });
+              }}
               onSetNextQuizTrial={(num) => {
                 pushUndo(formData);
                 setFormData(prev => ({ ...prev, next_quiz_trial: num }));
@@ -504,13 +512,17 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
 
       <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} />
 
-      <AnimatePresence>
-        {isCwEditorOpen && <HomeworkEditor title="Smart Classwork Editor" homeworkJson={formData.classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'classwork')} onClose={() => setIsCwEditorOpen(false)} />}
-        {isHwEditorOpen && <HomeworkEditor title="Smart Homework Editor" homeworkJson={formData.homework_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'homework')} onClose={() => setIsHwEditorOpen(false)} />}
-        {isNqEditorOpen && <HomeworkEditor title="Next Quiz Range Editor" homeworkJson={formData.next_quiz_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'next_quiz')} onClose={() => setIsNqEditorOpen(false)} />}
-        {isTestEditorOpen && <TestEditor testData={formData.test_id} onUpdate={(formattedText, averageScore) => { const newData = { ...formData, test_id: formattedText, test_score: averageScore !== null ? String(averageScore) : formData.test_score }; setFormData(newData); if (testRef.current) testRef.current.value = formattedText; handleSave(newData); }} onClose={() => setIsTestEditorOpen(false)} />}
-        {isTestModalOpen && <TestAnswerModal testId={formData.test_id} studentName={student.name} onClose={() => setIsTestModalOpen(false)} onSave={handleTestSave} />}
-      </AnimatePresence>
+      <tr style={{ display: 'none' }}>
+        <td colSpan={activeColumns.length}>
+          <AnimatePresence>
+            {isCwEditorOpen && <HomeworkEditor title="Smart Classwork Editor" homeworkJson={formData.classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'classwork')} onClose={() => setIsCwEditorOpen(false)} />}
+            {isHwEditorOpen && <HomeworkEditor title="Smart Homework Editor" homeworkJson={formData.homework_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'homework')} onClose={() => setIsHwEditorOpen(false)} />}
+            {isNqEditorOpen && <HomeworkEditor title="Next Quiz Range Editor" homeworkJson={formData.next_quiz_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'next_quiz')} onClose={() => setIsNqEditorOpen(false)} />}
+            {isTestEditorOpen && <TestEditor testData={formData.test_id} onUpdate={(formattedText, averageScore) => { const newData = { ...formData, test_id: formattedText, test_score: averageScore !== null ? String(averageScore) : formData.test_score }; setFormData(newData); if (testRef.current) testRef.current.value = formattedText; handleSave(newData); }} onClose={() => setIsTestEditorOpen(false)} />}
+            {isTestModalOpen && <TestAnswerModal testId={formData.test_id} studentName={student.name} onClose={() => setIsTestModalOpen(false)} onSave={handleTestSave} />}
+          </AnimatePresence>
+        </td>
+      </tr>
     </>
   );
 });

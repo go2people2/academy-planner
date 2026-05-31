@@ -98,16 +98,32 @@ export default function HomeworkEditor({
     const sNum = parseInt(start.replace(/\D/g, ''));
     const eNum = parseInt(end.replace(/\D/g, ''));
 
-    if (!isNaN(sNum) && !isNaN(eNum)) {
+    const isStartValid = !isNaN(sNum);
+    const isEndValid = !isNaN(eNum);
+
+    if (isStartValid || isEndValid) {
+      const searchStart = isStartValid ? sNum : eNum;
+      const searchEnd = isEndValid ? eNum : sNum;
+
       const matchedUnits = units.filter(u => {
         const uStart = parseInt(String(u.start_page).replace(/\D/g, ''));
         const uEnd = parseInt(String(u.end_page).replace(/\D/g, ''));
-        return (uStart <= eNum && uEnd >= sNum);
+        return (uStart <= searchEnd && uEnd >= searchStart);
       });
 
       const uniqueUnitNames = Array.from(new Set(matchedUnits.map(u => u.unit)));
       const unitText = uniqueUnitNames.join(', ');
-      item.range = unitText ? `${unitText} p${start}~${end}` : `p${start}~${end}`;
+      
+      let rangeText = "";
+      if (isStartValid && isEndValid) {
+        rangeText = (sNum === eNum) ? `p${sNum}` : `p${sNum}~${eNum}`;
+      } else if (isStartValid) {
+        rangeText = `p${sNum}`;
+      } else {
+        rangeText = `p${eNum}`;
+      }
+
+      item.range = unitText ? `${unitText} ${rangeText}` : rangeText;
       item.units = uniqueUnitNames;
     } else {
       const startText = start ? `p${start}` : '';

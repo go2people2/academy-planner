@@ -43,7 +43,14 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     e.preventDefault();
     if (isSaving) return;
     setIsSaving(true);
-    await onSave(formData);
+    
+    // 💡 전화번호 숫자만 추출 (하이픈 제거)
+    const cleanedData = {
+      ...formData,
+      phone: formData.phone.replace(/[^0-9]/g, '')
+    };
+
+    await onSave(cleanedData);
     setIsSaving(false);
     onClose();
   };

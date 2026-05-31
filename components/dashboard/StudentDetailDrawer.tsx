@@ -35,6 +35,19 @@ export default function StudentDetailDrawer({
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
+  // 💡 [추가] ESC 키로 닫기 기능
+  useEffect(() => {
+    const handleEsc = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // 만약 파기 확인 모달이 떠 있다면 그것부터 닫고, 아니면 전체 창을 닫음
+        if (showDeleteConfirm) setShowDeleteConfirm(false);
+        else onClose();
+      }
+    };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, [onClose, showDeleteConfirm]);
+
   useEffect(() => {
     setLocalSchedules(student.day_schedules || {});
     setLocalDays(student.class_days || []);
@@ -211,7 +224,13 @@ export default function StudentDetailDrawer({
                 className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-400 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
             <div className="relative group">
-              <input type="tel" value={localPhone} placeholder="Phone Number" onChange={(e) => setLocalPhone(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'phone', localPhone)}
+              <input type="tel" value={localPhone} placeholder="Phone Number" 
+                onChange={(e) => setLocalPhone(e.target.value)} 
+                onBlur={() => {
+                  const cleaned = localPhone.replace(/[^0-9]/g, '');
+                  setLocalPhone(cleaned); // 화면 표시값도 정제
+                  onUpdateInfo(student.id, 'phone', cleaned);
+                }}
                 className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
           </div>
@@ -300,7 +319,7 @@ export default function StudentDetailDrawer({
           </div>
         </section>
 
-        {/* 4. 💡 선생님 전용 관리 메모 (포스트잇 스타일) */}
+        {/* 5. 💡 선생님 전용 관리 메모 (포스트잇 스타일) */}
         <section className="space-y-3">
           <div className="flex items-center justify-between px-1">
             <h5 className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
@@ -315,10 +334,8 @@ export default function StudentDetailDrawer({
               <textarea 
                 value={localManagementNotes}
                 maxLength={300}
-                onChange={(e) => {
-                  setLocalManagementNotes(e.target.value);
-                  onUpdateInfo(student.id, 'management_notes', e.target.value);
-                }}
+                onChange={(e) => setLocalManagementNotes(e.target.value)}
+                onBlur={() => onUpdateInfo(student.id, 'management_notes', localManagementNotes)}
                 placeholder="이 학생에 대해 꼭 기억해야 할 핵심 내용을 적어주세요 (성향, 주의사항 등)..."
                 className="w-full bg-transparent border-none text-[13px] font-bold text-amber-900/80 outline-none resize-none leading-relaxed placeholder:text-amber-700/30 flex-1 custom-scrollbar-v"
               />
@@ -346,10 +363,8 @@ export default function StudentDetailDrawer({
             <div className="relative bg-blue-600/5 border border-blue-500/20 p-5 min-h-[100px] rounded-sm flex flex-col shadow-inner">
               <textarea 
                 value={localRecentMission}
-                onChange={(e) => {
-                  setLocalRecentMission(e.target.value);
-                  onUpdateInfo(student.id, 'recent_mission', e.target.value);
-                }}
+                onChange={(e) => setLocalRecentMission(e.target.value)}
+                onBlur={() => onUpdateInfo(student.id, 'recent_mission', localRecentMission)}
                 placeholder="학생에게 전달할 이번 주 미션을 입력하세요..."
                 className="w-full bg-transparent border-none text-[12px] font-bold text-blue-100 placeholder:text-blue-500/30 outline-none resize-none flex-1 leading-relaxed"
               />

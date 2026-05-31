@@ -84,20 +84,29 @@ export default function LoginForm({ academy }: { academy: any }) {
         }
       } else {
         // 3. 학생 로그인 체크 (ams_students 테이블 조회)
-        const { data: student, error } = await supabase
+        // 💡 원장님/담임 선생님 전용 패스키 체크 (기본값: 2324)
+        const masterPasskey = academy.student_passkey || '2324';
+        const isMasterAccess = phoneLast4 === masterPasskey;
+
+        let query = supabase
           .from('ams_students')
           .select('*')
           .eq('academy_id', academy.id)
-          .eq('name', studentName)
-          .like('phone', `%${phoneLast4}`)
-          .single();
+          .eq('name', studentName);
+        
+        // 💡 패스키가 아닐 때만 전화번호 뒷자리 조건 추가
+        if (!isMasterAccess) {
+          query = query.like('phone', `%${phoneLast4}`);
+        }
+
+        const { data: student, error } = await query.maybeSingle();
 
         if (student) {
           localStorage.setItem('ams_student', JSON.stringify(student));
           setIsLoading(false);
           router.push(`/${slug}/student`);
         } else {
-          alert('학생 정보를 찾을 수 없습니다. 이름과 전화번호 뒷자리를 확인해 주세요.');
+          alert(isMasterAccess ? '해당 이름의 학생을 찾을 수 없습니다.' : '학생 정보를 찾을 수 없습니다. 이름과 전화번호 뒷자리를 확인해 주세요.');
           setIsLoading(false);
         }
       }

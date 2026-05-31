@@ -159,7 +159,7 @@ export default function Overview({
                 </h3>
                 <div className="flex items-center gap-1.5">
                   <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
-                    {todayStudents.length} Students
+                    <span className="text-amber-400">{todayStudents.length}</span> Students
                   </span>
                   {todayGradeStats.map(([grade, count], idx) => {
                     const isES = grade.includes('초');
@@ -252,7 +252,7 @@ export default function Overview({
             {!isArchiveMode && (
               <div className="flex items-center gap-1.5 mt-0.5">
                 <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
-                  {studentsToDisplay.length} Students
+                  <span className="text-amber-400">{studentsToDisplay.length}</span> Students
                 </span>
                 {otherGradeStats.map(([grade, count], idx) => {
                   const isES = grade.includes('초');
