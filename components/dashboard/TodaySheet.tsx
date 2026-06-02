@@ -32,7 +32,8 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'test_score', label: '점수', minWidth: 60, canHide: true },
   { id: 'next_quiz', label: '다음TEST', minWidth: 200, canHide: true },
   { id: 'review', label: '과제확인', minWidth: 180, canHide: true },
-  { id: 'classwork', label: '오늘진도', minWidth: 220, canHide: false },
+  { id: 'classwork', label: '오늘 할 일(To-Do)', minWidth: 200, canHide: false }, // 💡 라벨 변경 및 폭 조절
+  { id: 'completed_classwork', label: '수행진도', minWidth: 200, canHide: false }, // 💡 신규 추가
   { id: 'assign', label: '오늘숙제', minWidth: 220, canHide: false },
   { id: 'mission', label: '학생미션', minWidth: 220, canHide: false },
   { id: 'notes', label: '특이사항', minWidth: 160, canHide: true },
@@ -51,7 +52,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
           minWidth: colWidths[col.id] || col.minWidth,
           position: 'sticky',
           top: 0,
-          left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) : 'auto'),
+          left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) - 1 : 'auto'),
           right: col.id === 'action' ? 0 : 'auto',
           zIndex: isStickyHorizontally ? 50 : 40,
           backgroundColor: '#000000',
@@ -103,7 +104,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
 // --- Main Component ---
 
 export default function TodaySheet({ 
-  students, masterTextbooks, onSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, academyInfo, currentUser,
+  students, masterTextbooks, onSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange
 }: any) {
   // 1. States
@@ -131,7 +132,7 @@ export default function TodaySheet({
     }
     const defaultCols = DEFAULT_COLUMNS.map(c => c.id);
     return {
-      '1': ['select', 'name', 'review', 'classwork', 'assign', 'mission', 'action'],
+      '1': ['select', 'name', 'review', 'classwork', 'completed_classwork', 'assign', 'mission', 'action'],
       '2': ['select', 'name', 'test_id', 'test_score', 'notes', 'action'],
       '3': ['select', 'name', 'next_quiz', 'action'],
       '4': defaultCols
@@ -440,7 +441,11 @@ export default function TodaySheet({
             const rMin = Math.min(sI, eI); const rMax = Math.max(sI, eI);
             const cMin = Math.min(sC, eC); const cMax = Math.max(sC, eC);
             const updates: any[] = [];
-            const fieldMap: any = { 'test_id': 'test_id', 'test_score': 'test_score', 'classwork': 'classwork_text', 'assign': 'homework_text', 'next_quiz': 'next_quiz_text', 'mission': 'mission', 'notes': 'special_notes' };
+            const fieldMap: any = { 
+              'test_id': 'test_status', 'test_score': 'test_score', 'classwork': 'classwork_text', 
+              'completed_classwork': 'completed_classwork_text', 'assign': 'homework_text', 
+              'next_quiz': 'next_quiz_text', 'mission': 'mission', 'notes': 'special_notes' 
+            };
             for (let r = rMin; r <= rMax; r++) {
               const st = students[r]; const sess = st.todaySession || {}; const nD = { ...sess }; let chg = false;
               for (let c = cMin; c <= cMax; c++) { const cid = activeColumns[c].id; const f = fieldMap[cid]; if (f) { nD[f] = ''; chg = true; } }
@@ -590,14 +595,15 @@ export default function TodaySheet({
                     {isNewSection && (
                       <tr className="bg-blue-600/5"><td colSpan={activeColumns.length} className="px-4 py-2 border-b border-blue-500/30"><div className="flex items-center gap-3"><span className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] whitespace-nowrap">{currentStartTime === 999 ? '기타 타임' : (currentStartTime >= 12 ? (currentStartTime === 12 ? `오후 12:${displayMinute}` : `오후 ${currentStartTime-12}:${displayMinute}`) : `오전 ${currentStartTime}:${displayMinute}`) + ' 수업'}</span><div className="flex-1 h-px bg-gradient-to-r from-blue-500/30 to-transparent" /></div></td></tr>
                     )}
-                    <TodaySheetRow 
-                      student={s} 
-                      masterTextbooks={masterTextbooks} 
-                      onSave={handleSaveWithUndo} 
+                    <TodaySheetRow
+                      student={s}
+                      masterTextbooks={masterTextbooks}
+                      onSave={handleSaveWithUndo}
                       onUpdateStudentInfo={onUpdateStudentInfo}
-                      onViewProgress={onViewProgress} 
-                      colWidths={colWidths} 
-                      activeColumns={activeColumns} 
+                      onViewProgress={onViewProgress}
+                      onSelectStudent={onSelectStudent}
+                      colWidths={colWidths}
+                      activeColumns={activeColumns}
                       selectedDate={selectedDate} 
                       isHistoryExpanded={!!expandedHistory[s.id]} 
                       onToggleHistory={toggleHistory} 

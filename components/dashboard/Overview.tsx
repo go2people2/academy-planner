@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, Zap, StickyNote, Target } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, Zap, StickyNote, Target, ExternalLink } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import AddStudentModal from './AddStudentModal';
@@ -471,16 +471,30 @@ function StudentRowItem({
             </span>
           )}
           {!isBatchMode && onViewProgress && (
-            <button 
-              onClick={(e) => {
-                e.stopPropagation();
-                onViewProgress(student.id);
-              }}
-              className="p-1 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-all shadow-sm shadow-blue-900/20"
-              title="진도표 바로가기"
-            >
-              <TrendingUp size={10} />
-            </button>
+            <div className="flex items-center gap-1">
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewProgress(student.id);
+                }}
+                className="p-1 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-all shadow-sm shadow-blue-900/20"
+                title="진도표 바로가기"
+              >
+                <TrendingUp size={10} />
+              </button>
+              {/* 💡 학생 포털 바로가기 추가 */}
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  const slug = window.location.pathname.split('/')[1];
+                  window.open(`/${slug}/student?id=${student.id}`, '_blank');
+                }}
+                className="p-1 rounded bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white transition-all shadow-sm shadow-indigo-900/20"
+                title="학생 페이지 보기"
+              >
+                <ExternalLink size={10} strokeWidth={3} />
+              </button>
+            </div>
           )}
           {isMakeup && !isSelected && !isChecked && (
             <span className="bg-emerald-500/20 text-emerald-500 text-[8px] font-black px-1 py-0.5 rounded border border-emerald-500/20 uppercase tracking-tighter shrink-0">

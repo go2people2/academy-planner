@@ -167,13 +167,12 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       const hours = s.day_schedules?.[day] || [];
       const hasRegularSession = hours.length > 0;
       
-      // 💡 '실제 수업' 판정 로직:
-      // 1. 정규 시간표가 있는 학생
-      // 2. 혹은 임시(temp)가 아닌 실제 DB 기록이 있는 학생
-      // 3. 혹은 오늘 수동으로 출결이나 보강 처리가 된 학생 (temp 이더라도 status가 있음)
-      const isRealSession = session && (session.id !== 'temp' || (status !== '' && status !== 'none'));
+      // 💡 '실제 수업' 판정 로직 강화:
+      // 1. 정규 시간표가 있는 학생이거나
+      // 2. 혹은 오늘 명시적으로 출결 상태(보강, 출석 등)가 입력된 학생만 포함
+      const isRealPresence = status !== '' && status !== 'none';
       
-      if (!((hasRegularSession || isRealSession) && status !== '수업제외')) return false;
+      if (!((hasRegularSession || isRealPresence) && status !== '수업제외')) return false;
       if (selectedTeacherId && selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
       
       const studentHour = getStudentHour(s);

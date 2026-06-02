@@ -4,7 +4,7 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, ExternalLink
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
 import { getDayOfWeek } from '@/lib/utils';
@@ -28,6 +28,7 @@ interface TodaySheetCellProps {
   // Refs
   testRef: React.RefObject<HTMLTextAreaElement | null>;
   cwRef: React.RefObject<HTMLTextAreaElement | null>;
+  ccwRef: React.RefObject<HTMLTextAreaElement | null>; // 💡 추가
   hwRef: React.RefObject<HTMLTextAreaElement | null>;
   nqRef: React.RefObject<HTMLTextAreaElement | null>;
   missionRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -39,6 +40,7 @@ interface TodaySheetCellProps {
   onSelectOne?: (studentId: string, checked: boolean) => void;
   onToggleHistory: (id: string) => void;
   onViewProgress: (id: string) => void;
+  onViewDetail?: (id: string) => void;
   handleCellInteraction: (e: React.MouseEvent, colId: string, type: 'click' | 'dblclick') => void;
   handleKeyDown: (e: React.KeyboardEvent, colId: string) => void;
   onCellMouseDown: (e: React.MouseEvent, studentId: string, colId: string) => void;
@@ -54,6 +56,7 @@ interface TodaySheetCellProps {
   
   // Modal Triggers
   onOpenCwEditor: (e: React.MouseEvent) => void;
+  onOpenCcwEditor: (e: React.MouseEvent) => void; // 💡 추가
   onOpenHwEditor: (e: React.MouseEvent) => void;
   onOpenNqEditor: (e: React.MouseEvent) => void;
   onOpenTestEditor: (e: React.MouseEvent) => void;
@@ -69,11 +72,11 @@ interface TodaySheetCellProps {
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
   col, styles, student, formData, isEditing, isActive, isInRange, isSelected, 
   isCompleted, saveStatus, isSaving, isHistoryExpanded, displayDateShort, statusMap, 
-  testRef, cwRef, hwRef, nqRef, missionRef, notesRef, tdRef, scoreInputRef, 
-  onSelectOne, onToggleHistory, onViewProgress, handleCellInteraction, handleKeyDown, 
+  testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, tdRef, scoreInputRef, // 💡 ccwRef 추가
+  onSelectOne, onToggleHistory, onViewProgress, onViewDetail, handleCellInteraction, handleKeyDown, 
   onCellMouseDown, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle, 
   onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback, 
-  onOpenCwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal, 
+  onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal, // 💡 onOpenCcwEditor 추가
   onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave 
 }: TodaySheetCellProps) {
   
@@ -90,6 +93,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
   const currentText = colId === 'test_id' ? formData.test_id :
                     colId === 'classwork' ? formData.classwork_text :
+                    colId === 'completed_classwork' ? formData.completed_classwork_text : // 💡 추가
                     colId === 'assign' ? formData.homework_text :
                     colId === 'next_quiz' ? formData.next_quiz_text :
                     colId === 'mission' ? formData.mission :
@@ -99,14 +103,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
   // 💡 텍스트가 변경되거나 편집 모드 진입 시 높이 자동 조절
   React.useEffect(() => {
-    const refs = [testRef, cwRef, hwRef, nqRef, missionRef, notesRef];
+    const refs = [testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef]; // 💡 ccwRef 추가
     refs.forEach(ref => {
       if (ref.current && (isEditing || isActive)) {
         ref.current.style.height = 'auto';
         ref.current.style.height = `${ref.current.scrollHeight}px`;
       }
     });
-  }, [isEditing, isActive, currentText, testRef, cwRef, hwRef, nqRef, missionRef, notesRef]);
+  }, [isEditing, isActive, currentText, testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef]);
 
   // 💡 커트라인 픽커 전용 상태
   const [isCutPickerOpen, setIsCutPickerOpen] = useState(false);
@@ -155,22 +159,59 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'name' && (
           <div className="flex items-center justify-between gap-3 px-4 py-2.5 w-full h-[56px] relative group/namecell">
-            <div className="absolute top-0 right-0 flex items-center gap-0">
+            <div className="absolute top-0 right-0 flex flex-row-reverse items-start gap-1">
+              {student.management_notes && (
+                <div 
+                  className="group/note relative cursor-pointer"
+                  onClick={(e) => { e.stopPropagation(); onViewDetail?.(student.id); }}
+                >
+                  <div className="w-0 h-0 border-t-[22px] border-t-amber-500 border-l-[22px] border-l-transparent shadow-md" />
+                  {/* Tooltip for management notes */}
+                  <div className="absolute bottom-full left-0 mb-4 w-80 p-4 bg-amber-50 text-amber-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/note:opacity-100 pointer-events-none transition-all z-50 border-2 border-amber-200">
+                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200/50">
+                      <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                      <span className="text-[10px] uppercase tracking-widest text-amber-600">Student Management Note</span>
+                    </div>
+                    <p className="whitespace-pre-wrap leading-relaxed">{student.management_notes}</p>
+                  </div>
+                </div>
+              )}
               {student.suggestions && student.suggestions.length > 0 && (
                 <div className="group/suggestion relative">
                   <div className="w-0 h-0 border-t-[22px] border-t-blue-500 border-l-[22px] border-l-transparent shadow-md" />
-                </div>
-              )}
-              {student.management_notes && (
-                <div className="group/note relative">
-                  <div className="w-0 h-0 border-t-[22px] border-t-amber-500 border-l-[22px] border-l-transparent shadow-md" />
+                  {/* Tooltip for suggestions */}
+                  <div className="absolute bottom-full left-0 mb-4 w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/suggestion:opacity-100 pointer-events-none transition-all z-50 border-2 border-blue-200">
+                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-blue-200/50">
+                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                      <span className="text-[10px] uppercase tracking-widest text-blue-600">Student Suggestion</span>
+                    </div>
+                    <div className="space-y-3">
+                      {student.suggestions.map((sug: any, idx: number) => (
+                        <p key={idx} className="whitespace-pre-wrap leading-relaxed">{sug.content}</p>
+                      ))}
+                    </div>
+                  </div>
                 </div>
               )}
             </div>
-            <div className="flex flex-col min-w-0">
-              <span className="text-[13px] font-black text-white truncate group-hover/namecell:text-blue-400 transition-colors">
-                {student.name}-{student.teacher_initial || '?'}-{student.class_days?.join('') || '무'}
-              </span>
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[13px] font-black text-white truncate group-hover/namecell:text-blue-400 transition-colors">
+                  {student.name}-{student.teacher_initial || '?'}-{student.class_days?.join('') || '무'}
+                </span>
+                {/* 💡 학생 포털 바로가기 아이콘 추가 */}
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    const slug = window.location.pathname.split('/')[1];
+                    window.open(`/${slug}/student?id=${student.id}`, '_blank');
+                  }}
+                  className="opacity-0 group-hover/namecell:opacity-100 transition-opacity p-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-[2px] shrink-0"
+                  title="학생 페이지 보기"
+                >
+                  <ExternalLink size={10} strokeWidth={3} />
+                </button>
+              </div>
               <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-tighter truncate text-gray-500">
                 {student.school} · {student.grade}
               </div>
@@ -207,11 +248,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           </div>
         )}
 
-        {(['test_id', 'classwork', 'assign', 'next_quiz', 'mission', 'notes'].includes(colId)) && (
+        {(['test_id', 'classwork', 'completed_classwork', 'assign', 'next_quiz', 'mission', 'notes'].includes(colId)) && (
           <div className="relative w-full h-full flex items-start justify-start group/cell">
             {(isEditing || isActive) && (
               <textarea 
-                ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : colId === 'mission' ? missionRef : notesRef} 
+                ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : colId === 'mission' ? missionRef : notesRef} 
                 defaultValue={currentText || ''} 
                 autoFocus={isEditing} 
                 onKeyDown={(e) => handleKeyDown(e, colId)} 
@@ -290,8 +331,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   </div>
                 </div>
               )}
-              {(colId === 'classwork' || colId === 'assign') && (
-                <button onClick={colId === 'classwork' ? onOpenCwEditor : onOpenHwEditor} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
+              {(colId === 'classwork' || colId === 'completed_classwork' || colId === 'assign') && (
+                <button onClick={colId === 'classwork' ? onOpenCwEditor : colId === 'completed_classwork' ? onOpenCcwEditor : onOpenHwEditor} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
               )}
 
               {/* 💡 [공용] 포탈로 띄우는 정사각형 픽커 */}

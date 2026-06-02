@@ -27,6 +27,7 @@ export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, 
   const [isSaving, setIsSaving] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempName, setLocalTempName] = useState('');
+  const [tempInitials, setLocalTempInitials] = useState(''); // 💡 추가
 
   // 💡 테스트 및 시험 관리 상태
   const [tests, setTests] = useState<any[]>([]);
@@ -96,7 +97,12 @@ const updateTimerPreset = async (index: number, value: number) => {
   };
 
   const fetchExams = async () => {
-    const { data, error } = await supabase.from('ams_exam_schedules').select('*').order('target_date', { ascending: true });
+    if (!academyInfo) return;
+    const { data, error } = await supabase
+      .from('ams_exam_schedules')
+      .select('*')
+      .eq('academy_id', academyInfo.id)
+      .order('target_date', { ascending: true });
     if (!error && data) setExamSchedules(data);
   };
 
@@ -138,6 +144,7 @@ const updateTimerPreset = async (index: number, value: number) => {
     login_id: '',
     password: '',
     name: '',
+    initials: '', // 💡 추가
     role: 'teacher' as 'admin' | 'teacher'
   });
 
@@ -147,7 +154,7 @@ const updateTimerPreset = async (index: number, value: number) => {
     await onAddTeacher(formData);
     setIsSaving(false);
     setIsAddModalOpen(false);
-    setFormData({ login_id: '', password: '', name: '', role: 'teacher' });
+    setFormData({ login_id: '', password: '', name: '', initials: '', role: 'teacher' });
   };
 
   return (
@@ -375,12 +382,48 @@ const updateTimerPreset = async (index: number, value: number) => {
                     </div>
                     <div>
                       {editingId === t.id ? (
-                        <input autoFocus value={tempName} onChange={(e) => setLocalTempName(e.target.value)}
-                          onBlur={() => { onUpdateTeacher(t.id, { name: tempName }); setEditingId(null); }}
-                          onKeyDown={(e) => { if (e.key === 'Enter') { onUpdateTeacher(t.id, { name: tempName }); setEditingId(null); } }}
-                          className="bg-black/60 border border-blue-500 rounded px-2 py-0.5 text-sm font-black text-white outline-none w-24" />
+                        <div className="flex flex-col gap-1">
+                          <input autoFocus value={tempName} onChange={(e) => setLocalTempName(e.target.value)}
+                            onBlur={(e) => {
+                              const nextTarget = e.relatedTarget as HTMLElement;
+                              if (nextTarget && e.currentTarget.parentElement?.contains(nextTarget)) return;
+                              // 💡 정식 'initials' 컬럼에 저장
+                              onUpdateTeacher(t.id, { name: tempName, initials: tempInitials }); 
+                              setEditingId(null);
+                            }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { 
+                              onUpdateTeacher(t.id, { name: tempName, initials: tempInitials }); 
+                              setEditingId(null); 
+                            } }}
+                            placeholder="Name"
+                            className="bg-black/60 border border-blue-500 rounded px-2 py-0.5 text-sm font-black text-white outline-none w-24" />
+                          <input value={tempInitials} onChange={(e) => setLocalTempInitials(e.target.value)}
+                            onBlur={(e) => {
+                              const nextTarget = e.relatedTarget as HTMLElement;
+                              if (nextTarget && e.currentTarget.parentElement?.contains(nextTarget)) return;
+                              onUpdateTeacher(t.id, { name: tempName, initials: tempInitials }); 
+                              setEditingId(null);
+                            }}
+                            onKeyDown={(e) => { if (e.key === 'Enter') { 
+                              onUpdateTeacher(t.id, { name: tempName, initials: tempInitials }); 
+                              setEditingId(null); 
+                            } }}
+                            placeholder="Initials"
+                            className="bg-black/60 border border-amber-500 rounded px-2 py-0.5 text-[10px] font-black text-white outline-none w-16" />
+                        </div>
                       ) : (
-                        <h4 onClick={() => { setEditingId(t.id); setLocalTempName(t.name); }} className="text-sm font-black text-white cursor-pointer hover:text-blue-400 transition-colors">{t.name}</h4>
+                        <>
+                          <h4 onClick={() => { 
+                            setEditingId(t.id); 
+                            setLocalTempName(t.name); 
+                            setLocalTempInitials(t.initials || ''); 
+                          }} className="text-sm font-black text-white cursor-pointer hover:text-blue-400 transition-colors flex items-center gap-2">
+                            {t.name}
+                            <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded">
+                              ({t.initials || '?'})
+                            </span>
+                          </h4>
+                        </>
                       )}
                       <div className="flex items-center gap-2 mt-1">
                         <span className="text-[9px] font-black text-gray-500 uppercase px-1.5 py-0.5 bg-white/5 rounded-[2px]">{t.role}</span>
@@ -638,6 +681,14 @@ const updateTimerPreset = async (index: number, value: number) => {
                       <input required value={formData.name || ''} onChange={e => setFormData({ ...formData, name: e.target.value })}
                         className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all" placeholder="Name" />
                       <UserCircle className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Teacher Initials (이니셜)</label>
+                    <div className="relative">
+                      <input required value={formData.initials || ''} onChange={e => setFormData({ ...formData, initials: e.target.value })}
+                        className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all" placeholder="Initials (e.g. YH)" />
+                      <Hash className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600" size={16} />
                     </div>
                   </div>
                 </div>

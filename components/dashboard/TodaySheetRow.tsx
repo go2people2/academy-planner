@@ -15,6 +15,7 @@ interface TodaySheetRowProps {
   onSave: (id: string, data: any) => Promise<boolean>;
   onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
   onViewProgress: (id: string) => void;
+  onSelectStudent?: (id: string) => void;
   colWidths: Record<string, number>;
   activeColumns: any[];
   selectedDate: string;
@@ -34,7 +35,7 @@ interface TodaySheetRowProps {
 }
 
 export const TodaySheetRow = React.memo(function TodaySheetRow({ 
-  student, masterTextbooks, onSave, onUpdateStudentInfo, onViewProgress, colWidths, activeColumns, 
+  student, masterTextbooks, onSave, onUpdateStudentInfo, onViewProgress, onSelectStudent, colWidths, activeColumns, 
   selectedDate, isHistoryExpanded, onToggleHistory, currentUser, activeCell, editingCell,
   onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
   selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter
@@ -42,6 +43,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
   // 1. All States
   const [isHwEditorOpen, setIsHwEditorOpen] = useState(false);
   const [isCwEditorOpen, setIsCwEditorOpen] = useState(false);
+  const [isCcwEditorOpen, setIsCcwEditorOpen] = useState(false); // 💡 추가
   const [isNqEditorOpen, setIsNqEditorOpen] = useState(false);
   const [isTestEditorOpen, setIsTestEditorOpen] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
@@ -54,6 +56,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
   // 2. All Refs (Must be declared before any logic that uses them)
   const testRef = useRef<HTMLTextAreaElement>(null);
   const cwRef = useRef<HTMLTextAreaElement>(null);
+  const ccwRef = useRef<HTMLTextAreaElement>(null); // 💡 추가
   const hwRef = useRef<HTMLTextAreaElement>(null);
   const nqRef = useRef<HTMLTextAreaElement>(null);
   const missionRef = useRef<HTMLTextAreaElement>(null);
@@ -92,6 +95,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
       special_notes: session?.special_notes || '',
       classwork_text: session?.classwork_text || '',
       classwork_json: mergeBooks(session?.classwork_json),
+      completed_classwork_text: session?.completed_classwork_text || '', // 💡 추가
+      completed_classwork_json: mergeBooks(session?.completed_classwork_json), // 💡 추가
       homework_text: session?.homework_text || '',
       homework_json: mergeBooks(session?.homework_json),
       next_quiz_text: session?.next_quiz_text || '',
@@ -119,6 +124,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
       formData.status !== initial.status ||
       formData.special_notes !== initial.special_notes ||
       formData.classwork_text !== initial.classwork_text ||
+      formData.completed_classwork_text !== initial.completed_classwork_text || // 💡 추가
       formData.homework_text !== initial.homework_text ||
       formData.next_quiz_text !== initial.next_quiz_text ||
       String(formData.next_quiz_cut) !== String(initial.next_quiz_cut) ||
@@ -151,6 +157,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
       setFormData(newData);
       if (testRef.current) testRef.current.value = newData.test_id || '';
       if (cwRef.current) cwRef.current.value = newData.classwork_text || '';
+      if (ccwRef.current) ccwRef.current.value = newData.completed_classwork_text || ''; // 💡 추가
       if (hwRef.current) hwRef.current.value = newData.homework_text || '';
       if (nqRef.current) nqRef.current.value = newData.next_quiz_text || '';
       if (missionRef.current) missionRef.current.value = newData.mission || '';
@@ -192,6 +199,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
     const lazyData: any = {};
     if (testRef.current) lazyData.test_id = testRef.current.value;
     if (cwRef.current) lazyData.classwork_text = cwRef.current.value;
+    if (ccwRef.current) lazyData.completed_classwork_text = ccwRef.current.value; // 💡 추가
     if (hwRef.current) lazyData.homework_text = hwRef.current.value;
     if (nqRef.current) lazyData.next_quiz_text = nqRef.current.value;
     if (missionRef.current) lazyData.mission = missionRef.current.value;
@@ -220,12 +228,15 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
     setIsSaving(true);
     setFormData(finalData);
 
+    // 💡 변경된 필드만 전송하여 다른 사용자(학생 등)의 업데이트 유실 방지
+    const changesOnly = { ...lazyData, ...extraData };
+
     // 💡 미션(Mission)은 학생 정보이므로 별도로 저장
     if (finalData.mission !== initial.mission && onUpdateStudentInfo) {
       await onUpdateStudentInfo(student.id, 'recent_mission', finalData.mission);
     }
 
-    const success = await onSave(student.id, finalData);
+    const success = await onSave(student.id, changesOnly);
     setIsSaving(false);
     if (success) { 
       setSaveStatus('success'); 
@@ -287,7 +298,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
     setIsFeedbackOpen(false);
   };
 
-  const syncTextFromData = (newJson: HomeworkItem[], fieldPrefix: 'classwork' | 'homework' | 'next_quiz') => {
+  const syncTextFromData = (newJson: HomeworkItem[], fieldPrefix: 'classwork' | 'completed_classwork' | 'homework' | 'next_quiz') => { // 💡 추가
     pushUndo(formData);
     const assignedBookTitles = newJson.map(h => {
       const bookInfo = masterTextbooks.find((m: any) => m.bookcode === h.book_name) || 
@@ -295,7 +306,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
                       masterTextbooks.find((m: any) => h.book_name.toLowerCase().startsWith(m.bookcode.toLowerCase()));
       return bookInfo?.title || h.book_name;
     });
-    const currentRef = fieldPrefix === 'homework' ? hwRef : fieldPrefix === 'classwork' ? cwRef : nqRef;
+    const currentRef = fieldPrefix === 'homework' ? hwRef : fieldPrefix === 'classwork' ? cwRef : fieldPrefix === 'completed_classwork' ? ccwRef : nqRef; // 💡 추가
     const currentText = (currentRef.current?.value !== undefined) ? currentRef.current.value : (formData as any)[`${fieldPrefix}_text`] || '';
     const manualLines = currentText.split('\n').filter((l: string) => {
       const trimmed = l.trim();
@@ -309,12 +320,13 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
       return `${title} ${h.range}`;
     });
     const combinedText = [...manualLines, ...bookLines].join('\n');
-    const newData = { ...formData, [`${fieldPrefix}_json`]: newJson, [`${fieldPrefix}_text`]: combinedText };
-    setFormData(newData);
+    const updatePayload = { [`${fieldPrefix}_json`]: newJson, [`${fieldPrefix}_text`]: combinedText };
+    setFormData(prev => ({ ...prev, ...updatePayload }));
     if (fieldPrefix === 'classwork' && cwRef.current) cwRef.current.value = combinedText;
+    else if (fieldPrefix === 'completed_classwork' && ccwRef.current) ccwRef.current.value = combinedText; // 💡 추가
     else if (fieldPrefix === 'homework' && hwRef.current) hwRef.current.value = combinedText;
     else if (fieldPrefix === 'next_quiz' && nqRef.current) nqRef.current.value = combinedText;
-    handleSave(newData);
+    handleSave(updatePayload);
   };
 
   const handleCellInteraction = (e: React.MouseEvent, colId: string, type: 'click' | 'dblclick') => {
@@ -329,7 +341,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
   const handleKeyDown = (e: React.KeyboardEvent, colId: string) => {
     if (isComposing.current) return;
     const isMod = e.ctrlKey || e.metaKey;
-    if (isMod && e.key === 'z') { e.preventDefault(); performUndo(); return; }
+    // 💡 Cmd+S (저장) 및 에디터 단축키만 유지, Cmd+Z는 브라우저 기본 동작에 맡김
     if (isMod && e.key === 's') { e.preventDefault(); handleSave(); return; }
     if (isMod && e.key === 'b') {
       e.preventDefault();
@@ -342,13 +354,14 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
     const isEditing = editingCell?.studentId === student.id && editingCell?.columnId === colId;
     if (!isEditing && (e.key === 'Backspace' || e.key === 'Delete')) {
       e.preventDefault();
-      const fieldMap: any = { 'test_id': 'test_id', 'test_score': 'test_score', 'classwork': 'classwork_text', 'assign': 'homework_text', 'next_quiz': 'next_quiz_text', 'mission': 'mission', 'notes': 'special_notes' };
+      const fieldMap: any = { 'test_id': 'test_id', 'test_score': 'test_score', 'classwork': 'classwork_text', 'completed_classwork': 'completed_classwork_text', 'assign': 'homework_text', 'next_quiz': 'next_quiz_text', 'mission': 'mission', 'notes': 'special_notes' };
       const field = fieldMap[colId];
       if (field) {
         const updatedData = { ...formData, [field]: '' };
         setFormData(updatedData);
         if (colId === 'test_id' && testRef.current) testRef.current.value = '';
         else if (colId === 'classwork' && cwRef.current) cwRef.current.value = '';
+        else if (colId === 'completed_classwork' && ccwRef.current) ccwRef.current.value = ''; // 💡 추가
         else if (colId === 'assign' && hwRef.current) hwRef.current.value = '';
         else if (colId === 'next_quiz' && nqRef.current) nqRef.current.value = '';
         else if (colId === 'mission' && missionRef.current) missionRef.current.value = '';
@@ -365,7 +378,14 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
       if (!['attendance', 'action', 'select', 'date'].includes(colId)) { onEditingCellChange?.(student.id, colId); return; }
     }
     if (e.key === 'Enter' && !e.altKey) {
-      if (isEditing) { if (e.nativeEvent.isComposing) return; e.preventDefault(); handleSave(); }
+      if (isEditing) { 
+        if (e.nativeEvent.isComposing) return; 
+        // 💡 Shift+Enter인 경우 줄바꿈 허용 (textarea 필드들)
+        if (e.shiftKey && ['classwork', 'completed_classwork', 'assign', 'next_quiz', 'mission', 'notes'].includes(colId)) return;
+        
+        e.preventDefault(); 
+        handleSave(); 
+      }
       else { e.preventDefault(); onEditingCellChange?.(student.id, colId); }
     }
     if (e.key === 'Tab') { if (isEditing) { handleSave(); onEditingCellChange?.(student.id, null); } }
@@ -405,10 +425,9 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
           const isActive = activeCell?.studentId === student.id && activeCell?.columnId === col.id;
           const isEditing = editingCell?.studentId === student.id && editingCell?.columnId === col.id;
           const isInRange = isCellInRange?.(student.id, col.id) || false;
-
           const styles: React.CSSProperties = {
             position: (col.id === 'name' || col.id === 'action' || col.id === 'select') ? 'sticky' : 'relative',
-            left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) : 'auto'),
+            left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) - 1 : 'auto'),
             right: col.id === 'action' ? 0 : 'auto',
             zIndex: (col.id === 'name' || col.id === 'action' || col.id === 'select') ? (isActive ? 30 : 20) : (isActive ? 15 : 1),
             width: colWidths[col.id] || col.minWidth,
@@ -445,6 +464,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
               statusMap={statusMap}
               testRef={testRef}
               cwRef={cwRef}
+              ccwRef={ccwRef} // 💡 추가
               hwRef={hwRef}
               nqRef={nqRef}
               missionRef={missionRef}
@@ -454,6 +474,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
               onSelectOne={onSelectOne}
               onToggleHistory={onToggleHistory}
               onViewProgress={onViewProgress}
+              onViewDetail={onSelectStudent}
               handleCellInteraction={handleCellInteraction}
               handleKeyDown={handleKeyDown}
               onCellMouseDown={onCellMouseDown || (() => {})}
@@ -470,6 +491,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
               onSelectFeedback={selectFeedback}
               onCloseFeedback={() => setIsFeedbackOpen(false)}
               onOpenCwEditor={(e) => { e.stopPropagation(); setIsCwEditorOpen(true); }}
+              onOpenCcwEditor={(e) => { e.stopPropagation(); setIsCcwEditorOpen(true); }} // 💡 추가
               onOpenHwEditor={(e) => { e.stopPropagation(); setIsHwEditorOpen(true); }}
               onOpenNqEditor={(e) => { e.stopPropagation(); setIsNqEditorOpen(true); }}
               onOpenTestEditor={(e) => { e.stopPropagation(); setIsTestEditorOpen(true); }}
@@ -516,6 +538,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
         <td colSpan={activeColumns.length}>
           <AnimatePresence>
             {isCwEditorOpen && <HomeworkEditor title="Smart Classwork Editor" homeworkJson={formData.classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'classwork')} onClose={() => setIsCwEditorOpen(false)} />}
+            {isCcwEditorOpen && <HomeworkEditor title="Smart Completed Classwork Editor" homeworkJson={formData.completed_classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'completed_classwork')} onClose={() => setIsCcwEditorOpen(false)} />}
             {isHwEditorOpen && <HomeworkEditor title="Smart Homework Editor" homeworkJson={formData.homework_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'homework')} onClose={() => setIsHwEditorOpen(false)} />}
             {isNqEditorOpen && <HomeworkEditor title="Next Quiz Range Editor" homeworkJson={formData.next_quiz_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'next_quiz')} onClose={() => setIsNqEditorOpen(false)} />}
             {isTestEditorOpen && <TestEditor testData={formData.test_id} onUpdate={(formattedText, averageScore) => { const newData = { ...formData, test_id: formattedText, test_score: averageScore !== null ? String(averageScore) : formData.test_score }; setFormData(newData); if (testRef.current) testRef.current.value = formattedText; handleSave(newData); }} onClose={() => setIsTestEditorOpen(false)} />}

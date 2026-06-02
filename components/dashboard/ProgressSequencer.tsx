@@ -81,8 +81,27 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
         {selectedStudent ? (
           <div className="flex-1 overflow-y-auto custom-scrollbar-v p-5 space-y-8">
             <div className="space-y-0.5 mb-6">
-              <h2 className="text-xl font-black text-white uppercase tracking-tight">{selectedStudent.name} 학생 진도표</h2>
-              <p className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em]">학습 진행도를 확인합니다.</p>
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-xl font-black text-white uppercase tracking-tight">{selectedStudent.name} 학생 진도표</h2>
+                  <p className="text-[9px] text-gray-500 font-bold uppercase tracking-[0.2em]">학습 진행도를 확인합니다.</p>
+                </div>
+                {/* 💡 스마트 프로그레스 바 범례 추가 */}
+                <div className="flex items-center gap-4 bg-white/5 px-4 py-2 rounded-full border border-white/5">
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-emerald-500" />
+                    <span className="text-[9px] font-black text-emerald-500 uppercase">오답완료</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-amber-500" />
+                    <span className="text-[9px] font-black text-amber-500 uppercase">처음풀기</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-blue-500" />
+                    <span className="text-[9px] font-black text-blue-500 uppercase">숙제부여</span>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {selectedStudent.assigned_books.length > 0 ? (
@@ -174,39 +193,63 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
     }
   };
 
-  const bookHistoryPages = useMemo(() => {
-    const pages = new Set<number>();
+  const bookPageStatus = useMemo(() => {
+    const statusMap = new Map<number, 'wrong' | 'classwork' | 'homework'>();
     const actualBookCode = textbook?.bookcode || bookCode;
+    const title = textbook?.title || bookCode;
 
     student.allLogs.forEach((log: any) => {
-      const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];
-      combinedJson.forEach((h: any) => {
-        // 💡 이전 코드와 새 코드 모두에서 히스토리를 찾을 수 있도록 함
-        if ((h.book_name === bookCode || h.book_name === actualBookCode) && h.range) {
-          const matches = h.range.match(/p(\d+)\s*[~-]\s*p(\d+)/i) || h.range.match(/p(\d+)\s*[~-]\s*(\d+)/i);
-          if (matches) {
-            const s = parseInt(matches[1]);
-            const e = parseInt(matches[2]);
-            if (!isNaN(s) && !isNaN(e)) { for (let i = s; i <= e; i++) pages.add(i); }
+      // 1. 숙제 (Homework - Blue) 파싱
+      const hwText = log.homework_text || '';
+      if (hwText.includes(title)) {
+        const matches = hwText.matchAll(/p(\d+)\s*[~-]\s*p?(\d+)/gi);
+        for (const match of matches) {
+          const s = parseInt(match[1]); const e = match[2] ? parseInt(match[2]) : s;
+          if (!isNaN(s) && !isNaN(e)) { for (let i = Math.min(s, e); i <= Math.max(s, e); i++) { if (!statusMap.has(i)) statusMap.set(i, 'homework'); } }
+        }
+      }
+
+      // 2. 수업/수행 (Classwork/Wrong - Amber/Green) 파싱
+      const cwLines = (log.classwork_text || '').split('\n');
+      cwLines.forEach(line => {
+        if (line.includes(title)) {
+          const type = line.includes('[오답]') ? 'wrong' : 'classwork';
+          const matches = line.matchAll(/p(\d+)\s*[~-]\s*p?(\d+)/gi);
+          for (const match of matches) {
+            const s = parseInt(match[1]); const e = match[2] ? parseInt(match[2]) : s;
+            if (!isNaN(s) && !isNaN(e)) {
+              for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
+                const current = statusMap.get(i);
+                // Hierarchy: wrong > classwork > homework
+                if (type === 'wrong') statusMap.set(i, 'wrong');
+                else if (type === 'classwork' && current !== 'wrong') statusMap.set(i, 'classwork');
+              }
+            }
           }
         }
       });
-      const combinedText = `${log.classwork_text || ''}\n${log.homework_text || ''}`;
-      if (combinedText.trim()) {
-        const lines = combinedText.split('\n');
-        lines.forEach((line: string) => {
-          if (line.includes(textbook?.title || bookCode)) {
-            const matches = line.match(/p(\d+)\s*[~-]\s*p(\d+)/i) || line.match(/p(\d+)\s*[~-]\s*(\d+)/i);
-            if (matches) {
-              const s = parseInt(matches[1]);
-              const e = parseInt(matches[2]);
-              if (!isNaN(s) && !isNaN(e)) { for (let i = s; i <= e; i++) pages.add(i); }
+
+      // 3. JSON 데이터 (보정용)
+      const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];
+      combinedJson.forEach((h: any) => {
+        if ((h.book_name === bookCode || h.book_name === actualBookCode) && h.range) {
+          const type = h.type === 'wrong' ? 'wrong' : (log.classwork_json?.includes(h) ? 'classwork' : 'homework');
+          const matches = h.range.match(/p(\d+)\s*[~-]\s*p?(\d+)/i) || h.range.match(/p(\d+)/i);
+          if (matches) {
+            const s = parseInt(matches[1]); const e = matches[2] ? parseInt(matches[2]) : s;
+            if (!isNaN(s) && !isNaN(e)) {
+              for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
+                const current = statusMap.get(i);
+                if (type === 'wrong') statusMap.set(i, 'wrong');
+                else if (type === 'classwork' && current !== 'wrong') statusMap.set(i, 'classwork');
+                else if (type === 'homework' && !current) statusMap.set(i, 'homework');
+              }
             }
           }
-        });
-      }
+        }
+      });
     });
-    return Array.from(pages);
+    return statusMap;
   }, [student.allLogs, bookCode, textbook]);
 
   const completedUnitNames = useMemo(() => {
@@ -228,11 +271,10 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
   const getMissingRanges = (start: number, end: number) => {
     const missing: number[] = [];
     for (let i = start; i <= end; i++) {
-      if (!bookHistoryPages.includes(i)) missing.push(i);
+      if (!bookPageStatus.has(i)) missing.push(i);
     }
     if (missing.length === 0) return [];
     
-    // 연속된 숫자를 범위로 묶기 (예: [1, 2, 3, 5, 6] -> ["1~3", "5~6"])
     const ranges: string[] = [];
     if (missing.length > 0) {
       let rStart = missing[0];
@@ -294,8 +336,18 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
             const startP = parseInt(u.start_page || '0');
             const endP = parseInt(u.end_page || '0');
             const totalInUnit = Math.max(1, endP - startP + 1);
-            const pagesInUnit = bookHistoryPages.filter(p => p >= startP && p <= endP);
-            const progressRatio = Math.min(1, pagesInUnit.length / totalInUnit);
+            
+            // 💡 스마트 상태별 페이지 수 계산
+            let wrongCount = 0; let classworkCount = 0; let homeworkCount = 0;
+            for (let i = startP; i <= endP; i++) {
+              const status = bookPageStatus.get(i);
+              if (status === 'wrong') wrongCount++;
+              else if (status === 'classwork') classworkCount++;
+              else if (status === 'homework') homeworkCount++;
+            }
+            
+            const totalCovered = wrongCount + classworkCount + homeworkCount;
+            const progressRatio = Math.min(1, totalCovered / totalInUnit);
 
             return (
               <motion.div 
@@ -332,7 +384,7 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
                 </div>
 
                 {/* 💡 누락 페이지 탐지 표시 */}
-                {!isCompleted && progressRatio < 1 && progressRatio > 0 && (
+                {!isCompleted && progressRatio < 1 && totalCovered > 0 && (
                   <div className="mb-2 px-1 py-0.5 bg-red-500/10 border border-red-500/20 rounded-[2px] flex items-center justify-between group/missing">
                     <span className="text-[7px] font-black text-red-400 uppercase tracking-tighter">
                       Gap: p.{getMissingRanges(startP, endP).join(', ')}
@@ -346,28 +398,20 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
                   </div>
                 )}
 
-                {/* 10단계 정밀 눈금 */}
-                <div className="h-1 flex gap-[1px] mb-2">
-                  {[...Array(10)].map((_, i) => {
-                    const threshold = (i + 1) * 10;
-                    const currentProgress = Math.round(progressRatio * 100);
-                    // 💡 4번째 플래그가 체크되어 있거나 서버에서 완료된 경우(isCompleted) 무조건 100% (Active)
-                    const isStepFinalDone = stepStates[u.unit]?.[3];
-                    const isActive = isCompleted || isStepFinalDone || currentProgress >= threshold;
-                    return (
-                      <div 
-                        key={i} 
-                        className={`flex-1 rounded-[0.5px] transition-all duration-500 ${
-                          isActive 
-                            ? (isCompleted || isStepFinalDone ? 'bg-emerald-500' : 'bg-blue-600') 
-                            : 'bg-white/[0.05]'
-                        }`} 
-                      />
-                    );
-                  })}
+                {/* 💡 스마트 멀티 컬러 프로그레스 바 */}
+                <div className="h-1.5 w-full bg-white/[0.05] rounded-full overflow-hidden flex mb-3 border border-white/[0.03]">
+                  {isCompleted ? (
+                    <div className="h-full bg-emerald-500 w-full" />
+                  ) : (
+                    <>
+                      <div style={{ width: `${(wrongCount / totalInUnit) * 100}%` }} className="h-full bg-emerald-500 transition-all duration-700" />
+                      <div style={{ width: `${(classworkCount / totalInUnit) * 100}%` }} className="h-full bg-amber-500 transition-all duration-700 shadow-[inset_-1px_0_0_rgba(0,0,0,0.2)]" />
+                      <div style={{ width: `${(homeworkCount / totalInUnit) * 100}%` }} className="h-full bg-blue-500 transition-all duration-700 shadow-[inset_-1px_0_0_rgba(0,0,0,0.2)]" />
+                    </>
+                  )}
                 </div>
 
-                {/* 하단 4개 체크리스트 박스 복원 */}
+                {/* 하단 4개 체크리스트 박스 */}
                 <div className="grid grid-cols-4 gap-1 h-5">
                   {[
                     { id: 'video', icon: <Video size={8} />, label: '강의 시청' },

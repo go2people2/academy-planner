@@ -15,6 +15,8 @@ export interface SessionLog {
   special_notes: string;
   classwork_text: string;
   classwork_json: HomeworkItem[];
+  completed_classwork_text?: string; // 💡 실제 수행 진도 텍스트
+  completed_classwork_json?: HomeworkItem[]; // 💡 실제 수행 진도 데이터
   homework_text: string;
   homework_json: HomeworkItem[];
   next_quiz_text?: string; // 💡 추가
@@ -63,6 +65,7 @@ export interface Teacher {
   id: string;
   academy_id: string;
   name: string;
+  initials?: string; // 💡 추가
   email?: string;
   role: 'admin' | 'teacher';
   homework_presets?: Record<string, string>; // 💡 추가

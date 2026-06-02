@@ -109,8 +109,12 @@ export default function DashboardPage() {
   const fetchTeachers = useCallback(async (academyId: string) => {
     try {
       const { data, error } = await supabase.from('ams_teachers').select('*').eq('academy_id', academyId).order('name', { ascending: true });
-      if (!error) setTeachers(data || []);
+      if (!error) {
+        setTeachers(data || []);
+        return data || []; // 💡 데이터 반환 추가
+      }
     } catch (e) { console.error(e); }
+    return [];
   }, []);
 
   const refreshTextbooks = useCallback(async () => {
@@ -125,15 +129,21 @@ export default function DashboardPage() {
     if (showLoader) setIsLoading(true);
     try {
       let currentAcademy = academy;
+      let currentTeachers = teachers; // 💡 로컬 변수 사용
+
       if (!currentAcademy) {
         const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
         const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
         if (acData) { 
           const announcements = { monthly: '', weekly: '', daily: '', ...(acData.announcements || {}) };
           const enrichedAcademy = { ...acData, announcements };
-          setAcademy(enrichedAcademy); currentAcademy = enrichedAcademy; await fetchTeachers(acData.id); 
+          setAcademy(enrichedAcademy); 
+          currentAcademy = enrichedAcademy; 
+          currentTeachers = await fetchTeachers(acData.id); // 💡 즉시 반환받은 데이터 사용
         } else { setIsLoading(false); return; }
-      } else { await fetchTeachers(currentAcademy.id); }
+      } else { 
+        currentTeachers = await fetchTeachers(currentAcademy.id); 
+      }
 
       let studentsQuery = supabase.from('ams_students').select('*').eq('academy_id', currentAcademy.id);
       const user = currentUser || (typeof window !== 'undefined' ? JSON.parse(localStorage.getItem('ams_user') || 'null') : null);
@@ -142,7 +152,7 @@ export default function DashboardPage() {
       const { data: studentsData, error: sErr } = await studentsQuery;
       if (sErr) throw sErr;
 
-      const { data: tasksData } = await supabase.from('ams_tasks').select('*').eq('academy_id', academy?.id).eq('is_completed', false).like('title', '[건의]%');
+      const { data: tasksData } = await supabase.from('ams_tasks').select('*').eq('academy_id', currentAcademy.id).eq('is_completed', false).like('title', '[건의]%');
 
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
         const { data: logsData } = await supabase.from('ams_session_logs').select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(20);
@@ -154,7 +164,7 @@ export default function DashboardPage() {
             if (l.homework_to?.startsWith('{')) {
               const parsed = JSON.parse(l.homework_to);
               nqText = parsed.text || ''; nqCut = parsed.cut || 0; nqTrial = parsed.trial || 1; nqJson = parsed.json || [];
-              if (nqText) hasHwTo = true; // 💡 텍스트가 있을 때만 유의미한 기록으로 간주
+              if (nqText) hasHwTo = true;
             } else if (l.homework_to) {
               hasHwTo = true; nqText = l.homework_to;
             }
@@ -172,7 +182,6 @@ export default function DashboardPage() {
               tCut = res.cut || 0;
               missionSnapshot = res.mission || '';
               todoAchievement = res.todo_achievement || 0;
-              // 💡 상태(완료/미완료), 텍스트, 미션, 혹은 성취도가 있을 때만 유의미한 기록으로 간주
               if (isTestCompleted !== undefined || l.test_status || missionSnapshot || todoAchievement > 0) hasTestResult = true;
             }
           } catch (e) {}
@@ -181,6 +190,8 @@ export default function DashboardPage() {
             id: l.id, date: l.session_date, status: (l.status || 'none') as StudentStatus,
             attendance_status: l.attendance_status || '', special_notes: l.special_notes || '',
             classwork_text: l.classwork_text || '', classwork_json: l.classwork_json || [],
+            completed_classwork_text: l.completed_classwork_text || '', 
+            completed_classwork_json: l.completed_classwork_json || [],
             homework_text: l.homework_text || '', homework_json: l.homework_json || [],
             next_quiz_text: nqText, next_quiz_json: nqJson, next_quiz_cut: nqText ? nqCut : (hasHwTo ? nqCut : 0), next_quiz_trial: nqText ? nqTrial : (hasHwTo ? nqTrial : 1),
             test_id: l.test_status || '', test_score: l.test_score, 
@@ -189,6 +200,8 @@ export default function DashboardPage() {
             mission: missionSnapshot,
             todo_achievement: todoAchievement,
             report_sent_at: l.report_sent_at,
+            timer_started_at: l.timer_started_at,
+            timer_duration: l.timer_duration,
             hasHwTo, hasTestResult
           };
         });
@@ -198,8 +211,6 @@ export default function DashboardPage() {
         const pastLogs = logs.filter(l => l.date < selectedDate).sort((a, b) => b.date.localeCompare(a.date));
         let aggregatedHw = "";
         
-        // 💡 기준 수업(baseSession) 찾기: 단순히 최근 날짜가 아니라, 
-        // 테스트 계획(next_quiz_text)이나 실제 기록이 남아있는 '마지막 수업'을 끝까지 추적하여 찾음
         let baseSession = pastLogs.find(l => 
           (l.next_quiz_text || l.test_id || l.classwork_text || l.homework_text) && 
           !['결석', '수업취소', '수업제외'].includes(l.attendance_status)
@@ -208,16 +219,13 @@ export default function DashboardPage() {
         const dayName = getDayOfWeek(selectedDate);
         const todayLog = logs.find(l => String(l.date) === String(selectedDate));
         
-        // 💡 수업일 판정: 정규 요일이거나, 명시적으로 출결(출석/지각/보강)이 입력된 경우
         const isTodayClassDay = s.class_days?.includes(dayName) || 
                                 (todayLog?.attendance_status && !['none', ''].includes(todayLog.attendance_status));
 
-        // 💡 1. 활성 계획(Active Plan) 확립
-        // 💡 수정: '다음 계획'이 있다면 무조건 그것을 우선함. 계획이 없을 때만 미완료 시험 재시험을 제안함.
         const activePlanText = baseSession?.next_quiz_text || (baseSession?.test_completed === false ? (baseSession.test_id || "") : "");
         const activePlanCut = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_cut) || 0) : (baseSession?.test_completed === false ? (Number(baseSession.test_cut) || 0) : 0);
         const activePlanTrial = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_trial) || 1) : (baseSession?.test_completed === false ? 1 : 1);
-        const baseMission = baseSession?.mission || s.recent_mission || ""; // 💡 마지막 미션 추적
+        const baseMission = baseSession?.mission || s.recent_mission || "";
 
         if (pastLogs.length > 0) {
           for (const log of pastLogs) {
@@ -233,19 +241,16 @@ export default function DashboardPage() {
         }
 
         if (todayLog) {
-          // 💡 학생 미션 자동 채우기: 새로운 입력이 없으면 이전 기록을 계속 유지
           if (!todayLog.mission && baseMission) {
             todayLog.mission = baseMission;
           }
 
           if (isTodayClassDay) {
-            // [수업일] 오늘 테스트 칸에 계획 복사 (기존 기록 보호)
             if (!todayLog.test_id && !todayLog.hasTestResult && activePlanText) {
               todayLog.test_id = activePlanText;
               todayLog.test_cut = activePlanCut;
             }
           } else {
-            // [사이 날짜] 다음 테스트 칸에 계획 보존 (기존 기록 보호)
             if (!todayLog.next_quiz_text && !todayLog.hasHwTo && activePlanText) {
               todayLog.next_quiz_text = activePlanText;
               todayLog.next_quiz_cut = activePlanCut;
@@ -255,8 +260,8 @@ export default function DashboardPage() {
         }
 
         const studentSuggestions = (tasksData || []).filter(t => t.title === `[건의] ${s.name}`);
-        const teacher = (teachers || []).find(t => t.id === s.teacher_id);
-        const teacherInitial = teacher ? getInitial(teacher.name) : '?';
+        const teacher = (currentTeachers || []).find(t => t.id === s.teacher_id);
+        const teacherInitial = teacher ? (teacher.initials || getInitial(teacher.name)) : '?';
 
         return {
           id: s.id, academy_id: s.academy_id, teacher_id: s.teacher_id,
@@ -277,7 +282,7 @@ export default function DashboardPage() {
             id: 'temp', date: selectedDate, status: 'none', attendance_status: '', 
             test_id: isTodayClassDay ? activePlanText : '', 
             test_cut: isTodayClassDay ? activePlanCut : 0, 
-            mission: baseMission, // 💡 임시 객체에도 마지막 미션 부여
+            mission: baseMission,
             next_quiz_text: !isTodayClassDay ? activePlanText : '', 
             next_quiz_cut: !isTodayClassDay ? activePlanCut : 0, 
             next_quiz_trial: !isTodayClassDay ? activePlanTrial : 1, 
@@ -323,7 +328,12 @@ export default function DashboardPage() {
     if (!student || !academy) return false;
     let sessionId = student.todaySession?.id;
 
-    const ALLOWED_COLUMNS = ['status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 'session_date', 'academy_id', 'student_id', 'homework_to', 'timer_started_at', 'timer_duration'];
+    const ALLOWED_COLUMNS = [
+      'status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 
+      'completed_classwork_text', 'completed_classwork_json',
+      'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 
+      'session_date', 'academy_id', 'student_id', 'homework_to', 'timer_started_at', 'timer_duration'
+    ];
     const filteredData: any = {};
     const nqObj = {
       text: ('next_quiz_text' in sessionData) ? sessionData.next_quiz_text : (student.todaySession?.next_quiz_text ?? ''),
@@ -418,7 +428,7 @@ export default function DashboardPage() {
     if (!academy) return;
     try {
       await supabase.from('ams_students').insert([{ academy_id: academy.id, name: data.name, school: data.school, grade: data.grade, course: data.course, book_courses: data.book_courses || {}, class_name: data.class_name, phone: data.phone, teacher_id: data.teacher_id || null, class_days: data.class_days, day_schedules: data.day_schedules, assigned_books: data.assigned_books, is_deleted: false }]);
-      await fetchAllData();
+      await fetchAllData(false);
     } catch (e) { console.error(e); }
   };
 
@@ -439,7 +449,7 @@ export default function DashboardPage() {
         return { student_id: id, student_name: s?.name, academy_id: academy.id, session_date: selectedDate, attendance_status: '보강', status: null, special_notes: notes };
       });
       const { error } = await supabase.from('ams_session_logs').upsert(newLogs, { onConflict: 'student_id,session_date' });
-      if (error) throw error; await fetchAllData(); setIsBatchMode(false);
+      if (error) throw error; await fetchAllData(false); setIsBatchMode(false);
     } catch (e) { console.error(e); } finally { setIsLoading(false); }
   };
 
@@ -451,7 +461,7 @@ export default function DashboardPage() {
       const payload: any = { student_id: studentId, student_name: student.name, academy_id: academy.id, session_date: selectedDate, attendance_status: '수업제외', special_notes: notes, status: null };
       if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
       const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date' });
-      if (error) throw error; await fetchAllData();
+      if (error) throw error; await fetchAllData(false);
     } catch (e) { console.error(e); }
   };
 
@@ -464,29 +474,53 @@ export default function DashboardPage() {
         let updateData: any = (typeof fieldOrUpdates === 'string') ? { [fieldOrUpdates]: value } : { ...fieldOrUpdates };
         await supabase.from('ams_students').update(updateData).eq('id', studentId);
       }
-      await fetchAllData();
+      await fetchAllData(false);
     } catch (e: any) { console.error(e); }
   };
 
   const handleAddNewTeacherAccount = async (d: any) => {
     if (!academy) return;
-    try { await supabase.from('ams_teachers').insert([{ academy_id: academy.id, login_id: d.login_id, password: d.password, name: d.name, role: d.role }]); await fetchTeachers(academy.id); } 
+    try { 
+      await supabase.from('ams_teachers').insert([{ 
+        academy_id: academy.id, 
+        login_id: d.login_id, 
+        password: d.password, 
+        name: d.name, 
+        initials: d.initials, // 💡 추가
+        role: d.role 
+      }]); 
+      await fetchTeachers(academy.id); 
+    } 
     catch (e) { console.error(e); }
   };
 
   const handleDeleteTeacher = async (id: string) => { if (!confirm('삭제하시겠습니까?')) return; await supabase.from('ams_teachers').delete().eq('id', id); if (academy) await fetchTeachers(academy.id); };
 
-  const handleUpdateTeacher = async (id: string, updates: any) => { try { await supabase.from('ams_teachers').update(updates).eq('id', id); if (academy) await fetchTeachers(academy.id); } catch (e) { console.error(e); } };
+  const handleUpdateTeacher = async (id: string, updates: any) => { 
+    try { 
+      const { error } = await supabase.from('ams_teachers').update(updates).eq('id', id); 
+      if (error) {
+        console.error('Update Error:', error);
+        alert('저장 실패: ' + error.message);
+      } else {
+        if (academy) await fetchTeachers(academy.id); 
+      }
+    } catch (e) { console.error(e); } 
+  };
 
   const selectedDayKey = getDayOfWeek(selectedDate);
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
   const todayStudents = useMemo(() => students.filter(s => {
     if (s.is_deleted === true) return false;
-    const hasRealSession = s.todaySession?.id && s.todaySession.id !== 'temp';
     const isScheduledToday = s.class_days.includes(selectedDayKey);
     const attStatus = s.todaySession?.attendance_status || '';
-    const isToday = (isScheduledToday && attStatus !== '수업제외') || (hasRealSession && attStatus !== '수업제외' && attStatus !== '');
+    
+    // 💡 '오늘 수업 학생' 판정 조건 강화: 
+    // 1. 오늘이 정규 수업일이거나
+    // 2. 정규 수업일은 아니지만 명시적인 출결 상태(출석, 보강, 결석 등)가 입력된 경우만 포함
+    const isToday = (isScheduledToday && attStatus !== '수업제외') || (attStatus !== '' && attStatus !== '수업제외');
+    
     if (!isToday) return false;
     if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
     if (selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
@@ -539,7 +573,7 @@ export default function DashboardPage() {
           <div className="h-full">
             {viewMode === 'board' && <Overview todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} />}
             {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={filteredAllStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} />}
-            {viewMode === 'todayTable' && <TodaySheet students={todayStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} masterTextbooks={availableTextbooks} onSave={saveTodaySession} onUpdateStudentInfo={updateStudentInfo} academyInfo={academy} currentUser={currentUser} sortMode={sortMode} onSortModeChange={setSortMode} />}
+            {viewMode === 'todayTable' && <TodaySheet students={todayStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} onSelectStudent={setSelectedStudentId} masterTextbooks={availableTextbooks} onSave={saveTodaySession} onUpdateStudentInfo={updateStudentInfo} academyInfo={academy} currentUser={currentUser} sortMode={sortMode} onSortModeChange={setSortMode} />}
             {viewMode === 'progress' && <ProgressSequencer students={filteredAllStudents} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
             {viewMode === 'notifications' && <NotificationsView academyInfo={academy} students={students} currentUser={currentUser} />}
