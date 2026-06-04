@@ -218,6 +218,40 @@ export default function StudentPortal() {
     fetchAllStudentData(parsedStudent.id);
   }, [slug, router, fetchAllStudentData]);
 
+  // 💡 실시간 데이터 동기화 (타이머 중단 등 반영)
+  useEffect(() => {
+    if (!student?.id || !selectedDate) return;
+
+    const channel = supabase
+      .channel(`sync_session_${student.id}_${selectedDate}`)
+      .on(
+        'postgres_changes', 
+        { 
+          event: 'UPDATE', 
+          schema: 'public', 
+          table: 'ams_session_logs', 
+          filter: `student_id=eq.${student.id}` 
+        }, 
+        (payload: any) => {
+          const newData = payload.new;
+          if (newData && newData.session_date === selectedDate) {
+            setTodaySession((prev: any) => ({
+              ...prev,
+              ...newData
+            }));
+            
+            // 💡 텍스트 필드들도 동기화 (선생님이 수정했을 때 바로 보이도록)
+            setTodayPlan(newData.classwork_text || '');
+            setLocalCompletedClasswork(newData.completed_classwork_text || '');
+            setLocalHomework(newData.homework_text || '');
+          }
+        }
+      )
+      .subscribe();
+
+    return () => { supabase.removeChannel(channel); };
+  }, [student?.id, selectedDate]);
+
   const handleManualSave = async (field: 'classwork' | 'completed_classwork' | 'homework' | 'special_notes', value: string) => {
     if (!student || !academy) return;
     setIsSaving(true);

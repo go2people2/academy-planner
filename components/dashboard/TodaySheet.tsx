@@ -7,7 +7,8 @@ import {
   Calendar as CalendarIcon, History as HistoryIcon, 
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
-  SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap
+  SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
+  Maximize2, ArrowLeft
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRow';
@@ -32,8 +33,8 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'test_score', label: '점수', minWidth: 60, canHide: true },
   { id: 'next_quiz', label: '다음TEST', minWidth: 200, canHide: true },
   { id: 'review', label: '과제확인', minWidth: 180, canHide: true },
-  { id: 'classwork', label: '오늘 할 일(To-Do)', minWidth: 200, canHide: false }, // 💡 라벨 변경 및 폭 조절
-  { id: 'completed_classwork', label: '수행진도', minWidth: 200, canHide: false }, // 💡 신규 추가
+  { id: 'classwork', label: '오늘 할 일(To-Do)', minWidth: 200, canHide: false },
+  { id: 'completed_classwork', label: '수행진도', minWidth: 200, canHide: false },
   { id: 'assign', label: '오늘숙제', minWidth: 220, canHide: false },
   { id: 'mission', label: '학생미션', minWidth: 220, canHide: false },
   { id: 'notes', label: '특이사항', minWidth: 160, canHide: true },
@@ -42,11 +43,12 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 // --- Sub-components ---
 
-function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCut, onSelectAll, isAllSelected }: any) {
+function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCut, onSelectAll, isAllSelected, onFocusColumn, focusColumn }: any) {
   return (
     <tr className="bg-black border-b border-white/20 select-none">
       {activeColumns.map((col: any) => {
         const isStickyHorizontally = col.id === 'name' || col.id === 'action' || col.id === 'select';
+        const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes'].includes(col.id);
         const styles: React.CSSProperties = {
           width: colWidths[col.id] || col.minWidth,
           minWidth: colWidths[col.id] || col.minWidth,
@@ -69,7 +71,18 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
                 />
               ) : (
                 <>
-                  {col.label}
+                  <div className="flex items-center gap-1.5">
+                    {col.label}
+                    {canFocus && !focusColumn && (
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); onFocusColumn(col.id); }}
+                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded transition-all text-blue-400"
+                        title="넓게 보기"
+                      >
+                        <Maximize2 size={10} />
+                      </button>
+                    )}
+                  </div>
                   {col.id === 'next_quiz' && onBatchQuizCut && (
                     <div className="relative group/batch" title="모든 학생 커트라인 일괄 설정">
                       <select 
@@ -130,12 +143,11 @@ export default function TodaySheet({
       const saved = localStorage.getItem(`todaySheetPresets_${currentUser?.id || 'default'}`);
       if (saved) return JSON.parse(saved);
     }
-    const defaultCols = DEFAULT_COLUMNS.map(c => c.id);
     return {
       '1': ['select', 'name', 'review', 'classwork', 'completed_classwork', 'assign', 'mission', 'action'],
       '2': ['select', 'name', 'test_id', 'test_score', 'notes', 'action'],
       '3': ['select', 'name', 'next_quiz', 'action'],
-      '4': defaultCols
+      '4': DEFAULT_COLUMNS.map(c => c.id)
     };
   });
 
@@ -152,17 +164,71 @@ export default function TodaySheet({
   const [undoStack, setUndoStack] = useState<any[]>([]);
   const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
+  const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
 
   // 2. Memos
   const visibleColumns = useMemo(() => {
+    if (focusColumn) {
+      // 💡 포커스 모드일 때: 이름, 출결, 선택한 컬럼(+테스트 점수), 저장 버튼만 노출
+      const base = ['select', 'name', 'attendance'];
+      const focused = [focusColumn];
+      if (focusColumn === 'test_id') focused.push('test_score');
+      return [...base, ...focused, 'action'];
+    }
     return presets[activeSet] || DEFAULT_COLUMNS.map(c => c.id);
-  }, [presets, activeSet]);
+  }, [presets, activeSet, focusColumn]);
 
   const activeColumns = useMemo(() => {
     return DEFAULT_COLUMNS.filter(col => !col.canHide || visibleColumns.includes(col.id));
   }, [visibleColumns]);
 
-  const totalWidth = useMemo(() => activeColumns.reduce((acc, col) => acc + (colWidths[col.id] || col.minWidth), 0), [activeColumns, colWidths]);
+  // 💡 포커스 모드용 컬럼 너비 계산
+  const focusColWidths = useMemo(() => {
+    const base = { ...colWidths };
+    if (focusColumn) {
+      // 포커스된 컬럼은 화면의 상당 부분을 차지하도록 확장
+      base[focusColumn] = 800;
+      if (focusColumn === 'test_id') base['test_score'] = 100;
+      base['name'] = 140;
+      base['attendance'] = 80;
+    }
+    return base;
+  }, [colWidths, focusColumn]);
+
+  const totalWidth = useMemo(() => {
+    if (focusColumn) return '100%'; // 포커스 모드에서는 테이블 너비를 100%로 설정
+    return activeColumns.reduce((acc, col) => acc + (colWidths[col.id] || col.minWidth), 0);
+  }, [activeColumns, colWidths, focusColumn]);
+
+  // 💡 포커스 모드일 때 학생 필터링 및 전체 정렬 로직 적용
+  const filteredStudents = useMemo(() => {
+    let result = [...students];
+    
+    if (focusColumn === 'test_id') {
+      result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
+    }
+
+    const dayKey = getDayOfWeek(selectedDate);
+    const getStartTime = (st: any) => {
+      const stat = st.todaySession?.attendance_status || '';
+      if (stat.includes(':')) { 
+        const parts = stat.split(':'); 
+        const val = parseInt(parts[parts.length - 1]); 
+        if (!isNaN(val) && val < 24) return val; 
+      }
+      const hours = st.day_schedules?.[dayKey] || [];
+      return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
+    };
+
+    return result.sort((a, b) => {
+      if (sortMode === 'time') {
+        const timeA = getStartTime(a);
+        const timeB = getStartTime(b);
+        if (timeA !== timeB) return timeA - timeB;
+      }
+      return a.name.localeCompare(b.name, 'ko');
+    });
+  }, [students, focusColumn, sortMode, selectedDate]);
 
   // 3. Callbacks
   const isCellInRange = useCallback((studentId: string, colId: string) => {
@@ -251,8 +317,6 @@ export default function TodaySheet({
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     if (!activeCell) return;
-    const target = e.target as HTMLElement;
-    const isInputTarget = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.tagName === 'SELECT';
     const clipboardData = e.clipboardData?.getData('text/plain');
     if (!clipboardData) return;
     try {
@@ -268,11 +332,7 @@ export default function TodaySheet({
       if (dataMatrix.length > 1 && dataMatrix[dataMatrix.length - 1].length === 1 && dataMatrix[dataMatrix.length - 1][0] === '') dataMatrix.pop();
       const isSingle = dataMatrix.length === 1 && dataMatrix[0].length === 1;
       const isEditing = !!editingCell;
-
-      // 💡 편집 중(입력창 활성 상태)일 때는 브라우저의 기본 붙여넣기 동작을 허용하여 
-      // 한 셀 내에 모든 내용이 들어가도록 합니다. (쪼개짐 방지)
       if (isEditing) return;
-
       e.preventDefault();
       const updates: any[] = [];
       const startColIdx = activeColumns.findIndex(col => col.id === activeCell.columnId);
@@ -407,16 +467,8 @@ export default function TodaySheet({
       if (e.isComposing || e.keyCode === 229) return;
       const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '');
       const isEditorOpen = !!document.getElementById('homework-editor-portal');
-
-      // SET 전환 단축키 (Alt + Q, W, E, R)
       const keyToSet: Record<string, string> = { 'q': '1', 'w': '2', 'e': '3', 'r': '4', 'Q': '1', 'W': '2', 'E': '3', 'R': '4' };
-      if (e.altKey && keyToSet[e.key]) {
-        e.preventDefault();
-        handleSetSwitch(keyToSet[e.key]);
-        return;
-      }
-
-      // CMD+Z
+      if (e.altKey && keyToSet[e.key]) { e.preventDefault(); handleSetSwitch(keyToSet[e.key]); return; }
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
         const target = e.target as HTMLElement;
         const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
@@ -424,72 +476,39 @@ export default function TodaySheet({
         if (inInput) { const input = target as HTMLInputElement | HTMLTextAreaElement; hasSel = input.selectionStart !== input.selectionEnd; }
         if (!hasSel) { e.preventDefault(); performUndo(); return; }
       }
-
       if (!activeCell) return;
-      const rIdx = students.findIndex(s => s.id === activeCell.studentId);
+      const rIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
       const cIdx = activeColumns.findIndex(c => c.id === activeCell.columnId);
       if (rIdx === -1 || cIdx === -1) return;
-
       let nR = rIdx; let nC = cIdx;
-      if (!isInput) {
-        if (e.key === 'ArrowDown') nR++; else if (e.key === 'ArrowUp') nR--;
-        else if (e.key === 'ArrowRight') nC++; else if (e.key === 'ArrowLeft') nC--;
-      }
-      if (e.key === 'Enter' && !e.shiftKey && !e.altKey) {
-        if (!isInput) return; e.preventDefault(); nR++; setSelectedRange(null);
-      } else if (e.key === 'Tab') {
-        e.preventDefault(); setSelectedRange(null); if (e.shiftKey) nC--; else nC++;
-      }
-
+      if (!isInput) { if (e.key === 'ArrowDown') nR++; else if (e.key === 'ArrowUp') nR--; else if (e.key === 'ArrowRight') nC++; else if (e.key === 'ArrowLeft') nC--; }
+      if (e.key === 'Enter' && !e.shiftKey && !e.altKey) { if (!isInput) return; e.preventDefault(); nR++; setSelectedRange(null); } 
+      else if (e.key === 'Tab') { e.preventDefault(); setSelectedRange(null); if (e.shiftKey) nC--; else nC++; }
       if (nR !== rIdx || nC !== cIdx) {
-        nR = Math.max(0, Math.min(students.length - 1, nR)); nC = Math.max(0, Math.min(activeColumns.length - 1, nC));
-        const nS = students[nR]; const nCol = activeColumns[nC];
-        if (nS && nCol) {
-          setActiveCell({ studentId: nS.id, columnId: nCol.id });
-          if (e.key === 'Enter' || e.key === 'Tab') { setTimeout(() => setEditingCell({ studentId: nS.id, columnId: nCol.id }), 50); } 
-          else if (e.key.startsWith('Arrow')) { setEditingCell(null); }
-        }
+        nR = Math.max(0, Math.min(filteredStudents.length - 1, nR)); nC = Math.max(0, Math.min(activeColumns.length - 1, nC));
+        const nS = filteredStudents[nR]; const nCol = activeColumns[nC];
+        if (nS && nCol) { setActiveCell({ studentId: nS.id, columnId: nCol.id }); if (e.key === 'Enter' || e.key === 'Tab') { setTimeout(() => setEditingCell({ studentId: nS.id, columnId: nCol.id }), 50); } else if (e.key.startsWith('Arrow')) { setEditingCell(null); } }
       } else if (e.key === 'Enter' || e.key === 'Tab') { setEditingCell(null); }
-
       if (!isInput && (e.key === 'Backspace' || e.key === 'Delete')) {
         if (selectedRange) {
           e.preventDefault();
-          const sI = students.findIndex((s:any) => s.id === selectedRange.startStudentId);
-          const eI = students.findIndex((s:any) => s.id === selectedRange.endStudentId);
+          const sI = filteredStudents.findIndex((s:any) => s.id === selectedRange.startStudentId);
+          const eI = filteredStudents.findIndex((s:any) => s.id === selectedRange.endStudentId);
           const sC = activeColumns.findIndex(c => c.id === selectedRange.startColId);
           const eC = activeColumns.findIndex(c => c.id === selectedRange.endColId);
           if (sI !== -1 && eI !== -1 && sC !== -1 && eC !== -1) {
             const rMin = Math.min(sI, eI); const rMax = Math.max(sI, eI);
             const cMin = Math.min(sC, eC); const cMax = Math.max(sC, eC);
             const updates: any[] = [];
-            const fieldMap: any = { 
-              'test_id': 'test_status', 'test_score': 'test_score', 'classwork': 'classwork_text', 
-              'completed_classwork': 'completed_classwork_text', 'assign': 'homework_text', 
-              'next_quiz': 'next_quiz_text', 'mission': 'mission', 'notes': 'special_notes' 
-            };
-            for (let r = rMin; r <= rMax; r++) {
-              const st = students[r]; const sess = st.todaySession || {}; const nD = { ...sess }; let chg = false;
-              for (let c = cMin; c <= cMax; c++) { const cid = activeColumns[c].id; const f = fieldMap[cid]; if (f) { nD[f] = ''; chg = true; } }
-              if (chg) updates.push({ studentId: st.id, newData: nD, prevData: { ...sess } });
-            }
+            const fieldMap: any = { 'test_id': 'test_status', 'test_score': 'test_score', 'classwork': 'classwork_text', 'completed_classwork': 'completed_classwork_text', 'assign': 'homework_text', 'next_quiz': 'next_quiz_text', 'mission': 'mission', 'notes': 'special_notes' };
+            for (let r = rMin; r <= rMax; r++) { const st = filteredStudents[r]; const sess = st.todaySession || {}; const nD = { ...sess }; let chg = false; for (let c = cMin; c <= cMax; c++) { const cid = activeColumns[c].id; const f = fieldMap[cid]; if (f) { nD[f] = ''; chg = true; } } if (chg) updates.push({ studentId: st.id, newData: nD, prevData: { ...sess } }); }
             if (updates.length > 0) handleBatchSaveWithUndo(updates);
           }
         }
       }
     };
-
-    window.addEventListener('mouseup', handleMouseUpGlobal);
-    window.addEventListener('mousedown', handleClickOutside);
-    window.addEventListener('keydown', handleGlobalKeyDown);
-    window.addEventListener('copy', handleCopy);
-    window.addEventListener('paste', handlePaste);
-    return () => {
-      window.removeEventListener('mouseup', handleMouseUpGlobal);
-      window.removeEventListener('mousedown', handleClickOutside);
-      window.removeEventListener('keydown', handleGlobalKeyDown);
-      window.removeEventListener('copy', handleCopy);
-      window.removeEventListener('paste', handlePaste);
-    };
+    window.addEventListener('mouseup', handleMouseUpGlobal); window.addEventListener('mousedown', handleClickOutside); window.addEventListener('keydown', handleGlobalKeyDown); window.addEventListener('copy', handleCopy); window.addEventListener('paste', handlePaste);
+    return () => { window.removeEventListener('mouseup', handleMouseUpGlobal); window.removeEventListener('mousedown', handleClickOutside); window.removeEventListener('keydown', handleGlobalKeyDown); window.removeEventListener('copy', handleCopy); window.removeEventListener('paste', handlePaste); };
   }, [isDragging, selectedRange, students, activeColumns, selectedIds, undoStack, activeCell, editingCell, performUndo, handleCopy, handlePaste, handleSetSwitch]);
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
@@ -519,17 +538,22 @@ export default function TodaySheet({
         </div>
 
         <div className="flex items-center gap-4">
+          {focusColumn && (
+            <div className="flex items-center gap-2 bg-blue-600/20 border border-blue-500/40 px-3 py-1.5 rounded-md animate-pulse">
+              <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Focus Mode: {DEFAULT_COLUMNS.find(c => c.id === focusColumn)?.label}</span>
+              <button onClick={() => setFocusColumn(null)} className="p-1 hover:bg-blue-500/30 rounded text-blue-400 transition-all"><X size={14} /></button>
+            </div>
+          )}
+
           <div onClick={(e) => { const input = e.currentTarget.querySelector('input'); if (input && 'showPicker' in input) try { (input as any).showPicker(); } catch (err) { console.error(err); } }}
             className="flex items-center gap-2 bg-black border border-white/20 rounded-[6px] px-4 py-2 text-gray-400 hover:text-white transition-all group cursor-pointer shadow-xl">
             <CalendarIcon size={16} className="group-hover:text-blue-500" />
             <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className="bg-transparent text-[12px] font-black uppercase outline-none cursor-pointer [color-scheme:dark]" />
           </div>
 
-          {undoStack.length > 0 && (
-            <button onClick={performUndo} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-white hover:bg-blue-600/20 transition-all shadow-xl" title="Cmd+Z">
-              <RotateCcw size={14} className="text-blue-500" /> 실행 취소 <span className="bg-white/10 px-1.5 py-0.5 rounded text-[8px] ml-1">{undoStack.length}</span>
-            </button>
-          )}
+          <button onClick={performUndo} disabled={undoStack.length === 0} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-white hover:bg-blue-600/20 transition-all shadow-xl disabled:opacity-20" title="Cmd+Z">
+            <RotateCcw size={14} className="text-blue-500" /> 실행 취소 <span className="bg-white/10 px-1.5 py-0.5 rounded text-[8px] ml-1">{undoStack.length}</span>
+          </button>
 
           <button onClick={() => onSortModeChange(sortMode === 'time' ? 'name' : 'time')} className={`flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest transition-all shadow-xl ${sortMode === 'time' ? 'text-blue-400' : 'text-emerald-400'} hover:text-white hover:bg-white/10`}>
             {sortMode === 'time' ? <ClockIcon size={14} /> : <SortAsc size={14} />} {sortMode === 'time' ? '시간순' : '이름순'}
@@ -543,27 +567,10 @@ export default function TodaySheet({
               {isExportOpen && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute right-0 mt-2 w-56 bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-lg shadow-2xl p-2 z-[100] overflow-hidden">
                   <div className="space-y-1">
-                    <button onClick={() => handleExport('aca2000')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-indigo-400 transition-all text-left group border border-indigo-500/10 hover:border-indigo-500/30 mb-1 bg-indigo-500/5">
-                      <div className="w-8 h-8 rounded bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500 group-hover:text-white transition-all">
-                        <Zap size={16} />
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-[12px] font-black">ACA2000 전용</span>
-                        <span className="text-[9px] text-gray-600">업로드용 맞춤 엑셀</span>
-                      </div>
-                    </button>
-                    <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-emerald-400 transition-all text-left group">
-                      <div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all"><FileSpreadsheet size={16} /></div>
-                      <div className="flex flex-col"><span className="text-[12px] font-black">Excel File</span><span className="text-[9px] text-gray-600">Microsoft Excel (.xlsx)</span></div>
-                    </button>
-                    <button onClick={() => handleExport('csv')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-amber-400 transition-all text-left group">
-                      <div className="w-8 h-8 rounded bg-amber-500/10 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-all"><FileTextIcon size={16} /></div>
-                      <div className="flex flex-col"><span className="text-[12px] font-black">CSV File</span><span className="text-[9px] text-gray-600">쉼표로 구분된 텍스트 파일</span></div>
-                    </button>
-                    <button onClick={() => handleExport('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-left group">
-                      <div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all"><Copy size={16} /></div>
-                      <div className="flex flex-col"><span className="text-[12px] font-black">Copy to Clipboard</span><span className="text-[9px] text-gray-600">다른 엑셀 시트에 바로 붙여넣기</span></div>
-                    </button>
+                    <button onClick={() => handleExport('aca2000')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-indigo-400 transition-all text-left group border border-indigo-500/10 hover:border-indigo-500/30 mb-1 bg-indigo-500/5"><div className="w-8 h-8 rounded bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500 group-hover:text-white transition-all"><Zap size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">ACA2000 전용</span><span className="text-[9px] text-gray-600">업로드용 맞춤 엑셀</span></div></button>
+                    <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-emerald-400 transition-all text-left group"><div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all"><FileSpreadsheet size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Excel File</span><span className="text-[9px] text-gray-600">Microsoft Excel (.xlsx)</span></div></button>
+                    <button onClick={() => handleExport('csv')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-amber-400 transition-all text-left group"><div className="w-8 h-8 rounded bg-amber-500/10 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-all"><FileTextIcon size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">CSV File</span><span className="text-[9px] text-gray-600">쉼표로 구분된 텍스트 파일</span></div></button>
+                    <button onClick={() => handleExport('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-left group"><div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all"><Copy size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Copy to Clipboard</span><span className="text-[9px] text-gray-600">다른 엑셀 시트에 바로 붙여넣기</span></div></button>
                   </div>
                 </motion.div>
               )}
@@ -575,20 +582,19 @@ export default function TodaySheet({
       </div>
 
       <div className="flex items-center justify-between px-1">
-        <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
-          {['1', '2', '3', '4'].map((setId, idx) => {
-            const keys = ['Q', 'W', 'E', 'R'];
-            return (
-              <button 
-                key={setId} 
-                onClick={() => handleSetSwitch(setId)} 
-                className={`px-4 py-1.5 rounded-[4px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} 
-                title={`Alt + ${keys[idx]}`}
-              >
-                SET {setId}
-              </button>
-            );
-          })}
+        <div className="flex items-center gap-2">
+          {focusColumn ? (
+            <button onClick={() => setFocusColumn(null)} className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/40 transition-all"><ArrowLeft size={12} /> 전체 화면으로 돌아가기</button>
+          ) : (
+            <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
+              {['1', '2', '3', '4'].map((setId, idx) => {
+                const keys = ['Q', 'W', 'E', 'R'];
+                return (
+                  <button key={setId} onClick={() => handleSetSwitch(setId)} className={`px-4 py-1.5 rounded-[4px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} title={`Alt + ${keys[idx]}`}>SET {setId}</button>
+                );
+              })}
+            </div>
+          )}
         </div>
         <div className="flex items-center gap-4">
           <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-1.5 bg-blue-600/10 text-blue-500 border border-blue-500/20 rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-lg">{isSendingReport === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} 전체 리포트 발송</button>
@@ -597,35 +603,31 @@ export default function TodaySheet({
 
       <div className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container`}>
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={colWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} /></thead>
           <tbody className="divide-y divide-white/10">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
               const [_, configM] = (academyInfo?.operation_settings?.first_period_time || "00:00").split(':').map(Number);
               const displayMinute = configM.toString().padStart(2, '0');
 
-              return students.map((s: any, idx: number) => {
+              return filteredStudents.map((s: any, idx: number) => {
                 const getStartTime = (st: any) => {
                   const stat = st.todaySession?.attendance_status || '';
-                  if (stat.includes(':')) {
-                    const parts = stat.split(':');
-                    const val = parseInt(parts[parts.length - 1]);
-                    if (!isNaN(val) && val < 24) return val;
-                  }
+                  if (stat.includes(':')) { const parts = stat.split(':'); const val = parseInt(parts[parts.length - 1]); if (!isNaN(val) && val < 24) return val; }
                   const hours = st.day_schedules?.[dayKey] || [];
-                  const rawHour = hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
-                  return rawHour;
+                  return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
                 };
                 const currentStartTime = getStartTime(s);
-                const prevStartTime = idx > 0 ? getStartTime(students[idx - 1]) : null;
-                const isNewSection = sortMode === 'time' && currentStartTime !== prevStartTime;
+                const prevStartTime = idx > 0 ? getStartTime(filteredStudents[idx - 1]) : null;
+                const isNewSection = sortMode === 'time' && currentStartTime !== prevStartTime && !focusColumn;
 
                 return (
-                  <React.Fragment key={`${s.id}-${idx}`}>
+                  <React.Fragment key={s.id}>
                     {isNewSection && (
                       <tr className="bg-blue-600/5"><td colSpan={activeColumns.length} className="px-4 py-2 border-b border-blue-500/30"><div className="flex items-center gap-3"><span className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] whitespace-nowrap">{currentStartTime === 999 ? '기타 타임' : (currentStartTime >= 12 ? (currentStartTime === 12 ? `오후 12:${displayMinute}` : `오후 ${currentStartTime-12}:${displayMinute}`) : `오전 ${currentStartTime}:${displayMinute}`) + ' 수업'}</span><div className="flex-1 h-px bg-gradient-to-r from-blue-500/30 to-transparent" /></div></td></tr>
                     )}
                     <TodaySheetRow
+                      key={`${s.id}-${selectedDate}`}
                       student={s}
                       rowIndex={idx}
                       masterTextbooks={masterTextbooks}
@@ -633,7 +635,7 @@ export default function TodaySheet({
                       onUpdateStudentInfo={onUpdateStudentInfo}
                       onViewProgress={onViewProgress}
                       onSelectStudent={onSelectStudent}
-                      colWidths={colWidths}
+                      colWidths={focusColWidths}
                       activeColumns={activeColumns}
                       selectedDate={selectedDate} 
                       isHistoryExpanded={!!expandedHistory[s.id]} 

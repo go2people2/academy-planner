@@ -1,8 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { motion } from 'framer-motion';
-import { Zap, CheckCircle2, ClipboardCheck, ChevronRight, TrendingUp, BookOpen, Target } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Zap, CheckCircle2, ClipboardCheck, ChevronRight, TrendingUp, BookOpen, Target, Clock, AlertTriangle } from 'lucide-react';
 
 interface LearningDashboardProps {
   student: any;
@@ -13,6 +13,60 @@ interface LearningDashboardProps {
   handleSelfEval: (level: number) => void;
   handleTodoAchievement: (percentage: number) => void;
   todayPlan: string;
+}
+
+function StudentTimer({ startedAt, duration }: { startedAt: number, duration: number }) {
+  const [timeLeft, setTimeLeft] = useState<number>(0);
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    const updateTimer = () => {
+      const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+      const remaining = Math.max(0, duration * 60 - elapsed);
+      setTimeLeft(remaining);
+      setIsExpired(remaining <= 0);
+    };
+
+    updateTimer();
+    const interval = setInterval(updateTimer, 1000);
+    return () => clearInterval(interval);
+  }, [startedAt, duration]);
+
+  const minutes = Math.floor(timeLeft / 60);
+  const seconds = timeLeft % 60;
+  const progress = Math.min(100, ( ( (duration * 60) - timeLeft ) / (duration * 60) ) * 100);
+
+  return (
+    <motion.div 
+      initial={{ opacity: 0, y: -20 }} 
+      animate={{ opacity: 1, y: 0 }}
+      className={`relative overflow-hidden rounded-xl border-2 transition-all shadow-2xl ${isExpired ? 'bg-red-600/20 border-red-500 shadow-red-900/20' : 'bg-indigo-600/10 border-indigo-500/50 shadow-indigo-900/20'}`}
+    >
+      <div className="absolute bottom-0 left-0 h-1.5 transition-all duration-1000 bg-indigo-500 z-10" style={{ width: `${100 - progress}%` }} />
+      {isExpired && <div className="absolute inset-0 bg-red-600/10 animate-pulse pointer-events-none" />}
+      
+      <div className="p-4 flex items-center justify-between gap-6 relative z-20">
+        <div className="flex items-center gap-4">
+          <div className={`w-10 h-10 rounded-lg flex items-center justify-center shadow-lg ${isExpired ? 'bg-red-600 shadow-red-500/30' : 'bg-indigo-600 shadow-indigo-500/30'}`}>
+            {isExpired ? <AlertTriangle className="text-white" size={20} /> : <Clock className="text-white" size={20} />}
+          </div>
+          <div className="text-left">
+            <h4 className={`text-[10px] font-black uppercase tracking-widest ${isExpired ? 'text-red-400' : 'text-indigo-400'}`}>
+              {isExpired ? 'Time Expired' : 'Test in Progress'}
+            </h4>
+            <p className="text-[12px] font-bold text-white/70">
+              {isExpired ? '시험 시간이 종료되었습니다.' : '선생님이 설정한 시험 시간이 흐르고 있습니다.'}
+            </p>
+          </div>
+        </div>
+        <div className="text-right">
+          <div className={`text-4xl font-black tabular-nums leading-none tracking-tighter ${isExpired ? 'text-red-500' : 'text-white'}`}>
+            {minutes}:{seconds.toString().padStart(2, '0')}
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
 }
 
 export default function LearningDashboard({
@@ -29,6 +83,13 @@ export default function LearningDashboard({
 
   return (
     <div className="space-y-3">
+      {/* 💡 타이머 섹션 (선생님이 설정했을 때만 노출) */}
+      {todaySession?.timer_started_at && todaySession?.timer_duration && (
+        <div className="mb-6">
+          <StudentTimer startedAt={todaySession.timer_started_at} duration={todaySession.timer_duration} />
+        </div>
+      )}
+
       {/* 💡 대시보드 컨트롤 헤더: 여백 축소 */}
       <div className="flex items-center justify-between px-1 mb-1">
         <div className="flex items-center gap-2">
@@ -159,7 +220,7 @@ export default function LearningDashboard({
                 <TrendingUp className="text-white" size={10} />
               </div>
               <div className="text-left flex-1 min-w-0 overflow-x-auto no-scrollbar">
-                <p className="text-[13px] font-bold text-white whitespace-nowrap">{todayPlan ? todayPlan.trim().replace(/\n/g, ' | ') : '선생님이 계획을 입력 중입니다...'}</p>
+                <p className="text-[13px] font-bold text-white whitespace-nowrap">{todayPlan ? todayPlan.trim().replace(/\n/g, ' | ') : '오늘 학원에서 할일이 입력될 예정입니다.'}</p>
               </div>
               {todaySession?.todo_achievement > 0 && (
                 <div className="bg-emerald-600 px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg tabular-nums shrink-0">
@@ -205,7 +266,7 @@ export default function LearningDashboard({
                     <p className="text-[12px] font-bold text-white italic">
                       {new Date(selectedDate) < new Date(new Date().setHours(0,0,0,0)) 
                         ? '이 날짜에는 기록된 학습 정보가 없습니다.' 
-                        : '선생님이 계획을 입력 중입니다...'}
+                        : '오늘 학원에서 할일이 입력될 예정입니다.'}
                     </p>
                   </div>
                 )}

@@ -1,11 +1,11 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   UserCircle, Shield, Key, Trash2, UserPlus, Save, X, Loader2,
   Lock, Settings as SettingsIcon, Users, Check, Calendar, TrendingUp, MessageSquare,
-  Clock, AlertTriangle, BookOpen, Hash
+  Clock, AlertTriangle, BookOpen, Hash, School
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getInitial } from '@/lib/utils';
@@ -13,6 +13,7 @@ import TestContentEditor from './TestContentEditor';
 
 interface SettingsViewProps {
   teachers: any[];
+  students: any[]; // 💡 추가
   onAddTeacher: (data: any) => Promise<void>;
   onDeleteTeacher: (id: string) => Promise<void>;
   onUpdateTeacher: (id: string, updates: any) => Promise<void>;
@@ -121,7 +122,7 @@ function PresetItem({ preset, currentUser, onUpdateCurrentUser, academyInfo, onU
   );
 }
 
-export default function SettingsView({ teachers, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser }: SettingsViewProps) {
+export default function SettingsView({ teachers, students, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser }: SettingsViewProps) {
   const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'tests'>('teachers');
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -214,6 +215,30 @@ const updateTimerPreset = async (index: number, value: number) => {
     if (activeTab === 'tests') fetchTests();
     if (activeTab === 'exams') fetchExams();
   }, [activeTab, academyInfo?.id]);
+
+  // 💡 미등록 학교 추출 및 정렬 로직 (중학교 -> 고등학교 순)
+  const pendingSchools = useMemo(() => {
+    if (!students || !examSchedules) return [];
+    
+    // 1. 현재 학원 학생들의 고유 학교 목록 추출
+    const allSchools = Array.from(new Set(students.map(s => s.school).filter(Boolean)));
+    
+    // 2. 이미 시험 일정이 등록된 학교 목록 (학년 정보가 있으면 특정 학년만, 없으면 전체)
+    const registeredSchools = new Set(examSchedules.map(ex => ex.school_name));
+    
+    // 3. 미등록 학교 필터링
+    const missing = allSchools.filter(school => !registeredSchools.has(school));
+    
+    // 4. 중학교 -> 고등학교 순으로 정렬
+    return missing.sort((a: string, b: string) => {
+      const isAMid = a.includes('중학교') || a.endsWith('중');
+      const isBMid = b.includes('중학교') || b.endsWith('중');
+      
+      if (isAMid && !isBMid) return -1;
+      if (!isAMid && isBMid) return 1;
+      return a.localeCompare(b);
+    });
+  }, [students, examSchedules]);
 
   const handleAddExam = async () => {
     if (!newExam.school_name || !newExam.target_date || !academyInfo?.id) {
@@ -347,11 +372,34 @@ const updateTimerPreset = async (index: number, value: number) => {
 
         {/* 💡 학교별 시험 일정 관리 탭 */}
         {activeTab === 'exams' && (
-          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-3">
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
             <div className="flex justify-between items-center px-1">
               <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Calendar size={16} /> School Exam Schedules</h3>
               <p className="text-[9px] text-gray-600 font-bold uppercase tracking-tighter">Automatic D-Day mapping for students</p>
             </div>
+
+            {/* 💡 미등록 학교 추천 섹션 (중학교 -> 고등학교 순) */}
+            {pendingSchools.length > 0 && (
+              <div className="bg-amber-500/5 border border-amber-500/20 rounded-[4px] p-4 space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle size={14} className="text-amber-500" />
+                  <h4 className="text-[10px] font-black text-amber-500 uppercase tracking-widest">시험 일정이 등록되지 않은 학교 ({pendingSchools.length})</h4>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {pendingSchools.map(school => (
+                    <button 
+                      key={school} 
+                      onClick={() => setNewExam({ ...newExam, school_name: school })}
+                      className="px-3 py-1.5 bg-black/40 border border-white/10 rounded-[2px] text-[11px] font-bold text-gray-400 hover:border-amber-500 hover:text-amber-500 transition-all flex items-center gap-2 group"
+                    >
+                      <School size={12} className="opacity-40 group-hover:opacity-100" />
+                      {school}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[9px] text-amber-500/40 italic">* 학교를 클릭하면 아래 입력창에 자동으로 입력됩니다.</p>
+              </div>
+            )}
 
             {/* 통합 테이블 레이아웃 (초밀착 버전) */}
             <div className="bg-white/5 border border-white/10 rounded-[4px] overflow-hidden">

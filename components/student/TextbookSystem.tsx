@@ -244,7 +244,7 @@ export default function TextbookSystem({
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Auto-sync Active</span>{isSaving && <Loader2 size={10} className="animate-spin text-emerald-500" />}</div>
           </div>
           <div className="p-6 space-y-4 flex flex-col min-h-[300px]">
-            <div className="flex items-center gap-2 px-1"><ClipboardList className="text-blue-500" size={16} /><span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">Assigned Homework</span></div>
+            <div className="flex items-center gap-2 px-1"><ClipboardList className="text-blue-500" size={16} /><span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">부여된 숙제 (Homework)</span></div>
             <textarea value={localHomework} onChange={(e) => setLocalHomework(e.target.value)} onBlur={() => handleManualSave('homework', localHomework)} placeholder="다음 수업까지의 숙제를 적어주세요." rows={Math.max(10, localHomework.split('\n').length)} className="w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10" />
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Real-time Cloud Sync</span>{isSaving && <Loader2 size={10} className="animate-spin text-blue-500" />}</div>
           </div>

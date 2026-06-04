@@ -31,6 +31,8 @@ export interface SessionLog {
   test_cut?: string | number; // 💡 오늘 테스트 커트라인 추가
   test_completed?: boolean; // 💡 추가 (테스트 완료 여부)
   report_sent_at?: string;
+  timer_started_at?: number; // 💡 추가 (타이머 시작 시각)
+  timer_duration?: number; // 💡 추가 (타이머 시간 - 분)
 }
 
 export interface Student {

@@ -67,6 +67,7 @@ interface TodaySheetCellProps {
   onSetTodayTestCut: (val: number) => void; // 💡 추가
   onSetNextQuizTrial: (num: number) => void;
   onSave: (data?: any) => void;
+  onInputChange?: (field: string, value: string) => void;
   rowIndex?: number;
 }
 
@@ -79,6 +80,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback, 
   onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal, // 💡 onOpenCcwEditor 추가
   onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave,
+  onInputChange,
   rowIndex
 }: TodaySheetCellProps) {
   
@@ -103,16 +105,18 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
   const dynamicPadding = getDynamicPadding(currentText);
 
-  // 💡 텍스트가 변경되거나 편집 모드 진입 시 높이 자동 조절
-  React.useEffect(() => {
-    const refs = [testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef]; // 💡 ccwRef 추가
+  // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 포커스 지연 제거
+  React.useLayoutEffect(() => {
+    const refs = [testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef];
     refs.forEach(ref => {
       if (ref.current && (isEditing || isActive)) {
         ref.current.style.height = 'auto';
         ref.current.style.height = `${ref.current.scrollHeight}px`;
+        // 💡 편집 모드일 때만 즉시 포커스 (속도 향상 핵심)
+        if (isEditing) ref.current.focus();
       }
     });
-  }, [isEditing, isActive, currentText, testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef]);
+  }, [isEditing, isActive, currentText]);
 
   // 💡 커트라인 픽커 전용 상태
   const [isCutPickerOpen, setIsCutPickerOpen] = useState(false);
@@ -123,6 +127,16 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     const rect = e.currentTarget.getBoundingClientRect();
     setPickerCoords({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
     setIsCutPickerOpen(true);
+  };
+
+  const handleLocalInput = (e: React.FormEvent<HTMLTextAreaElement | HTMLInputElement>, field: string) => {
+    const val = (e.target as any).value;
+    if (onInputChange) onInputChange(field, val);
+    
+    if (e.target instanceof HTMLTextAreaElement) {
+      e.target.style.height = 'auto';
+      e.target.style.height = `${e.target.scrollHeight}px`;
+    }
   };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
@@ -226,11 +240,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'attendance' && (
           <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-black cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
-            (formData.attendance_status?.startsWith('출석') || !formData.attendance_status) ? 'text-emerald-400' : 
-            formData.attendance_status?.startsWith('결석') ? 'text-red-400' : 
+            !formData.attendance_status ? 'text-gray-600' :
+            formData.attendance_status.startsWith('출석') ? 'text-emerald-400' : 
+            formData.attendance_status.startsWith('결석') ? 'text-red-400' : 
             'text-amber-400'
           }`}>
-            {formData.attendance_status?.split(':')[0] || '출석'}
+            {formData.attendance_status?.split(':')[0] || '-'}
           </div>
         )}
 
@@ -252,20 +267,26 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {(['test_id', 'classwork', 'completed_classwork', 'assign', 'next_quiz', 'mission', 'notes'].includes(colId)) && (
           <div className="relative w-full h-full flex items-start justify-start group/cell">
+            {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
             {(isEditing || isActive) && (
               <textarea 
                 ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : colId === 'mission' ? missionRef : notesRef} 
                 defaultValue={currentText || ''} 
-                autoFocus={isEditing} 
-                onKeyDown={(e) => handleKeyDown(e, colId)} 
-                onBlur={() => onSave()} 
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
+                    onSave(colId, (e.target as HTMLTextAreaElement).value);
+                  }
+                  handleKeyDown(e, colId);
+                }} 
+                onBlur={(e) => onSave(colId, e.target.value)} 
                 placeholder="-" 
-                className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block ${!isEditing ? 'opacity-0 pointer-events-none absolute inset-0' : 'relative z-10'}`} 
-                onInput={(e) => { const t = e.target as HTMLTextAreaElement; t.style.height = 'auto'; t.style.height = `${t.scrollHeight}px`; }} 
+                className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`} 
+                onInput={(e) => handleLocalInput(e, colId)} 
               />
             )}
             
-            {!isEditing && (
+            {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 */}
+            {!isEditing && !isActive && (
               <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[56px] flex flex-col items-start justify-start`}>
                 <div className="w-full">{currentText || '-'}</div>
                 {colId === 'test_id' && formData.test_cut > 0 && (
@@ -391,7 +412,20 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         {colId === 'test_score' && (
           <div className="relative w-full h-full flex items-center justify-start group/score">
             {(isEditing || isActive) && (
-              <input ref={scoreInputRef} type="text" defaultValue={formData.test_score || ''} autoFocus={isEditing} onKeyDown={(e) => handleKeyDown(e, colId)} onBlur={() => onSave()} placeholder="-" className="w-full h-[56px] bg-transparent border-0 outline-none px-4 text-[14px] text-left text-emerald-400 font-black pr-4 m-0" />
+              <input 
+                ref={scoreInputRef} 
+                type="text" 
+                defaultValue={formData.test_score || ''} 
+                autoFocus={isEditing} 
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') onSave(colId, (e.target as HTMLInputElement).value);
+                  handleKeyDown(e, colId);
+                }} 
+                onBlur={(e) => onSave(colId, e.target.value)} 
+                onChange={(e) => handleLocalInput(e, 'test_score')} 
+                placeholder="-" 
+                className="w-full h-[56px] bg-transparent border-0 outline-none px-4 text-[14px] text-left text-emerald-400 font-black pr-4 m-0" 
+              />
             )}
             {!isEditing && (
               <div className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full h-[56px] flex items-center justify-start">
@@ -407,7 +441,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'action' && (
           <div className="px-3 py-2 w-full h-[56px] flex items-center justify-center">
-            <button onClick={(e) => { e.stopPropagation(); onSave(); }} disabled={isSaving || (isCompleted && saveStatus === 'idle')} className={`w-full h-10 rounded-[4px] flex items-center justify-center transition-all shadow-lg z-30 ${isSaving ? 'bg-blue-600/50 cursor-wait' : saveStatus === 'success' ? 'bg-emerald-500 text-white shadow-emerald-500/40' : saveStatus === 'error' ? 'bg-red-500 text-white shadow-red-500/40' : (isCompleted) ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/40' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-blue-900/40'}`}>
+            <button onClick={(e) => { e.stopPropagation(); onSave(colId); }} disabled={isSaving || (isCompleted && saveStatus === 'idle')} className={`w-full h-10 rounded-[4px] flex items-center justify-center transition-all shadow-lg z-30 ${isSaving ? 'bg-blue-600/50 cursor-wait' : saveStatus === 'success' ? 'bg-emerald-500 text-white shadow-emerald-500/40' : saveStatus === 'error' ? 'bg-red-500 text-white shadow-red-500/40' : (isCompleted) ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/40' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-blue-900/40'}`}>
               {isSaving ? <Loader2 size={16} className="animate-spin" /> : (saveStatus === 'success' || isCompleted) ? <Check size={18} className="stroke-[4px]" /> : saveStatus === 'error' ? <CheckCircle size={16} /> : <Send size={16} />}
             </button>
           </div>

@@ -210,7 +210,8 @@ export default function DashboardPage() {
         const dayName = getDayOfWeek(selectedDate);
         const todayLog = logs.find(l => String(l.date) === String(selectedDate));
         
-        const isTodayClassDay = s.class_days?.includes(dayName) || 
+        // 💡 요일 매칭 시 공백 제거 후 비교하여 정확도 향상
+        const isTodayClassDay = s.class_days?.map((d: string) => d.trim()).includes(dayName) || 
                                 (todayLog?.attendance_status && !['none', ''].includes(todayLog.attendance_status));
 
         const activePlanText = baseSession?.next_quiz_text || (baseSession?.test_completed === false ? (baseSession.test_id || "") : "");
@@ -237,12 +238,14 @@ export default function DashboardPage() {
           }
 
           if (isTodayClassDay) {
-            if (!todayLog.test_id && !todayLog.hasTestResult && activePlanText) {
+            // 💡 test_id가 비어있다면 과거 세션의 계획(activePlanText)을 이월
+            if (!todayLog.test_id && activePlanText) {
               todayLog.test_id = activePlanText;
               todayLog.test_cut = activePlanCut;
             }
           } else {
-            if (!todayLog.next_quiz_text && !todayLog.hasHwTo && activePlanText) {
+            // 💡 정규 수업일이 아닐 경우 다음 테스트 칸으로 이월
+            if (!todayLog.next_quiz_text && activePlanText) {
               todayLog.next_quiz_text = activePlanText;
               todayLog.next_quiz_cut = activePlanCut;
               todayLog.next_quiz_trial = activePlanTrial;
@@ -387,11 +390,60 @@ export default function DashboardPage() {
 
     try {
       const payload: any = { student_id: studentId, student_name: student.name, academy_id: academy.id, session_date: selectedDate, ...filteredData };
-      if (sessionId && sessionId !== 'temp') payload.id = sessionId;
-      const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date' });
-      if (error) throw error; return true;
-    } catch (e) { console.error('Save error:', e); await fetchAllData(false); return false; }
-  }, [students, academy, selectedDate, fetchAllData]);
+      if (sessionId && sessionId !== 'temp') {
+        payload.id = sessionId;
+      } else {
+        if (!('attendance_status' in filteredData)) {
+          payload.attendance_status = null;
+        }
+      }
+
+      // 💡 [개선] 전체 리페치 대신 서버에서 저장된 최신 데이터를 받아와서 로컬 상태에 직접 주입
+      const { data: savedLog, error } = await supabase
+        .from('ams_session_logs')
+        .upsert([payload], { onConflict: 'student_id,session_date' })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      if (savedLog) {
+        setStudents(prev => prev.map(s => {
+          if (s.id === studentId) {
+            const nextQuiz = savedLog.homework_to ? (typeof savedLog.homework_to === 'string' ? JSON.parse(savedLog.homework_to) : savedLog.homework_to) : {};
+            const testRes = savedLog.test_result ? (typeof savedLog.test_result === 'string' ? JSON.parse(savedLog.test_result) : savedLog.test_result) : {};
+            
+            return {
+              ...s,
+              todaySession: {
+                ...savedLog,
+                date: savedLog.session_date,
+                status: savedLog.status || 'none',
+                test_id: savedLog.test_status,
+                test_completed: testRes.completed,
+                test_cut: testRes.cut || 0,
+                mission: testRes.mission || '',
+                todo_achievement: testRes.todo_achievement || 0,
+                next_quiz_text: nextQuiz.text || '',
+                next_quiz_cut: nextQuiz.cut || 0,
+                next_quiz_trial: nextQuiz.trial || 1,
+                next_quiz_json: nextQuiz.json || [],
+                hasHwTo: !!nextQuiz.text,
+                hasTestResult: true
+              }
+            };
+          }
+          return s;
+        }));
+      }
+
+      return true;
+    } catch (e) { 
+      console.error('Save error:', e); 
+      // 💡 실패 시에도 전체 리페치를 하지 않고 에러만 출력 (사용자 입력값 보존을 위해)
+      return false; 
+    }
+  }, [students, academy, selectedDate]);
 
   const handleUpdateAcademyInfo = async (updates: any) => {
     if (!academy) return;
@@ -612,7 +664,7 @@ export default function DashboardPage() {
             {viewMode === 'progress' && <ProgressSequencer students={filteredAllStudents} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
             {viewMode === 'notifications' && <NotificationsView academyInfo={academy} students={students} currentUser={currentUser} />}
-            {viewMode === 'settings' && <SettingsView teachers={teachers} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} />}
+            {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} />}
           </div>
         )}
       </main>
