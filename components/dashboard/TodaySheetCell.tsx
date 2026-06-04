@@ -67,6 +67,7 @@ interface TodaySheetCellProps {
   onSetTodayTestCut: (val: number) => void; // 💡 추가
   onSetNextQuizTrial: (num: number) => void;
   onSave: (data?: any) => void;
+  rowIndex?: number;
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
@@ -77,7 +78,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onCellMouseDown, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle, 
   onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback, 
   onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal, // 💡 onOpenCcwEditor 추가
-  onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave 
+  onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave,
+  rowIndex
 }: TodaySheetCellProps) {
   
   const colId = col.id;
@@ -167,7 +169,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 >
                   <div className="w-0 h-0 border-t-[22px] border-t-amber-500 border-l-[22px] border-l-transparent shadow-md" />
                   {/* Tooltip for management notes */}
-                  <div className="absolute bottom-full left-0 mb-4 w-80 p-4 bg-amber-50 text-amber-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/note:opacity-100 pointer-events-none transition-all z-50 border-2 border-amber-200">
+                  <div className={`absolute ${rowIndex === 0 ? 'top-full mt-4' : 'bottom-full mb-4'} left-0 w-80 p-4 bg-amber-50 text-amber-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/note:opacity-100 pointer-events-none transition-all z-[100] border-2 border-amber-200`}>
                     <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200/50">
                       <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
                       <span className="text-[10px] uppercase tracking-widest text-amber-600">Student Management Note</span>
@@ -180,7 +182,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 <div className="group/suggestion relative">
                   <div className="w-0 h-0 border-t-[22px] border-t-blue-500 border-l-[22px] border-l-transparent shadow-md" />
                   {/* Tooltip for suggestions */}
-                  <div className="absolute bottom-full left-0 mb-4 w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/suggestion:opacity-100 pointer-events-none transition-all z-50 border-2 border-blue-200">
+                  <div className={`absolute ${rowIndex === 0 ? 'top-full mt-4' : 'bottom-full mb-4'} left-0 w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/suggestion:opacity-100 pointer-events-none transition-all z-[100] border-2 border-blue-200`}>
                     <div className="flex items-center gap-2 mb-2 pb-2 border-b border-blue-200/50">
                       <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                       <span className="text-[10px] uppercase tracking-widest text-blue-600">Student Suggestion</span>

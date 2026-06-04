@@ -125,6 +125,9 @@ export default function NotificationsView({ academyInfo, students, currentUser }
 const consultationAlerts = useMemo(() => {
   return students.filter(s => {
     if (s.is_deleted) return false;
+    // 💡 일반 선생님인 경우 본인 담당 학생만 필터링
+    if (!isAdmin && s.teacher_id !== currentUser?.id) return false;
+    
     if (!s.last_consulted_at) return true; // 기록 없으면 표시
 
     const lastDate = new Date(s.last_consulted_at);
@@ -134,12 +137,24 @@ const consultationAlerts = useMemo(() => {
 
     return diffDays >= 35; // 💡 5주(35일) 이상만 알림
   });
-}, [students]);
+}, [students, isAdmin, currentUser?.id]);
 
 // 6. 학생 건의사항 알림 계산
 const suggestionAlerts = useMemo(() => {
-  return tasks.filter(t => t.title.startsWith('[건의]') && !t.is_completed);
-}, [tasks]);
+  const suggestions = tasks.filter(t => t.title.startsWith('[건의]') && !t.is_completed);
+  
+  if (isAdmin) return suggestions;
+
+  // 💡 일반 선생님인 경우 본인 담당 학생의 건의만 필터링
+  const myStudentNames = students
+    .filter(s => s.teacher_id === currentUser?.id)
+    .map(s => s.name);
+
+  return suggestions.filter(t => {
+    const studentNameMatch = t.title.replace('[건의] ', '').trim();
+    return myStudentNames.includes(studentNameMatch);
+  });
+}, [tasks, isAdmin, students, currentUser?.id]);
 
   const filteredTasks = useMemo(() => {
     if (filterTab === 'all') return tasks;

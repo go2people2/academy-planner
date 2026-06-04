@@ -157,6 +157,7 @@ export default function HomeworkEditor({
   return createPortal(
     <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center">
       <motion.div 
+        id="homework-editor-portal"
         drag 
         dragMomentum={false}
         initial={{ opacity: 0, scale: 0.95, x: 100, y: 50 }}

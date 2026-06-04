@@ -6,6 +6,7 @@ import { AnimatePresence } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
+import { getInitial } from '@/lib/utils';
 import { TextbookOption, ExamSchedule } from '@/types/dashboard';
 
 // 💡 분리된 컴포넌트 임포트
@@ -36,6 +37,7 @@ export default function StudentPortal() {
   const [localHomework, setLocalHomework] = useState('');
   const [todayPlan, setTodayPlan] = useState('');
   const [suggestion, setSuggestion] = useState('');
+  const [mySuggestions, setMySuggestions] = useState<any[]>([]); // 💡 건의 히스토리 상태 추가
   const [teachers, setTeachers] = useState<any[]>([]);
   const [selectedDate, setSelectedDate] = useState(() => {
     const now = new Date();
@@ -45,11 +47,32 @@ export default function StudentPortal() {
 
   const matchedExam = useMemo(() => {
     if (!student || !examSchedules.length) return null;
-    const studentSchool = student.school?.trim();
-    const studentGrade = student.grade?.trim();
-    const exactMatch = examSchedules.find(ex => ex.school_name.trim() === studentSchool && ex.grade?.trim() === studentGrade);
+    
+    // 💡 학교명 정규화: 공백 제거 및 '학교' 접미사 제거하여 매칭 유연성 확보
+    const normalize = (name: string) => (name || '').trim().replace(/\s+/g, '').replace(/학교$/, '');
+    
+    const studentSchool = normalize(student.school);
+    const studentGrade = (student.grade || '').trim();
+
+    if (!studentSchool) return null;
+
+    console.log(`Matching exam for ${student.name}: School=${studentSchool}, Grade=${studentGrade}`);
+    console.log('Available exam schedules:', examSchedules);
+
+    // 1. 학교명 + 학년 완벽 일치
+    const exactMatch = examSchedules.find(ex => 
+      normalize(ex.school_name) === studentSchool && 
+      (ex.grade?.trim() === studentGrade)
+    );
     if (exactMatch) return exactMatch;
-    const schoolMatch = examSchedules.find(ex => ex.school_name.trim() === studentSchool && (!ex.grade || ex.grade.trim() === ''));
+
+    // 2. 학교명 일치 + 전학년 대상 (grade가 없거나 빈 값)
+    const schoolMatch = examSchedules.find(ex => 
+      normalize(ex.school_name) === studentSchool && 
+      (!ex.grade || ex.grade.trim() === '')
+    );
+    
+    if (schoolMatch) console.log('Matched via school-only match:', schoolMatch);
     return schoolMatch || null;
   }, [student, examSchedules]);
 
@@ -63,15 +86,6 @@ export default function StudentPortal() {
     const sessionsBeforeToday = allLogs.filter(l => l.session_date < selectedDate);
     return sessionsBeforeToday.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || sessionsBeforeToday[0];
   }, [allLogs, selectedDate]);
-
-  const getInitial = (name: string) => {
-    if (!name) return '?';
-    const firstChar = name.charAt(0);
-    const mapping: Record<string, string> = {
-      '김': 'K', '이': 'L', '박': 'P', '최': 'C', '정': 'J', '강': 'K', '조': 'J', '윤': 'Y', '장': 'J', '임': 'L', '한': 'H', '오': 'O', '서': 'S', '신': 'S', '권': 'K', '황': 'H', '안': 'A', '송': 'S', '전': 'J', '홍': 'H', '유': 'Y', '고': 'K', '문': 'M', '양': 'Y', '손': 'S', '배': 'B', '백': 'B', '허': 'H', '남': 'N', '심': 'S', '노': 'N', '하': 'H', '곽': 'K', '성': 'S', '차': 'C', '주': 'J', '우': 'W', '구': 'K', '나': 'N', '민': 'M', '지': 'J'
-    };
-    return mapping[firstChar] || firstChar.toUpperCase();
-  };
 
   const fetchAllStudentData = useCallback(async (studentId: string) => {
     setIsLoading(true);
@@ -88,6 +102,19 @@ export default function StudentPortal() {
       if (acData) {
         const { data: exData } = await supabase.from('ams_exam_schedules').select('*').eq('academy_id', acData.id).order('target_date', { ascending: true });
         if (exData) setExamSchedules(exData);
+
+        // 💡 학생 건의 사항 히스토리 가져오기 (최근 30일 이내, 최대 5개)
+        const thirtyDaysAgo = new Date();
+        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+        
+        const { data: suggData } = await supabase.from('ams_tasks')
+          .select('*')
+          .eq('academy_id', acData.id)
+          .eq('title', `[건의] ${stData.name}`)
+          .gte('created_at', thirtyDaysAgo.toISOString())
+          .order('created_at', { ascending: false })
+          .limit(5);
+        if (suggData) setMySuggestions(suggData);
       }
       const tbRes = await fetch('/api/textbooks');
       if (tbRes.ok) setAvailableTextbooks(await tbRes.json());
@@ -246,8 +273,20 @@ export default function StudentPortal() {
     if (!suggestion.trim() || !student || !academy) return;
     setIsSaving(true);
     try {
-      const { error } = await supabase.from('ams_tasks').insert([{ academy_id: academy.id, title: `[건의] ${student.name}`, content: suggestion, start_date: selectedDate, target_date: selectedDate, display_period_type: 'custom', is_completed: false, type: 'manual' }]);
-      if (error) throw error; alert('선생님께 건의사항이 전달되었습니다.'); setSuggestion('');
+      const { data, error } = await supabase.from('ams_tasks').insert([{ 
+        academy_id: academy.id, 
+        title: `[건의] ${student.name}`, 
+        content: suggestion, 
+        start_date: selectedDate, 
+        target_date: selectedDate, 
+        display_period_type: 'custom', 
+        is_completed: false, 
+        type: 'manual' 
+      }]).select();
+      if (error) throw error; 
+      alert('선생님께 건의사항이 전달되었습니다.'); 
+      setSuggestion('');
+      if (data) setMySuggestions(prev => [data[0], ...prev].slice(0, 5)); // 💡 리스트 즉시 갱신 (최대 5개)
     } catch (e) { console.error(e); alert('전송 중 오류가 발생했습니다.'); } finally { setIsSaving(false); }
   };
 
@@ -314,6 +353,7 @@ export default function StudentPortal() {
           <StudentSuggestion 
             suggestion={suggestion} setSuggestion={setSuggestion} 
             selectedDate={selectedDate} handleSuggestionSubmit={handleSuggestionSubmit} isSaving={isSaving}
+            mySuggestions={mySuggestions}
           />
         </div>
       </main>

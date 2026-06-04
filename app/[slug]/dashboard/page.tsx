@@ -14,7 +14,7 @@ import StudentStudyReportDrawer from '@/components/dashboard/StudentStudyReportD
 import MorningBriefingModal from '@/components/dashboard/MorningBriefingModal';
 import ClassroomMode from '@/components/dashboard/ClassroomMode';
 import { supabase } from '@/lib/supabase';
-import { getTodayStr, getDayOfWeek } from '@/lib/utils';
+import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { Student, SessionLog, StudentStatus, TextbookOption } from '@/types/dashboard';
 import { Loader2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -96,15 +96,6 @@ export default function DashboardPage() {
   };
 
   const handleViewProgress = (id: string) => { setActiveProgressStudentId(id); setViewMode('progress'); };
-
-  const getInitial = (name: string) => {
-    if (!name) return '?';
-    const firstChar = name.charAt(0);
-    const mapping: Record<string, string> = {
-      '김': 'K', '이': 'L', '박': 'P', '최': 'C', '정': 'J', '강': 'K', '조': 'J', '윤': 'Y', '장': 'J', '임': 'L', '한': 'H', '오': 'O', '서': 'S', '신': 'S', '권': 'K', '황': 'H', '안': 'A', '송': 'S', '전': 'J', '홍:': 'H', '유': 'Y', '고': 'K', '문': 'M', '양': 'Y', '손': 'S', '배': 'B', '백': 'B', '허': 'H', '남': 'N', '심': 'S', '노': 'N', '하': 'H', '곽': 'K', '성': 'S', '차': 'C', '주': 'J', '우': 'W', '구': 'K', '신': 'S', '임': 'L', '나': 'N', '전': 'J', '민': 'M', '송': 'S', '지': 'J'
-    };
-    return mapping[firstChar] || firstChar.toUpperCase();
-  };
 
   const fetchTeachers = useCallback(async (academyId: string) => {
     try {
@@ -261,7 +252,7 @@ export default function DashboardPage() {
 
         const studentSuggestions = (tasksData || []).filter(t => t.title === `[건의] ${s.name}`);
         const teacher = (currentTeachers || []).find(t => t.id === s.teacher_id);
-        const teacherInitial = teacher ? (teacher.initials || getInitial(teacher.name)) : '?';
+        const teacherInitial = teacher ? (teacher.initials || getInitial(teacher.name)) : (s.teacher_name ? getInitial(s.teacher_name) : '?');
 
         return {
           id: s.id, academy_id: s.academy_id, teacher_id: s.teacher_id,
@@ -405,8 +396,19 @@ export default function DashboardPage() {
   const handleUpdateAcademyInfo = async (updates: any) => {
     if (!academy) return;
     try {
-      await supabase.from('ams_academies').update(updates).eq('id', academy.id);
-      setAcademy(prev => ({ ...prev, ...updates }));
+      console.log('Updating academy info:', updates);
+      const { error } = await supabase.from('ams_academies').update(updates).eq('id', academy.id);
+      if (error) {
+        console.error('Update academy error:', error);
+        alert('저장 실패: ' + error.message);
+      } else {
+        console.log('Update success');
+        setAcademy(prev => ({ ...prev, ...updates }));
+        // 💡 중요한 정보(예: 공지사항) 변경 시 대시보드 데이터 재동기화 고려
+        if (updates.announcements || updates.operation_settings) {
+          await fetchAllData(false);
+        }
+      }
     } catch (e) { console.error('Update academy error:', e); }
   };
 
@@ -444,13 +446,41 @@ export default function DashboardPage() {
     try {
       const timestamp = new Date().toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
       const newLogs = studentIds.map(id => {
-        const s = students.find(st => st.id === id); const reason = reasons[id] || ''; const formatted = reason ? `[${timestamp}] ${reason}` : '';
-        const exist = s?.todaySession?.special_notes || ''; const notes = (exist && !exist.includes('[temp]')) ? `${exist}\n${formatted}`.trim() : formatted;
-        return { student_id: id, student_name: s?.name, academy_id: academy.id, session_date: selectedDate, attendance_status: '보강', status: null, special_notes: notes };
-      });
+        const s = students.find(st => st.id === id);
+        if (!s) return null;
+        const reason = reasons[id] || ''; 
+        const formatted = reason ? `[${timestamp}] ${reason}` : '';
+        const exist = s.todaySession?.special_notes || ''; 
+        const notes = (exist && !exist.includes('[temp]')) ? `${exist}\n${formatted}`.trim() : formatted;
+        
+        const log: any = { 
+          student_id: id, 
+          student_name: s.name, 
+          academy_id: academy.id, 
+          session_date: selectedDate, 
+          attendance_status: '보강', 
+          status: null, 
+          special_notes: notes 
+        };
+        if (s.todaySession?.id && s.todaySession.id !== 'temp') log.id = s.todaySession.id;
+        return log;
+      }).filter(Boolean);
+
+      if (newLogs.length === 0) {
+        setIsBatchMode(false);
+        return;
+      }
+
       const { error } = await supabase.from('ams_session_logs').upsert(newLogs, { onConflict: 'student_id,session_date' });
-      if (error) throw error; await fetchAllData(false); setIsBatchMode(false);
-    } catch (e) { console.error(e); } finally { setIsLoading(false); }
+      if (error) throw error;
+      await fetchAllData(false); 
+      setIsBatchMode(false);
+    } catch (e) { 
+      console.error('Batch Add Error:', e); 
+      alert('일괄 추가 중 오류가 발생했습니다.');
+    } finally { 
+      setIsLoading(false); 
+    }
   };
 
   const removeStudentFromToday = async (studentId: string, reason: string = '') => {
@@ -462,7 +492,10 @@ export default function DashboardPage() {
       if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
       const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date' });
       if (error) throw error; await fetchAllData(false);
-    } catch (e) { console.error(e); }
+    } catch (e) { 
+      console.error('Remove Student Error:', e); 
+      alert('학생 제외 중 오류가 발생했습니다.');
+    }
   };
 
   const updateStudentInfo = async (studentId: string, fieldOrUpdates: string | any, value?: any) => {
@@ -498,11 +531,13 @@ export default function DashboardPage() {
 
   const handleUpdateTeacher = async (id: string, updates: any) => { 
     try { 
+      console.log(`Updating teacher ${id}:`, updates);
       const { error } = await supabase.from('ams_teachers').update(updates).eq('id', id); 
       if (error) {
         console.error('Update Error:', error);
         alert('저장 실패: ' + error.message);
       } else {
+        console.log('Update Success');
         if (academy) await fetchTeachers(academy.id); 
       }
     } catch (e) { console.error(e); } 

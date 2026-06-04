@@ -33,39 +33,54 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
             exit={{ height: 0, opacity: 0 }} 
             className="overflow-hidden"
           >
-            <div className="relative pl-6 space-y-8 before:content-[''] before:absolute before:left-2 before:top-2 before:bottom-2 before:w-px before:bg-white/20 text-left max-h-[600px] overflow-y-auto pr-2 custom-scrollbar-v">
+            <div className="relative space-y-2 before:content-[''] before:absolute before:left-[52px] before:top-2 before:bottom-2 before:w-px before:bg-white/20 text-left max-h-[500px] overflow-y-auto pr-2 custom-scrollbar-v">
               {allLogs.length === 0 ? (
-                <p className="text-xs text-white italic px-4 font-bold text-left">학습 기록을 불러오고 있습니다...</p>
+                <p className="text-xs text-gray-600 italic px-4 text-left">학습 기록이 없습니다.</p>
               ) : (
-                allLogs.map((log, i) => (
-                  <div key={i} className="relative pl-8 text-left">
-                    <div className={`absolute left-[-22px] top-1.5 w-3 h-3 rounded-full border-[3px] border-[#0a0a0a] ${i === 0 ? 'bg-blue-500 shadow-[0_0_12px_rgba(59,130,246,0.6)]' : 'bg-gray-700'}`} />
-                    <div className="bg-[#121212] border border-white/10 p-6 rounded-[4px] space-y-5 hover:border-white/30 transition-colors shadow-sm">
-                      <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
-                        <p className="text-[11px] font-black text-white uppercase tracking-widest">{log.session_date.replace(/-/g, '.')}</p>
-                        {log.test_score !== null && log.test_score !== undefined && (
-                          <span className="text-[10px] font-black bg-blue-500/10 text-blue-400 px-2.5 py-1 rounded-[2px] border border-blue-500/30">
-                            Score: {log.test_score}%
-                          </span>
-                        )}
+                allLogs.map((log, i) => {
+                  const displayDate = log.session_date.slice(5).replace('-', '.'); // MM.DD
+                  return (
+                    <div key={i} className="flex gap-5 items-start">
+                      {/* 💡 날짜를 완전한 흰색으로 강조 */}
+                      <div className="w-[42px] shrink-0 text-right pt-2">
+                        <p className="text-[11px] font-black text-white tabular-nums tracking-tighter">
+                          {displayDate}
+                        </p>
                       </div>
-                      <div className="space-y-4">
-                        <div>
-                          <h4 className="text-[10px] font-black text-emerald-500 uppercase mb-1.5 flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-emerald-500" /> Classwork
-                          </h4>
-                          <p className="text-[13px] font-bold text-white leading-relaxed whitespace-pre-wrap">{log.classwork_text || '-'}</p>
-                        </div>
-                        <div>
-                          <h4 className="text-[10px] font-black text-blue-500 uppercase mb-1.5 flex items-center gap-1.5">
-                            <div className="w-1 h-1 rounded-full bg-blue-500" /> Homework
-                          </h4>
-                          <p className="text-[13px] font-bold text-white leading-relaxed whitespace-pre-wrap">{log.homework_text || '-'}</p>
+
+                      <div className="relative flex-1">
+                        {/* 💡 타임라인 불렛 포인트 (최대 밝기) */}
+                        <div className={`absolute left-[-15px] top-[14px] w-2 h-2 rounded-full border border-[#0a0a0a] z-10 ${i === 0 ? 'bg-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.8)]' : 'bg-gray-400'}`} />
+                        
+                        {/* 💡 제목이 제거된 컴팩트한 내용 박스 (테두리 최대 밝기) */}
+                        <div className="bg-[#121212]/80 border border-white/30 p-3 rounded-[4px] hover:border-blue-500/50 transition-colors space-y-1 shadow-2xl">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1 min-w-0">
+                              {/* 💡 Classwork 제목 제거 */}
+                              <p className="text-[12px] font-bold text-gray-200 leading-snug whitespace-pre-wrap">{log.classwork_text || '-'}</p>
+                            </div>
+                            {log.test_score !== null && log.test_score !== undefined && (
+                              <div className="shrink-0 text-right">
+                                <span className="text-[9px] font-black text-blue-500 tabular-nums">SCORE {log.test_score}%</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 💡 Homework 제목 제거 및 따옴표/기울임꼴 적용 (줄간격 극소화) */}
+                          {log.homework_text && (
+                            <div className="pt-1 border-t border-white/5">
+                              <p className="text-[12px] font-medium text-blue-200 leading-tight italic whitespace-pre-wrap">
+                                <span className="text-blue-500/80 text-[12px] font-black mr-1">"</span>
+                                {log.homework_text}
+                                <span className="text-blue-500/80 text-[12px] font-black ml-1">"</span>
+                              </p>
+                            </div>
+                          )}
                         </div>
                       </div>
                     </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </motion.div>

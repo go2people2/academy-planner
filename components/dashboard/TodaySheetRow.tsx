@@ -32,13 +32,15 @@ interface TodaySheetRowProps {
   isCellInRange?: (studentId: string, colId: string) => boolean;
   onCellMouseDown?: (e: React.MouseEvent, studentId: string, colId: string) => void;
   onCellMouseEnter?: (studentId: string, colId: string) => void;
+  rowIndex?: number;
 }
 
 export const TodaySheetRow = React.memo(function TodaySheetRow({ 
   student, masterTextbooks, onSave, onUpdateStudentInfo, onViewProgress, onSelectStudent, colWidths, activeColumns, 
   selectedDate, isHistoryExpanded, onToggleHistory, currentUser, activeCell, editingCell,
   onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
-  selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter
+  selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
+  rowIndex
 }: TodaySheetRowProps) {
   // 1. All States
   const [isHwEditorOpen, setIsHwEditorOpen] = useState(false);
@@ -527,6 +529,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow({
                 handleSave({ next_quiz_trial: num });
               }}
               onSave={() => handleSave()}
+              rowIndex={rowIndex}
             />
           );
         })}

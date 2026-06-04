@@ -63,11 +63,11 @@ export default function StudentHeader({
                     try { (input as any).showPicker(); } catch (err) { console.error(err); }
                   }
                 }}
-                className="flex items-center gap-3 bg-blue-600/10 border border-blue-500/30 px-4 py-2 rounded-lg shadow-lg shrink-0 cursor-pointer hover:bg-blue-600/20 transition-all group relative"
+                className="flex items-center gap-3 bg-blue-600/10 border border-blue-500/30 px-4 h-[46px] rounded-[2px] shadow-lg shrink-0 cursor-pointer hover:bg-blue-600/20 transition-all group relative"
               >
                 <CalendarIcon className="text-blue-500 group-hover:scale-110 transition-transform" size={18} />
                 <div className="text-right">
-                  <p className="text-[15px] font-black text-white leading-none tracking-tight">
+                  <p className="text-[14px] font-black text-white leading-none tracking-tight">
                     {new Date(selectedDate).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })}
                     <span className="text-amber-400 ml-1.5">
                       ({new Date(selectedDate).toLocaleDateString('ko-KR', { weekday: 'short' })})
@@ -83,24 +83,25 @@ export default function StudentHeader({
               </div>
 
               {/* 시험 디데이 */}
-              <div className={`flex items-center gap-3 border px-4 py-2 rounded-lg shadow-lg transition-all shrink-0 ${matchedExam ? 'bg-rose-600/10 border-rose-500/30' : 'bg-white/5 border-white/20'}`}>
+              <div className={`flex items-center gap-3 border px-4 h-[46px] rounded-[2px] shadow-lg transition-all shrink-0 ${matchedExam ? 'bg-rose-600/10 border-rose-500/30' : 'bg-white/5 border-white/20'}`}>
                 <FileText className={matchedExam ? 'text-rose-500' : 'text-gray-500'} size={18} />
-                <div className="text-right min-w-[110px]">
+                <div className="flex items-center justify-end h-full">
                   {matchedExam ? (
-                    <>
-                      <p className="text-[15px] font-black text-white leading-none tracking-tight">
+                    <div className="flex items-center gap-3">
+                      <span className="text-[14px] font-black text-white tracking-tight whitespace-nowrap">
                         {new Date(matchedExam.target_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
-                        <span className="text-rose-400 ml-1.5 uppercase text-[9px] tracking-widest font-black">Exam</span>
-                      </p>
-                      <p className="text-[10px] font-black text-rose-500 uppercase tracking-[0.15em] mt-1">
-                        {getRemainingClasses(matchedExam.target_date)} Classes Left
-                      </p>
-                    </>
+                      </span>
+                      <div className="w-[1px] h-3 bg-white/10" />
+                      <span className="text-[11px] font-black text-rose-500 uppercase tracking-widest whitespace-nowrap">
+                        잔여 <span className="text-[14px] ml-0.5">{getRemainingClasses(matchedExam.target_date)}</span>회
+                      </span>
+                    </div>
                   ) : (
-                    <>
-                      <p className="text-[12px] font-black text-gray-500 leading-none uppercase tracking-widest">No Exam Set</p>
-                      <p className="text-[9px] font-bold text-gray-600 mt-1 uppercase">시험 일정 없음</p>
-                    </>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] font-black text-gray-500 uppercase tracking-widest">No Exam</span>
+                      <div className="w-[1px] h-2 bg-white/5" />
+                      <span className="text-[10px] font-bold text-gray-600 uppercase">일정 없음</span>
+                    </div>
                   )}
                 </div>
               </div>

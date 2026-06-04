@@ -386,6 +386,18 @@ export default function TodaySheet({
   const handleEditingCellChange = useCallback((studentId: string, colId: string | null) => { setEditingCell(colId ? { studentId, columnId: colId } : null); }, []);
   const toggleHistory = useCallback((studentId: string) => { setExpandedHistory(prev => ({ ...prev, [studentId]: prev[studentId] ? 0 : 3 })); }, []);
 
+  const handleSetSwitch = useCallback((setId: string) => { 
+    setActiveSet(setId); 
+    localStorage.setItem(`todaySheetActiveSet_${currentUser?.id || 'default'}`, setId); 
+  }, [currentUser?.id]);
+
+  const toggleColumn = useCallback((colId: string) => { 
+    const newCols = visibleColumns.includes(colId) ? visibleColumns.filter(c => c !== colId) : [...visibleColumns, colId]; 
+    const newPresets = { ...presets, [activeSet]: newCols }; 
+    setPresets(newPresets); 
+    localStorage.setItem(`todaySheetPresets_${currentUser?.id || 'default'}`, JSON.stringify(newPresets)); 
+  }, [visibleColumns, presets, activeSet, currentUser?.id]);
+
   // 4. Global Events
   useEffect(() => {
     const handleMouseUpGlobal = () => setIsDragging(false);
@@ -394,6 +406,15 @@ export default function TodaySheet({
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing || e.keyCode === 229) return;
       const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '');
+      const isEditorOpen = !!document.getElementById('homework-editor-portal');
+
+      // SET 전환 단축키 (Alt + Q, W, E, R)
+      const keyToSet: Record<string, string> = { 'q': '1', 'w': '2', 'e': '3', 'r': '4', 'Q': '1', 'W': '2', 'E': '3', 'R': '4' };
+      if (e.altKey && keyToSet[e.key]) {
+        e.preventDefault();
+        handleSetSwitch(keyToSet[e.key]);
+        return;
+      }
 
       // CMD+Z
       if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
@@ -469,14 +490,13 @@ export default function TodaySheet({
       window.removeEventListener('copy', handleCopy);
       window.removeEventListener('paste', handlePaste);
     };
-  }, [isDragging, selectedRange, students, activeColumns, selectedIds, undoStack, activeCell, editingCell, performUndo, handleCopy, handlePaste]);
+  }, [isDragging, selectedRange, students, activeColumns, selectedIds, undoStack, activeCell, editingCell, performUndo, handleCopy, handlePaste, handleSetSwitch]);
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
   const onMouseDown = (e: React.MouseEvent, colId: string) => { resizingCol.current = { id: colId, startX: e.pageX, startWidth: colWidths[colId] || 100 }; document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); document.body.style.cursor = 'col-resize'; };
   const onMouseMove = (e: MouseEvent) => { if (!resizingCol.current) return; const { id, startX, startWidth } = resizingCol.current; const newWidth = Math.max(40, startWidth + (e.pageX - startX)); setColWidths(prev => ({ ...prev, [id]: newWidth })); };
   const onMouseUp = () => { if (resizingCol.current) { setColWidths(latest => { localStorage.setItem('todaySheetColWidths', JSON.stringify(latest)); return latest; }); } resizingCol.current = null; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); document.body.style.cursor = 'default'; };
-  const handleSetSwitch = (setId: string) => { setActiveSet(setId); localStorage.setItem(`todaySheetActiveSet_${currentUser?.id || 'default'}`, setId); };
-  const toggleColumn = (colId: string) => { const newCols = visibleColumns.includes(colId) ? visibleColumns.filter(c => c !== colId) : [...visibleColumns, colId]; const newPresets = { ...presets, [activeSet]: newCols }; setPresets(newPresets); localStorage.setItem(`todaySheetPresets_${currentUser?.id || 'default'}`, JSON.stringify(newPresets)); };
+
   const handleSendAll = async () => { if (!confirm(`${students.length}명 일괄 발송하시겠습니까?`)) return; setIsSendingReport('all'); let count = 0; for (const s of students) { try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: s.id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) count++; } catch(e){} } alert(`${count}명 완료`); setIsSendingReport(null); };
   const handleSendIndividual = async (id: string) => { const s = students.find((st:any) => st.id === id); if (!s) return; setIsSendingReport(id); try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) alert(`${s.name} 발송 완료`); } catch(e){} finally { setIsSendingReport(null); } };
   const handleBatchQuizCut = async (cut: number) => { const actives = students.filter((s:any) => !s.is_deleted); if (actives.length === 0) return; if (!confirm(`${actives.length}명 커트라인을 ${cut}개로 변경하시겠습니까?`)) return; setIsSendingReport('batch-cut'); try { await Promise.all(actives.map((s:any) => handleSaveWithUndo(s.id, { ...s.todaySession, next_quiz_cut: cut }))); alert('변경 완료'); } catch(e){} finally { setIsSendingReport(null); } };
@@ -556,9 +576,19 @@ export default function TodaySheet({
 
       <div className="flex items-center justify-between px-1">
         <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
-          {['1', '2', '3', '4'].map(setId => (
-            <button key={setId} onClick={() => handleSetSwitch(setId)} className={`px-4 py-1.5 rounded-[4px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`}>SET {setId}</button>
-          ))}
+          {['1', '2', '3', '4'].map((setId, idx) => {
+            const keys = ['Q', 'W', 'E', 'R'];
+            return (
+              <button 
+                key={setId} 
+                onClick={() => handleSetSwitch(setId)} 
+                className={`px-4 py-1.5 rounded-[4px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} 
+                title={`Alt + ${keys[idx]}`}
+              >
+                SET {setId}
+              </button>
+            );
+          })}
         </div>
         <div className="flex items-center gap-4">
           <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-1.5 bg-blue-600/10 text-blue-500 border border-blue-500/20 rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-lg">{isSendingReport === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} 전체 리포트 발송</button>
@@ -597,6 +627,7 @@ export default function TodaySheet({
                     )}
                     <TodaySheetRow
                       student={s}
+                      rowIndex={idx}
                       masterTextbooks={masterTextbooks}
                       onSave={handleSaveWithUndo}
                       onUpdateStudentInfo={onUpdateStudentInfo}

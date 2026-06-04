@@ -23,9 +23,14 @@ export function getTodayStr(): string {
 }
 
 /**
- * 날짜 문자열을 MM.DD 형식으로 변환합니다.
+ * 이름에서 첫 글자를 따서 영문 이니셜(또는 한글 첫 글자)을 반환합니다.
  */
-export function formatDateShort(dateStr: string): string {
-  if (!dateStr) return '';
-  return dateStr.slice(5).replace('-', '.');
+export function getInitial(name: string): string {
+  if (!name) return '?';
+  const firstChar = name.charAt(0);
+  const mapping: Record<string, string> = {
+    '김': 'K', '이': 'L', '박': 'P', '최': 'C', '정': 'J', '강': 'K', '조': 'J', '윤': 'Y', '장': 'J', '임': 'L', '한': 'H', '오': 'O', '서': 'S', '신': 'S', '권': 'K', '황': 'H', '안': 'A', '송': 'S', '전': 'J', '홍': 'H', '유': 'Y', '고': 'K', '문': 'M', '양': 'Y', '손': 'S', '배': 'B', '백': 'B', '허': 'H', '남': 'N', '심': 'S', '노': 'N', '하': 'H', '곽': 'K', '성': 'S', '차': 'C', '주': 'J', '우': 'W', '구': 'K', '신': 'S', '임': 'L', '나': 'N', '전': 'J', '민': 'M', '송': 'S', '지': 'J'
+  };
+  return mapping[firstChar] || firstChar.toUpperCase();
 }
+
