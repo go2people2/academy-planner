@@ -4,10 +4,13 @@ import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, ExternalLink
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
 import { getDayOfWeek } from '@/lib/utils';
+import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
+import { ScoreCell } from './cells/ScoreCell';
+import { SimpleTextCell } from './cells/SimpleTextCell';
 
 interface TodaySheetCellProps {
   col: any;
@@ -122,6 +125,28 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const [isCutPickerOpen, setIsCutPickerOpen] = useState(false);
   const [pickerCoords, setPickerCoords] = useState({ top: 0, left: 0 });
 
+  // 💡 [추가] 포탈형 툴팁 상태
+  const [activeTooltip, setActiveTooltip] = useState<'note' | 'suggestion' | null>(null);
+  const [tooltipCoords, setTooltipCoords] = useState({ top: 0, left: 0, right: 0, bottom: 0 });
+
+  const handleOpenTooltip = (e: React.MouseEvent | React.FocusEvent, type: 'note' | 'suggestion') => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    setTooltipCoords({ top: rect.top, left: rect.left, right: rect.right, bottom: rect.bottom });
+    setActiveTooltip(type);
+  };
+
+  // 💡 [추가] 툴팁 열린 상태에서 스크롤/리사이즈 시 자동 닫기 (위치 어긋남 방지)
+  React.useEffect(() => {
+    if (!activeTooltip) return;
+    const handleClose = () => setActiveTooltip(null);
+    window.addEventListener('scroll', handleClose, true); // 테이블 스크롤 감지를 위해 capture 사용
+    window.addEventListener('resize', handleClose);
+    return () => {
+      window.removeEventListener('scroll', handleClose, true);
+      window.removeEventListener('resize', handleClose);
+    };
+  }, [activeTooltip]);
+
   const handleOpenCutPicker = (e: React.MouseEvent) => {
     e.stopPropagation();
     const rect = e.currentTarget.getBoundingClientRect();
@@ -178,35 +203,81 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div className="absolute top-0 right-0 flex flex-row-reverse items-start gap-1">
               {student.management_notes && (
                 <div 
-                  className="group/note relative cursor-pointer"
+                  className="group/note relative cursor-pointer z-[60]"
                   onClick={(e) => { e.stopPropagation(); onViewDetail?.(student.id); }}
+                  onMouseEnter={(e) => handleOpenTooltip(e, 'note')}
+                  onMouseLeave={() => setActiveTooltip(null)}
+                  onFocus={(e) => handleOpenTooltip(e, 'note')}
+                  onBlur={() => setActiveTooltip(null)}
+                  tabIndex={0}
                 >
-                  <div className="w-0 h-0 border-t-[22px] border-t-amber-500 border-l-[22px] border-l-transparent shadow-md" />
-                  {/* Tooltip for management notes */}
-                  <div className={`absolute ${rowIndex === 0 ? 'top-full mt-4' : 'bottom-full mb-4'} left-0 w-80 p-4 bg-amber-50 text-amber-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/note:opacity-100 pointer-events-none transition-all z-[100] border-2 border-amber-200`}>
-                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-amber-200/50">
-                      <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
-                      <span className="text-[10px] uppercase tracking-widest text-amber-600">Student Management Note</span>
-                    </div>
-                    <p className="whitespace-pre-wrap leading-relaxed">{student.management_notes}</p>
-                  </div>
+                  <div className="w-0 h-0 border-t-[24px] border-t-amber-500 border-l-[24px] border-l-transparent shadow-lg drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
+                  
+                  {activeTooltip === 'note' && createPortal(
+                    <AnimatePresence mode="wait">
+                      <motion.div 
+                        initial={{ opacity: 0, y: tooltipCoords.top < 350 ? 10 : -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        style={{ 
+                          position: 'fixed',
+                          top: tooltipCoords.top < 350 ? tooltipCoords.bottom + 8 : 'auto',
+                          bottom: tooltipCoords.top < 350 ? 'auto' : (window.innerHeight - tooltipCoords.top) + 8,
+                          left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
+                          zIndex: 9999
+                        }}
+                        className="w-80 p-5 bg-amber-50 text-amber-950 text-[13px] font-black rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.5)] border-2 border-amber-200 ring-4 ring-black/20 pointer-events-none"
+                      >
+                        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-200">
+                          <AlertTriangle size={14} className="text-amber-600 animate-bounce" />
+                          <span className="text-[10px] uppercase tracking-widest text-amber-600 font-black">Student Management Alert</span>
+                        </div>
+                        <p className="whitespace-pre-wrap leading-relaxed text-[14px]">"{student.management_notes}"</p>
+                      </motion.div>
+                    </AnimatePresence>,
+                    document.body
+                  )}
                 </div>
               )}
               {student.suggestions && student.suggestions.length > 0 && (
-                <div className="group/suggestion relative">
+                <div 
+                  className="group/suggestion relative cursor-pointer"
+                  onMouseEnter={(e) => handleOpenTooltip(e, 'suggestion')}
+                  onMouseLeave={() => setActiveTooltip(null)}
+                  onFocus={(e) => handleOpenTooltip(e, 'suggestion')}
+                  onBlur={() => setActiveTooltip(null)}
+                  tabIndex={0}
+                >
                   <div className="w-0 h-0 border-t-[22px] border-t-blue-500 border-l-[22px] border-l-transparent shadow-md" />
-                  {/* Tooltip for suggestions */}
-                  <div className={`absolute ${rowIndex === 0 ? 'top-full mt-4' : 'bottom-full mb-4'} left-0 w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] opacity-0 group-hover/suggestion:opacity-100 pointer-events-none transition-all z-[100] border-2 border-blue-200`}>
-                    <div className="flex items-center gap-2 mb-2 pb-2 border-b border-blue-200/50">
-                      <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                      <span className="text-[10px] uppercase tracking-widest text-blue-600">Student Suggestion</span>
-                    </div>
-                    <div className="space-y-3">
-                      {student.suggestions.map((sug: any, idx: number) => (
-                        <p key={idx} className="whitespace-pre-wrap leading-relaxed">{sug.content}</p>
-                      ))}
-                    </div>
-                  </div>
+                  
+                  {activeTooltip === 'suggestion' && createPortal(
+                    <AnimatePresence mode="wait">
+                      <motion.div 
+                        initial={{ opacity: 0, y: tooltipCoords.top < 350 ? 10 : -10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0 }}
+                        style={{ 
+                          position: 'fixed',
+                          top: tooltipCoords.top < 350 ? tooltipCoords.bottom + 8 : 'auto',
+                          bottom: tooltipCoords.top < 350 ? 'auto' : (window.innerHeight - tooltipCoords.top) + 8,
+                          left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
+                          zIndex: 9999
+                        }}
+                        className="w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-2 border-blue-200 pointer-events-none"
+                      >
+                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-blue-200/50">
+                          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+                          <span className="text-[10px] uppercase tracking-widest text-blue-600">Student Suggestion</span>
+                        </div>
+                        <div className="space-y-3">
+                          {student.suggestions.map((sug: any, idx: number) => (
+                            <p key={idx} className="whitespace-pre-wrap leading-relaxed">{sug.content}</p>
+                          ))}
+                        </div>
+                      </motion.div>
+                    </AnimatePresence>,
+                    document.body
+                  )}
                 </div>
               )}
             </div>
@@ -240,12 +311,19 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'attendance' && (
           <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-black cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
-            !formData.attendance_status ? 'text-gray-600' :
-            formData.attendance_status.startsWith('출석') ? 'text-emerald-400' : 
-            formData.attendance_status.startsWith('결석') ? 'text-red-400' : 
+            formData.attendance_status === ATTENDANCE_STATUS.BEFORE ? 'text-gray-600' :
+            formData.attendance_status.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400' : 
+            formData.attendance_status.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-red-400' : 
             'text-amber-400'
           }`}>
-            {formData.attendance_status?.split(':')[0] || '-'}
+            <div className="flex items-center gap-1">
+              <span>{formData.attendance_status}</span>
+              {formData.moved_to_hour && (
+                <span className="text-[9px] opacity-60 bg-white/10 px-1 rounded">
+                  {formData.moved_to_hour}시
+                </span>
+              )}
+            </div>
           </div>
         )}
 
@@ -265,13 +343,32 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           </div>
         )}
 
-        {(['test_id', 'classwork', 'completed_classwork', 'assign', 'next_quiz', 'mission', 'notes'].includes(colId)) && (
+        {/* 💡 [리팩토링] 단순 텍스트 셀 분리 (mission, notes) */}
+        {(['mission', 'notes'].includes(colId)) && (
+          <SimpleTextCell 
+            ref={colId === 'mission' ? missionRef : notesRef}
+            student={student}
+            colId={colId}
+            currentText={currentText}
+            isEditing={isEditing}
+            isActive={isActive}
+            onSave={onSave}
+            handleKeyDown={handleKeyDown}
+            handleLocalInput={handleLocalInput}
+            handleCellInteraction={handleCellInteraction}
+            commonTextStyle={commonTextStyle}
+          />
+        )}
+
+        {(['test_id', 'classwork', 'completed_classwork', 'assign', 'next_quiz'].includes(colId)) && (
           <div className="relative w-full h-full flex items-start justify-start group/cell">
             {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
             {(isEditing || isActive) && (
               <textarea 
-                ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : colId === 'mission' ? missionRef : notesRef} 
+                ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : nqRef} 
                 defaultValue={currentText || ''} 
+                data-student-id={student.id}
+                data-col-id={colId}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && !e.shiftKey) {
                     onSave(colId, (e.target as HTMLTextAreaElement).value);
@@ -305,32 +402,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100 transition-opacity z-30">
               {colId === 'test_id' && (
                 <>
-                  <button 
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      let nextStatus: boolean | undefined = undefined;
-                      // 💡 cycle: 없음 -> 완료(true) -> 미완료(false) -> 없음
-                      if (formData.test_completed === undefined || formData.test_completed === null) nextStatus = true;
-                      else if (formData.test_completed === true) nextStatus = false;
-                      else nextStatus = undefined;
-                      onSave({ test_completed: nextStatus }); 
-                    }} 
-                    className={`w-5 h-5 rounded-[1px] border transition-all flex items-center justify-center shadow-sm ${
-                      formData.test_completed === true ? 'bg-emerald-600 text-white border-emerald-400' : 
-                      formData.test_completed === false ? 'bg-rose-600 text-white border-rose-500' : 
-                      'bg-white/10 text-gray-500 border-white/20 hover:bg-white/20'
-                    }`}
-                    title={
-                      formData.test_completed === true ? "테스트 완료 (다음 수업 시 새 테스트 준비)" : 
-                      formData.test_completed === false ? "미완료 (다음 수업 시 이 테스트를 다시 가져옴)" : 
-                      "테스트 없음 (클릭하여 완료/미완료 상태 지정)"
-                    }
-                  >
-                    {formData.test_completed === true ? <Check size={10} strokeWidth={4} /> : 
-                     formData.test_completed === false ? <Clock size={10} strokeWidth={4} /> : 
-                     <Circle size={8} fill="currentColor" className="opacity-30" />}
-                  </button>
-
                   {/* 💡 오늘 테스트 커트라인 픽커 버튼 */}
                   <div onClick={handleOpenCutPicker} className="relative cursor-pointer group/cut">
                     <div className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 group-hover/cut:bg-emerald-600 group-hover/cut:text-white transition-all shadow-sm flex items-center justify-center">
@@ -409,34 +480,21 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           </div>
         )}
 
+        {/* 💡 [리팩토링] 점수 입력 셀 분리 */}
         {colId === 'test_score' && (
-          <div className="relative w-full h-full flex items-center justify-start group/score">
-            {(isEditing || isActive) && (
-              <input 
-                ref={scoreInputRef} 
-                type="text" 
-                defaultValue={formData.test_score || ''} 
-                autoFocus={isEditing} 
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') onSave(colId, (e.target as HTMLInputElement).value);
-                  handleKeyDown(e, colId);
-                }} 
-                onBlur={(e) => onSave(colId, e.target.value)} 
-                onChange={(e) => handleLocalInput(e, 'test_score')} 
-                placeholder="-" 
-                className="w-full h-[56px] bg-transparent border-0 outline-none px-4 text-[14px] text-left text-emerald-400 font-black pr-4 m-0" 
-              />
-            )}
-            {!isEditing && (
-              <div className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full h-[56px] flex items-center justify-start">
-                {formData.test_score ? (formData.test_score_type === 'score' ? `${formData.test_score}%` : `${formData.test_score}/${formData.test_total_count || '?'}`) : '-'}
-              </div>
-            )}
-            <div className="absolute right-1 flex flex-col gap-0.5 z-30">
-              <button onClick={(e) => { e.stopPropagation(); onTestScoreTypeToggle(); }} className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${formData.test_score_type === 'score' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-blue-500/20 text-blue-400'}`}>{formData.test_score_type === 'score' ? <Percent size={8} strokeWidth={4} /> : <Hash size={8} strokeWidth={4} />}</button>
-              <span className="text-[7px] font-black text-gray-600/50 text-center uppercase">{formData.test_score_type === 'score' ? '%' : 'ea'}</span>
-            </div>
-          </div>
+          <ScoreCell 
+            student={student}
+            colId={colId}
+            formData={formData}
+            isEditing={isEditing}
+            isActive={isActive}
+            scoreInputRef={scoreInputRef}
+            onSave={onSave}
+            handleKeyDown={handleKeyDown}
+            handleLocalInput={handleLocalInput}
+            handleCellInteraction={handleCellInteraction}
+            onTestScoreTypeToggle={onTestScoreTypeToggle}
+          />
         )}
 
         {colId === 'action' && (

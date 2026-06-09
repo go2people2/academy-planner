@@ -247,7 +247,10 @@ export default function Sidebar({
       </div>
 
       <div className="pt-4 border-t border-white/5 space-y-1">
-        <SidebarLink icon={<Settings size={14} />} label="Settings" active={viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />
+        {/* 💡 [수정] 관리자 전용 메뉴로 제한 */}
+        {isAdmin && (
+          <SidebarLink icon={<Settings size={14} />} label="Settings" active={viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />
+        )}
         <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-all group font-bold">
           <LogOut size={14} />
           <span className="text-[11px]">Log Out</span>

@@ -18,28 +18,19 @@ export default function LoginForm({ academy }: { academy: any }) {
 
   if (!academy) {
     return (
-      <motion.div 
-        initial={{ opacity: 0, scale: 0.95 }}
-        animate={{ opacity: 1, scale: 1 }}
-        className="bg-[#111111]/80 backdrop-blur-xl border border-red-500/20 p-10 rounded-[4px] shadow-2xl text-center space-y-6"
-      >
-        <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mx-auto text-red-500">
-          <Lock size={32} />
+      <div className="flex items-center justify-center min-h-screen text-white bg-black p-4 text-center">
+        <div className="space-y-4">
+          <Lock size={48} className="mx-auto text-red-500" />
+          <h1 className="text-xl font-black uppercase tracking-widest">Unregistered Access</h1>
+          <p className="text-gray-400 text-sm">죄송합니다. [{slug}] 슬러그로 등록된 학원을 찾을 수 없습니다.</p>
+          <button 
+            onClick={() => window.location.href = '/'} 
+            className="px-6 py-2 bg-white/10 hover:bg-white/20 transition-all rounded-[2px] text-xs font-black uppercase tracking-widest"
+          >
+            Back to Main
+          </button>
         </div>
-        <div className="space-y-2">
-          <h1 className="text-xl font-black text-white uppercase tracking-tight">Unregistered Access</h1>
-          <p className="text-gray-400 text-xs leading-relaxed">
-            죄송합니다. <span className="text-red-400 font-bold">[{slug}]</span> 슬러그로 등록된 학원을 찾을 수 없습니다.<br/>
-            주소를 다시 확인하거나 관리자에게 문의해 주세요.
-          </p>
-        </div>
-        <button 
-          onClick={() => window.location.href = '/'}
-          className="w-full py-3 bg-white/5 hover:bg-white/10 text-gray-400 text-[10px] font-black uppercase tracking-widest rounded-[2px] transition-all"
-        >
-          Back to Main
-        </button>
-      </motion.div>
+      </div>
     );
   }
 
@@ -49,42 +40,48 @@ export default function LoginForm({ academy }: { academy: any }) {
 
     try {
       if (loginType === 'teacher') {
-        // 1. 원장님 관리자 모드 체크 (ID: admin, PW: academy.admin_password)
-        if (username === 'admin' && password === academy.admin_password) {
-          localStorage.setItem('ams_user', JSON.stringify({
-            role: 'admin',
-            id: 'admin',
-            name: '원장님'
-          }));
+        // 💡 [개선] Supabase Auth 공식 인증 (이메일 매핑 기반)
+        const email = `${username.trim().toLowerCase()}@hokma-academy.com`;
+        const { data, error: authError } = await supabase.auth.signInWithPassword({
+          email: email,
+          password: password,
+        });
+
+        if (authError) {
+          console.error('Auth error:', authError.message);
+          alert('아이디 또는 비밀번호가 올바르지 않습니다.');
           setIsLoading(false);
-          router.push(`/${slug}/dashboard`);
           return;
         }
 
-        // 2. 개별 선생님 로그인 체크 (ams_teachers 테이블 조회)
-        const { data: teacher, error } = await supabase
-          .from('ams_teachers')
-          .select('*')
-          .eq('academy_id', academy.id)
-          .eq('login_id', username)
-          .eq('password', password)
-          .single();
+        if (data?.user) {
+          // 💡 [중요] Auth 세션 기반으로 ams_teachers 테이블에서 실제 프로필 정보 로드
+          const { data: profile, error: pErr } = await supabase
+            .from('ams_teachers')
+            .select('id, name, role, academy_id')
+            .eq('user_id', data.user.id)
+            .maybeSingle();
 
-        if (teacher) {
+          if (pErr || !profile) {
+            console.error('Profile fetch error:', pErr);
+            alert('인증은 성공했으나 교사 정보를 찾을 수 없습니다. (마이그레이션 확인 필요)');
+            setIsLoading(false);
+            return;
+          }
+
+          // 💡 [호환성] 기존 앱 상태 포맷으로 localStorage 저장
           localStorage.setItem('ams_user', JSON.stringify({
-            role: 'teacher',
-            id: teacher.id,
-            name: teacher.name
+            role: profile.role || 'teacher',
+            id: profile.id, // 앱 내부에서 쓰이는 DB PK (teacher_id)
+            name: profile.name,
+            academy_id: profile.academy_id
           }));
-          setIsLoading(false);
+          
+          setIsLoading(false); // 이동 전 로딩 상태 해제
           router.push(`/${slug}/dashboard`);
-        } else {
-          alert('ID 또는 비밀번호가 올바르지 않습니다.');
-          setIsLoading(false);
         }
       } else {
         // 3. 학생 로그인 체크 (ams_students 테이블 조회)
-        // 💡 원장님/담임 선생님 전용 패스키 체크 (기본값: 2324)
         const masterPasskey = academy.student_passkey || '2324';
         const isMasterAccess = phoneLast4 === masterPasskey;
 
@@ -94,24 +91,30 @@ export default function LoginForm({ academy }: { academy: any }) {
           .eq('academy_id', academy.id)
           .eq('name', studentName);
         
-        // 💡 패스키가 아닐 때만 전화번호 뒷자리 조건 추가
         if (!isMasterAccess) {
           query = query.like('phone', `%${phoneLast4}`);
         }
 
-        const { data: student, error } = await query.maybeSingle();
+        const { data: student, error: sErr } = await query.maybeSingle();
+
+        if (sErr) {
+          console.error('Student fetch error:', sErr);
+          alert('학생 정보 조회 중 오류가 발생했습니다.');
+          setIsLoading(false);
+          return;
+        }
 
         if (student) {
           localStorage.setItem('ams_student', JSON.stringify(student));
           setIsLoading(false);
           router.push(`/${slug}/student`);
         } else {
-          alert(isMasterAccess ? '해당 이름의 학생을 찾을 수 없습니다.' : '학생 정보를 찾을 수 없습니다. 이름과 전화번호 뒷자리를 확인해 주세요.');
+          alert(isMasterAccess ? '해당 이름의 학생을 찾을 수 없습니다.' : '학생 정보를 찾을 수 없습니다.');
           setIsLoading(false);
         }
       }
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Login fatal error:', err);
       alert('로그인 처리 중 오류가 발생했습니다.');
       setIsLoading(false);
     }
@@ -121,27 +124,26 @@ export default function LoginForm({ academy }: { academy: any }) {
     <motion.div 
       initial={{ opacity: 0, y: 20 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
       className="bg-[#111111]/80 backdrop-blur-xl border border-white/10 p-8 rounded-[4px] shadow-2xl"
     >
       <div className="text-center mb-8">
         <h1 className="text-3xl font-bold text-white tracking-tight mb-2 uppercase">
           {academy.academy_name}
         </h1>
-        <p className="text-gray-400 text-sm">{academy.welcome_message || 'Academy Management System'}</p>
+        <p className="text-gray-400 text-sm tracking-wide">Academy Management System</p>
       </div>
 
       {/* 탭 전환 */}
-      <div className="flex mb-8 bg-black/40 p-1 rounded-[2px] border border-white/5">
+      <div className="flex mb-8 bg-black/40 p-1 rounded-[2px] border border-white/5 gap-1">
         <button 
           onClick={() => setLoginType('teacher')}
-          className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${loginType === 'teacher' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}
+          className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${loginType === 'teacher' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}
         >
           Teacher / Admin
         </button>
         <button 
           onClick={() => setLoginType('student')}
-          className={`flex-1 py-2 text-[10px] font-black uppercase tracking-widest transition-all ${loginType === 'student' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}
+          className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${loginType === 'student' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}
         >
           Student Portal
         </button>
@@ -150,35 +152,35 @@ export default function LoginForm({ academy }: { academy: any }) {
       <form onSubmit={handleLogin} className="space-y-6">
         {loginType === 'teacher' ? (
           <>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
-                Teacher ID / admin
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
+                Teacher ID
               </label>
               <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
                 <input 
                   type="text"
-                  placeholder="Enter your ID"
+                  placeholder="ID"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-gray-600"
+                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                   required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
                 Password
               </label>
               <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
                 <input 
                   type="password"
                   placeholder="••••••••"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-gray-600"
+                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                   required
                 />
               </div>
@@ -186,36 +188,36 @@ export default function LoginForm({ academy }: { academy: any }) {
           </>
         ) : (
           <>
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
-                Student Name (이름)
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
+                Student Name
               </label>
               <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
                 <input 
                   type="text"
                   placeholder="성함을 입력하세요"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-gray-600"
+                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                   required
                 />
               </div>
             </div>
 
-            <div className="space-y-2">
-              <label className="text-xs font-semibold text-gray-400 uppercase tracking-wider ml-1">
-                Phone Last 4 Digits (번호 뒷자리)
+            <div className="space-y-1">
+              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
+                Phone Last 4 Digits
               </label>
               <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-500 group-focus-within:text-blue-400 transition-colors" />
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
                 <input 
                   type="text"
                   maxLength={4}
-                  placeholder="전화번호 뒷자리 4자리"
+                  placeholder="0000"
                   value={phoneLast4}
                   onChange={(e) => setPhoneLast4(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all placeholder:text-gray-600 tabular-nums"
+                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
                   required
                 />
               </div>
@@ -232,18 +234,12 @@ export default function LoginForm({ academy }: { academy: any }) {
             <Loader2 className="w-5 h-5 animate-spin" />
           ) : (
             <>
-              {loginType === 'teacher' ? 'Sign In' : 'Enter Student Portal'}
-              <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
+              <span className="uppercase tracking-widest text-[11px]">Sign In Securely</span>
+              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
             </>
           )}
         </button>
       </form>
-
-      <div className="mt-8 pt-8 border-t border-white/5 text-center">
-        <p className="text-gray-500 text-xs">
-          {loginType === 'teacher' ? 'Forgot your credentials? Please contact the administrator.' : '로그인에 어려움이 있다면 학원 선생님께 문의해 주세요.'}
-        </p>
-      </div>
     </motion.div>
   );
 }

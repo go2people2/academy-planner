@@ -142,6 +142,29 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
         <MetricCard label="테스트 평균" value={`${stats.avgTestScore}점`} sub="최근 5회" color="text-orange-500" icon={<BarChart3 size={16}/>} />
       </div>
 
+      {/* 💡 학생 관리 메모 (노란 삼각형 클릭 시 주요 확인 대상) */}
+      {student.management_notes && (
+        <section className="space-y-4">
+          <SectionTitle title="학습 지도 시 주의사항" />
+          <div className="relative group/postit">
+            <div className="absolute inset-0 bg-amber-200 rounded-sm shadow-[5px_5px_15px_rgba(0,0,0,0.3)] rotate-[-1deg]" />
+            <div className="relative bg-amber-100/90 backdrop-blur-sm p-6 min-h-[100px] rounded-sm flex flex-col shadow-inner">
+              <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-900/10 opacity-60">
+                <AlertCircle size={14} className="text-amber-700" />
+                <span className="text-[10px] font-black text-amber-800 uppercase tracking-widest">Management Sticky Note</span>
+              </div>
+              <p className="text-[14px] font-bold text-amber-950 leading-relaxed whitespace-pre-wrap italic">
+                "{student.management_notes}"
+              </p>
+              <div className="absolute bottom-2 right-4 flex items-center gap-1 opacity-20">
+                <span className="text-[8px] font-black text-amber-900 uppercase">Registered Info</span>
+              </div>
+            </div>
+            <div className="absolute bottom-0 right-0 w-6 h-6 bg-amber-300/50 rounded-tl-full shadow-[-2px_-2px_5px_rgba(0,0,0,0.1)] pointer-events-none" />
+          </div>
+        </section>
+      )}
+
       <section className="space-y-4">
         <SectionTitle title="현재 학습 중인 교재" />
         <div className="space-y-2">

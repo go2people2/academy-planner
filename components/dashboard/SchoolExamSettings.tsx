@@ -1,0 +1,279 @@
+'use client';
+
+import React, { useState, useEffect, useMemo } from 'react';
+import { motion } from 'framer-motion';
+import { 
+  Calendar, School, AlertTriangle, Save, Loader2, Trash2 
+} from 'lucide-react';
+import { supabase } from '@/lib/supabase';
+
+interface SchoolExamSettingsProps {
+  academyInfo: any;
+  students: any[];
+  onUpdateAcademyInfo?: (updates: any) => Promise<void>;
+}
+
+export default function SchoolExamSettings({ academyInfo, students, onUpdateAcademyInfo }: SchoolExamSettingsProps) {
+  const [examSchedules, setExamSchedules] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  
+  const EXAM_TYPES = [
+    { id: '1-MID', label: '1학기 중간' },
+    { id: '1-FINAL', label: '1학기 기말' },
+    { id: '2-MID', label: '2학기 중간' },
+    { id: '2-FINAL', label: '2학기 기말' }
+  ];
+
+  const HIGH_SUBJECTS = ['공수1', '공수2', '대수', '확통', '기하', '미적분', '미적분2'];
+
+  const currentPeriod = useMemo(() => {
+    const settings = academyInfo?.operation_settings || {};
+    if (settings.current_exam_period) return settings.current_exam_period;
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth() + 1;
+    let type = '1-MID';
+    if (month >= 5 && month <= 7) type = '1-FINAL';
+    else if (month >= 8 && month <= 10) type = '2-MID';
+    else if (month >= 11 || month <= 2) type = '2-FINAL';
+    return `${year}-${type}`;
+  }, [academyInfo]);
+
+  const [selectedYear, setSelectedYear] = useState(currentPeriod.split('-')[0]);
+  const [selectedType, setSelectedType] = useState(`${currentPeriod.split('-')[1]}-${currentPeriod.split('-')[2]}`);
+
+  const [newExam, setNewExam] = useState({
+    school_name: '',
+    grade: '',
+    subject: '',
+    target_date: new Date().toISOString().split('T')[0]
+  });
+
+  const fetchExams = async () => {
+    if (!academyInfo?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('ams_exam_schedules')
+        .select('*')
+        .eq('academy_id', academyInfo.id)
+        .order('target_date', { ascending: true });
+      if (error) throw error;
+      setExamSchedules(data || []);
+    } catch (e) { console.error('Fetch exams error:', e); }
+  };
+
+  useEffect(() => { fetchExams(); }, [academyInfo?.id]);
+
+  const isHighSchool = (name: string) => name.includes('고') || name.endsWith('고') || name.includes('고등학교');
+
+  const groupedExams = useMemo(() => {
+    const periodKey = `${selectedYear}-${selectedType}`;
+    const periodMap: any = {
+      '1-MID': ['1학기 중간', '1학기 중간고사'],
+      '1-FINAL': ['1학기 기말', '1학기 기말고사'],
+      '2-MID': ['2학기 중간', '2학기 중간고사'],
+      '2-FINAL': ['2학기 기말', '2학기 기말고사']
+    };
+    const legacyNames = periodMap[selectedType] || [];
+    const filtered = examSchedules.filter(ex => {
+      if (ex.exam_name.startsWith(periodKey)) return true;
+      const exYear = new Date(ex.target_date).getFullYear();
+      if (String(exYear) === selectedYear && legacyNames.includes(ex.exam_name)) return true;
+      return false;
+    });
+    return {
+      middle: filtered.filter(ex => !isHighSchool(ex.school_name)),
+      high: filtered.filter(ex => isHighSchool(ex.school_name))
+    };
+  }, [examSchedules, selectedYear, selectedType]);
+
+  const pendingSchools = useMemo(() => {
+    if (!students || !examSchedules) return [];
+    const allExams = [...groupedExams.middle, ...groupedExams.high];
+    const allSchools = Array.from(new Set(students.map(s => s.school).filter(Boolean)));
+    const registeredSchools = new Set(allExams.map(ex => ex.school_name));
+    const missing = allSchools.filter(school => !registeredSchools.has(school));
+    return missing.sort((a, b) => {
+      const isAMid = !isHighSchool(a);
+      const isBMid = !isHighSchool(b);
+      if (isAMid && !isBMid) return -1;
+      if (!isAMid && isBMid) return 1;
+      return a.localeCompare(b);
+    });
+  }, [students, groupedExams]);
+
+  const handleSetCurrentPeriod = async () => {
+    if (!onUpdateAcademyInfo) return;
+    const periodKey = `${selectedYear}-${selectedType}`;
+    const nextSettings = { ...(academyInfo?.operation_settings || {}), current_exam_period: periodKey };
+    await onUpdateAcademyInfo({ operation_settings: nextSettings });
+    alert(`현재 시험 기간이 설정되었습니다.`);
+  };
+
+  const handleAddExam = async () => {
+    if (!newExam.school_name || !newExam.target_date || !academyInfo?.id) { alert('학교와 날짜를 확인해 주세요.'); return; }
+    setIsSaving(true);
+    try {
+      const periodKey = `${selectedYear}-${selectedType}`;
+      const finalExamName = newExam.subject ? `${periodKey}:${newExam.subject}` : periodKey;
+      const payload = { academy_id: academyInfo.id, school_name: newExam.school_name, grade: newExam.grade || null, exam_name: finalExamName, target_date: newExam.target_date };
+      const { error } = await supabase.from('ams_exam_schedules').insert([payload]);
+      if (error) throw error;
+      setNewExam({ ...newExam, subject: '', target_date: new Date().toISOString().split('T')[0] });
+      await fetchExams();
+    } catch (e: any) { alert(`오류: ${e.message}`); } finally { setIsSaving(false); }
+  };
+
+  const handleDeleteExam = async (id: string) => {
+    if (!confirm('삭제하시겠습니까?')) return;
+    const { error } = await supabase.from('ams_exam_schedules').delete().eq('id', id);
+    if (!error) fetchExams();
+  };
+
+  const ExamList = ({ title, list }: { title: string, list: any[] }) => (
+    <div className="flex-1 space-y-2">
+      <div className="flex items-center gap-2 px-1">
+        <div className={`w-1.5 h-3.5 rounded-full ${title === 'MIDDLE' ? 'bg-blue-500' : 'bg-rose-500'}`} />
+        <span className="text-[11px] font-black text-gray-400 tracking-widest">{title} SCHOOLS</span>
+        <span className="text-[10px] text-gray-700 font-bold ml-auto">{list.length}</span>
+      </div>
+      <div className="bg-white/5 border border-white/10 rounded-[4px] overflow-hidden divide-y divide-white/5 shadow-2xl">
+        {list.length === 0 ? (
+          <div className="py-6 text-center text-[11px] text-gray-700 font-black uppercase italic">Empty</div>
+        ) : (
+          list.map(exam => {
+            const subject = exam.exam_name.split(':')[1];
+            const diff = Math.ceil((new Date(exam.target_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+            return (
+              <div key={exam.id} className="flex items-center justify-between px-4 py-2 group hover:bg-white/[0.04] transition-all">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <span className="text-[14px] font-black text-white truncate">{exam.school_name}</span>
+                  {subject && <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-rose-600 text-white shadow-lg">{subject}</span>}
+                </div>
+                <div className="flex items-center gap-4 ml-2 shrink-0">
+                  <span className="text-[13px] font-black text-white tabular-nums opacity-90">{exam.target_date.replace(/-/g, '.')}</span>
+                  <div className="min-w-[44px] text-right">
+                    <span className={`text-[13px] font-black tabular-nums tracking-tighter ${diff <= 7 ? 'text-rose-500' : diff <= 14 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                      {diff === 0 ? 'DAY' : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`}
+                    </span>
+                  </div>
+                  <button onClick={() => handleDeleteExam(exam.id)} className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      {/* 💡 [슈퍼 원라인] 모든 컨트롤을 한 줄로 통합 + 크기 확대 */}
+      <div className="bg-white/5 border border-white/10 rounded-[6px] overflow-hidden shadow-2xl">
+        <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-6 bg-white/[0.02]">
+          <div className="flex items-center gap-4 flex-1">
+            {/* 1. 연도 설정 */}
+            <div className="flex items-center gap-2">
+              <Calendar size={16} className="text-rose-500 opacity-50" />
+              <input 
+                type="number" 
+                value={selectedYear} 
+                onChange={e => setSelectedYear(e.target.value)} 
+                className="w-20 bg-black/40 border border-white/10 rounded-[2px] px-3 py-1.5 text-[14px] font-black text-white outline-none focus:border-rose-500 transition-all text-center" 
+              />
+            </div>
+            
+            <div className="h-5 w-px bg-white/10" />
+
+            {/* 2. 학기 버튼 */}
+            <div className="flex gap-1">
+              {EXAM_TYPES.map(type => (
+                <button 
+                  key={type.id} 
+                  onClick={() => setSelectedType(type.id)} 
+                  className={`px-3 py-1.5 text-[11px] font-black rounded-[2px] border transition-all ${selectedType === type.id ? 'bg-rose-600 border-rose-400 text-white shadow-lg' : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'}`}
+                >
+                  {type.label.replace('학기 ', '')}
+                </button>
+              ))}
+            </div>
+
+            <div className="h-5 w-px bg-white/10" />
+
+            {/* 3. 학교 입력 필드 (통합) */}
+            <div className="flex items-center gap-2 flex-1 max-w-2xl">
+              <input 
+                type="text" 
+                placeholder="학교명" 
+                value={newExam.school_name} 
+                onChange={e => setNewExam({...newExam, school_name: e.target.value})} 
+                className="flex-1 min-w-[140px] bg-black/40 border border-white/10 rounded-[2px] px-3 py-1.5 text-[13px] font-bold text-white outline-none focus:border-rose-500" 
+              />
+              <input 
+                type="text" 
+                placeholder="학년" 
+                value={newExam.grade} 
+                onChange={e => setNewExam({...newExam, grade: e.target.value})} 
+                className="w-14 bg-black/40 border border-white/10 rounded-[2px] px-2 py-1.5 text-[13px] font-bold text-white text-center outline-none focus:border-rose-500" 
+              />
+              <input 
+                type="date" 
+                value={newExam.target_date} 
+                onChange={e => setNewExam({...newExam, target_date: e.target.value})} 
+                className="w-36 bg-black/40 border border-white/10 rounded-[2px] px-3 py-1.5 text-[13px] font-black text-white outline-none focus:border-rose-500 [color-scheme:dark]" 
+              />
+              <button 
+                onClick={handleAddExam} 
+                disabled={isSaving} 
+                className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-black rounded-[2px] uppercase tracking-widest transition-all shadow-lg active:scale-95 flex items-center gap-2"
+              >
+                {isSaving ? <Loader2 size={12} className="animate-spin" /> : <><Save size={12} /> Add</>}
+              </button>
+            </div>
+          </div>
+
+          <div className="h-5 w-px bg-white/10" />
+
+          {/* 4. 활성화 버튼 */}
+          <button 
+            onClick={handleSetCurrentPeriod} 
+            className={`px-5 py-2 rounded-[2px] text-[11px] font-black uppercase tracking-widest transition-all ${currentPeriod === `${selectedYear}-${selectedType}` ? 'bg-rose-500/10 text-rose-500 border border-rose-500/20' : 'bg-rose-600 text-white hover:bg-rose-500 shadow-xl'}`}
+          >
+            {currentPeriod === `${selectedYear}-${selectedType}` ? 'Active' : 'Set Active'}
+          </button>
+        </div>
+
+        {/* 고등 과목 선택 (필요시 하단에 작게 노출) */}
+        {isHighSchool(newExam.school_name) && (
+          <div className="px-4 py-2 bg-rose-600/[0.04] border-t border-white/5 flex flex-wrap gap-1.5 items-center">
+            {HIGH_SUBJECTS.map(sub => (
+              <button key={sub} onClick={() => setNewExam({...newExam, subject: sub})} className={`px-2.5 py-1 text-[10px] font-black rounded-[2px] border transition-all ${newExam.subject === sub ? 'bg-rose-500/20 border-rose-500/50 text-rose-400' : 'bg-white/5 border-white/5 text-gray-500 hover:border-white/20'}`}>{sub}</button>
+            ))}
+            <input type="text" placeholder="기타" value={HIGH_SUBJECTS.includes(newExam.subject) ? '' : newExam.subject} onChange={e => setNewExam({...newExam, subject: e.target.value})} className="ml-2 w-20 bg-transparent border-b border-white/10 px-2 py-0.5 text-[11px] font-bold text-white outline-none focus:border-rose-500" />
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        {/* 💡 미등록 학교 (시인성 강화) */}
+        {pendingSchools.length > 0 && (
+          <div className="bg-amber-500/10 border border-amber-500/20 rounded-[6px] p-3 flex flex-wrap gap-2.5 items-center shadow-lg">
+            <div className="flex items-center gap-2 mr-2 border-r border-amber-500/20 pr-4">
+              <AlertTriangle size={16} className="text-amber-500" />
+              <span className="text-[11px] font-black text-amber-500 uppercase tracking-widest">미등록</span>
+            </div>
+            {pendingSchools.map(school => (
+              <button key={school} onClick={() => setNewExam({ ...newExam, school_name: school })} className="px-3 py-1.5 bg-black/60 border border-amber-500/20 rounded-[4px] text-[13px] font-black text-white hover:bg-amber-600 hover:border-amber-400 transition-all flex items-center gap-2 group shadow-sm"><School size={12} className="text-amber-500 opacity-60 group-hover:opacity-100" />{school}</button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-6">
+          <ExamList title="MIDDLE" list={groupedExams.middle} />
+          <ExamList title="HIGH" list={groupedExams.high} />
+        </div>
+      </div>
+    </motion.div>
+  );
+}

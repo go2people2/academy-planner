@@ -80,11 +80,11 @@ export async function fetchTextbookMasterList(): Promise<TextbookMaster[]> {
 
   // [0]bookcode, [1]book(title), [2]grade, [3]status, [4]e-period
   const list = rows.slice(1).map((row) => ({
-    bookcode: row[0] || '',
-    title: row[1] || '',
-    grade: row[2] || '',
-    status: row[3] || '',
-    ePeriod: row[4] || '',
+    bookcode: (row[0] || '').trim(),
+    title: (row[1] || '').trim(),
+    grade: (row[2] || '').trim(),
+    status: (row[3] || '').trim(),
+    ePeriod: (row[4] || '').trim(),
   })).filter(item => item.bookcode && item.status !== '비활성');
 
   // 💡 중복된 bookcode 제거 (React Key 충돌 방지)

@@ -8,13 +8,15 @@ import {
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
   SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
-  Maximize2, ArrowLeft
+  Maximize2, ArrowLeft, AlertTriangle
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRow';
 import { HistoryRows } from './TodaySheetHistory';
 import ReportPreview from './ReportPreview';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
+import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
+import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
 
 interface ColumnConfig {
   id: string;
@@ -28,15 +30,15 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'select', label: '', minWidth: 40, isSticky: true, canHide: false },
   { id: 'date', label: '날짜', minWidth: 50, canHide: true },
   { id: 'name', label: '이름', minWidth: 120, isSticky: true, canHide: false },
-  { id: 'attendance', label: '출결', minWidth: 80, canHide: false },
+  { id: 'attendance', label: '출결', minWidth: 80, canHide: true },
   { id: 'test_id', label: '오늘TEST', minWidth: 140, canHide: true },
   { id: 'test_score', label: '점수', minWidth: 60, canHide: true },
   { id: 'next_quiz', label: '다음TEST', minWidth: 200, canHide: true },
   { id: 'review', label: '과제확인', minWidth: 180, canHide: true },
-  { id: 'classwork', label: '오늘 할 일(To-Do)', minWidth: 200, canHide: false },
-  { id: 'completed_classwork', label: '수행진도', minWidth: 200, canHide: false },
-  { id: 'assign', label: '오늘숙제', minWidth: 220, canHide: false },
-  { id: 'mission', label: '학생미션', minWidth: 220, canHide: false },
+  { id: 'classwork', label: '오늘 할 일(To-Do)', minWidth: 200, canHide: true },
+  { id: 'completed_classwork', label: '수행진도', minWidth: 200, canHide: true },
+  { id: 'assign', label: '오늘숙제', minWidth: 220, canHide: true },
+  { id: 'mission', label: '학생미션', minWidth: 220, canHide: true },
   { id: 'notes', label: '특이사항', minWidth: 160, canHide: true },
   { id: 'action', label: '저장', minWidth: 60, isSticky: true, canHide: false }
 ];
@@ -116,10 +118,12 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
 
 // --- Main Component ---
 
-export default function TodaySheet({ 
-  students, masterTextbooks, onSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
-  sortMode = 'time', onSortModeChange
+export default function TodaySheet({
+  students, setStudents, masterTextbooks, onSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
+  sortMode = 'time', onSortModeChange,
+  onOpenBriefing // 💡 추가
 }: any) {
+
   // 1. States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [selectedRange, setSelectedRange] = useState<{
@@ -210,7 +214,12 @@ export default function TodaySheet({
 
     const dayKey = getDayOfWeek(selectedDate);
     const getStartTime = (st: any) => {
-      const stat = st.todaySession?.attendance_status || '';
+      // 1. 시간 이동 필드 우선 사용
+      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
+        return st.todaySession.moved_to_hour;
+      }
+      
+      const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
       if (stat.includes(':')) { 
         const parts = stat.split(':'); 
         const val = parseInt(parts[parts.length - 1]); 
@@ -233,9 +242,9 @@ export default function TodaySheet({
   // 3. Callbacks
   const isCellInRange = useCallback((studentId: string, colId: string) => {
     if (!selectedRange) return false;
-    const sIdx = students.findIndex((s:any) => s.id === selectedRange.startStudentId);
-    const eIdx = students.findIndex((s:any) => s.id === selectedRange.endStudentId);
-    const cIdx = students.findIndex((s:any) => s.id === studentId);
+    const sIdx = filteredStudents.findIndex((s:any) => s.id === selectedRange.startStudentId);
+    const eIdx = filteredStudents.findIndex((s:any) => s.id === selectedRange.endStudentId);
+    const cIdx = filteredStudents.findIndex((s:any) => s.id === studentId);
     const sColIdx = activeColumns.findIndex(col => col.id === selectedRange.startColId);
     const eColIdx = activeColumns.findIndex(col => col.id === selectedRange.endColId);
     const currentColIdx = activeColumns.findIndex(col => col.id === colId);
@@ -243,22 +252,41 @@ export default function TodaySheet({
     const rMin = Math.min(sIdx, eIdx); const rMax = Math.max(sIdx, eIdx);
     const cMin = Math.min(sColIdx, eColIdx); const cMax = Math.max(sColIdx, eColIdx);
     return cIdx >= rMin && cIdx <= rMax && currentColIdx >= cMin && currentColIdx <= cMax;
-  }, [selectedRange, students, activeColumns]);
+  }, [selectedRange, filteredStudents, activeColumns]);
 
   const handleSaveWithUndo = useCallback(async (studentId: string, newData: any) => {
-    const student = students.find((s: any) => s.id === studentId);
+    const student = filteredStudents.find((s: any) => s.id === studentId);
     if (student) {
       const prevData = { ...(student.todaySession || {}) };
       setUndoStack(prev => [{ type: 'single', studentId, studentName: student.name, prevData, timestamp: Date.now() }, ...prev].slice(0, 20));
     }
     return onSave(studentId, newData);
-  }, [students, onSave]);
+  }, [filteredStudents, onSave]);
 
   const handleBatchSaveWithUndo = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[]) => {
     if (updates.length === 0) return;
+    
+    // 💡 [낙관적 업데이트] DB 저장 전에 로컬 상태를 즉시 업데이트하여 UI 반응성 확보
+    // newData(부분 업데이트 페이로드)만 기존 todaySession에 병합
+    setStudents((prev: any[]) => prev.map(s => {
+      const update = updates.find(u => u.studentId === s.id);
+      if (update) {
+        return {
+          ...s,
+          todaySession: {
+            ...(s.todaySession || {}),
+            ...update.newData
+          }
+        };
+      }
+      return s;
+    }));
+
     setUndoStack(prev => [{ type: 'batch', updates: updates.map(u => ({ studentId: u.studentId, prevData: u.prevData })), timestamp: Date.now() }, ...prev].slice(0, 20));
+    
+    // 💡 [수정] onSave 호출 시 전체 객체가 아닌 newData(부분 페이로드)만 전송하여 서버 측 필터링(getFilteredBaseFields)이 올바르게 작동하게 함
     await Promise.all(updates.map(u => onSave(u.studentId, u.newData)));
-  }, [onSave]);
+  }, [onSave, setStudents]);
 
   const performUndo = useCallback(async () => {
     if (undoStack.length === 0) return;
@@ -267,53 +295,6 @@ export default function TodaySheet({
     else { await onSave(lastAction.studentId, lastAction.prevData); }
     setUndoStack(prev => prev.slice(1));
   }, [undoStack, onSave]);
-
-  const handleCopy = useCallback((e: ClipboardEvent) => {
-    const target = e.target as HTMLElement;
-    const isInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
-    let hasSelection = false;
-    if (isInput) {
-      const input = target as HTMLInputElement | HTMLTextAreaElement;
-      hasSelection = input.selectionStart !== input.selectionEnd;
-    } else {
-      const selection = window.getSelection();
-      hasSelection = !!(selection && selection.toString().length > 0);
-    }
-    if (hasSelection || !selectedRange) return;
-    e.preventDefault();
-    const sIdx = students.findIndex((s:any) => s.id === selectedRange.startStudentId);
-    const eIdx = students.findIndex((s:any) => s.id === selectedRange.endStudentId);
-    const sColIdx = activeColumns.findIndex(c => c.id === selectedRange.startColId);
-    const eColIdx = activeColumns.findIndex(c => c.id === selectedRange.endColId);
-    if (sIdx === -1 || eIdx === -1 || sColIdx === -1 || eColIdx === -1) return;
-    const rStart = Math.min(sIdx, eIdx); const rEnd = Math.max(sIdx, eIdx);
-    const cStart = Math.min(sColIdx, eColIdx); const cEnd = Math.max(sColIdx, eColIdx);
-    const rows: string[] = [];
-    for (let r = rStart; r <= rEnd; r++) {
-      const st = students[r]; const session = st.todaySession || {}; const rowData: string[] = [];
-      for (let c = cStart; c <= cEnd; c++) {
-        const col = activeColumns[c]; let val = '';
-        if (col.id === 'name') val = st.name;
-        else if (col.id === 'date') val = selectedDate;
-        else if (col.id === 'attendance') val = session.attendance_status || '출석';
-        else if (col.id === 'test_id') val = session.test_id || '';
-        else if (col.id === 'test_score') val = session.test_score || '';
-        else if (col.id === 'classwork') val = session.classwork_text || '';
-        else if (col.id === 'assign') val = session.homework_text || '';
-        else if (col.id === 'mission') val = st.recent_mission || '';
-        else if (col.id === 'notes') val = session.special_notes || '';
-        else if (col.id === 'next_quiz') val = session.next_quiz_text || '';
-        else if (col.id === 'review') val = st.lastSession?.homework_text || '';
-        const sVal = String(val || '');
-        if (sVal.includes('\n') || sVal.includes('\t') || sVal.includes('"')) { rowData.push(`"${sVal.replace(/"/g, '""')}"`); } 
-        else { rowData.push(sVal); }
-      }
-      rows.push(rowData.join('\t'));
-    }
-    const finalData = rows.join('\n');
-    if (e.clipboardData) { e.clipboardData.setData('text/plain', finalData); } 
-    else { navigator.clipboard.writeText(finalData); }
-  }, [selectedRange, students, activeColumns, selectedDate]);
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     if (!activeCell) return;
@@ -372,7 +353,42 @@ export default function TodaySheet({
           if (changed) updates.push({ studentId: currentStudent.id, newData: upds, prevData: { ...session } });
         });
       }
-      if (updates.length > 0) { await handleBatchSaveWithUndo(updates); setEditingCell(null); }
+      if (updates.length > 0) { 
+        // 💡 [낙관적 업데이트] 붙여넣기 데이터를 즉시 state에 반영
+        setStudents((prev: any[]) => prev.map(s => {
+          const update = updates.find(u => u.studentId === s.id);
+          if (update) {
+            return {
+              ...s,
+              todaySession: {
+                ...(s.todaySession || {}),
+                ...update.newData
+              }
+            };
+          }
+          return s;
+        }));
+
+        await handleBatchSaveWithUndo(updates); 
+        setEditingCell(null); 
+
+        // 💡 [최종 최적화] 브라우저의 다음 프레임에서 즉시 DOM 업데이트 (반응성 우선)
+        requestAnimationFrame(() => {
+          updates.forEach(u => {
+            const invMap: any = { 'test_status': 'test_id', 'test_score': 'test_score', 'classwork_text': 'classwork', 'completed_classwork_text': 'completed_classwork', 'homework_text': 'assign', 'next_quiz_text': 'next_quiz', 'mission': 'mission', 'special_notes': 'notes' };
+            Object.keys(u.newData).forEach(field => {
+              // 💡 [최적화] 이전 데이터와 비교하여 실제 값이 바뀐 경우에만 DOM 조작
+              if (String(u.newData[field] || '') === String(u.prevData?.[field] || '')) return;
+
+              const colId = invMap[field];
+              if (!colId) return;
+              const selector = `[data-student-id="${u.studentId}"][data-col-id="${colId}"]`;
+              const el = document.querySelector(selector) as HTMLTextAreaElement | HTMLInputElement;
+              if (el) el.value = u.newData[field] || '';
+            });
+          });
+        });
+      }
     } catch (err) { console.error('Paste error:', err); }
   }, [activeCell, editingCell, activeColumns, selectedIds, students, handleBatchSaveWithUndo]);
 
@@ -408,7 +424,11 @@ export default function TodaySheet({
         const sess = s.todaySession || {};
         return cols.map(col => {
           if (col.id === 'date') return selectedDate; if (col.id === 'name') return s.name;
-          if (col.id === 'attendance') return sess.attendance_status || '출석';
+          if (col.id === 'attendance') {
+            const status = normalizeAttendanceStatus(sess.attendance_status);
+            const moved = sess.moved_to_hour;
+            return moved ? `${status}(${moved}시)` : status;
+          }
           if (col.id === 'test_id') return sess.test_id || '';
           if (col.id === 'test_score') return sess.test_score ? `${sess.test_score}${sess.test_score_type === 'count' ? '개' : '%'}` : '';
           if (col.id === 'next_quiz') return sess.next_quiz_text || '';
@@ -458,58 +478,22 @@ export default function TodaySheet({
     localStorage.setItem(`todaySheetPresets_${currentUser?.id || 'default'}`, JSON.stringify(newPresets)); 
   }, [visibleColumns, presets, activeSet, currentUser?.id]);
 
-  // 4. Global Events
-  useEffect(() => {
-    const handleMouseUpGlobal = () => setIsDragging(false);
-    const handleClickOutside = (e: MouseEvent) => { if (!(e.target as HTMLElement).closest('table')) { setSelectedRange(null); } };
-    
-    const handleGlobalKeyDown = (e: KeyboardEvent) => {
-      if (e.isComposing || e.keyCode === 229) return;
-      const isInput = ['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName || '');
-      const isEditorOpen = !!document.getElementById('homework-editor-portal');
-      const keyToSet: Record<string, string> = { 'q': '1', 'w': '2', 'e': '3', 'r': '4', 'Q': '1', 'W': '2', 'E': '3', 'R': '4' };
-      if (e.altKey && keyToSet[e.key]) { e.preventDefault(); handleSetSwitch(keyToSet[e.key]); return; }
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
-        const target = e.target as HTMLElement;
-        const inInput = target.tagName === 'INPUT' || target.tagName === 'TEXTAREA';
-        let hasSel = false;
-        if (inInput) { const input = target as HTMLInputElement | HTMLTextAreaElement; hasSel = input.selectionStart !== input.selectionEnd; }
-        if (!hasSel) { e.preventDefault(); performUndo(); return; }
-      }
-      if (!activeCell) return;
-      const rIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
-      const cIdx = activeColumns.findIndex(c => c.id === activeCell.columnId);
-      if (rIdx === -1 || cIdx === -1) return;
-      let nR = rIdx; let nC = cIdx;
-      if (!isInput) { if (e.key === 'ArrowDown') nR++; else if (e.key === 'ArrowUp') nR--; else if (e.key === 'ArrowRight') nC++; else if (e.key === 'ArrowLeft') nC--; }
-      if (e.key === 'Enter' && !e.shiftKey && !e.altKey) { if (!isInput) return; e.preventDefault(); nR++; setSelectedRange(null); } 
-      else if (e.key === 'Tab') { e.preventDefault(); setSelectedRange(null); if (e.shiftKey) nC--; else nC++; }
-      if (nR !== rIdx || nC !== cIdx) {
-        nR = Math.max(0, Math.min(filteredStudents.length - 1, nR)); nC = Math.max(0, Math.min(activeColumns.length - 1, nC));
-        const nS = filteredStudents[nR]; const nCol = activeColumns[nC];
-        if (nS && nCol) { setActiveCell({ studentId: nS.id, columnId: nCol.id }); if (e.key === 'Enter' || e.key === 'Tab') { setTimeout(() => setEditingCell({ studentId: nS.id, columnId: nCol.id }), 50); } else if (e.key.startsWith('Arrow')) { setEditingCell(null); } }
-      } else if (e.key === 'Enter' || e.key === 'Tab') { setEditingCell(null); }
-      if (!isInput && (e.key === 'Backspace' || e.key === 'Delete')) {
-        if (selectedRange) {
-          e.preventDefault();
-          const sI = filteredStudents.findIndex((s:any) => s.id === selectedRange.startStudentId);
-          const eI = filteredStudents.findIndex((s:any) => s.id === selectedRange.endStudentId);
-          const sC = activeColumns.findIndex(c => c.id === selectedRange.startColId);
-          const eC = activeColumns.findIndex(c => c.id === selectedRange.endColId);
-          if (sI !== -1 && eI !== -1 && sC !== -1 && eC !== -1) {
-            const rMin = Math.min(sI, eI); const rMax = Math.max(sI, eI);
-            const cMin = Math.min(sC, eC); const cMax = Math.max(sC, eC);
-            const updates: any[] = [];
-            const fieldMap: any = { 'test_id': 'test_status', 'test_score': 'test_score', 'classwork': 'classwork_text', 'completed_classwork': 'completed_classwork_text', 'assign': 'homework_text', 'next_quiz': 'next_quiz_text', 'mission': 'mission', 'notes': 'special_notes' };
-            for (let r = rMin; r <= rMax; r++) { const st = filteredStudents[r]; const sess = st.todaySession || {}; const nD = { ...sess }; let chg = false; for (let c = cMin; c <= cMax; c++) { const cid = activeColumns[c].id; const f = fieldMap[cid]; if (f) { nD[f] = ''; chg = true; } } if (chg) updates.push({ studentId: st.id, newData: nD, prevData: { ...sess } }); }
-            if (updates.length > 0) handleBatchSaveWithUndo(updates);
-          }
-        }
-      }
-    };
-    window.addEventListener('mouseup', handleMouseUpGlobal); window.addEventListener('mousedown', handleClickOutside); window.addEventListener('keydown', handleGlobalKeyDown); window.addEventListener('copy', handleCopy); window.addEventListener('paste', handlePaste);
-    return () => { window.removeEventListener('mouseup', handleMouseUpGlobal); window.removeEventListener('mousedown', handleClickOutside); window.removeEventListener('keydown', handleGlobalKeyDown); window.removeEventListener('copy', handleCopy); window.removeEventListener('paste', handlePaste); };
-  }, [isDragging, selectedRange, students, activeColumns, selectedIds, undoStack, activeCell, editingCell, performUndo, handleCopy, handlePaste, handleSetSwitch]);
+  // 4. Custom Hooks (Shortcuts & Events)
+  useTodaySheetShortcuts({
+    activeCell, setActiveCell,
+    editingCell, setEditingCell,
+    students, setStudents,
+    filteredStudents,
+    activeColumns,
+    selectedRange, setSelectedRange,
+    selectedDate,
+    performUndo,
+    handleBatchSaveWithUndo,
+    handleSetSwitch,
+    setIsDragging,
+    selectedIds,
+    onSave
+  });
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
   const onMouseDown = (e: React.MouseEvent, colId: string) => { resizingCol.current = { id: colId, startX: e.pageX, startWidth: colWidths[colId] || 100 }; document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); document.body.style.cursor = 'col-resize'; };
@@ -518,7 +502,19 @@ export default function TodaySheet({
 
   const handleSendAll = async () => { if (!confirm(`${students.length}명 일괄 발송하시겠습니까?`)) return; setIsSendingReport('all'); let count = 0; for (const s of students) { try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: s.id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) count++; } catch(e){} } alert(`${count}명 완료`); setIsSendingReport(null); };
   const handleSendIndividual = async (id: string) => { const s = students.find((st:any) => st.id === id); if (!s) return; setIsSendingReport(id); try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) alert(`${s.name} 발송 완료`); } catch(e){} finally { setIsSendingReport(null); } };
-  const handleBatchQuizCut = async (cut: number) => { const actives = students.filter((s:any) => !s.is_deleted); if (actives.length === 0) return; if (!confirm(`${actives.length}명 커트라인을 ${cut}개로 변경하시겠습니까?`)) return; setIsSendingReport('batch-cut'); try { await Promise.all(actives.map((s:any) => handleSaveWithUndo(s.id, { ...s.todaySession, next_quiz_cut: cut }))); alert('변경 완료'); } catch(e){} finally { setIsSendingReport(null); } };
+  const handleBatchQuizCut = async (cut: number) => {
+    const actives = students.filter((s:any) => !s.is_deleted);
+    if (actives.length === 0) return;
+    if (!confirm(`${actives.length}명 커트라인을 ${cut}개로 변경하시겠습니까?`)) return;
+    setIsSendingReport('batch-cut');
+    try {
+      // 💡 [수정] 전체 세션 데이터를 보내지 않고 변경된 필드만 명시적으로 전송
+      await Promise.all(actives.map((s:any) => handleSaveWithUndo(s.id, { next_quiz_cut: cut })));
+      alert('변경 완료');
+    } catch(e){} finally {
+      setIsSendingReport(null);
+    }
+  };
   const gradeStats = useMemo(() => { const stats: Record<string, number> = {}; ['초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'].forEach(g => stats[g] = 0); students.forEach((s:any) => { if (stats[s.grade] !== undefined) stats[s.grade]++; }); return stats; }, [students]);
 
   return (
@@ -526,7 +522,18 @@ export default function TodaySheet({
       <div className="flex items-center justify-between px-3 py-2 bg-black/50 border border-white/10 rounded-lg shrink-0">
         <div className="flex items-center gap-6">
           <div className="flex flex-col gap-0.5 items-start">
-            <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
+            <div className="flex items-center gap-3">
+              <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
+              {/* 💡 수동 브리핑 버튼 (더 크고 직관적인 노란 삼각형) */}
+              <button 
+                onClick={onOpenBriefing}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500 text-black hover:bg-amber-400 transition-all animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.4)] border-2 border-amber-300/50 group"
+                title="오늘의 중요 브리핑 열기"
+              >
+                <AlertTriangle size={14} className="fill-current" />
+                <span className="text-[10px] font-black uppercase tracking-widest">Morning Briefing</span>
+              </button>
+            </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter mr-1">{students.length} Total</span>
               {Object.entries(gradeStats).filter(([_, count]) => count > 0).map(([grade, count], idx) => {
@@ -612,7 +619,10 @@ export default function TodaySheet({
 
               return filteredStudents.map((s: any, idx: number) => {
                 const getStartTime = (st: any) => {
-                  const stat = st.todaySession?.attendance_status || '';
+                  if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
+                    return st.todaySession.moved_to_hour;
+                  }
+                  const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
                   if (stat.includes(':')) { const parts = stat.split(':'); const val = parseInt(parts[parts.length - 1]); if (!isNaN(val) && val < 24) return val; }
                   const hours = st.day_schedules?.[dayKey] || [];
                   return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;

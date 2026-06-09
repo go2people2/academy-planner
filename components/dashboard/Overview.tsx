@@ -2,7 +2,7 @@
 
 import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, Zap, StickyNote, Target, ExternalLink } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, Zap, StickyNote, Target, ExternalLink, Search, X } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import AddStudentModal from './AddStudentModal';
@@ -31,6 +31,8 @@ interface OverviewProps {
   consultationCycle?: number;
   onStartClass?: () => void;
   academyInfo?: any;
+  searchQuery?: string; // 💡 추가
+  onSearchChange?: (val: string) => void; // 💡 추가
 }
 
 export default function Overview({ 
@@ -45,7 +47,9 @@ export default function Overview({
   hideTodaySection = false,
   consultationCycle = 21,
   onStartClass,
-  academyInfo
+  academyInfo,
+  searchQuery = '', // 💡 추가
+  onSearchChange // 💡 추가
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
@@ -243,71 +247,95 @@ export default function Overview({
       )}
 
       <section className={`space-y-2 ${todayStudents.length > 0 ? 'pt-4 border-t border-white/5' : ''}`}>
-        <div className="flex items-center justify-between px-1">
-          <div className="flex flex-col gap-0.5">
-            <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
-              <Users size={14} /> 
-              {title ? title : (isArchiveMode ? 'Discharged Students Archive' : 'Rest of Students')}
-            </h3>
-            {!isArchiveMode && (
-              <div className="flex items-center gap-1.5 mt-0.5">
-                <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
-                  <span className="text-amber-400">{studentsToDisplay.length}</span> Students
-                </span>
-                {otherGradeStats.map(([grade, count], idx) => {
-                  const isES = grade.includes('초');
-                  const isMS = grade.includes('중');
-                  const isHS = grade.includes('고');
-                  const colorClass = isES ? 'text-emerald-500/60' : isHS ? 'text-amber-500/60' : 'text-blue-500/60';
-                  return (
-                    <div key={grade || idx} className="flex items-center gap-1.5 bg-white/[0.03] border border-white/10 px-2 py-1 rounded-[2px] shadow-sm">
-                      <span className="text-[10px] font-bold text-gray-500 uppercase">{grade}</span>
-                      <span className={`text-[10px] font-black ${colorClass}`}>{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+        <div className={`sticky top-[-8px] z-40 bg-[#050505]/95 backdrop-blur-sm pb-4 pt-2 -mx-2 px-3 border-b border-white/5`}>
+          <div className="flex items-center justify-between px-1">
+            <div className="flex flex-col gap-0.5">
+              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
+                <Users size={14} /> 
+                {title ? title : (isArchiveMode ? 'Discharged Students Archive' : 'Rest of Students')}
+              </h3>
+              {!isArchiveMode && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
+                    <span className="text-amber-400">{studentsToDisplay.length}</span> Students
+                  </span>
+                  {otherGradeStats.map(([grade, count], idx) => {
+                    const isES = grade.includes('초');
+                    const isMS = grade.includes('중');
+                    const isHS = grade.includes('고');
+                    const colorClass = isES ? 'text-emerald-500/60' : isHS ? 'text-amber-500/60' : 'text-blue-500/60';
+                    return (
+                      <div key={grade || idx} className="flex items-center gap-1.5 bg-white/[0.03] border border-white/10 px-2 py-1 rounded-[2px] shadow-sm">
+                        <span className="text-[10px] font-bold text-gray-500 uppercase">{grade}</span>
+                        <span className={`text-[10px] font-black ${colorClass}`}>{count}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2">
+              {!isBatchMode && !isArchiveMode && showAddButton && (
+                <button 
+                  onClick={() => setIsAddModalOpen(true)}
+                  className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
+                >
+                  <UserPlus size={10} /> 신규 학생 등록
+                </button>
+              )}
+              
+              {isBatchMode && (
+                <button 
+                  onClick={() => { setIsBatchMode(false); setSelectedForBatch([]); setSelectedToRemove([]); }}
+                  className="px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase bg-white/5 text-gray-500 hover:text-white transition-all"
+                >
+                  Cancel
+                </button>
+              )}
+              
+              {!isArchiveMode && !hideTodaySection && (
+                <div className="flex gap-2">
+                  <button 
+                    onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all ${
+                      isBatchMode 
+                        ? 'bg-blue-600 text-white shadow-lg' 
+                        : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {isBatchMode ? (
+                      <><Check size={10} /> {selectedForBatch.length + selectedToRemove.length} Confirm</>
+                    ) : (
+                      <><Users size={10} /> 오늘 수업 변경</>
+                    )}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            {!isBatchMode && !isArchiveMode && showAddButton && (
-              <button 
-                onClick={() => setIsAddModalOpen(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
-              >
-                <UserPlus size={10} /> 신규 학생 등록
-              </button>
-            )}
-            
-            {isBatchMode && (
-              <button 
-                onClick={() => { setIsBatchMode(false); setSelectedForBatch([]); setSelectedToRemove([]); }}
-                className="px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase bg-white/5 text-gray-500 hover:text-white transition-all"
-              >
-                Cancel
-              </button>
-            )}
-            
-            {!isArchiveMode && !hideTodaySection && (
-              <div className="flex gap-2">
+          {/* 💡 [추가] 학생 정보 수정 모드('전체 학생 정보 관리')에서만 노출되는 검색창 */}
+          {hideTodaySection && onSearchChange && (
+            <div className="mt-4 relative group max-w-md px-1">
+              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-blue-500 transition-colors" size={14} />
+              <input 
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                placeholder="찾으실 학생 이름을 입력하세요..."
+                className="w-full bg-white/[0.03] border border-white/10 rounded-[2px] py-2.5 pl-10 pr-10 text-xs text-white placeholder:text-gray-700 focus:bg-white/[0.06] focus:border-blue-500/50 outline-none transition-all font-bold"
+              />
+              {searchQuery && (
                 <button 
-                  onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
-                  className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all ${
-                    isBatchMode 
-                      ? 'bg-blue-600 text-white shadow-lg' 
-                      : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
-                  }`}
+                  onClick={() => onSearchChange('')}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1"
                 >
-                  {isBatchMode ? (
-                    <><Check size={10} /> {selectedForBatch.length + selectedToRemove.length} Confirm</>
-                  ) : (
-                    <><Users size={10} /> 오늘 수업 변경</>
-                  )}
+                  <X size={14} />
                 </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
         <AnimatePresence>

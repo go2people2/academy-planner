@@ -48,6 +48,9 @@ export default function StudentPortal() {
   const matchedExam = useMemo(() => {
     if (!student || !examSchedules.length) return null;
     
+    // 💡 [개선] 학원에서 정한 현재 관리 시험 회차 가져오기
+    const currentPeriod = academy?.operation_settings?.current_exam_period;
+    
     // 💡 학교명 정규화: 공백 제거 및 '학교' 접미사 제거하여 매칭 유연성 확보
     const normalize = (name: string) => (name || '').trim().replace(/\s+/g, '').replace(/학교$/, '');
     
@@ -56,25 +59,26 @@ export default function StudentPortal() {
 
     if (!studentSchool) return null;
 
-    console.log(`Matching exam for ${student.name}: School=${studentSchool}, Grade=${studentGrade}`);
-    console.log('Available exam schedules:', examSchedules);
+    // 1. 현재 학기(period) 필터링
+    const currentPeriodSchedules = currentPeriod 
+      ? examSchedules.filter(ex => ex.exam_name === currentPeriod)
+      : examSchedules; // 설정이 없으면 전체에서 검색 (하위 호환성)
 
-    // 1. 학교명 + 학년 완벽 일치
-    const exactMatch = examSchedules.find(ex => 
+    // 2. 학교명 + 학년 완벽 일치
+    const exactMatch = currentPeriodSchedules.find(ex => 
       normalize(ex.school_name) === studentSchool && 
       (ex.grade?.trim() === studentGrade)
     );
     if (exactMatch) return exactMatch;
 
-    // 2. 학교명 일치 + 전학년 대상 (grade가 없거나 빈 값)
-    const schoolMatch = examSchedules.find(ex => 
+    // 3. 학교명 일치 + 전학년 대상 (grade가 없거나 빈 값)
+    const schoolMatch = currentPeriodSchedules.find(ex => 
       normalize(ex.school_name) === studentSchool && 
       (!ex.grade || ex.grade.trim() === '')
     );
     
-    if (schoolMatch) console.log('Matched via school-only match:', schoolMatch);
     return schoolMatch || null;
-  }, [student, examSchedules]);
+  }, [student, examSchedules, academy?.operation_settings?.current_exam_period]);
 
   const currentSelfEval = useMemo(() => {
     const match = todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/);
@@ -117,7 +121,24 @@ export default function StudentPortal() {
         if (suggData) setMySuggestions(suggData);
       }
       const tbRes = await fetch('/api/textbooks');
-      if (tbRes.ok) setAvailableTextbooks(await tbRes.json());
+      const textbooks: TextbookOption[] = tbRes.ok ? await tbRes.json() : [];
+      if (tbRes.ok) setAvailableTextbooks(textbooks);
+
+      // 💡 [추가] 교재 코드를 실제 이름으로 변환하는 내부 유틸리티
+      const translateBookCodes = (text: string) => {
+        if (!text || !textbooks || textbooks.length === 0) return text;
+        let result = text;
+        const sortedMaster = [...textbooks].sort((a, b) => (b.bookcode?.length || 0) - (a.bookcode?.length || 0));
+        sortedMaster.forEach(m => {
+          if (m.bookcode && m.title) {
+            const escapedCode = m.bookcode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapedCode, 'gi'); // 💡 'gi' 플래그 적용
+            result = result.replace(regex, m.title);
+          }
+        });
+        return result;
+      };
+
       const { data: logs } = await supabase.from('ams_session_logs').select('*').eq('student_id', studentId).order('session_date', { ascending: false }).limit(50);
       
       if (logs) {
@@ -187,14 +208,31 @@ export default function StudentPortal() {
             } 
           } catch (e) {}
 
-          setTodaySession({ ...todayLog, test_status: todayLog.test_status || autoTodayTest, next_quiz_text: nqText || autoNextTestText, next_quiz_cut: nqText ? nqCut : autoNextTestCut, next_quiz_trial: nqText ? nqTrial : autoNextTestTrial, next_quiz_json: nqJson, test_cut: todayLog.test_cut || todayCut || autoTodayTestCut, todo_achievement: todoAchievement });
+          setTodaySession({ 
+            ...todayLog, 
+            test_status: translateBookCodes(todayLog.test_status || autoTodayTest), 
+            next_quiz_text: translateBookCodes(nqText || autoNextTestText), 
+            next_quiz_cut: nqText ? nqCut : autoNextTestCut, 
+            next_quiz_trial: nqText ? nqTrial : autoNextTestTrial, 
+            next_quiz_json: nqJson, 
+            test_cut: todayLog.test_cut || todayCut || autoTodayTestCut, 
+            todo_achievement: todoAchievement 
+          });
           
-          // 💡 분리된 컬럼 사용: classwork_text는 계획으로, completed_classwork_text는 수행 진도로 매핑
-          setTodayPlan(todayLog.classwork_text || ''); 
-          setLocalCompletedClasswork(todayLog.completed_classwork_text || ''); 
-          setLocalHomework(todayLog.homework_text || '');
+          setTodayPlan(translateBookCodes(todayLog.classwork_text || '')); 
+          setLocalCompletedClasswork(translateBookCodes(todayLog.completed_classwork_text || '')); 
+          setLocalHomework(translateBookCodes(todayLog.homework_text || ''));
         } else {
-          setTodaySession({ session_date: selectedDate, test_status: autoTodayTest, next_quiz_text: autoNextTestText, next_quiz_cut: autoNextTestCut, next_quiz_trial: autoNextTestTrial, next_quiz_json: [], test_cut: autoTodayTestCut, todo_achievement: 0 } as any);
+          setTodaySession({ 
+            session_date: selectedDate, 
+            test_status: translateBookCodes(autoTodayTest), 
+            next_quiz_text: translateBookCodes(autoNextTestText), 
+            next_quiz_cut: autoNextTestCut, 
+            next_quiz_trial: autoNextTestTrial, 
+            next_quiz_json: [], 
+            test_cut: autoTodayTestCut, 
+            todo_achievement: 0 
+          } as any);
           setLocalCompletedClasswork(''); setTodayPlan(''); setLocalHomework('');
         }
       }
