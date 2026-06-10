@@ -642,7 +642,7 @@ const getFilteredBaseFields = (sessionData: any) => {
 
 // 2. 테스트 결과 JSON 안전 병합 (기존 모든 키 보존)
 const buildMergedTestResult = (existingJsonRaw: any, sessionData: any, fallbacks: {
-  completed: any, mission: string, cut: number, achievement: number, sType: string, tTotal: number
+  completed: any, mission: string, cut: string | number, achievement: number, sType: string, tTotal: number
 }) => {
   let existing = {};
   try {
@@ -817,7 +817,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         alert('저장 실패: ' + error.message);
       } else if (data && data.length > 0) {
         // ✅ DB 성공 시에만 로컬 상태 반영 (affectedRows: 1)
-        setAcademy(prev => ({ ...prev, ...data[0] }));
+        setAcademy((prev: any) => ({ ...prev, ...data[0] }));
 
         // 💡 [추가] 성공적으로 저장된 필드만 dirty 플래그 해제 (State & Ref 모두) 및 Draft 강제 동기화
         if (updates.announcements) {

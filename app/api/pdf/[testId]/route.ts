@@ -8,10 +8,10 @@ import path from 'path';
  */
 export async function GET(
   request: Request,
-  { params }: { params: { testId: string } }
+  { params }: { params: Promise<{ testId: string }> }
 ) {
   try {
-    const { testId } = params;
+    const { testId } = await params;
 
     // 💡 PDF 자료 창고 기본 경로 (환경 변수로 관리 권장)
     // 예: C:/AMS_LIBRARY/PDFs

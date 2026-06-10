@@ -640,7 +640,7 @@ function StudentRowItem({
           <>
             <div className="flex gap-0.5">
               {(student.history || []).map((status, i) => (
-                <div key={i} className={`w-1 h-1 rounded-full ${status === 'perfect' ? 'bg-emerald-500' : status === 'warning' ? 'bg-amber-500' : status === 'late' ? 'bg-blue-400' : 'bg-white/10'}`} />
+                <div key={i} className={`w-1 h-1 rounded-full ${(status as any) === 'perfect' ? 'bg-emerald-500' : (status as any) === 'good' ? 'bg-emerald-400' : (status as any) === 'warning' || (status as any) === 'neutral' ? 'bg-amber-500' : (status as any) === 'poor' || (status as any) === 'late' ? 'bg-orange-500' : (status as any) === 'bad' ? 'bg-red-500' : 'bg-white/10'}`} />
               ))}
             </div>
             <ChevronRight size={12} className={isSelected ? 'text-white' : 'text-gray-600'} />

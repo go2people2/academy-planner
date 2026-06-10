@@ -50,7 +50,7 @@ export async function POST(request: Request) {
       };
     }
 
-    const result = await messageService.sendOne(messagePayload);
+    const result: any = await messageService.send(messagePayload);
 
     return NextResponse.json({ 
       success: true, 

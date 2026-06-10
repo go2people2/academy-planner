@@ -10,6 +10,7 @@ export interface HomeworkItem {
 export interface SessionLog {
   id?: string;
   date: string;
+  session_date?: string; // 💡 추가 (구형 스키마 하위 호환성용)
   status: StudentStatus;
   attendance_status: string;
   special_notes: string;
@@ -34,6 +35,10 @@ export interface SessionLog {
   timer_started_at?: number; // 💡 추가 (타이머 시작 시각)
   timer_duration?: number; // 💡 추가 (타이머 시간 - 분)
   moved_to_hour?: number | null; // 💡 추가 (시간 이동/보강 시 변경된 교시)
+  mission?: string; // 💡 추가 (학생용 개별 미션)
+  todo_achievement?: number; // 💡 추가 (투두 달성률)
+  hasHwTo?: boolean; // 💡 추가 (숙제 이월 여부)
+  hasTestResult?: boolean; // 💡 추가 (테스트 결과 여부)
 }
 
 export interface Student {
@@ -62,6 +67,8 @@ export interface Student {
   lastSession?: SessionLog;
   todaySession?: SessionLog;
   allLogs: SessionLog[];
+  is_deleted?: boolean; // 💡 추가 (퇴원 여부)
+  isTodayClassDay?: boolean; // 💡 추가 (오늘 수업 여부)
 }
 
 export interface Teacher {

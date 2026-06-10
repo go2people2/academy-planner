@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
-  ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp
+  ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
@@ -41,6 +41,7 @@ export default function Sidebar({
   const router = useRouter();
   const { slug } = useParams();
   const [user, setUser] = useState<any>(null);
+  const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   const [isMultiMode, setIsMultiMode] = useState(false);
   const [isEditingStrategy, setIsEditingStrategy] = useState(false);
@@ -52,7 +53,29 @@ export default function Sidebar({
   useEffect(() => {
     const userJson = localStorage.getItem('ams_user');
     if (userJson) setUser(JSON.parse(userJson));
+
+    // 초기 테마 설정 로드
+    const savedTheme = localStorage.getItem('theme');
+    const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    if (savedTheme === 'dark' || (!savedTheme && isDarkSystem)) {
+      setTheme('dark');
+      document.documentElement.classList.add('dark');
+    } else {
+      setTheme('light');
+      document.documentElement.classList.remove('dark');
+    }
   }, []);
+
+  const toggleTheme = () => {
+    const nextTheme = theme === 'dark' ? 'light' : 'dark';
+    setTheme(nextTheme);
+    localStorage.setItem('theme', nextTheme);
+    if (nextTheme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  };
 
   useEffect(() => {
     if (academyInfo?.announcements) setTempNotices(academyInfo.announcements);
@@ -247,6 +270,12 @@ export default function Sidebar({
       </div>
 
       <div className="pt-4 border-t border-white/5 space-y-1">
+        {/* 테마 토글 버튼 */}
+        <button onClick={toggleTheme} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-all group font-bold">
+          {theme === 'dark' ? <Sun size={14} className="text-amber-500 group-hover:animate-pulse" /> : <Moon size={14} className="text-indigo-400 group-hover:animate-bounce" />}
+          <span className="text-[11px]">{theme === 'dark' ? 'Light Mode' : 'Dark Mode'}</span>
+        </button>
+
         {/* 💡 [수정] 관리자 전용 메뉴로 제한 */}
         {isAdmin && (
           <SidebarLink icon={<Settings size={14} />} label="Settings" active={viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />

@@ -6,7 +6,7 @@ import {
   ChevronRight, BookOpen, User, Calendar, TrendingUp, Search, 
   CheckCircle2, AlertCircle, ChevronLeft, Video, ClipboardCheck, RotateCcw, Flag
 } from 'lucide-react';
-import { Student, TextbookOption } from '@/types/dashboard';
+import { Student, TextbookOption, SessionLog } from '@/types/dashboard';
 
 interface ProgressSequencerProps {
   students: Student[];
@@ -198,7 +198,7 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
     const actualBookCode = textbook?.bookcode || bookCode;
     const title = textbook?.title || bookCode;
 
-    student.allLogs.forEach((log: any) => {
+    student.allLogs.forEach((log: SessionLog) => {
       // 1. 숙제 (Homework - Blue) 파싱
       const hwText = log.homework_text || '';
       if (hwText.includes(title)) {

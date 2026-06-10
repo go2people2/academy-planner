@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { parseClipboardText } from '@/lib/clipboardParser';
-import { mapColumnToProp, mapFieldToColumn } from '@/lib/sessionFieldMap';
+import { mapColumnToProp, mapFieldToColumn, mapColumnToField } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 
 interface UseTodaySheetClipboardProps {

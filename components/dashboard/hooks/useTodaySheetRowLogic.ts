@@ -188,7 +188,7 @@ export function useTodaySheetRowLogic({
       delete savePayload.attendance_status;
     }
 
-    const hasChange = Object.keys(mergedUpdates).some(key => String(finalData[key] || '') !== String(initial[key] || ''));
+    const hasChange = Object.keys(mergedUpdates).some(key => String((finalData as any)[key] || '') !== String((initial as any)[key] || ''));
     if (!hasChange) return;
 
     // 3. 저장 실행 및 플래그 설정

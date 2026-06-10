@@ -34,7 +34,7 @@ interface SettingsViewProps {
 // --- Main SettingsView Component ---
 
 export default function SettingsView({ teachers, students, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'tests' | 'holidays'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'tests' | 'holidays' | 'exams'>('teachers');
 
   // 💡 휴일 관리 함수
   const handleAddHoliday = async (date: string, note: string) => {
