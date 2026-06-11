@@ -7,6 +7,7 @@ export interface HomeworkItem {
   units?: string[];
   start_page?: string;
   end_page?: string;
+  note?: string;
 }
 
 export interface SessionLog {

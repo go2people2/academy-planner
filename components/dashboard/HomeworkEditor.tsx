@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ClipboardList, Plus, BookOpen, ChevronRight, RefreshCcw } from 'lucide-react';
+import { X, ClipboardList, Plus, BookOpen, ChevronRight, RefreshCcw, Trash2 } from 'lucide-react';
 import { HomeworkItem, TextbookOption } from '@/types/dashboard';
 
 interface HomeworkEditorProps {
@@ -90,20 +90,25 @@ export default function HomeworkEditor({
   if (!mounted) return null;
 
   // 💡 입력이 완료되었을 때만 부모의 데이터를 갱신 (Race Condition 방지)
-  const commitPageChange = (idx: number, start: string, end: string) => {
+  const commitPageChange = (idx: number, start: string, end: string, note?: string) => {
     const newHw = [...homeworkJson];
     const item = { ...newHw[idx] };
     const units = unitDataMap[item.book_name] || [];
 
-    // 💡 고유 페이지 값 저장 (정규식 오작동 원천 차단)
+    // 💡 고유 페이지 및 메모 값 저장 (정규식 오작동 원천 차단)
     item.start_page = start;
     item.end_page = end;
+    if (note !== undefined) {
+      item.note = note;
+    }
 
     const sNum = parseInt(start.replace(/\D/g, ''));
     const eNum = parseInt(end.replace(/\D/g, ''));
 
     const isStartValid = !isNaN(sNum);
     const isEndValid = !isNaN(eNum);
+
+    const activeNote = item.note ? ` ${item.note}` : '';
 
     if (isStartValid || isEndValid) {
       const searchStart = isStartValid ? sNum : eNum;
@@ -127,12 +132,12 @@ export default function HomeworkEditor({
         rangeText = `p${eNum}`;
       }
 
-      item.range = unitText ? `${unitText} ${rangeText}` : rangeText;
+      item.range = unitText ? `${unitText} ${rangeText}${activeNote}` : `${rangeText}${activeNote}`;
       item.units = uniqueUnitNames;
     } else {
       const startText = start ? `p${start}` : '';
       const endText = end ? `~${end}` : '';
-      item.range = `${startText}${endText}`;
+      item.range = `${startText}${endText}${activeNote}`;
       item.units = [];
     }
 
@@ -184,7 +189,7 @@ export default function HomeworkEditor({
             <button 
               onClick={() => {
                 if (window.confirm('입력된 모든 페이지와 단원 정보를 초기화하시겠습니까? (교재 목록은 유지됩니다)')) {
-                  const resetHw = homeworkJson.map(hw => ({ ...hw, range: '', units: [], start_page: '', end_page: '' }));
+                  const resetHw = homeworkJson.map(hw => ({ ...hw, range: '', units: [], start_page: '', end_page: '', note: '' }));
                   onUpdate(resetHw);
                 }
               }}
@@ -214,11 +219,20 @@ export default function HomeworkEditor({
                   newHw[idx] = updated;
                   onUpdate(newHw);
                 }}
-                commitPageChange={(start, end) => commitPageChange(idx, start, end)}
+                commitPageChange={(start, end, note) => commitPageChange(idx, start, end, note)}
                 onKeyDown={(key, type) => navigateInput(idx, type, key)}
                 onReset={() => {
                   const newHw = [...homeworkJson];
-                  newHw[idx] = { ...newHw[idx], range: '', units: [], start_page: '', end_page: '' };
+                  newHw[idx] = { ...newHw[idx], range: '', units: [], start_page: '', end_page: '', note: '' };
+                  onUpdate(newHw);
+                }}
+                onDuplicate={() => {
+                  const newHw = [...homeworkJson];
+                  newHw.splice(idx + 1, 0, { type: hw.type, book_name: hw.book_name, range: '', units: [], start_page: '', end_page: '', note: '' });
+                  onUpdate(newHw);
+                }}
+                onDelete={() => {
+                  const newHw = homeworkJson.filter((_, i) => i !== idx);
                   onUpdate(newHw);
                 }}
               />
@@ -273,12 +287,13 @@ export default function HomeworkEditor({
 }
 
 function HomeworkRow({ 
-  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, startRef, endRef, onKeyDown 
+  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, onDuplicate, startRef, endRef, onKeyDown 
 }: { 
-  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string) => void, onReset?: () => void, onDelete?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void
+  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void
 }) {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
+  const [note, setNote] = useState('');
   const [isUnitsExpanded, setIsUnitsExpanded] = useState(false);
 
   // 💡 데이터가 외부에서 초기화(Reset)되었거나 변경되었을 때 내부 state도 동기화
@@ -286,39 +301,43 @@ function HomeworkRow({
     if (!hw.range) {
       setStartPage('');
       setEndPage('');
-    } else if (hw.start_page !== undefined || hw.end_page !== undefined) {
-      // 💡 명시적 필드 존재 시 최우선 반영하여 정규식 혼선 방지
-      setStartPage(hw.start_page || '');
-      setEndPage(hw.end_page || '');
+      setNote('');
     } else {
-      // 💡 하위 호환: 단원명 내 숫자 무시를 위해 문자열 끝에 있는 'p숫자' 형식에서만 페이지 번호 추출 시도
-      const pagePartMatch = hw.range.match(/p\d+(?:~\d+)?\s*$/i);
-      if (pagePartMatch) {
-        const pagePart = pagePartMatch[0];
-        const numbers = pagePart.match(/\d+/g);
-        if (numbers && numbers.length >= 2) {
-          setStartPage(numbers[0]);
-          setEndPage(numbers[1]);
-        } else if (numbers && numbers.length === 1) {
-          setStartPage(numbers[0]);
-          setEndPage('');
-        }
+      setNote(hw.note || '');
+      if (hw.start_page !== undefined || hw.end_page !== undefined) {
+        // 💡 명시적 필드 존재 시 최우선 반영하여 정규식 혼선 방지
+        setStartPage(hw.start_page || '');
+        setEndPage(hw.end_page || '');
       } else {
-        const numbers = hw.range.match(/\d+/g);
-        if (numbers && numbers.length >= 2) {
-          setStartPage(numbers[numbers.length - 2]);
-          setEndPage(numbers[numbers.length - 1]);
-        } else if (numbers && numbers.length === 1) {
-          setStartPage(numbers[0]);
-          setEndPage('');
+        // 💡 하위 호환: 단원명 내 숫자 무시를 위해 문자열 끝에 있는 'p숫자' 형식에서만 페이지 번호 추출 시도
+        const pagePartMatch = hw.range.match(/p\d+(?:~\d+)?\s*$/i);
+        if (pagePartMatch) {
+          const pagePart = pagePartMatch[0];
+          const numbers = pagePart.match(/\d+/g);
+          if (numbers && numbers.length >= 2) {
+            setStartPage(numbers[0]);
+            setEndPage(numbers[1]);
+          } else if (numbers && numbers.length === 1) {
+            setStartPage(numbers[0]);
+            setEndPage('');
+          }
+        } else {
+          const numbers = hw.range.match(/\d+/g);
+          if (numbers && numbers.length >= 2) {
+            setStartPage(numbers[numbers.length - 2]);
+            setEndPage(numbers[numbers.length - 1]);
+          } else if (numbers && numbers.length === 1) {
+            setStartPage(numbers[0]);
+            setEndPage('');
+          }
         }
       }
     }
-  }, [hw.range, hw.start_page, hw.end_page]);
+  }, [hw.range, hw.start_page, hw.end_page, hw.note]);
 
   // 💡 엔터나 탭 입력 시 부모에게 최종 값을 전달
   const handleFinalize = () => {
-    commitPageChange(startPage, endPage);
+    commitPageChange(startPage, endPage, note);
   };
 
   const handleInputKeyDown = (e: React.KeyboardEvent, type: 'start' | 'end') => {
@@ -371,7 +390,7 @@ function HomeworkRow({
               onKeyDown={(e) => handleInputKeyDown(e, 'start')}
               onBlur={handleFinalize}
               placeholder="Start"
-              className="w-12 bg-black/40 border border-white/5 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-500 text-center font-bold"
+              className="w-10 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
             />
             <span className="text-gray-700 text-[10px]">-</span>
             <input 
@@ -382,7 +401,23 @@ function HomeworkRow({
               onKeyDown={(e) => handleInputKeyDown(e, 'end')}
               onBlur={handleFinalize}
               placeholder="End"
-              className="w-12 bg-black/40 border border-white/5 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-500 text-center font-bold"
+              className="w-10 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
+            />
+            <input 
+              type="text" 
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  commitPageChange(startPage, endPage, e.currentTarget.value);
+                  onKeyDown?.('ArrowDown', 'end');
+                }
+              }}
+              onBlur={(e) => commitPageChange(startPage, endPage, e.target.value)}
+              placeholder="메모"
+              className="w-14 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-blue-400 focus:border-blue-500 text-center font-bold"
+              title="예: 오답, 처음풀기, 풀기"
             />
           </div>
         ) : (
@@ -396,7 +431,7 @@ function HomeworkRow({
         )}
 
         {hw.type === 'book' && (
-          <div className="w-24 shrink-0 flex items-center gap-1 overflow-hidden" onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}>
+          <div className="w-16 shrink-0 flex items-center gap-1 overflow-hidden" onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}>
             <ChevronRight size={10} className="text-blue-500/50 shrink-0" />
             <p className="text-[10px] font-bold text-gray-500 truncate italic cursor-pointer">
               {hw.range || '...'}
@@ -432,12 +467,14 @@ function HomeworkRow({
                     setEndPage(e);
                     
                     const unitText = unitData.filter(x => newUnits.includes(x.unit)).map(x => x.unit).join(', ');
+                    const activeNote = hw.note ? ` ${hw.note}` : '';
                     onUpdate({ 
                       ...hw, 
                       units: newUnits, 
-                      range: unitText ? `${unitText} p${s}~${e}` : `p${s}~${e}`,
+                      range: unitText ? `${unitText} p${s}~${e}${activeNote}` : `p${s}~${e}${activeNote}`,
                       start_page: s,
-                      end_page: e
+                      end_page: e,
+                      note: hw.note
                     });
                   }} className={`flex items-center justify-between px-3 py-1.5 rounded-[2px] text-[10px] font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-600 hover:bg-white/5 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-500/60' : ''}`}>
                     <div className="flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-500' : isInRange ? 'bg-emerald-500/30' : 'bg-transparent border border-white/10'}`} /><span className="truncate max-w-[200px]">{u.unit}</span></div>
