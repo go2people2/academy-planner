@@ -8,7 +8,7 @@ import {
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
   SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
-  Maximize2, ArrowLeft, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer
+  Maximize2, Minimize2, ArrowLeft, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRow';
@@ -127,7 +127,9 @@ export default function TodaySheet({
   selectedTeacherId, setSelectedTeacherId,
   selectedDays, setSelectedDays,
   isAndFilter, setIsAndFilter,
-  teachers = []
+  teachers = [],
+  isFullScreen = false,
+  onToggleFullScreen
 }: any) {
 
   // 1. States
@@ -793,6 +795,15 @@ export default function TodaySheet({
           )}
         </div>
         <div className="flex items-center gap-4 no-print">
+          {/* 💡 [추가] 전체화면 버튼 */}
+          <button 
+            onClick={onToggleFullScreen} 
+            className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 border border-blue-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg"
+          >
+            {isFullScreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+            {isFullScreen ? '원래화면' : '전체화면'}
+          </button>
+          
           {/* 💡 [변경] 인쇄하기 버튼 (테이블 바로 위로 이동) */}
           <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg">
             <Printer size={12} /> 인쇄하기

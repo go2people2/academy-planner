@@ -379,6 +379,7 @@ export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<string>('board');
+  const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
   const [navHistory, setNavHistory] = useState<string[]>(['board']);
   const [historyIdx, setHistoryIdx] = useState(0);
@@ -1054,7 +1055,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] flex font-sans selection:bg-blue-500/30 overflow-hidden text-xs">
-      <Sidebar viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} filterTarget={filterTarget} setFilterTarget={setFilterTarget} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} />
+      {!(viewMode === 'todayTable' && isFullScreen) && (
+        <Sidebar viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} filterTarget={filterTarget} setFilterTarget={setFilterTarget} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} />
+      )}
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
         {isLoading ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><Loader2 className="animate-spin mb-4" size={32} /><p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Academy Data...</p></div>) : (
           <div className="h-full">
@@ -1087,6 +1090,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                 isAndFilter={isAndFilter}
                 setIsAndFilter={setIsAndFilter}
                 teachers={teachers}
+                isFullScreen={isFullScreen}
+                onToggleFullScreen={() => setIsFullScreen(!isFullScreen)}
               />
             )}
 
