@@ -490,7 +490,7 @@ export default function TodaySheet({
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
-      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "ACA2000_Upload"); XLSX.writeFile(wb, `${customFileName}.xlsx`);
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "ACA2000_Upload"); XLSX.writeFile(wb, `${customFileName}.xls`, { bookType: 'biff8' });
     } else {
       const cols = activeColumns.filter(c => !['select', 'action'].includes(c.id));
       headers = cols.map(c => c.label);
