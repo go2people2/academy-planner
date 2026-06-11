@@ -8,7 +8,7 @@ import {
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
   SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
-  Maximize2, ArrowLeft, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff
+  Maximize2, ArrowLeft, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRow';
@@ -603,7 +603,7 @@ export default function TodaySheet({
           </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 no-print">
           {focusColumn && (
             <div className="flex items-center gap-2 bg-blue-600/20 border border-blue-500/40 px-3 py-1.5 rounded-md animate-pulse">
               <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Focus Mode: {DEFAULT_COLUMNS.find(c => c.id === focusColumn)?.label}</span>
@@ -622,6 +622,11 @@ export default function TodaySheet({
           </button>
 
           <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-black border-white/20 text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
+          
+          {/* 💡 [추가] 인쇄하기 버튼 */}
+          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 border border-indigo-500 text-white rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-xl">
+            <Printer size={14} /> 인쇄하기
+          </button>
           
           <div className="relative">
             <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-white transition-all shadow-xl"><Download size={14} /> Download</button>
@@ -644,7 +649,7 @@ export default function TodaySheet({
       </div>
 
       {/* 💡 [신설] 통합 필터 패널 (앞으로 추가될 필터 확장성 확보) */}
-      <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 bg-[#0a0a0a]/60 border border-white/5 rounded-lg shrink-0 text-left">
+      <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 bg-[#0a0a0a]/60 border border-white/5 rounded-lg shrink-0 text-left no-print">
         <div className="flex flex-wrap items-center gap-6">
           
           {/* 1. 담당 선생님 필터 */}

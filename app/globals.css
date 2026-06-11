@@ -28,3 +28,80 @@ body {
 * {
   transition: background-color 0.3s ease, border-color 0.3s ease;
 }
+
+/* 💡 업무일지 전용 A4 가로 인쇄 최적화 스타일 */
+@media print {
+  .no-print,
+  aside,
+  nav,
+  header,
+  button,
+  select,
+  .sidebar,
+  .filter-panel,
+  .report-preview,
+  .tabs-container {
+    display: none !important;
+  }
+
+  body, 
+  main, 
+  html, 
+  #root, 
+  .print-container {
+    background: white !important;
+    color: black !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  @page {
+    size: A4 landscape;
+    margin: 0.8cm;
+  }
+
+  table {
+    width: 100% !important;
+    border-collapse: collapse !important;
+    color: black !important;
+    background: white !important;
+  }
+  
+  th, td {
+    border: 1.5px solid #000000 !important;
+    color: black !important;
+    background: transparent !important;
+    padding: 6px 4px !important;
+    font-size: 10px !important;
+    line-height: 1.2 !important;
+  }
+
+  th {
+    font-weight: 900 !important;
+    background-color: #f3f4f6 !important;
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  input, textarea {
+    border: none !important;
+    background: transparent !important;
+    color: black !important;
+    resize: none !important;
+    font-size: 10px !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  /* 테이블 내 불필요한 열 인쇄 숨김 (체크박스 열, 삭제/관리 열) */
+  th:first-child, td:first-child,
+  th:last-child, td:last-child {
+    display: none !important;
+  }
+}
