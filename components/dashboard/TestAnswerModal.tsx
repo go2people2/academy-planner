@@ -16,13 +16,32 @@ interface TestAnswerModalProps {
   reviewData?: Record<string, string>; // 학생이 이미 제출한 답 (리뷰 모드용)
 }
 
+interface TestResult {
+  completed: boolean;
+  score: number;
+  correctCount: number;
+  totalCount: number;
+  answers: Record<string, string>;
+}
+
 export default function TestAnswerModal({ testId: initialTestId, studentName, onClose, onSave, reviewData }: TestAnswerModalProps) {
   const [mounted, setMounted] = useState(false);
-  const [testId, setTestId] = useState(initialTestId || '');
+  
+  // 💡 다중 테스트 코드 파싱: M101, M102 또는 M101\nM102 등
+  const testIds = (initialTestId || '')
+    .split(/[\n,]+/)
+    .map(id => id.trim())
+    .filter(id => id.length > 0);
+
+  const [testId, setTestId] = useState(testIds[0] || '');
+  const [selectedTestId, setSelectedTestId] = useState(testIds[0] || ''); // 💡 현재 활성화된 테스트 ID
   const [testInfo, setTestInfo] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(reviewData || {});
   const [activeTab, setActiveTab] = useState<'mc' | 'desc'>('mc'); 
   const [scoreMode, setScoreMode] = useState<'score' | 'count'>('score');
+
+  // 💡 각 테스트별 개별 채점 데이터 보관
+  const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -33,11 +52,13 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
     setMounted(true);
   }, []);
 
-  // 💡 수동 로드 함수 (버튼 클릭이나 Enter 입력 시 실행)
-  const handleLoadTest = async () => {
-    const trimmedId = testId?.trim();
+  // 💡 수동/자동 로드 함수 (대상 ID 지정 가능)
+  const handleLoadTest = async (targetId = selectedTestId) => {
+    const trimmedId = targetId?.trim();
     if (!trimmedId || trimmedId.length < 2) {
-      alert('유효한 시험 코드를 입력해 주세요.');
+      if (testIds.length === 0) {
+        alert('유효한 시험 코드를 입력해 주세요.');
+      }
       return;
     }
 
@@ -48,11 +69,14 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
       const data = await res.json();
       if (data.success) {
         setTestInfo({
+          id: trimmedId,
           title: data.title,
           mcCount: data.mcCount,
           mcAnswers: data.mcAnswers || [],
           descCount: data.descCount || 0
         });
+        // 이전에 마킹한 답안이 있다면 복원, 없으면 빈 객체
+        setAnswers(testResults[trimmedId]?.answers || {});
       } else {
         setError(data.error || '시험 정보를 찾을 수 없습니다.');
         setTestInfo(null);
@@ -65,10 +89,17 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
     }
   };
 
-  // 초기 testId가 있고 리뷰 모드가 아닐 때만 자동 로드 시도 (첫 1회)
+  // 💡 선택된 테스트 ID가 변경될 때마다 자동 로드
   useEffect(() => {
-    if (initialTestId && !reviewData) {
-      handleLoadTest();
+    if (selectedTestId && !reviewData) {
+      handleLoadTest(selectedTestId);
+    }
+  }, [selectedTestId]);
+
+  // 초기 testId가 있고 리뷰 모드가 아닐 때 첫 로드 트리거
+  useEffect(() => {
+    if (testIds.length > 0 && !reviewData) {
+      setSelectedTestId(testIds[0]);
     }
   }, []);
 
@@ -76,32 +107,85 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
 
   const handleAnswerChange = (type: 'mc' | 'desc', index: number, value: string) => {
     if (isReviewMode) return;
-    setAnswers(prev => ({ ...prev, [`${type}_${index}`]: value }));
+    const newAnswers = { ...answers, [`${type}_${index}`]: value };
+    setAnswers(newAnswers);
+
+    // 💡 현재 활성화된 테스트의 실시간 채점 정보 갱신
+    if (testInfo) {
+      let correctCount = 0;
+      testInfo.mcAnswers.forEach((correctObj: any, i: number) => {
+        const correctAns = typeof correctObj === 'string' ? correctObj : correctObj.ans;
+        if (newAnswers[`mc_${i}`] === correctAns) correctCount++;
+      });
+      const mcTotal = testInfo.mcCount || 0;
+      const score = mcTotal > 0 ? Math.round((correctCount / mcTotal) * 100) : 0;
+
+      setTestResults(prev => ({
+        ...prev,
+        [selectedTestId]: {
+          completed: true,
+          score,
+          correctCount,
+          totalCount: mcTotal,
+          answers: newAnswers
+        }
+      }));
+    }
   };
 
   const handleSubmit = () => {
     if (!testInfo || !onSave) return;
 
-    let correctCount = 0;
-    testInfo.mcAnswers.forEach((correctObj: any, i: number) => {
-      const correctAns = typeof correctObj === 'string' ? correctObj : correctObj.ans;
-      if (answers[`mc_${i}`] === correctAns) correctCount++;
-    });
+    // 만약 단일 수동 입력 시험 코드인 경우 로컬 결과를 강제 할당
+    let currentResults = { ...testResults };
+    if (testIds.length <= 1) {
+      let correctCount = 0;
+      testInfo.mcAnswers.forEach((correctObj: any, i: number) => {
+        const correctAns = typeof correctObj === 'string' ? correctObj : correctObj.ans;
+        if (answers[`mc_${i}`] === correctAns) correctCount++;
+      });
+      const mcTotal = testInfo.mcCount || 0;
+      const score = mcTotal > 0 ? Math.round((correctCount / mcTotal) * 100) : 0;
 
-    const mcTotal = testInfo.mcCount || 0;
-    const score = mcTotal > 0 ? Math.round((correctCount / mcTotal) * 100) : 0;
-
-    const modeText = scoreMode === 'score' ? '점수(%)' : '개수(맞은개수/전체)';
-    const resultText = scoreMode === 'score' ? `${score}점` : `${correctCount}/${mcTotal}개`;
-
-    if (confirm(`객관식 ${mcTotal}문항 중 ${correctCount}문항 정답입니다.\n표기 방식: ${modeText}\n결과: ${resultText}\n제출하시겠습니까?`)) {
-      onSave({ 
-        answers, 
-        calculatedScore: score, 
-        correctCount, 
+      currentResults[selectedTestId] = {
+        completed: true,
+        score,
+        correctCount,
         totalCount: mcTotal,
+        answers
+      };
+    }
+
+    // 💡 미채점 시험 체크
+    const uncompletedIds = testIds.filter(id => !currentResults[id]?.completed);
+    if (testIds.length > 1 && uncompletedIds.length > 0) {
+      if (!confirm(`아직 채점하지 않은 시험(${uncompletedIds.join(', ')})이 존재합니다.\n이대로 제출하시겠습니까?`)) {
+        return;
+      }
+    }
+
+    const completedList = Object.values(currentResults).filter(r => r.completed);
+    if (completedList.length === 0) {
+      alert('최소 한 개 이상의 시험을 채점해야 제출할 수 있습니다.');
+      return;
+    }
+
+    // 💡 모든 완료된 시험의 성적 취합 (평균 점수 및 전체 총 맞은 개수 연산)
+    const avgScore = Math.round(completedList.reduce((sum, r) => sum + r.score, 0) / completedList.length);
+    const totalCorrect = completedList.reduce((sum, r) => sum + r.correctCount, 0);
+    const totalCount = completedList.reduce((sum, r) => sum + r.totalCount, 0);
+
+    const modeText = scoreMode === 'score' ? '점수(점)' : '개수(개)';
+    const resultText = scoreMode === 'score' ? `${avgScore}점` : `${totalCorrect}개 / ${totalCount}개`;
+
+    if (confirm(`채점 결과를 제출하시겠습니까?\n표기 방식: ${modeText}\n결과: ${resultText}`)) {
+      onSave({ 
+        answers: testIds.length > 1 ? currentResults : answers, // 다중 상태 연계
+        calculatedScore: avgScore, 
+        correctCount: totalCorrect, 
+        totalCount: totalCount,
         scoreMode,
-        testId: testId.trim() 
+        testId: initialTestId // 기존 테스트 코드 그대로 유지
       });
     }
   };
@@ -129,13 +213,13 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
             <Hash size={14} className="text-gray-500" />
             <input type="text" placeholder="시험 번호 입력 (예: M101)" value={testId} autoFocus 
               onChange={(e) => setTestId(e.target.value.toUpperCase())}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleLoadTest(); }}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleLoadTest(testId); }}
               className="bg-transparent border-none text-[12px] text-white focus:outline-none w-full font-black uppercase" />
           </div>
 
           <div className="flex gap-2 pt-2">
             <button onClick={onClose} className="flex-1 py-3 bg-white/5 text-gray-400 text-[10px] font-black uppercase rounded-[2px] hover:bg-white/10 transition-all border border-white/5">Cancel</button>
-            <button onClick={handleLoadTest} disabled={isLoading} className="flex-2 py-3 px-6 bg-blue-600 text-white text-[10px] font-black uppercase rounded-[2px] hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 min-w-[100px]">
+            <button onClick={() => handleLoadTest(testId)} disabled={isLoading} className="flex-2 py-3 px-6 bg-blue-600 text-white text-[10px] font-black uppercase rounded-[2px] hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2 min-w-[100px]">
               {isLoading ? <Loader2 size={12} className="animate-spin" /> : <><CheckCircle2 size={12} /> Find Test</>}
             </button>
           </div>
@@ -148,30 +232,61 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
         <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
           className="bg-[#121212] border border-white/10 rounded-[4px] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
           
-          <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/[0.02]">
-            <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded-[2px] flex items-center justify-center shadow-lg ${isReviewMode ? 'bg-amber-600' : 'bg-blue-600'}`}>
-                {isReviewMode ? <BookOpen className="text-white" size={20} /> : <Hash className="text-white" size={20} />}
-              </div>
-              <div>
-                <h2 className="text-sm font-black text-white uppercase tracking-tight">{testInfo.title}</h2>
-                <div className="flex items-center gap-2 mt-0.5">
-                  <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
-                    {isReviewMode ? 'Detailed Solution Review' : `Student: ${studentName}`}
-                  </p>
-                  {!isReviewMode && (
-                    <div className="flex bg-black/40 p-0.5 rounded border border-white/10 ml-2">
-                      <button onClick={() => setScoreMode('score')} className={`px-2 py-0.5 text-[8px] font-black rounded-[1px] transition-all ${scoreMode === 'score' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}>점수(%)</button>
-                      <button onClick={() => setScoreMode('count')} className={`px-2 py-0.5 text-[8px] font-black rounded-[1px] transition-all ${scoreMode === 'count' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}>개수(n/m)</button>
-                    </div>
-                  )}
+          <div className="p-4 border-b border-white/5 bg-white/[0.02] flex flex-col gap-3">
+            <div className="flex items-center justify-between w-full">
+              <div className="flex items-center gap-3">
+                <div className={`w-10 h-10 rounded-[2px] flex items-center justify-center shadow-lg ${isReviewMode ? 'bg-amber-600' : 'bg-blue-600'}`}>
+                  {isReviewMode ? <BookOpen className="text-white" size={20} /> : <Hash className="text-white" size={20} />}
+                </div>
+                <div>
+                  <h2 className="text-sm font-black text-white uppercase tracking-tight">{testInfo.title}</h2>
+                  <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest">
+                      {isReviewMode ? 'Detailed Solution Review' : `Student: ${studentName}`}
+                    </p>
+                    {!isReviewMode && (
+                      <div className="flex bg-black/40 p-0.5 rounded border border-white/10 ml-2">
+                        <button onClick={() => setScoreMode('score')} className={`px-2 py-0.5 text-[8px] font-black rounded-[1px] transition-all ${scoreMode === 'score' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}>점수(점)</button>
+                        <button onClick={() => setScoreMode('count')} className={`px-2 py-0.5 text-[8px] font-black rounded-[1px] transition-all ${scoreMode === 'count' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}>개수(개)</button>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
+              <div className="flex items-center gap-2">
+                 {!isReviewMode && testIds.length <= 1 && <button onClick={() => setTestInfo(null)} className="p-2 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"><Hash size={16} /></button>}
+                 <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors"><X size={18} className="text-gray-500" /></button>
+              </div>
             </div>
-            <div className="flex items-center gap-2">
-               {!isReviewMode && <button onClick={() => setTestInfo(null)} className="p-2 hover:bg-white/5 rounded-md transition-all text-gray-500 hover:text-white"><Hash size={16} /></button>}
-               <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors"><X size={18} className="text-gray-500" /></button>
-            </div>
+            
+            {/* 💡 다중 테스트 선택용 가로 탭바 */}
+            {!isReviewMode && testIds.length > 1 && (
+              <div className="flex flex-wrap gap-1 pt-2 border-t border-white/5">
+                {testIds.map((id) => {
+                  const isSelected = selectedTestId === id;
+                  const isCompleted = testResults[id]?.completed;
+                  const score = testResults[id]?.score;
+                  return (
+                    <button
+                      key={id}
+                      onClick={() => setSelectedTestId(id)}
+                      className={`px-3 py-1.5 rounded-[3px] text-[10px] font-black uppercase transition-all flex items-center gap-1.5 border ${
+                        isSelected 
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/30 scale-[1.02]' 
+                          : 'bg-white/5 border-white/5 text-gray-400 hover:text-white'
+                      }`}
+                    >
+                      <span>📑</span> {id}
+                      {isCompleted && (
+                        <span className="text-[8px] bg-emerald-500/20 text-emerald-400 px-1.5 py-0.2 rounded font-extrabold ml-1">
+                          {scoreMode === 'score' ? `${score}점` : `${testResults[id]?.correctCount}개`}
+                        </span>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           <div className="flex-1 overflow-y-auto p-6 custom-scrollbar-v">

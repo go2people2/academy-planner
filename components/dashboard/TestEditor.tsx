@@ -112,7 +112,7 @@ export default function TestEditor({
                       }}
                       className="w-full bg-transparent border-none outline-none text-emerald-400 text-[12px] font-black text-right"
                     />
-                    <span className="text-[10px] font-bold text-gray-600">%</span>
+                    <span className="text-[10px] font-bold text-gray-600">점</span>
                   </div>
                 </div>
                 <button 
