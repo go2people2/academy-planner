@@ -18,12 +18,14 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempName, setLocalTempName] = useState('');
   const [tempInitials, setLocalTempInitials] = useState('');
+  const [tempNickname, setLocalTempNickname] = useState(''); // 💡 추가
 
   const [formData, setFormData] = useState({
     login_id: '',
     password: '',
     name: '',
     initials: '',
+    nickname: '', // 💡 추가
     role: 'teacher' as 'admin' | 'teacher'
   });
 
@@ -33,7 +35,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
     await onAddTeacher(formData);
     setIsSaving(false);
     setIsAddModalOpen(false);
-    setFormData({ login_id: '', password: '', name: '', initials: '', role: 'teacher' });
+    setFormData({ login_id: '', password: '', name: '', initials: '', nickname: '', role: 'teacher' });
   };
 
   return (
@@ -52,26 +54,54 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
               </div>
               <div>
                 {editingId === t.id ? (
-                  <div className="flex flex-col gap-1">
-                    <input autoFocus value={tempName} onChange={(e) => setLocalTempName(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { 
-                        onUpdateTeacher(t.id, { name: tempName, initials: tempInitials }); 
-                        setEditingId(null); 
-                      } }}
-                      className="bg-black/60 border border-blue-500 rounded px-2 py-0.5 text-sm font-black text-white outline-none w-24" />
-                    <input value={tempInitials} onChange={(e) => setLocalTempInitials(e.target.value)}
-                      onKeyDown={(e) => { if (e.key === 'Enter') { 
-                        onUpdateTeacher(t.id, { name: tempName, initials: tempInitials }); 
-                        setEditingId(null); 
-                      } }}
-                      className="bg-black/60 border border-amber-500 rounded px-2 py-0.5 text-[10px] font-black text-white outline-none w-16" />
-                    <button onClick={() => { onUpdateTeacher(t.id, { name: tempName, initials: tempInitials }); setEditingId(null); }} className="text-[9px] font-black bg-blue-600 text-white px-2 py-1 rounded mt-1 uppercase tracking-widest hover:bg-blue-500">Save</button>
+                  <div className="flex flex-col gap-1.5">
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] text-gray-500 uppercase font-black">이름</span>
+                      <input autoFocus value={tempName} onChange={(e) => setLocalTempName(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { 
+                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
+                          setEditingId(null); 
+                        } }}
+                        className="bg-black/60 border border-blue-500/50 rounded px-2 py-0.5 text-xs font-black text-white outline-none w-32" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] text-gray-500 uppercase font-black">약칭 (Initials)</span>
+                      <input value={tempInitials} onChange={(e) => setLocalTempInitials(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { 
+                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
+                          setEditingId(null); 
+                        } }}
+                        className="bg-black/60 border border-amber-500/50 rounded px-2 py-0.5 text-[10px] font-black text-white outline-none w-24" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[8px] text-gray-500 uppercase font-black">별칭/직함 (ACA2000)</span>
+                      <input value={tempNickname} onChange={(e) => setLocalTempNickname(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { 
+                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
+                          setEditingId(null); 
+                        } }}
+                        placeholder="예: 대표원장"
+                        className="bg-black/60 border border-indigo-500/50 rounded px-2 py-0.5 text-[10px] font-black text-white placeholder-gray-600 outline-none w-32" />
+                    </div>
+                    <button onClick={() => { onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); setEditingId(null); }} className="text-[9px] font-black bg-blue-600 text-white px-2 py-1 rounded mt-1.5 uppercase tracking-widest hover:bg-blue-500 transition-colors">Save</button>
                   </div>
                 ) : (
-                  <h4 onClick={() => { setEditingId(t.id); setLocalTempName(t.name); setLocalTempInitials(t.initials || ''); }} className="text-sm font-black text-white cursor-pointer hover:text-blue-400 transition-colors flex items-center gap-2">
-                    {t.name}
-                    <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">({t.initials || getInitial(t.name)})</span>
-                  </h4>
+                  <div>
+                    <h4 onClick={() => { 
+                      setEditingId(t.id); 
+                      setLocalTempName(t.name); 
+                      setLocalTempInitials(t.initials || ''); 
+                      setLocalTempNickname(t.nickname || ''); 
+                    }} className="text-sm font-black text-white cursor-pointer hover:text-blue-400 transition-colors flex items-center gap-2">
+                      {t.name}
+                      <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">({t.initials || getInitial(t.name)})</span>
+                    </h4>
+                    {t.nickname && (
+                      <p className="text-[10px] font-black text-indigo-400/80 mt-0.5 tracking-tight flex items-center gap-1">
+                        <span>🏷️</span> ACA2000 직함: <span className="text-white font-extrabold">{t.nickname}</span>
+                      </p>
+                    )}
+                  </div>
                 )}
                 <div className="flex items-center gap-2 mt-1">
                   <button 
@@ -101,15 +131,16 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
               <form onSubmit={handleSubmit} className="p-8 space-y-6">
                 <div className="space-y-4">
                   {[
-                    { label: 'Login ID', key: 'login_id', icon: <Key size={16} />, placeholder: 'ID' },
-                    { label: 'Password', key: 'password', icon: <Lock size={16} />, placeholder: 'Password', type: 'password' },
-                    { label: 'Teacher Name', key: 'name', icon: <UserCircle size={16} />, placeholder: 'Name' },
-                    { label: 'Teacher Initials', key: 'initials', icon: <Hash size={16} />, placeholder: 'Initials (e.g. YH)' }
+                    { label: 'Login ID', key: 'login_id', icon: <Key size={16} />, placeholder: 'ID', required: true },
+                    { label: 'Password', key: 'password', icon: <Lock size={16} />, placeholder: 'Password', type: 'password', required: true },
+                    { label: 'Teacher Name', key: 'name', icon: <UserCircle size={16} />, placeholder: 'Name', required: true },
+                    { label: 'Teacher Initials', key: 'initials', icon: <Hash size={16} />, placeholder: 'Initials (e.g. YH)', required: false },
+                    { label: 'Teacher Nickname / Title (ACA2000)', key: 'nickname', icon: <Users size={16} />, placeholder: '직함 또는 별명 (예: 대표원장)', required: false }
                   ].map(f => (
                     <div key={f.key} className="space-y-1">
                       <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">{f.label}</label>
                       <div className="relative">
-                        <input required type={f.type || 'text'} value={(formData as any)[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
+                        <input required={f.required} type={f.type || 'text'} value={(formData as any)[f.key] || ''} onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
                           className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all" placeholder={f.placeholder} />
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600">{f.icon}</div>
                       </div>

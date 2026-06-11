@@ -463,7 +463,7 @@ export default function TodaySheet({
       headers = ['일자', '강사', '반명', '과목', '교재', '진도', '테스트', '과제', '기타'];
       dataRows = students.map((s: any) => {
         const session = s.todaySession || {}; const teacher = academyInfo?.teachers?.find((t: any) => t.id === s.teacher_id);
-        const tName = teacher?.name || ''; const classParts = (s.class || '').split('-');
+        const tName = teacher?.nickname || teacher?.name || ''; const classParts = (s.class || '').split('-');
         const initial = classParts.length > 1 ? classParts[classParts.length - 1].trim() : s.course;
         const sortedDays = (s.class_days || []).slice().sort((a: string, b: string) => {
           const order: any = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };

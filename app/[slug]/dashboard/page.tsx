@@ -976,6 +976,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         password: d.password, 
         name: d.name, 
         initials: d.initials, // 💡 추가
+        nickname: d.nickname, // 💡 추가 (ACA2000 별칭)
         role: d.role 
       }]); 
       await fetchTeachers(academy.id); 

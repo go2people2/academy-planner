@@ -78,6 +78,7 @@ export interface Teacher {
   academy_id: string;
   name: string;
   initials?: string; // 💡 추가
+  nickname?: string; // 💡 추가 (ACA2000 별칭/직함 용)
   email?: string;
   role: 'admin' | 'teacher';
   homework_presets?: Record<string, string>; // 💡 추가
