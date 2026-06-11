@@ -256,10 +256,13 @@ export function useTodaySheetRowLogic({
   };
 
   const syncTextFromData = (newJson: HomeworkItem[], field: 'classwork' | 'homework' | 'next_quiz' | 'completed_classwork') => {
-    const text = newJson.map(item => {
-      const book = masterTextbooks.find(m => m.bookcode === item.book_name);
-      return `${book?.title || item.book_name} p${item.range}`;
-    }).join('\n');
+    const text = newJson
+      .filter(item => item.range) // 💡 range가 존재하는 항목만 텍스트 일지에 반영
+      .map(item => {
+        const book = masterTextbooks.find(m => m.bookcode === item.book_name);
+        const cleanRange = (item.range.startsWith('p') || item.range.includes(' p')) ? item.range : `p${item.range}`;
+        return `${book?.title || item.book_name} ${cleanRange}`;
+      }).join('\n');
     const update = { [`${field}_json`]: newJson, [`${field}_text`]: text };
     setFormData((prev: any) => ({ ...prev, ...update }));
     const refs: any = { classwork: cwRef, homework: hwRef, next_quiz: nqRef, completed_classwork: ccwRef };

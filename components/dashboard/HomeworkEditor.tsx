@@ -291,8 +291,8 @@ function HomeworkRow({
       setStartPage(hw.start_page || '');
       setEndPage(hw.end_page || '');
     } else {
-      // 💡 하위 호환: 단원명 내 숫자 무시를 위해 'p숫자' 형식에서만 페이지 번호 추출 시도
-      const pagePartMatch = hw.range.match(/p\d+(?:~\d+)?/i);
+      // 💡 하위 호환: 단원명 내 숫자 무시를 위해 문자열 끝에 있는 'p숫자' 형식에서만 페이지 번호 추출 시도
+      const pagePartMatch = hw.range.match(/p\d+(?:~\d+)?\s*$/i);
       if (pagePartMatch) {
         const pagePart = pagePartMatch[0];
         const numbers = pagePart.match(/\d+/g);
