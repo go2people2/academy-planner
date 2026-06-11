@@ -990,10 +990,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     try { 
       console.log(`Updating teacher ${id}:`, updates);
       
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      
       // 💡 [개선] 권한 동기화를 위해 직접 DB 업데이트 대신 전용 서버 API 호출
       const res = await fetch(`/api/teachers/${id}`, {
         method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         body: JSON.stringify(updates)
       });
 

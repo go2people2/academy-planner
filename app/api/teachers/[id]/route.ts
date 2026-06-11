@@ -16,7 +16,10 @@ export async function PATCH(request: Request, context: any) {
       return NextResponse.json({ error: '서버 환경 설정 오류' }, { status: 500 });
     }
 
-    // 💡 1. [보안] 요청자 인증 정보 확보 (Cookies 기반 Supabase SSR Client)
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    // 💡 1. [보안] 요청자 인증 정보 확보
+    // (1) 쿠키 기반 세션 복원 시도
     const cookieStore = await cookies();
     const supabaseAuth = createServerClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
       cookies: {
@@ -27,8 +30,20 @@ export async function PATCH(request: Request, context: any) {
       },
     });
 
-    const { data: { session } } = await supabaseAuth.auth.getSession();
+    let { data: { session } } = await supabaseAuth.auth.getSession();
     
+    // (2) 쿠키 세션 실패 시 Authorization Bearer 헤더 검증 (Fallback)
+    if (!session) {
+      const authHeader = request.headers.get('Authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+        if (!userErr && user) {
+          session = { user } as any;
+        }
+      }
+    }
+
     if (!session) {
       return NextResponse.json({ error: '인증되지 않은 사용자입니다.' }, { status: 401 });
     }
@@ -40,9 +55,6 @@ export async function PATCH(request: Request, context: any) {
     if (reqRole !== 'admin' && reqRole !== 'master') {
       return NextResponse.json({ error: '권한이 없습니다. (Forbidden)' }, { status: 403 });
     }
-
-    // 관리자 권한용 Service Role Client 생성
-    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
 
     // 💡 3. [보안] 대상 교사 조회 및 학원 소속(Academy Bound) 검증
     const { data: targetTeacher, error: fetchErr } = await supabaseAdmin
