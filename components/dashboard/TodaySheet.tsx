@@ -513,9 +513,13 @@ export default function TodaySheet({
 
   const onCellMouseDown = useCallback((e: React.MouseEvent, studentId: string, colId: string) => {
     if (['select', 'action'].includes(colId)) return;
-    setSelectedRange({ startStudentId: studentId, startColId: colId, endStudentId: studentId, endColId: colId });
-    setIsDragging(true);
-    if (!e.shiftKey) { setActiveCell({ studentId, columnId: colId }); }
+    const isShift = e.shiftKey;
+    // 💡 브라우저가 blur 이벤트를 먼저 안전하게 처리하여 저장(onBlur)되도록 상태 변경을 한 프레임 지연
+    requestAnimationFrame(() => {
+      setSelectedRange({ startStudentId: studentId, startColId: colId, endStudentId: studentId, endColId: colId });
+      setIsDragging(true);
+      if (!isShift) { setActiveCell({ studentId, columnId: colId }); }
+    });
   }, []);
 
   const onCellMouseEnter = useCallback((studentId: string, colId: string) => {
