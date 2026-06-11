@@ -465,13 +465,13 @@ export default function TodaySheet({
       headers = ['일자', '강사', '반명', '과목', '교재', '진도', '테스트', '과제', '기타'];
       dataRows = students.map((s: any) => {
         const session = s.todaySession || {}; const teacher = academyInfo?.teachers?.find((t: any) => t.id === s.teacher_id);
-        const tName = teacher?.nickname || teacher?.name || ''; const classParts = (s.class || '').split('-');
-        const initial = classParts.length > 1 ? classParts[classParts.length - 1].trim() : s.course;
+        const tName = teacher?.nickname || teacher?.name || '';
         const sortedDays = (s.class_days || []).slice().sort((a: string, b: string) => {
           const order: any = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
           return (order[a] || 0) - (order[b] || 0);
         }).join('');
-        const combinedName = `${s.name}-${initial}-${sortedDays}`;
+        const teacherInitial = teacher?.initials || s.teacher_initial || '';
+        const combinedName = `${s.name}-${teacherInitial}-${sortedDays}`;
         const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code).filter((title: any) => !!title).join(', ');
         const testDisplay = (() => {
           if (!session.test_id) return '';
