@@ -473,7 +473,20 @@ export default function TodaySheet({
         }).join('');
         const combinedName = `${s.name}-${initial}-${sortedDays}`;
         const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code).filter((title: any) => !!title).join(', ');
-        return [selectedDate, tName, combinedName, '개별수업', books, session.classwork_text || '', session.test_id || '', session.homework_text || '', session.special_notes || ''];
+        const testDisplay = (() => {
+          if (!session.test_id) return '';
+          if (session.test_score === undefined || session.test_score === null || session.test_score === '') return session.test_id;
+          
+          const scoreType = session.test_score_type || 'score';
+          if (scoreType === 'score') {
+            return `${session.test_id} (${session.test_score}점)`;
+          } else {
+            return session.test_total_count 
+              ? `${session.test_id} (${session.test_score}개 / ${session.test_total_count}개)`
+              : `${session.test_id} (${session.test_score}개)`;
+          }
+        })();
+        return [selectedDate, tName, combinedName, '개별수업', books, session.classwork_text || '', testDisplay, session.homework_text || '', session.special_notes || ''];
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
