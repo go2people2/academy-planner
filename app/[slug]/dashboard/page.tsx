@@ -597,7 +597,18 @@ export default function DashboardPage() {
       if (hasSeenBriefing) return;
       const hasNotes = students.some(s => s.management_notes?.trim());
       const hasAnnouncements = Object.values(academy.announcements || {}).some(v => String(v).trim());
-      if (hasNotes || hasAnnouncements) { setShowMorningBriefing(true); }
+      const hasMissingInfo = students.some(s => {
+        if (s.is_deleted) return false;
+        return (
+          !s.phone?.trim() || 
+          !s.school?.trim() || 
+          !s.course?.trim() || 
+          !s.teacher_id || 
+          !s.class_days || 
+          s.class_days.length === 0
+        );
+      });
+      if (hasNotes || hasAnnouncements || hasMissingInfo) { setShowMorningBriefing(true); }
     };
     checkBriefing();
   }, [isLoading, !!academy, selectedDate, students.length]);
@@ -1081,7 +1092,17 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       </main>
       <AnimatePresence>
         {isClassroomModeOpen && < ClassroomMode students={students} onSave={saveTodaySession} onClose={() => setIsClassroomModeOpen(false)} selectedDate={selectedDate} academyInfo={academy} selectedTeacherId={selectedTeacherId} />}
-        {showMorningBriefing && <MorningBriefingModal academyInfo={academy} todayStudents={todayStudents} onClose={() => { setShowMorningBriefing(false); sessionStorage.setItem(`ams_briefing_${selectedDate}`, 'true'); }} />}
+        {showMorningBriefing && (
+          <MorningBriefingModal 
+            academyInfo={academy} 
+            todayStudents={todayStudents} 
+            allStudents={students}
+            onClose={() => { 
+              setShowMorningBriefing(false); 
+              sessionStorage.setItem(`ams_briefing_${selectedDate}`, 'true'); 
+            }} 
+          />
+        )}
         {selectedStudentId && selectedStudent && !isBatchMode && (viewMode === 'studentEdit' ? <StudentDetailDrawer student={selectedStudent} availableTextbooks={availableTextbooks} isRefreshingBooks={isRefreshingBooks} onRefreshBooks={refreshTextbooks} onUpdateInfo={updateStudentInfo} onAddToToday={addStudentToToday} onClose={() => setSelectedStudentId(null)} teachers={teachers} /> : <StudentStudyReportDrawer student={selectedStudent} availableTextbooks={availableTextbooks} onClose={() => setSelectedStudentId(null)} onEditMode={() => navigateTo('studentEdit')} />)}
       </AnimatePresence>
       <AnimatePresence>{selectedStudentId && !isBatchMode && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedStudentId(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />)}</AnimatePresence>
