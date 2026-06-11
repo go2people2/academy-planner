@@ -476,6 +476,10 @@ export default function TodaySheet({
         const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code).filter((title: any) => !!title).join(', ');
         const testDisplay = (() => {
           if (!session.test_id) return '';
+          
+          // 💡 하위 호환: 이미 test_id에 괄호 점수 정보가 직접 포함된 구형 데이터인 경우 추가 결합 생략
+          if (session.test_id.includes('(')) return session.test_id;
+          
           if (session.test_score === undefined || session.test_score === null || session.test_score === '') return session.test_id;
           
           const scoreType = session.test_score_type || 'score';

@@ -49,7 +49,8 @@ export default function TestEditor({
     }
 
     // 💡 텍스트 합치기
-    const formattedText = validTests.map(t => `${t.name}${t.score ? `(${t.score})` : ''}`).join(', ');
+    // 💡 데일리 시트 셀 자체에는 순수 시험명 목록만 저장하여 옆 칸의 점수와 중복 노출되는 문제 해결
+    const formattedText = validTests.map(t => t.name.trim()).join(', ');
     
     // 💡 평균 점수 계산
     const scores = validTests.map(t => parseInt(t.score)).filter(s => !isNaN(s));
