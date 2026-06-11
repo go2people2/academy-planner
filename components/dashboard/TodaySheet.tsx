@@ -623,9 +623,9 @@ export default function TodaySheet({
 
           <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-black border-white/20 text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
           
-          {/* 💡 [추가] 인쇄하기 버튼 */}
-          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-2 bg-indigo-600 border border-indigo-500 text-white rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-xl">
-            <Printer size={14} /> 인쇄하기
+          {/* 💡 [변경] 전체 리포트 발송 버튼 (1행 안전 구역으로 이동) */}
+          <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-500 border border-blue-500/20 rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-xl no-print">
+            {isSendingReport === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} 전체 리포트 발송
           </button>
           
           <div className="relative">
@@ -792,8 +792,11 @@ export default function TodaySheet({
             </div>
           )}
         </div>
-        <div className="flex items-center gap-4">
-          <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-1.5 bg-blue-600/10 text-blue-500 border border-blue-500/20 rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-lg">{isSendingReport === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} 전체 리포트 발송</button>
+        <div className="flex items-center gap-4 no-print">
+          {/* 💡 [변경] 인쇄하기 버튼 (테이블 바로 위로 이동) */}
+          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg">
+            <Printer size={12} /> 인쇄하기
+          </button>
         </div>
       </div>
 
