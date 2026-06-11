@@ -464,7 +464,8 @@ export default function TodaySheet({
     if (type === 'aca2000') {
       headers = ['일자', '강사', '반명', '과목', '교재', '진도', '테스트', '과제', '기타'];
       dataRows = students.map((s: any) => {
-        const session = s.todaySession || {}; const teacher = academyInfo?.teachers?.find((t: any) => t.id === s.teacher_id);
+        const session = s.todaySession || {}; 
+        const teacher = teachers?.find((t: any) => t.id === s.teacher_id);
         const tName = teacher?.nickname || teacher?.name || '';
         const sortedDays = (s.class_days || []).slice().sort((a: string, b: string) => {
           const order: any = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
@@ -486,7 +487,7 @@ export default function TodaySheet({
               : `${session.test_id} (${session.test_score}개)`;
           }
         })();
-        return [selectedDate, tName, combinedName, '개별수업', books, session.classwork_text || '', testDisplay, session.homework_text || '', session.special_notes || ''];
+        return [selectedDate, tName, combinedName, '개별수업', books, session.completed_classwork_text || '', testDisplay, session.homework_text || '', session.special_notes || ''];
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
