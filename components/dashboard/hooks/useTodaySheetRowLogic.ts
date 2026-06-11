@@ -108,7 +108,7 @@ export function useTodaySheetRowLogic({
 
   // 4. Sync Effects
   useEffect(() => {
-    const isUserEditing = activeCell?.studentId === student.id || editingCell?.studentId === student.id;
+    const isUserTyping = editingCell?.studentId === student.id;
     const isDateChanged = rowDate !== selectedDate;
 
     if (isDateChanged) {
@@ -118,7 +118,7 @@ export function useTodaySheetRowLogic({
       return;
     }
 
-    if (!isUserEditing && !isSaving) {
+    if (!isUserTyping && !isSaving) {
       const newData = getInitialFormData(selectedDate);
       setFormData(newData);
     }
@@ -162,7 +162,7 @@ export function useTodaySheetRowLogic({
     
     Object.keys(fieldRefs).forEach(key => {
       if (fieldRefs[key].current) {
-        const dbKey = key === 'test_id' ? 'test_id' : (key === 'notes' ? 'special_notes' : `${key}_text`);
+        const dbKey = key === 'test_id' ? 'test_id' : (key === 'notes' ? 'special_notes' : (key === 'mission' ? 'mission' : `${key}_text`));
         if (!(dbKey in finalUpdates)) lazyData[dbKey] = fieldRefs[key].current.value;
       }
     });

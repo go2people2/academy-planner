@@ -8,10 +8,12 @@ const SENDER_NUMBER = process.env.SOLAPI_SENDER_NUMBER || '';
 const TEMPLATE_ID = process.env.SOLAPI_TEMPLATE_ID || ''; // 알림톡 템플릿 ID
 const PF_ID = process.env.SOLAPI_PF_ID || ''; // 카카오 비즈니스 채널 ID
 
-const messageService = new SolapiMessageService(API_KEY, API_SECRET);
-
 export async function POST(request: Request) {
   try {
+    if (!API_KEY || !API_SECRET) {
+      return NextResponse.json({ error: '솔라피 API 연동 설정(API Key, Secret)이 구성되지 않았습니다.' }, { status: 500 });
+    }
+    const messageService = new SolapiMessageService(API_KEY, API_SECRET);
     const body = await request.json();
     const { studentName, phone, sessionData, academyName } = body;
 

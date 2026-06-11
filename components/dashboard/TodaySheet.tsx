@@ -8,14 +8,14 @@ import {
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
   SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
-  Maximize2, ArrowLeft, AlertTriangle
+  Maximize2, ArrowLeft, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRow';
 import { HistoryRows } from './TodaySheetHistory';
 import ReportPreview from './ReportPreview';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
-import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
+import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
 
 interface ColumnConfig {
@@ -121,11 +121,18 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
 export default function TodaySheet({
   students, setStudents, masterTextbooks, onSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange,
-  onOpenBriefing // 💡 추가
+  sortDirection = 'asc', onSortDirectionChange,
+  onOpenBriefing, // 💡 추가
+  selectedFilter, setSelectedFilter,
+  selectedTeacherId, setSelectedTeacherId,
+  selectedDays, setSelectedDays,
+  isAndFilter, setIsAndFilter,
+  teachers = []
 }: any) {
 
   // 1. States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [hiddenStudentIds, setHiddenStudentIds] = useState<string[]>([]);
   const [selectedRange, setSelectedRange] = useState<{
     startStudentId: string, 
     startColId: string, 
@@ -208,9 +215,37 @@ export default function TodaySheet({
   const filteredStudents = useMemo(() => {
     let result = [...students];
     
+    // 숨김 처리된 학생 필터링
+    if (hiddenStudentIds.length > 0) {
+      result = result.filter((s: any) => !hiddenStudentIds.includes(s.id));
+    }
+    
     if (focusColumn === 'test_id') {
       result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
     }
+
+    const getGradeWeight = (grade: string): number => {
+      if (!grade) return 999;
+      const cleaned = grade.replace(/\s+/g, '');
+      let levelWeight = 0;
+      let year = 0;
+      if (cleaned.includes('초')) {
+        levelWeight = 10;
+        const match = cleaned.match(/\d/);
+        year = match ? parseInt(match[0], 10) : 0;
+      } else if (cleaned.includes('중')) {
+        levelWeight = 20;
+        const match = cleaned.match(/\d/);
+        year = match ? parseInt(match[0], 10) : 0;
+      } else if (cleaned.includes('고')) {
+        levelWeight = 30;
+        const match = cleaned.match(/\d/);
+        year = match ? parseInt(match[0], 10) : 0;
+      } else {
+        levelWeight = 40;
+      }
+      return levelWeight + year;
+    };
 
     const dayKey = getDayOfWeek(selectedDate);
     const getStartTime = (st: any) => {
@@ -230,14 +265,26 @@ export default function TodaySheet({
     };
 
     return result.sort((a, b) => {
-      if (sortMode === 'time') {
+      let comparison = 0;
+      if (sortMode === 'grade') {
+        const gradeA = getGradeWeight(a.grade);
+        const gradeB = getGradeWeight(b.grade);
+        if (gradeA !== gradeB) {
+          comparison = gradeA - gradeB;
+          return sortDirection === 'asc' ? comparison : -comparison;
+        }
+      } else if (sortMode === 'time') {
         const timeA = getStartTime(a);
         const timeB = getStartTime(b);
-        if (timeA !== timeB) return timeA - timeB;
+        if (timeA !== timeB) {
+          comparison = timeA - timeB;
+          return sortDirection === 'asc' ? comparison : -comparison;
+        }
       }
-      return a.name.localeCompare(b.name, 'ko');
+      comparison = a.name.localeCompare(b.name, 'ko');
+      return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [students, focusColumn, sortMode, selectedDate]);
+  }, [students, focusColumn, sortMode, sortDirection, selectedDate, hiddenStudentIds]);
 
   // 3. Callbacks
   const isCellInRange = useCallback((studentId: string, colId: string) => {
@@ -267,12 +314,13 @@ export default function TodaySheet({
     if (updates.length === 0) return;
     
     // 💡 [낙관적 업데이트] DB 저장 전에 로컬 상태를 즉시 업데이트하여 UI 반응성 확보
-    // newData(부분 업데이트 페이로드)만 기존 todaySession에 병합
     setStudents((prev: any[]) => prev.map(s => {
       const update = updates.find(u => u.studentId === s.id);
       if (update) {
+        const hasMission = 'mission' in update.newData;
         return {
           ...s,
+          ...(hasMission ? { recent_mission: update.newData.mission } : {}),
           todaySession: {
             ...(s.todaySession || {}),
             ...update.newData
@@ -284,9 +332,20 @@ export default function TodaySheet({
 
     setUndoStack(prev => [{ type: 'batch', updates: updates.map(u => ({ studentId: u.studentId, prevData: u.prevData })), timestamp: Date.now() }, ...prev].slice(0, 20));
     
-    // 💡 [수정] onSave 호출 시 전체 객체가 아닌 newData(부분 페이로드)만 전송하여 서버 측 필터링(getFilteredBaseFields)이 올바르게 작동하게 함
-    await Promise.all(updates.map(u => onSave(u.studentId, u.newData)));
-  }, [onSave, setStudents]);
+    // 💡 [수정] mission 필드와 일반 세션 로그 필드를 분기 처리하여 알맞은 API로 전송
+    await Promise.all(updates.map(async (u) => {
+      if ('mission' in u.newData && onUpdateStudentInfo) {
+        await onUpdateStudentInfo(u.studentId, 'recent_mission', u.newData.mission);
+      }
+      
+      const savePayload = { ...u.newData };
+      delete savePayload.mission;
+      
+      if (Object.keys(savePayload).length > 0) {
+        await onSave(u.studentId, savePayload);
+      }
+    }));
+  }, [onSave, onUpdateStudentInfo, setStudents]);
 
   const performUndo = useCallback(async () => {
     if (undoStack.length === 0) return;
@@ -411,7 +470,7 @@ export default function TodaySheet({
           return (order[a] || 0) - (order[b] || 0);
         }).join('');
         const combinedName = `${s.name}-${initial}-${sortedDays}`;
-        const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find(m => m.bookcode === code)?.title || code).filter(title => !!title).join(', ');
+        const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code).filter((title: any) => !!title).join(', ');
         return [selectedDate, tName, combinedName, '개별수업', books, session.classwork_text || '', session.test_id || '', session.homework_text || '', session.special_notes || ''];
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
@@ -562,10 +621,6 @@ export default function TodaySheet({
             <RotateCcw size={14} className="text-blue-500" /> 실행 취소 <span className="bg-white/10 px-1.5 py-0.5 rounded text-[8px] ml-1">{undoStack.length}</span>
           </button>
 
-          <button onClick={() => onSortModeChange(sortMode === 'time' ? 'name' : 'time')} className={`flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest transition-all shadow-xl ${sortMode === 'time' ? 'text-blue-400' : 'text-emerald-400'} hover:text-white hover:bg-white/10`}>
-            {sortMode === 'time' ? <ClockIcon size={14} /> : <SortAsc size={14} />} {sortMode === 'time' ? '시간순' : '이름순'}
-          </button>
-
           <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-black border-white/20 text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
           
           <div className="relative">
@@ -585,6 +640,135 @@ export default function TodaySheet({
           </div>
 
           <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/5 border border-white/10 rounded-[6px] text-gray-400 hover:text-white transition-all shadow-xl"><Settings2 size={18} /></button>
+        </div>
+      </div>
+
+      {/* 💡 [신설] 통합 필터 패널 (앞으로 추가될 필터 확장성 확보) */}
+      <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 bg-[#0a0a0a]/60 border border-white/5 rounded-lg shrink-0 text-left">
+        <div className="flex flex-wrap items-center gap-6">
+          
+          {/* 1. 담당 선생님 필터 */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Teacher</span>
+            <select 
+              value={selectedTeacherId} 
+              onChange={(e) => setSelectedTeacherId(e.target.value)}
+              className="bg-black border border-white/10 rounded-[4px] px-3 py-1.5 text-[11px] font-bold text-white outline-none focus:border-blue-500 [color-scheme:dark]"
+            >
+              <option value="All">전체 선생님</option>
+              {teachers.map((t: any) => (
+                <option key={t.id} value={t.id}>{t.name} 선생님 ({t.initials || '?'})</option>
+              ))}
+            </select>
+          </div>
+
+          {/* 2. 학년 필터 */}
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Grade</span>
+            <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+              {[
+                { label: 'ALL', key: 'All' }, { label: 'ES (초)', key: '초' }, { label: 'MS (중)', key: '중' }, { label: 'HS (고)', key: '고' }
+              ].map((g) => (
+                <button 
+                  key={g.key} 
+                  onClick={() => setSelectedFilter(g.key)} 
+                  className={`px-3 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                >
+                  {g.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* 3. 요일 필터 */}
+          <div className="flex items-center gap-2.5">
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Days</span>
+            <div className="flex gap-[3px]">
+              {['월', '화', '수', '목', '금', '토', '일'].map((day) => {
+                const isActive = selectedDays.includes(day);
+                return (
+                  <button 
+                    key={day} 
+                    onClick={() => {
+                      if (selectedDays.includes(day)) {
+                        setSelectedDays(selectedDays.filter((d: string) => d !== day));
+                      } else {
+                        setSelectedDays([...selectedDays, day]);
+                      }
+                    }} 
+                    className={`w-6 h-6 rounded-[3px] text-[9px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-white'}`}
+                  >
+                    {day}
+                  </button>
+                );
+              })}
+            </div>
+            {selectedDays.length > 0 && (
+              <button 
+                onClick={() => setIsAndFilter(!isAndFilter)} 
+                className={`px-2 py-1 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'}`}
+              >
+                {isAndFilter ? 'AND' : 'OR'}
+              </button>
+            )}
+          </div>
+
+        </div>
+
+        {/* 4. 정렬 방식 및 방향 필터 */}
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Sort By</span>
+            <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+              {[
+                { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }
+              ].map((m) => (
+                <button 
+                  key={m.key} 
+                  onClick={() => onSortModeChange(m.key as any)} 
+                  className={`px-3 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                >
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+          
+          <button 
+            onClick={() => onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')}
+            className="px-2.5 py-1.5 rounded-[4px] bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5 text-[9px] font-black"
+            title={sortDirection === 'asc' ? '오름차순 (Up)' : '내림차순 (Down)'}
+          >
+            {sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-purple-400" />}
+            {sortDirection === 'asc' ? 'UP' : 'DOWN'}
+          </button>
+        </div>
+
+        {/* 5. 선택 학생 숨김/해제 제어 */}
+        <div className="flex items-center gap-2">
+          {selectedIds.length > 0 && (
+            <button
+              onClick={() => {
+                setHiddenStudentIds(prev => [...prev, ...selectedIds]);
+                setSelectedIds([]);
+              }}
+              className="px-2.5 py-1.5 rounded-[4px] bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1.5 text-[9px] font-black animate-pulse"
+              title="선택한 학생들을 임시로 숨깁니다"
+            >
+              <EyeOff size={12} />
+              선택 숨김 ({selectedIds.length})
+            </button>
+          )}
+          {hiddenStudentIds.length > 0 && (
+            <button
+              onClick={() => setHiddenStudentIds([])}
+              className="px-2.5 py-1.5 rounded-[4px] bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1.5 text-[9px] font-black"
+              title="숨겨진 학생들을 모두 다시 표시합니다"
+            >
+              <Eye size={12} />
+              숨김 해제 ({hiddenStudentIds.length})
+            </button>
+          )}
         </div>
       </div>
 

@@ -143,7 +143,7 @@ export async function fetchTextbookUnits(bookCode: string) {
  */
 export async function fetchTestAnswers(testId: string) {
   if (!testId) return null;
-  const rows = await fetchSheetData('tests');
+  const rows = await fetchSheetAsCsv('tests');
   if (!rows || rows.length <= 1) return null;
 
   const targetId = String(testId).trim();

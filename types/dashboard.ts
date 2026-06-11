@@ -69,6 +69,8 @@ export interface Student {
   allLogs: SessionLog[];
   is_deleted?: boolean; // 💡 추가 (퇴원 여부)
   isTodayClassDay?: boolean; // 💡 추가 (오늘 수업 여부)
+  teacher_initial?: string; // 💡 추가
+  teacher_name?: string; // 💡 추가
 }
 
 export interface Teacher {

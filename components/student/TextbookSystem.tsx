@@ -156,7 +156,7 @@ export default function TextbookSystem({
     } else {
       const start = selectionRange.start; const end = p;
       const min = Math.min(start, end); const max = Math.max(start, end);
-      const newRange = []; for (let i = min; i <= max; i++) newRange.push(i);
+      const newRange: number[] = []; for (let i = min; i <= max; i++) newRange.push(i);
       setSelectedPages(prev => Array.from(new Set([...prev, ...newRange])).sort((a, b) => a - b));
       setSelectionRange({ start: null, end: null });
     }

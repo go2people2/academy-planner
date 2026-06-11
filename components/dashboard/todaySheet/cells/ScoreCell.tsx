@@ -9,7 +9,7 @@ interface ScoreCellProps {
   formData: any;
   isEditing: boolean;
   isActive: boolean;
-  scoreInputRef: (el: HTMLInputElement | null) => void;
+  scoreInputRef?: (el: HTMLInputElement | null) => void;
   // 💡 단일 계약 고정: (updates, options?)
   onSave: (updates: Record<string, any>, options?: { isBlur?: boolean }) => void; 
   handleKeyDown: (e: React.KeyboardEvent, colId: string) => void;

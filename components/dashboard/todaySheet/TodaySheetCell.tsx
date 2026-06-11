@@ -26,7 +26,7 @@ interface TodaySheetCellProps {
   isSaving: boolean;
   isHistoryExpanded: boolean;
   displayDateShort: string;
-  statusMap: Record<string, { label: string, color: string }>;
+  statusMap: Record<string, any>;
   
   // Refs
   testRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -37,7 +37,7 @@ interface TodaySheetCellProps {
   missionRef: React.RefObject<HTMLTextAreaElement | null>;
   notesRef: React.RefObject<HTMLTextAreaElement | null>;
   tdRef: (el: HTMLTableCellElement | null) => void;
-  scoreInputRef: (el: HTMLInputElement | null) => void;
+  scoreInputRef?: (el: HTMLInputElement | null) => void;
 
   // Handlers
   onSelectOne?: (studentId: string, checked: boolean) => void;
@@ -69,7 +69,7 @@ interface TodaySheetCellProps {
   onSetNextQuizCut: (val: number) => void;
   onSetTodayTestCut: (val: number) => void; // 💡 추가
   onSetNextQuizTrial: (num: number) => void;
-  onSave: (data?: any) => void;
+  onSave: (data?: any, directValue?: any) => void;
   onInputChange?: (field: string, value: string) => void;
   rowIndex?: number;
 }

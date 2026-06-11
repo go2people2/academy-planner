@@ -31,6 +31,7 @@ interface UseTodaySheetShortcutsProps {
 export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
   const {
     activeCell, setActiveCell, editingCell, setEditingCell,
+    students, setStudents,
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
     performUndo, handleBatchSaveWithUndo, handleSetSwitch, setIsDragging, selectedIds
   } = props;
@@ -91,6 +92,39 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         setSelectedRange(null);
         if (e.key === 'Enter') nR++; 
         else if (e.shiftKey) nC--; else nC++;
+      }
+
+      // 💡 [추가] 선택 모드에서 즉시 타이핑 시 기존 내용 덮어쓰며 편집 시작 (엑셀 방식)
+      const isCharacterKey = e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey;
+      if (!isInput && isCharacterKey && activeCell && !editingCell) {
+        const readOnlyCols = ['select', 'name', 'action', 'attendance', 'review', 'date'];
+        if (!readOnlyCols.includes(activeCell.columnId)) {
+          e.preventDefault();
+          const colId = activeCell.columnId;
+          const prop = mapColumnToProp(colId);
+          const initialChar = e.key;
+
+          // 1. 로컬 학생 데이터 즉시 덮어쓰기
+          setStudents((prev: any[]) => prev.map(s => {
+            if (s.id === activeCell.studentId) {
+              if (colId === 'mission') {
+                return { ...s, recent_mission: initialChar };
+              } else {
+                return {
+                  ...s,
+                  todaySession: {
+                    ...(s.todaySession || {}),
+                    [prop]: initialChar
+                  }
+                };
+              }
+            }
+            return s;
+          }));
+
+          // 2. 편집 모드로 강제 전환
+          setEditingCell(activeCell);
+        }
       }
 
       // 셀 이동 처리

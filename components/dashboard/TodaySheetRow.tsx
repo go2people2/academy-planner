@@ -137,7 +137,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               onSetTodayTestCut={(val) => { states.setFormData((prev: any) => ({ ...prev, test_cut: val })); handleSave({ test_cut: val }, 'test_cut'); }}
               onSetNextQuizTrial={(num) => { states.setFormData((prev: any) => ({ ...prev, next_quiz_trial: num })); handleSave({ next_quiz_trial: num }, 'next_quiz_trial'); }}
               onSave={(data, directValue) => {
-                if (typeof data === 'string') handleSave({}, data, directValue);
+                if (typeof data === 'string') handleSave(data, directValue);
                 else handleSave(data || {}, col.id, directValue);
               }}
               onInputChange={() => {}} 

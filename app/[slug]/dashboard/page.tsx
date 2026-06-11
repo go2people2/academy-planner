@@ -431,7 +431,8 @@ export default function DashboardPage() {
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [isClassroomModeOpen, setIsClassroomModeOpen] = useState(false);
   const [showMorningBriefing, setShowMorningBriefing] = useState(false);
-  const [sortMode, setSortMode] = useState<'time' | 'name'>('time');
+  const [sortMode, setSortMode] = useState<'time' | 'name' | 'grade'>('time');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const navigateTo = useCallback((mode: string, skipHistory = false) => { 
     if (viewMode === mode) return;
@@ -772,8 +773,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       }
 
       return true;
-    } catch (e) { 
+    } catch (e: any) { 
       console.error('Save error:', e); 
+      if (e && typeof e === 'object') {
+        console.error('Save error detailed:', {
+          message: e.message,
+          details: e.details,
+          hint: e.hint,
+          code: e.code
+        });
+      }
       // 💡 실패 시에도 전체 리페치를 하지 않고 에러만 출력 (사용자 입력값 보존을 위해)
       return false; 
     }
@@ -1033,7 +1042,35 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           <div className="h-full">
             {viewMode === 'board' && <Overview todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} />}
             {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} />}
-            {viewMode === 'todayTable' && <TodaySheet students={todayStudents} setStudents={setStudents} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} onSelectStudent={setSelectedStudentId} masterTextbooks={availableTextbooks} onSave={saveTodaySession} onUpdateStudentInfo={updateStudentInfo} academyInfo={academy} currentUser={currentUser} sortMode={sortMode} onSortModeChange={setSortMode} onOpenBriefing={() => setShowMorningBriefing(true)} />}
+            {viewMode === 'todayTable' && (
+              <TodaySheet 
+                students={todayStudents} 
+                setStudents={setStudents} 
+                selectedDate={selectedDate} 
+                onDateChange={setSelectedDate} 
+                onViewProgress={handleViewProgress} 
+                onSelectStudent={setSelectedStudentId} 
+                masterTextbooks={availableTextbooks} 
+                onSave={saveTodaySession} 
+                onUpdateStudentInfo={updateStudentInfo} 
+                academyInfo={academy} 
+                currentUser={currentUser} 
+                sortMode={sortMode} 
+                onSortModeChange={setSortMode} 
+                sortDirection={sortDirection}
+                onSortDirectionChange={setSortDirection}
+                onOpenBriefing={() => setShowMorningBriefing(true)} 
+                selectedFilter={selectedFilter}
+                setSelectedFilter={setSelectedFilter}
+                selectedTeacherId={selectedTeacherId}
+                setSelectedTeacherId={setSelectedTeacherId}
+                selectedDays={selectedDays}
+                setSelectedDays={setSelectedDays}
+                isAndFilter={isAndFilter}
+                setIsAndFilter={setIsAndFilter}
+                teachers={teachers}
+              />
+            )}
 
             {viewMode === 'progress' && <ProgressSequencer students={filteredAllStudents} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
