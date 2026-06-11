@@ -489,7 +489,7 @@ export default function TodaySheet({
             return moved ? `${status}(${moved}시)` : status;
           }
           if (col.id === 'test_id') return sess.test_id || '';
-          if (col.id === 'test_score') return sess.test_score ? `${sess.test_score}${sess.test_score_type === 'count' ? '개' : '%'}` : '';
+          if (col.id === 'test_score') return sess.test_score ? `${sess.test_score}${sess.test_score_type === 'count' ? '개' : '점'}` : '';
           if (col.id === 'next_quiz') return sess.next_quiz_text || '';
           if (col.id === 'review') return s.lastSession?.homework_text || '';
           if (col.id === 'classwork') return sess.classwork_text || '';

@@ -1,7 +1,6 @@
 'use client';
 
 import React from 'react';
-import { Percent, Hash } from 'lucide-react';
 
 interface ScoreCellProps {
   student: any;
@@ -103,20 +102,24 @@ export const ScoreCell = React.memo(function ScoreCell({
           onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
           className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full h-[56px] flex items-center justify-start cursor-text group-hover/td:bg-white/[0.02] transition-colors"
         >
-          {formData.test_score ? (formData.test_score_type === 'score' ? `${formData.test_score}%` : `${formData.test_score}/${formData.test_total_count || '?'}`) : '-'}
+          {formData.test_score ? (
+            formData.test_score_type === 'score' ? (
+              `${formData.test_score}점`
+            ) : (
+              formData.test_total_count ? `${formData.test_score}개 / ${formData.test_total_count}개` : `${formData.test_score}개`
+            )
+          ) : '-'}
         </div>
       )}
 
-      <div className="absolute right-1 flex flex-col gap-0.5 z-30">
+      <div className="absolute right-1.5 flex flex-col items-center justify-center z-30">
         <button 
           onClick={(e) => { e.stopPropagation(); onTestScoreTypeToggle(); }} 
-          className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${formData.test_score_type === 'score' ? 'bg-emerald-500/20 text-emerald-500' : 'bg-blue-500/20 text-blue-400'}`}
+          className={`w-5 h-5 rounded-full flex items-center justify-center transition-all text-[9px] font-black tracking-tighter ${formData.test_score_type === 'score' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}
+          title={formData.test_score_type === 'score' ? '점수 모드 (클릭하여 개수 모드로 변경)' : '개수 모드 (클릭하여 점수 모드로 변경)'}
         >
-          {formData.test_score_type === 'score' ? <Percent size={8} strokeWidth={4} /> : <Hash size={8} strokeWidth={4} />}
+          {formData.test_score_type === 'score' ? '점' : '개'}
         </button>
-        <span className="text-[7px] font-black text-gray-600/50 text-center uppercase">
-          {formData.test_score_type === 'score' ? '%' : 'ea'}
-        </span>
       </div>
     </div>
   );
