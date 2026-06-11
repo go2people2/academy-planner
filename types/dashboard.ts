@@ -5,6 +5,8 @@ export interface HomeworkItem {
   book_name: string;
   range: string;
   units?: string[];
+  start_page?: string;
+  end_page?: string;
 }
 
 export interface SessionLog {

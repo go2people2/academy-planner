@@ -95,6 +95,10 @@ export default function HomeworkEditor({
     const item = { ...newHw[idx] };
     const units = unitDataMap[item.book_name] || [];
 
+    // 💡 고유 페이지 값 저장 (정규식 오작동 원천 차단)
+    item.start_page = start;
+    item.end_page = end;
+
     const sNum = parseInt(start.replace(/\D/g, ''));
     const eNum = parseInt(end.replace(/\D/g, ''));
 
@@ -180,7 +184,7 @@ export default function HomeworkEditor({
             <button 
               onClick={() => {
                 if (window.confirm('입력된 모든 페이지와 단원 정보를 초기화하시겠습니까? (교재 목록은 유지됩니다)')) {
-                  const resetHw = homeworkJson.map(hw => ({ ...hw, range: '', units: [] }));
+                  const resetHw = homeworkJson.map(hw => ({ ...hw, range: '', units: [], start_page: '', end_page: '' }));
                   onUpdate(resetHw);
                 }
               }}
@@ -214,7 +218,7 @@ export default function HomeworkEditor({
                 onKeyDown={(key, type) => navigateInput(idx, type, key)}
                 onReset={() => {
                   const newHw = [...homeworkJson];
-                  newHw[idx] = { ...newHw[idx], range: '', units: [] };
+                  newHw[idx] = { ...newHw[idx], range: '', units: [], start_page: '', end_page: '' };
                   onUpdate(newHw);
                 }}
               />
@@ -277,21 +281,40 @@ function HomeworkRow({
   const [endPage, setEndPage] = useState('');
   const [isUnitsExpanded, setIsUnitsExpanded] = useState(false);
 
-  // 💡 데이터가 외부에서 초기화(Reset)되었을 때 내부 state도 동기화
+  // 💡 데이터가 외부에서 초기화(Reset)되었거나 변경되었을 때 내부 state도 동기화
   useEffect(() => {
     if (!hw.range) {
       setStartPage('');
       setEndPage('');
+    } else if (hw.start_page !== undefined || hw.end_page !== undefined) {
+      // 💡 명시적 필드 존재 시 최우선 반영하여 정규식 혼선 방지
+      setStartPage(hw.start_page || '');
+      setEndPage(hw.end_page || '');
     } else {
-      const numbers = hw.range.match(/\d+/g);
-      if (numbers && numbers.length >= 2) {
-        setStartPage(numbers[numbers.length - 2]);
-        setEndPage(numbers[numbers.length - 1]);
-      } else if (numbers && numbers.length === 1) {
-        setStartPage(numbers[0]);
+      // 💡 하위 호환: 단원명 내 숫자 무시를 위해 'p숫자' 형식에서만 페이지 번호 추출 시도
+      const pagePartMatch = hw.range.match(/p\d+(?:~\d+)?/i);
+      if (pagePartMatch) {
+        const pagePart = pagePartMatch[0];
+        const numbers = pagePart.match(/\d+/g);
+        if (numbers && numbers.length >= 2) {
+          setStartPage(numbers[0]);
+          setEndPage(numbers[1]);
+        } else if (numbers && numbers.length === 1) {
+          setStartPage(numbers[0]);
+          setEndPage('');
+        }
+      } else {
+        const numbers = hw.range.match(/\d+/g);
+        if (numbers && numbers.length >= 2) {
+          setStartPage(numbers[numbers.length - 2]);
+          setEndPage(numbers[numbers.length - 1]);
+        } else if (numbers && numbers.length === 1) {
+          setStartPage(numbers[0]);
+          setEndPage('');
+        }
       }
     }
-  }, [hw.range]);
+  }, [hw.range, hw.start_page, hw.end_page]);
 
   // 💡 엔터나 탭 입력 시 부모에게 최종 값을 전달
   const handleFinalize = () => {
@@ -409,7 +432,13 @@ function HomeworkRow({
                     setEndPage(e);
                     
                     const unitText = unitData.filter(x => newUnits.includes(x.unit)).map(x => x.unit).join(', ');
-                    onUpdate({ ...hw, units: newUnits, range: unitText ? `${unitText} p${s}~${e}` : `p${s}~${e}` });
+                    onUpdate({ 
+                      ...hw, 
+                      units: newUnits, 
+                      range: unitText ? `${unitText} p${s}~${e}` : `p${s}~${e}`,
+                      start_page: s,
+                      end_page: e
+                    });
                   }} className={`flex items-center justify-between px-3 py-1.5 rounded-[2px] text-[10px] font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-600 hover:bg-white/5 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-500/60' : ''}`}>
                     <div className="flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-500' : isInRange ? 'bg-emerald-500/30' : 'bg-transparent border border-white/10'}`} /><span className="truncate max-w-[200px]">{u.unit}</span></div>
                     <span className="text-[8px] opacity-40 italic tabular-nums">p{u.start_page}~{u.end_page}</span>
