@@ -276,12 +276,13 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
     
     // 💡 [수정] 1클릭: 출석 처리 / 2클릭: 상세 메뉴 오픈
-    // 출결 정보가 아예 없는 상태(수업전)라면 즉시 '출석'으로 저장
-    if (status === ATTENDANCE_STATUS.BEFORE) {
+    // 출결 정보가 아예 없는 상태(수업전)이거나 보강 대기 상태인 경우 즉시 '출석'으로 저장
+    const isPendingMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
+    if (status === ATTENDANCE_STATUS.BEFORE || isPendingMakeup) {
       await onSave(student.id, { attendance_status: ATTENDANCE_STATUS.PRESENT });
       return;
     }
-
+ 
     // 이미 상태가 있는 경우 (출석, 지각, 결석 등) 클릭 시 메뉴 오픈
     if (activeStudentId === student.id) { 
       setActiveStudentId(null); 
@@ -290,15 +291,23 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     setActiveStudentId(student.id);
     setIsTimeShiftOpen(false);
   };
-
+ 
   const handleToggleSelect = (id: string) => {
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
-
+ 
   const handleQuickAction = async (studentId: string, status: string | null) => {
     let finalStatus = status || ATTENDANCE_STATUS.BEFORE;
     
-    // 💡 [수정] 더 이상 status 문자열에 시간을 병합하지 않음
+    // 💡 [개선] 초기화(BEFORE) 시, 보강 학생(moved_to_hour 존재)은 보강 대기 상태로 복원
+    if (finalStatus === ATTENDANCE_STATUS.BEFORE) {
+      const sObj = students.find(s => s.id === studentId);
+      const mHour = sObj?.todaySession?.moved_to_hour;
+      if (mHour !== undefined && mHour !== null) {
+        finalStatus = `${ATTENDANCE_STATUS.SUPPLEMENT}:${String(mHour).padStart(2, '0')}:00`;
+      }
+    }
+    
     await onSave(studentId, { attendance_status: finalStatus });
     setActiveStudentId(null);
     setIsTimeShiftOpen(false);

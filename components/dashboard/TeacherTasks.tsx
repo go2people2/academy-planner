@@ -376,12 +376,17 @@ export default function TeacherTasks({
   }, [students, makeupSearch, makeupGradeFilter, makeupDayFilter, showOnlyMyStudentsInMakeup, currentUser]);
 
   const getMakeupTimeKey = useCallback((makeup: any) => {
+    // 1. 시간이동 정보(moved_to_hour) 최우선 적용
+    if (makeup.moved_to_hour !== undefined && makeup.moved_to_hour !== null) {
+      return `${String(makeup.moved_to_hour).padStart(2, '0')}:00`;
+    }
+    // 2. 예약 상태(attendance_status) 파싱
     const status = makeup.attendance_status || '';
     if (status.includes(':')) {
       const parts = status.split(':');
       return `${parts[1]}:${parts[2] || '00'}`;
     }
-    return makeup.moved_to_hour ? `${String(makeup.moved_to_hour).padStart(2, '0')}:00` : '시간 미지정';
+    return '시간 미지정';
   }, []);
 
   const groupedMakeups = useMemo(() => {
