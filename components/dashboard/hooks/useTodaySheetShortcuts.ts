@@ -22,6 +22,7 @@ interface UseTodaySheetShortcutsProps {
   setIsDragging: (isDragging: boolean) => void;
   selectedIds: string[];
   onSave: (studentId: string, data: any) => Promise<any>;
+  toggleSecondRow?: () => void;
 }
 
 /**
@@ -32,7 +33,8 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     activeCell, setActiveCell, editingCell, setEditingCell,
     students, setStudents,
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
-    handleBatchSave, handleSetSwitch, setIsDragging, selectedIds
+    handleBatchSave, handleSetSwitch, setIsDragging, selectedIds,
+    toggleSecondRow
   } = props;
 
   // 1. 클립보드 로직 분리 (handleCopy, handlePaste)
@@ -146,6 +148,16 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         const map: Record<string, string> = { q:'1', w:'2', e:'3', r:'4', Q:'1', W:'2', E:'3', R:'4' };
         handleSetSwitch(map[e.key]);
         return;
+      }
+
+      // Alt + T (Option + T) - 2행 상세 설정 바 토글
+      const isTKey = e.key?.toLowerCase() === 't' || e.code === 'KeyT';
+      if (e.altKey && isTKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        if (toggleSecondRow) {
+          e.preventDefault();
+          toggleSecondRow();
+          return;
+        }
       }
 
       // Ctrl+D / Alt+D (Fill Down)
@@ -335,6 +347,6 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
   }, [
     activeCell, setActiveCell, editingCell, setEditingCell, filteredStudents, activeColumns, 
     selectedRange, setSelectedRange, handleBatchSave, handleSetSwitch, 
-    handleCopy, handlePaste, setIsDragging, selectedIds, handleFillDown
+    handleCopy, handlePaste, setIsDragging, selectedIds, handleFillDown, toggleSecondRow
   ]);
 }

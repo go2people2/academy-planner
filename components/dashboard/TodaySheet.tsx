@@ -598,7 +598,8 @@ export default function TodaySheet({
     handleSetSwitch,
     setIsDragging,
     selectedIds,
-    onSave
+    onSave,
+    toggleSecondRow
   });
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
