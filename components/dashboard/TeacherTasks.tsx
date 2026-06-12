@@ -307,10 +307,6 @@ export default function TeacherTasks({
   }, [tasks, currentUser, showOnlyMyTasks, hiddenTaskIds]);
 
   const filteredStudents = useMemo(() => {
-    if (!makeupSearch.trim() && makeupGradeFilter === 'all' && makeupDayFilter === 'all') {
-      return [];
-    }
-
     return students
       .filter(s => {
         if (s.is_deleted) return false;
@@ -354,6 +350,43 @@ export default function TeacherTasks({
       })
       .slice(0, 30);
   }, [students, makeupSearch, makeupGradeFilter, makeupDayFilter, showOnlyMyStudentsInMakeup, currentUser]);
+
+  const getMakeupTimeKey = useCallback((makeup: any) => {
+    const status = makeup.attendance_status || '';
+    if (status.includes(':')) {
+      const parts = status.split(':');
+      return `${parts[1]}:${parts[2] || '00'}`;
+    }
+    return makeup.moved_to_hour ? `${String(makeup.moved_to_hour).padStart(2, '0')}:00` : '시간 미지정';
+  }, []);
+
+  const groupedMakeups = useMemo(() => {
+    const groups: Record<string, {
+      date: string;
+      time: string;
+      items: any[];
+    }> = {};
+
+    makeups.forEach(makeup => {
+      const timeKey = getMakeupTimeKey(makeup);
+      const groupKey = `${makeup.session_date}|${timeKey}`;
+      
+      if (!groups[groupKey]) {
+        groups[groupKey] = {
+          date: makeup.session_date,
+          time: timeKey,
+          items: []
+        };
+      }
+      groups[groupKey].items.push(makeup);
+    });
+
+    return Object.values(groups).sort((a, b) => {
+      const dateCompare = a.date.localeCompare(b.date);
+      if (dateCompare !== 0) return dateCompare;
+      return a.time.localeCompare(b.time);
+    });
+  }, [makeups, getMakeupTimeKey]);
 
   const isAllFilteredSelected = useMemo(() => {
     return filteredStudents.length > 0 && filteredStudents.every(s => selectedStudentIds.includes(s.id));
@@ -561,61 +594,81 @@ export default function TeacherTasks({
                 <div className="flex-1 flex items-center justify-center"><Loader2 className="animate-spin text-blue-500" size={32} /></div>
               ) : (
                 <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 custom-scrollbar-v align-start content-start">
-                  {makeups.map((makeup) => {
-                    const studentObj = students.find(s => s.id === makeup.student_id);
-                    const formattedDate = makeup.session_date.slice(5).replace('-', '.');
-                    const isToday = makeup.session_date === getTodayStr();
+                  {groupedMakeups.map((group) => {
+                    const formattedDate = group.date.slice(5).replace('-', '.');
+                    const isToday = group.date === getTodayStr();
                     
                     return (
                       <motion.div 
-                        key={makeup.id}
+                        key={`${group.date}-${group.time}`}
                         layout
-                        className={`group relative flex flex-col justify-between border border-white/10 rounded-xl p-4 bg-[#0a0a0a] transition-all hover:border-white/20`}
+                        className="group relative flex flex-col justify-between border border-white/10 rounded-xl p-4 bg-[#0a0a0a] transition-all hover:border-white/20"
                       >
-                        <div className="space-y-2">
-                          <div className="flex items-start justify-between">
-                            <div className="space-y-1">
-                              <span className="text-[9px] font-black bg-blue-500/10 text-blue-400 px-1.5 py-0.5 rounded uppercase">보강 세션</span>
-                              <h4 className="text-sm font-black text-white">{makeup.student_name}</h4>
+                        <div className="space-y-3">
+                          {/* 카드 헤더: 날짜와 시간 */}
+                          <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                            <div className="flex items-center gap-2">
+                              <Calendar size={13} className="text-blue-400" />
+                              <span className="text-xs font-black text-white">{formattedDate}</span>
+                              {isToday && <span className="text-blue-500 font-black text-[9px]">(오늘)</span>}
                             </div>
-                            <button 
-                              onClick={() => handleDeleteMakeup(makeup.id)}
-                              className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
-                            >
-                              <Trash2 size={10} />
-                            </button>
+                            <div className="flex items-center gap-1.5 text-gray-400 text-xs font-bold">
+                              <Clock size={12} className="text-gray-500" />
+                              <span>{group.time} 보강</span>
+                              <span className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[9px] font-black text-gray-400 ml-1">{group.items.length}명</span>
+                            </div>
                           </div>
 
-                          <div className="flex flex-col gap-1 mt-1 text-[11px] text-gray-400">
-                            <div className="flex items-center gap-1.5"><Calendar size={12} className="text-gray-500" /><span>{formattedDate} {isToday && <span className="text-blue-500 font-bold text-[9px] ml-1">(오늘)</span>}</span></div>
-                            <div className="flex items-center gap-1.5"><Clock size={12} className="text-gray-500" /><span>{(() => {
-                              const status = makeup.attendance_status || '';
-                              if (status.includes(':')) {
-                                const parts = status.split(':');
-                                const time = `${parts[1]}:${parts[2] || '00'}`;
-                                return `${time} 수업`;
-                              }
-                              return makeup.moved_to_hour ? `${makeup.moved_to_hour}:00 수업` : '교시 지정 안됨';
-                            })()}</span></div>
-                          </div>
-                        </div>
+                          {/* 카드 바디: 소속 학생 목록 */}
+                          <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5 custom-scrollbar-v">
+                            {group.items.map((makeup) => {
+                              const studentObj = students.find(s => s.id === makeup.student_id);
+                              const isCompleted = makeup.attendance_status === '출석' || makeup.attendance_status === '결석';
+                              
+                              return (
+                                <div key={makeup.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0 group/row">
+                                  <div className="flex flex-col min-w-0 pr-2">
+                                    <span className="text-xs font-bold text-white truncate">{makeup.student_name}</span>
+                                    <span className="text-[8.5px] font-black text-gray-500 uppercase">{studentObj?.grade || '정보없음'}</span>
+                                  </div>
 
-                        <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between">
-                          <span className="text-[9px] font-bold text-gray-600 uppercase">{studentObj?.grade || '정보없음'}</span>
-                          
-                          <div className="flex gap-1">
-                            <button 
-                              onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '출석')}
-                              className="text-[9px] font-black px-2 py-1 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 text-emerald-400 rounded transition-all"
-                            >
-                              출석 체크
-                            </button>
-                            <button 
-                              onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '결석')}
-                              className="text-[9px] font-black px-2 py-1 bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 rounded transition-all"
-                            >
-                              결석 처리
-                            </button>
+                                  <div className="flex items-center gap-1.5 shrink-0">
+                                    {isCompleted ? (
+                                      <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${
+                                        makeup.attendance_status === '출석'
+                                          ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                                          : 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                                      }`}>
+                                        {makeup.attendance_status}
+                                      </span>
+                                    ) : (
+                                      <div className="flex gap-1">
+                                        <button 
+                                          onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '출석')}
+                                          className="text-[8px] font-black px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 text-emerald-400 rounded transition-all"
+                                        >
+                                          출석
+                                        </button>
+                                        <button 
+                                          onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '결석')}
+                                          className="text-[8px] font-black px-1.5 py-0.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 rounded transition-all"
+                                        >
+                                          결석
+                                        </button>
+                                      </div>
+                                    )}
+
+                                    <button 
+                                      onClick={() => handleDeleteMakeup(makeup.id)}
+                                      className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500 hover:bg-rose-500/5 transition-all opacity-0 group-hover/row:opacity-100"
+                                      title="보강 취소"
+                                    >
+                                      <Trash2 size={10} />
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       </motion.div>
@@ -830,8 +883,7 @@ export default function TeacherTasks({
                   </div>
 
                   {/* Search Results */}
-                  {(makeupSearch.trim() || makeupGradeFilter !== 'all' || makeupDayFilter !== 'all') && (
-                    <div className="space-y-1.5">
+                  <div className="space-y-1.5">
                       <div className="flex items-center justify-between px-1">
                         <span className="text-[9px] font-bold text-gray-500">검색 결과 ({filteredStudents.length}명)</span>
                         {filteredStudents.length > 0 && (
@@ -868,7 +920,6 @@ export default function TeacherTasks({
                         )}
                       </div>
                     </div>
-                  )}
 
                   {/* Selected Students Chips */}
                   {selectedStudentIds.length > 0 && (
@@ -891,12 +942,7 @@ export default function TeacherTasks({
                     </div>
                   )}
 
-                  {/* 안내 가이드 (아무 조건도 지정되지 않은 경우) */}
-                  {!makeupSearch.trim() && makeupGradeFilter === 'all' && makeupDayFilter === 'all' && (
-                    <div className="p-4 border border-dashed border-white/5 rounded-lg text-center text-xs text-gray-600">
-                      이름을 입력하거나 학년/요일 필터를 선택하면 대상 학생이 노출됩니다.
-                    </div>
-                  )}
+
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2">
