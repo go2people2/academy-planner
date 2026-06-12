@@ -219,7 +219,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
       if (selectedTeacherId && selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
       const studentHour = getStudentHour(s);
-      if (baseH !== null && studentHour !== 999 && studentHour < baseH) return false;
+      if (baseH !== null && studentHour !== 999 && studentHour < baseH && !isMakeup) return false;
       return true;
     }).sort((a, b) => {
       if (activeTab === 'timer') {
