@@ -684,6 +684,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   // 1. 기본 필드 필터링
   const filteredData = getFilteredBaseFields(sessionData);
 
+  // 💡 [수정] 출결 덮어쓰기 시 기존 보강 시간(moved_to_hour) 정보가 리셋/유실되는 현상 방지
+  if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
+    if (filteredData.moved_to_hour === undefined) {
+      filteredData.moved_to_hour = student.todaySession.moved_to_hour;
+    }
+  }
+
   // 2. 예정 테스트 정보 가공 (homework_to)
   const nqObj = {
     text: ('next_quiz_text' in sessionData) ? sessionData.next_quiz_text : (student.todaySession?.next_quiz_text ?? ''),
