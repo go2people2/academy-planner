@@ -40,7 +40,27 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
     const testLogs = logs.filter(l => l.test_score !== null && l.test_score !== undefined).slice(0, 5);
     const avgTestScore = testLogs.length > 0 ? Math.round(testLogs.reduce((acc, l) => acc + (Number(l.test_score) || 0), 0) / testLogs.length) : 0;
 
-    return { attendanceRate, homeworkRate, avgTestScore, testCount: testLogs.length };
+    // 4. 이번 달 결석 / 보강 횟수 계산
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentMonthStr = String(currentMonth + 1).padStart(2, '0');
+    const currentMonthPrefix = `${currentYear}-${currentMonthStr}`;
+
+    const thisMonthLogs = logs.filter(l => l.date && l.date.startsWith(currentMonthPrefix));
+    const absencesCount = thisMonthLogs.filter(l => l.attendance_status === '결석').length;
+    const makeupsCount = thisMonthLogs.filter(l => l.attendance_status && l.attendance_status.startsWith('보강')).length;
+    const currentMonthName = `${currentMonth + 1}월`;
+
+    return { 
+      attendanceRate, 
+      homeworkRate, 
+      avgTestScore, 
+      testCount: testLogs.length,
+      absencesCount,
+      makeupsCount,
+      currentMonthName
+    };
   }, [student.allLogs]);
 
   return (
@@ -136,11 +156,33 @@ function TabButton({ active, onClick, icon, label }: any) {
 function SummaryTab({ student, stats, availableTextbooks }: any) {
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+      {/* 기본 주요 지표 */}
       <div className="grid grid-cols-3 gap-4">
         <MetricCard label="평균 출석률" value={`${stats.attendanceRate}%`} sub="최근 20세션" color="text-emerald-500" icon={<CheckCircle2 size={16}/>} />
         <MetricCard label="숙제 이행률" value={`${stats.homeworkRate}%`} sub="최근 4주" color="text-blue-500" icon={<BookOpen size={16}/>} />
         <MetricCard label="테스트 평균" value={`${stats.avgTestScore}점`} sub="최근 5회" color="text-orange-500" icon={<BarChart3 size={16}/>} />
       </div>
+
+      {/* 당월 출결 및 보강 통계 */}
+      <section className="space-y-3">
+        <SectionTitle title={`${stats.currentMonthName} 출결 및 보강 통계`} />
+        <div className="grid grid-cols-2 gap-4">
+          <MetricCard 
+            label="이번 달 결석" 
+            value={`${stats.absencesCount}회`} 
+            sub="당월 누적 결석" 
+            color="text-rose-400" 
+            icon={<AlertCircle size={16} className="text-rose-400" />} 
+          />
+          <MetricCard 
+            label="이번 달 보강 진행" 
+            value={`${stats.makeupsCount}회`} 
+            sub="당월 누적 보강" 
+            color="text-blue-400" 
+            icon={<Clock size={16} className="text-blue-400" />} 
+          />
+        </div>
+      </section>
 
       {/* 💡 학생 관리 메모 (노란 삼각형 클릭 시 주요 확인 대상) */}
       {student.management_notes && (
