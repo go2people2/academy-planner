@@ -526,28 +526,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                           <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1"><div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isPureAttend ? 'bg-white/10 text-gray-500' : isMakeupActive ? 'bg-blue-500 text-white' : isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isCriticalWarning ? 'bg-red-500 text-white' : isLateWarning ? 'bg-amber-500 text-black' : isSupplementPending ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-blue-600 text-white'}`}>{isPureAttend ? <Check size={10} strokeWidth={4} /> : isAbsent ? <LogOut size={10} /> : isLate ? <Clock size={10} strokeWidth={3} /> : isMakeupActive ? <CalendarClock size={10} /> : isSupplementPending ? <Plus size={10} strokeWidth={4} /> : <User size={10} />}</div><button onClick={(e) => { e.stopPropagation(); setActiveStudentId(s.id); setIsTimeShiftOpen(false); }} className="p-1 hover:bg-white/10 rounded transition-colors text-gray-600 hover:text-white"><MoreHorizontal size={12} /></button></div>
                           <div className="text-center px-1"><h3 className={`text-2xl font-black tracking-tighter leading-none ${isPureAttend ? 'text-gray-400' : 'text-white'}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
                             {(() => { const isES = s.grade.includes('초'); const isHS = s.grade.includes('고'); const colorClass = isES ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : isHS ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'; return <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${isPureAttend ? 'text-gray-600 border-white/5 bg-white/5 opacity-50' : colorClass}`}>{s.grade}</p>; })()}
-                            <div className="flex items-center gap-1.5 mt-1 justify-center">
-                              {s.management_notes && (
-                                <div className="relative group/tooltip">
-                                  <StickyNote size={12} className="text-amber-500 opacity-40 group-hover/tooltip:opacity-100 transition-opacity" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-amber-100 text-amber-900 text-[10px] font-bold rounded shadow-xl opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-all z-50 border border-amber-200">
-                                    <div className="flex items-center gap-1 mb-1 border-b border-amber-900/10 pb-1 text-[8px] uppercase tracking-tighter opacity-60"><StickyNote size={8} /> Teacher's Note</div>
-                                    <div className="whitespace-pre-wrap leading-tight text-left">{s.management_notes}</div>
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-amber-100" />
-                                  </div>
-                                </div>
-                              )}
-                              {s.recent_mission && (
-                                <div className="relative group/tooltip">
-                                  <Target size={12} className="text-blue-500 opacity-40 group-hover/tooltip:opacity-100 transition-opacity" />
-                                  <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-48 p-2 bg-blue-600 text-white text-[10px] font-bold rounded shadow-xl opacity-0 group-hover/tooltip:opacity-100 pointer-events-none transition-all z-50 border border-blue-400/30">
-                                    <div className="flex items-center gap-1 mb-1 border-b border-white/20 pb-1 text-[8px] uppercase tracking-tighter opacity-60"><Target size={8} /> Current Mission</div>
-                                    <div className="whitespace-pre-wrap leading-tight text-left">{s.recent_mission}</div>
-                                    <div className="absolute top-full left-1/2 -translate-x-1/2 border-8 border-transparent border-t-blue-600" />
-                                  </div>
-                                </div>
-                              )}
-                            </div>
+
                           </div></div>
                           {isAnyMarked && <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isMakeupActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-gray-400'}`}>{isMakeupActive ? (hasMovedHour ? `${s.todaySession?.moved_to_hour}시` : '보강') : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status)}</div>}
                           {isBeforeClass && <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">수업전</div>}
