@@ -15,14 +15,14 @@ interface UseTodaySheetClipboardProps {
   activeColumns: any[];
   selectedRange: any;
   selectedDate: string;
-  handleBatchSaveWithUndo: (updates: any[]) => Promise<void>;
+  handleBatchSave: (updates: any[]) => Promise<void>;
   selectedIds: string[];
 }
 
 export function useTodaySheetClipboard({
   activeCell, editingCell, setEditingCell,
   students, setStudents, filteredStudents, activeColumns,
-  selectedRange, selectedDate, handleBatchSaveWithUndo, selectedIds
+  selectedRange, selectedDate, handleBatchSave, selectedIds
 }: UseTodaySheetClipboardProps) {
 
   // 1. 복사 핸들러
@@ -133,10 +133,10 @@ export function useTodaySheetClipboard({
 
         syncTodaySheetDom(updates, Array.from(pastedColIds));
         setEditingCell(null);
-        await handleBatchSaveWithUndo(updates);
+        await handleBatchSave(updates);
       }
     } catch (err) { console.error('Paste error:', err); }
-  }, [activeCell, editingCell, activeColumns, selectedIds, filteredStudents, handleBatchSaveWithUndo, setStudents, setEditingCell]);
+  }, [activeCell, editingCell, activeColumns, selectedIds, filteredStudents, handleBatchSave, setStudents, setEditingCell]);
 
   return { handleCopy, handlePaste };
 }

@@ -25,6 +25,7 @@ interface TodaySheetRowProps {
   isHistoryExpanded: boolean;
   onToggleHistory: (id: string) => void;
   currentUser: any;
+  academyInfo?: any;
   activeCell?: { studentId: string; columnId: string } | null;
   editingCell?: { studentId: string; columnId: string } | null;
   onActiveCellChange?: (studentId: string, colId: string) => void;
@@ -36,6 +37,8 @@ interface TodaySheetRowProps {
   onCellMouseDown?: (e: React.MouseEvent, studentId: string, colId: string) => void;
   onCellMouseEnter?: (studentId: string, colId: string) => void;
   rowIndex?: number;
+  isFirstInTimeSection?: boolean;
+  timeSectionLabel?: string;
 }
 
 /**
@@ -47,8 +50,25 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     selectedDate, isHistoryExpanded, onToggleHistory, activeCell, editingCell,
     onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
     selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
-    rowIndex
+    rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel
   } = props;
+
+  // 💡 단축어 및 트리거 기호 추출
+  const isMasterAdmin = currentUser?.id === 'admin';
+  const currentPresets = isMasterAdmin 
+    ? (academyInfo?.default_homework_presets || {}) 
+    : (currentUser?.homework_presets || {});
+  
+  const snippets = React.useMemo(() => {
+    const arr = currentPresets.snippets || [];
+    const result = [...arr];
+    while (result.length < 10) {
+      result.push('');
+    }
+    return result.slice(0, 10);
+  }, [currentPresets.snippets]);
+
+  const snippetTrigger = currentPresets.snippet_trigger || ';';
 
   // 1. 커스텀 훅 호출 (모든 상태와 핸들러 포함)
   const { states, refs, handlers } = useTodaySheetRowLogic({
@@ -69,13 +89,17 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
 
   return (
     <>
-      <tr className={`group/row transition-all duration-300 border-b border-white/5 ${isSelected ? 'bg-blue-600/10' : (!!(student.todaySession?.id && student.todaySession.id !== 'temp') ? 'bg-white/[0.01]' : 'bg-transparent')} hover:bg-white/[0.03]`}>
+      <tr className={`group/row transition-all duration-300 border-b border-white/10 ${isSelected ? 'bg-blue-600/10' : (!!(student.todaySession?.id && student.todaySession.id !== 'temp') ? 'bg-white/[0.01]' : 'bg-transparent')} hover:bg-white/[0.03]`}>
         {activeColumns.map((col) => {
           const isSticky = col.id === 'name' || col.id === 'action' || col.id === 'select';
           return (
             <TodaySheetCell
               key={col.id}
               col={col}
+              snippets={snippets}
+              snippetTrigger={snippetTrigger}
+              isFirstInTimeSection={isFirstInTimeSection}
+              timeSectionLabel={timeSectionLabel}
               styles={{
                 width: colWidths[col.id] || col.minWidth,
                 position: isSticky ? 'sticky' : 'relative',

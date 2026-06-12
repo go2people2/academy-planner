@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useCallback } from 'react';
 import { mapColumnToProp, COLUMN_TO_FIELD_MAP } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetClipboard } from './useTodaySheetClipboard';
@@ -17,8 +17,7 @@ interface UseTodaySheetShortcutsProps {
   selectedRange: any;
   setSelectedRange: (range: any) => void;
   selectedDate: string;
-  performUndo: () => void;
-  handleBatchSaveWithUndo: (updates: any[]) => Promise<void>;
+  handleBatchSave: (updates: any[]) => Promise<void>;
   handleSetSwitch: (setId: string) => void;
   setIsDragging: (isDragging: boolean) => void;
   selectedIds: string[];
@@ -33,11 +32,97 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     activeCell, setActiveCell, editingCell, setEditingCell,
     students, setStudents,
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
-    performUndo, handleBatchSaveWithUndo, handleSetSwitch, setIsDragging, selectedIds
+    handleBatchSave, handleSetSwitch, setIsDragging, selectedIds
   } = props;
 
   // 1. 클립보드 로직 분리 (handleCopy, handlePaste)
   const { handleCopy, handlePaste } = useTodaySheetClipboard(props);
+
+  // 아래 방향 자동 채우기 (Fill Down)
+  const handleFillDown = useCallback(() => {
+    if (!selectedRange) return;
+    const sI = filteredStudents.findIndex(s => s.id === selectedRange.startStudentId);
+    const eI = filteredStudents.findIndex(s => s.id === selectedRange.endStudentId);
+    const sC = activeColumns.findIndex(c => c.id === selectedRange.startColId);
+    const eC = activeColumns.findIndex(c => c.id === selectedRange.endColId);
+    
+    if (sI === -1 || eI === -1 || sC === -1 || eC === -1) return;
+    
+    const rMin = Math.min(sI, eI);
+    const rMax = Math.max(sI, eI);
+    const cMin = Math.min(sC, eC);
+    const cMax = Math.max(sC, eC);
+    
+    if (rMin === rMax) return; // 채울 대상 아래 행이 없는 경우 스킵
+    
+    const sourceStudent = filteredStudents[rMin];
+    const sourceSession = sourceStudent.todaySession || {};
+    const updates: any[] = [];
+    const targetColIds: string[] = [];
+    
+    for (let c = cMin; c <= cMax; c++) {
+      const colId = activeColumns[c].id;
+      if (!['select', 'name', 'action', 'date', 'attendance'].includes(colId)) {
+        targetColIds.push(colId);
+      }
+    }
+    
+    if (targetColIds.length === 0) return;
+    
+    for (let r = rMin + 1; r <= rMax; r++) {
+      const targetStudent = filteredStudents[r];
+      const targetSession = targetStudent.todaySession || {};
+      const newData: any = {};
+      let changed = false;
+      
+      targetColIds.forEach(colId => {
+        const prop = mapColumnToProp(colId);
+        let val = '';
+        if (colId === 'mission') {
+          val = sourceStudent.recent_mission || '';
+          if ((targetStudent.recent_mission || '') !== val) {
+            newData[prop] = val;
+            changed = true;
+          }
+        } else {
+          val = sourceSession[prop] || '';
+          if ((targetSession[prop] || '') !== val) {
+            newData[prop] = val;
+            changed = true;
+          }
+        }
+      });
+      
+      if (changed) {
+        updates.push({
+          studentId: targetStudent.id,
+          newData,
+          prevData: { ...targetSession }
+        });
+      }
+    }
+    
+    if (updates.length > 0) {
+      setStudents((prev: any[]) => prev.map(s => {
+        const update = updates.find(u => u.studentId === s.id);
+        if (update) {
+          const hasMission = 'mission' in update.newData;
+          return {
+            ...s,
+            ...(hasMission ? { recent_mission: update.newData.mission } : {}),
+            todaySession: {
+              ...(s.todaySession || {}),
+              ...update.newData
+            }
+          };
+        }
+        return s;
+      }));
+      
+      syncTodaySheetDom(updates, targetColIds);
+      handleBatchSave(updates);
+    }
+  }, [filteredStudents, activeColumns, selectedRange, setStudents, handleBatchSave]);
 
   // 2. 전역 키보드 및 마우스 이벤트 바인딩
   useEffect(() => {
@@ -63,12 +148,25 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         return;
       }
 
-      // Cmd+Z / Ctrl+Z (Undo)
-      if ((e.metaKey || e.ctrlKey) && e.key === 'z' && !e.shiftKey) {
-        if (!isInput || (target as HTMLInputElement).selectionStart === (target as HTMLInputElement).selectionEnd) {
-          e.preventDefault(); performUndo(); return;
+      // Ctrl+D / Alt+D (Fill Down)
+      const isDKey = e.key?.toLowerCase() === 'd' || e.code === 'KeyD';
+      const isModifierPressed = e.ctrlKey || e.altKey;
+      if (isModifierPressed && isDKey && !e.shiftKey) {
+        if (selectedRange) {
+          e.preventDefault();
+          if (isInput) {
+            target.blur();
+            requestAnimationFrame(() => {
+              handleFillDown();
+            });
+          } else {
+            handleFillDown();
+          }
+          return;
         }
       }
+
+
 
       if (!activeCell) return;
       const rIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
@@ -88,10 +186,48 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       // Enter / Tab 네비게이션
       if ((e.key === 'Enter' && !e.shiftKey && !e.altKey) || e.key === 'Tab') {
         if (e.key === 'Enter' && !isInput) return;
+
+        // 💡 [수정] 점수 개수 모드(분수)에서 분자 -> 분모로 Tab 키 내부 이동을 할 때는 전역 탭 이동 차단
+        if (e.key === 'Tab' && !e.shiftKey && activeCell?.columnId === 'test_score') {
+          const studentObj = filteredStudents.find(s => s.id === activeCell.studentId);
+          if (studentObj?.todaySession?.test_score_type === 'count') {
+            if (target.getAttribute('data-col-id') === 'test_score' && target.tagName === 'INPUT') {
+              return; // 전역 낚아채기를 스킵하여 ScoreCell 내부의 Tab 포커스 이동이 실행되도록 합니다.
+            }
+          }
+        }
+
         e.preventDefault(); 
-        setSelectedRange(null);
-        if (e.key === 'Enter') nR++; 
-        else if (e.shiftKey) nC--; else nC++;
+
+        // 💡 [수정] 강제 이동으로 인한 언마운트 전에 포커스를 먼저 해제하여 정식 onBlur 자동저장 실행
+        if (isInput) {
+          (target as HTMLElement).blur();
+        }
+
+        // 💡 blur에 따른 저장 프로세스가 먼저 실행될 수 있도록 브라우저 다음 프레임에서 안전하게 이동
+        requestAnimationFrame(() => {
+          setSelectedRange(null);
+          
+          let targetR = rIdx;
+          let targetC = cIdx;
+          if (e.key === 'Enter') targetR++; 
+          else if (e.shiftKey) targetC--; else targetC++;
+
+          targetR = Math.max(0, Math.min(filteredStudents.length - 1, targetR));
+          targetC = Math.max(0, Math.min(activeColumns.length - 1, targetC));
+          
+          if (targetR !== rIdx || targetC !== cIdx) {
+            const nS = filteredStudents[targetR];
+            const nCol = activeColumns[targetC];
+            if (nS && nCol) {
+              setActiveCell({ studentId: nS.id, columnId: nCol.id });
+              setTimeout(() => setEditingCell({ studentId: nS.id, columnId: nCol.id }), 50);
+            }
+          } else {
+            setEditingCell(null);
+          }
+        });
+        return; // 후반부 동기 셀 이동 로직과의 중복 실행 방지
       }
 
       // 💡 [추가] 선택 모드에서 즉시 타이핑 시 기존 내용 덮어쓰며 편집 시작 (엑셀 방식)
@@ -176,7 +312,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
           
           if (updates.length > 0) { 
             syncTodaySheetDom(updates, targetColIds, true); 
-            handleBatchSaveWithUndo(updates); 
+            handleBatchSave(updates); 
           }
         }
       }
@@ -198,7 +334,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     };
   }, [
     activeCell, setActiveCell, editingCell, setEditingCell, filteredStudents, activeColumns, 
-    selectedRange, setSelectedRange, performUndo, handleBatchSaveWithUndo, handleSetSwitch, 
-    handleCopy, handlePaste, setIsDragging, selectedIds
+    selectedRange, setSelectedRange, handleBatchSave, handleSetSwitch, 
+    handleCopy, handlePaste, setIsDragging, selectedIds, handleFillDown
   ]);
 }

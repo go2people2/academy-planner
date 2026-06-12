@@ -17,7 +17,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
   return (
     <>
       {history.map((log: any, idx: number) => (
-        <tr key={`${student.id}-hist-${idx}`} className="bg-white/[0.01] border-b border-white/[0.05] transition-colors hover:bg-white/[0.03] align-middle text-[11px]">
+        <tr key={`${student.id}-hist-${idx}`} className="bg-white/[0.01] border-b border-white/10 transition-colors hover:bg-white/[0.03] align-middle text-[11px]">
           {activeColumns.map((col: any) => {
             const styles = { 
               width: colWidths[col.id] || col.minWidth, 
@@ -28,21 +28,21 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
               backgroundColor: '#050505' 
             };
             
-            if (col.id === 'date') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/5 text-gray-400 text-[10px] font-black text-center">{log.date.slice(5).replace('-', '.')}</td>;
-            if (col.id === 'name') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/10 opacity-30 italic text-gray-600">-</td>;
+            if (col.id === 'date') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-400 text-[10px] font-black text-center">{log.date.slice(5).replace('-', '.')}</td>;
+            if (col.id === 'name') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 opacity-30 italic text-gray-600">-</td>;
             if (col.id === 'attendance') {
               const status = log.attendance_status || '출석';
               const colorClass = status.startsWith('출석') ? 'text-emerald-400' : status.startsWith('결석') ? 'text-red-400' : 'text-amber-400';
-              return <td key={col.id} style={styles} className={`py-3 px-3 border-r border-white/5 text-left font-black text-[11px] ${colorClass}`}>{status}</td>;
+              return <td key={col.id} style={styles} className={`py-3 px-3 border-r border-white/12 text-left font-black text-[11px] ${colorClass}`}>{status}</td>;
             }
-            if (col.id === 'test_id') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/5 text-gray-300 font-bold text-[11px] truncate text-left">{log.test_id}</td>;
-            if (col.id === 'test_score') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/5 text-left text-blue-400 font-black text-[12px]">{log.test_score ? `${log.test_score}%` : '-'}</td>;
-            if (col.id === 'review') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/5 text-gray-500 italic truncate text-[11px]">Prev: {log.status}</td>;
-            if (col.id === 'classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/5 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.classwork_text || '-'}</td>;
-            if (col.id === 'assign') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/5 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.homework_text || '-'}</td>;
-            if (col.id === 'next_quiz') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/5 text-gray-400 italic text-[11px] whitespace-pre-wrap leading-tight text-left">{log.next_quiz_text} {log.next_quiz_cut !== undefined ? `(Cut: ${log.next_quiz_cut})` : ''}</td>;
-            if (col.id === 'notes') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/5 text-amber-200/50 italic text-[10px] truncate text-left">{log.special_notes}</td>;
-            if (col.id === 'action') return <td key={col.id} style={styles} className="py-3 sticky right-0 bg-[#050505] z-20 border-l border-white/10 text-center text-gray-800">-</td>;
+            if (col.id === 'test_id') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-300 font-bold text-[11px] truncate text-left">{log.test_id}</td>;
+            if (col.id === 'test_score') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-left text-blue-400 font-black text-[12px]">{log.test_score ? `${log.test_score}%` : '-'}</td>;
+            if (col.id === 'review') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-500 italic truncate text-[11px]">Prev: {log.status}</td>;
+            if (col.id === 'classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.classwork_text || '-'}</td>;
+            if (col.id === 'assign') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.homework_text || '-'}</td>;
+            if (col.id === 'next_quiz') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-400 italic text-[11px] whitespace-pre-wrap leading-tight text-left">{log.next_quiz_text} {log.next_quiz_cut !== undefined ? `(Cut: ${log.next_quiz_cut})` : ''}</td>;
+            if (col.id === 'notes') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-amber-200/50 italic text-[10px] truncate text-left">{log.special_notes}</td>;
+            if (col.id === 'action') return <td key={col.id} style={styles} className="py-3 sticky right-0 bg-[#050505] z-20 border-l border-white/10" />;
             return <td key={col.id} style={styles}></td>;
           })}
         </tr>

@@ -13,6 +13,7 @@ import StudentDetailDrawer from '@/components/dashboard/StudentDetailDrawer';
 import StudentStudyReportDrawer from '@/components/dashboard/StudentStudyReportDrawer';
 import MorningBriefingModal from '@/components/dashboard/MorningBriefingModal';
 import ClassroomMode from '@/components/dashboard/ClassroomMode';
+import TeacherTasks from '@/components/dashboard/TeacherTasks';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
@@ -1096,9 +1097,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
             )}
 
             {viewMode === 'progress' && <ProgressSequencer students={filteredAllStudents} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
-            {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} />}
+            {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} onSelectStudent={setSelectedStudentId} />}
             {viewMode === 'notifications' && <NotificationsView academyInfo={academy} students={students} currentUser={currentUser} />}
             {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} noticeDrafts={noticeDrafts} onNoticeDraftChange={handleNoticeDraftChange} />}
+            {viewMode === 'teacherTask' && <TeacherTasks academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} onRefreshStudents={fetchAllData} />}
           </div>
         )}
       </main>

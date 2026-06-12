@@ -27,6 +27,10 @@ interface TodaySheetCellProps {
   isHistoryExpanded: boolean;
   displayDateShort: string;
   statusMap: Record<string, any>;
+  snippets?: string[];
+  snippetTrigger?: string;
+  isFirstInTimeSection?: boolean;
+  timeSectionLabel?: string;
   
   // Refs
   testRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -84,7 +88,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal, // 💡 onOpenCcwEditor 추가
   onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave,
   onInputChange,
-  rowIndex
+  rowIndex,
+  snippets,
+  snippetTrigger,
+  isFirstInTimeSection,
+  timeSectionLabel
 }: TodaySheetCellProps) {
   
   const colId = col.id;
@@ -155,7 +163,48 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   };
 
   const handleLocalInput = (e: React.FormEvent<HTMLTextAreaElement | HTMLInputElement>, field: string) => {
-    const val = (e.target as any).value;
+    const target = e.target as any;
+    let val = target.value;
+
+    // 💡 단축어 트리거 치환 감지 (textarea 에서만 동작)
+    if (e.target instanceof HTMLTextAreaElement && snippets && snippetTrigger && snippetTrigger !== 'none') {
+      const escapedTrigger = snippetTrigger.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+      
+      // 맥북 한글 상태에서 백틱 입력 시 ₩로 입력되는 현상 대응
+      let triggerRegexStr = escapedTrigger;
+      if (snippetTrigger === '`') {
+        triggerRegexStr = '[`₩]';
+      }
+      
+      const regex = new RegExp(`${triggerRegexStr}([1-9]|10|0)$`);
+      const match = val.match(regex);
+
+      if (match) {
+        const matchedStr = match[0];
+        const numStr = match[1];
+        let idx = parseInt(numStr) - 1;
+        if (numStr === '0' || numStr === '10') idx = 9;
+
+        const snip = snippets[idx];
+        if (snip) {
+          const startPos = target.selectionStart - matchedStr.length;
+          const endPos = target.selectionStart;
+          const before = val.substring(0, startPos);
+          const after = val.substring(endPos);
+          const newVal = before + snip + after;
+
+          val = newVal;
+          target.value = newVal;
+
+          const newCursorPos = startPos + snip.length;
+          requestAnimationFrame(() => {
+            target.selectionStart = newCursorPos;
+            target.selectionEnd = newCursorPos;
+          });
+        }
+      }
+    }
+
     if (onInputChange) onInputChange(field, val);
     
     if (e.target instanceof HTMLTextAreaElement) {
@@ -165,14 +214,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
-  const commonTextStyle = `w-full text-[12px] leading-[18px] text-left text-white font-black px-4 ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
+  const textColClass = colId === 'mission' ? 'text-amber-200/90 font-bold' : 'text-white font-black';
+  const commonTextStyle = `w-full text-[12px] leading-[18px] text-left ${textColClass} px-4 ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
 
   return (
     <td 
       ref={tdRef}
       style={styles} 
       tabIndex={0}
-      className={`border-r border-white/15 relative group/td outline-none align-top ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''}`}
+      className={`border-r border-white/12 relative group/td outline-none align-top ${
+        isFirstInTimeSection ? 'border-t-[3px] border-t-blue-500/60 shadow-[inset_0_1px_0_rgba(59,130,246,0.2)]' : ''
+      } ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''}`}
       onMouseDown={(e) => onCellMouseDown(e, student.id, colId)}
       onMouseEnter={() => onCellMouseEnter(student.id, colId)}
       onClick={(e) => handleCellInteraction(e, colId, 'click')}
@@ -183,11 +235,61 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         <div className="absolute inset-0 z-20 cursor-default" />
       )}
 
-      <div className={`flex items-start min-h-[56px] h-full w-full ${['select', 'action', 'date'].includes(colId) ? 'justify-center' : 'justify-start'}`}>
+      {colId === 'action' ? (
+        <button 
+          type="button"
+          onClick={(e) => { 
+            e.stopPropagation(); 
+            onSave(colId); 
+          }} 
+          disabled={isSaving}
+          className={`absolute inset-0 w-full h-full transition-all duration-300 outline-none border-0 p-0 m-0 z-30 cursor-pointer ${
+            isSaving ? 'bg-blue-500 animate-pulse cursor-wait' : 
+            saveStatus === 'success' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 
+            isCompleted ? 'bg-emerald-500/30 hover:bg-emerald-500/50' : 
+            saveStatus === 'error' ? 'bg-rose-500 animate-bounce shadow-[0_0_10px_rgba(244,63,94,0.4)]' : 
+            'bg-white/10 hover:bg-blue-600/50'
+          }`}
+          title={
+            isSaving ? '저장 중...' : 
+            saveStatus === 'success' ? '저장 성공' : 
+            isCompleted ? '저장 완료됨' : 
+            saveStatus === 'error' ? '저장 실패 (클릭하여 재시도)' : 
+            '저장되지 않음 (클릭하여 수동 저장)'
+          }
+        />
+      ) : (
+        <div className={`flex items-start min-h-[56px] h-full w-full ${['select', 'action', 'date'].includes(colId) ? 'justify-center' : 'justify-start'}`}>
         
         {colId === 'select' && (
-          <div className="flex items-center justify-center w-full h-[56px] relative z-30">
-            <input type="checkbox" checked={isSelected} onChange={(e) => onSelectOne?.(student.id, e.target.checked)} className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer" />
+          <div className="flex items-center justify-center w-full h-[56px] relative z-30 group/select select-none">
+            {isSelected ? (
+              <div className="flex items-center justify-center">
+                <input 
+                  type="checkbox" 
+                  checked={isSelected} 
+                  onChange={(e) => onSelectOne?.(student.id, e.target.checked)} 
+                  className="w-4 h-4 rounded border-white/20 bg-blue-600 checked:bg-blue-600 cursor-pointer" 
+                />
+              </div>
+            ) : (
+              <>
+                <div className="group-hover/select:hidden flex items-center justify-center">
+                  <input 
+                    type="checkbox" 
+                    checked={isSelected} 
+                    onChange={(e) => onSelectOne?.(student.id, e.target.checked)} 
+                    className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer" 
+                  />
+                </div>
+                <button 
+                  onClick={() => onSelectOne?.(student.id, !isSelected)}
+                  className="hidden group-hover/select:flex items-center justify-center w-5 h-5 rounded bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-blue-600/10 text-[9px] font-black text-gray-400 hover:text-blue-400 transition-colors"
+                >
+                  {(rowIndex ?? 0) + 1}
+                </button>
+              </>
+            )}
           </div>
         )}
 
@@ -200,6 +302,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'name' && (
           <div className="flex items-center justify-between gap-3 px-4 py-2.5 w-full h-[56px] relative group/namecell">
+            {isFirstInTimeSection && timeSectionLabel && (
+              <div className="absolute -top-[4px] right-4 z-[45] pointer-events-none select-none">
+                <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-black text-white tracking-widest uppercase shadow-[0_2px_8px_rgba(37,99,235,0.4)] border border-blue-400/40">
+                  {timeSectionLabel}
+                </span>
+              </div>
+            )}
             <div className="absolute top-0 right-0 flex flex-row-reverse items-start gap-1">
               {student.management_notes && (
                 <div 
@@ -357,6 +466,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             handleLocalInput={handleLocalInput}
             handleCellInteraction={handleCellInteraction}
             commonTextStyle={commonTextStyle}
+            snippets={snippets}
+            snippetTrigger={snippetTrigger}
           />
         )}
 
@@ -399,7 +510,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               </div>
             )}
             
-            <div className="absolute right-1 top-1 flex items-center gap-1 opacity-0 group-hover/cell:opacity-100 focus-within:opacity-100 transition-opacity z-30">
+            <div className="absolute right-1 top-1 flex items-center gap-1 opacity-30 group-hover/cell:opacity-100 focus-within:opacity-100 transition-all duration-200 z-30">
               {colId === 'test_id' && (
                 <>
                   {/* 💡 오늘 테스트 커트라인 픽커 버튼 */}
@@ -454,7 +565,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       ))}
                     </div>
                     <div className="pt-3 border-t border-white/5 flex flex-col gap-2">
-                      <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Custom Cut</label>
+                      <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">커트라인 직접 입력</label>
                       <input 
                         type="number"
                         autoFocus
@@ -496,15 +607,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onTestScoreTypeToggle={onTestScoreTypeToggle}
           />
         )}
-
-        {colId === 'action' && (
-          <div className="px-3 py-2 w-full h-[56px] flex items-center justify-center">
-            <button onClick={(e) => { e.stopPropagation(); onSave(colId); }} disabled={isSaving || (isCompleted && saveStatus === 'idle')} className={`w-full h-10 rounded-[4px] flex items-center justify-center transition-all shadow-lg z-30 ${isSaving ? 'bg-blue-600/50 cursor-wait' : saveStatus === 'success' ? 'bg-emerald-500 text-white shadow-emerald-500/40' : saveStatus === 'error' ? 'bg-red-500 text-white shadow-red-500/40' : (isCompleted) ? 'bg-emerald-500/20 text-emerald-500 border border-emerald-500/40' : 'bg-blue-600 hover:bg-blue-500 text-white active:scale-95 shadow-blue-900/40'}`}>
-              {isSaving ? <Loader2 size={16} className="animate-spin" /> : (saveStatus === 'success' || isCompleted) ? <Check size={18} className="stroke-[4px]" /> : saveStatus === 'error' ? <CheckCircle size={16} /> : <Send size={16} />}
-            </button>
-          </div>
-        )}
       </div>
+      )}
     </td>
   );
 });

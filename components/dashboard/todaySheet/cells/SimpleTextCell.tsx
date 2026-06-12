@@ -13,10 +13,12 @@ interface SimpleTextCellProps {
   handleLocalInput: (e: React.FormEvent<HTMLTextAreaElement>, field: string) => void;
   handleCellInteraction: (e: React.MouseEvent, colId: string, type: 'click' | 'dblclick') => void;
   commonTextStyle: string;
+  snippets?: string[];
+  snippetTrigger?: string;
 }
 
 export const SimpleTextCell = React.forwardRef<HTMLTextAreaElement, SimpleTextCellProps>(({
-  student, colId, currentText, isEditing, isActive, onSave, handleKeyDown, handleLocalInput, handleCellInteraction, commonTextStyle
+  student, colId, currentText, isEditing, isActive, onSave, handleKeyDown, handleLocalInput, handleCellInteraction, commonTextStyle, snippets, snippetTrigger
 }, ref) => {
 
   // 💡 [이식] 해당 컬럼의 자동 높이 조절 및 포커스 로직

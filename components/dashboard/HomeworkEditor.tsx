@@ -135,7 +135,7 @@ export default function HomeworkEditor({
       item.range = unitText ? `${unitText} ${rangeText}${activeNote}` : `${rangeText}${activeNote}`;
       item.units = uniqueUnitNames;
     } else {
-      const startText = start ? `p${start}` : '';
+      const startText = start ? (isNaN(Number(start)) ? start : `p${start}`) : '';
       const endText = end ? `~${end}` : '';
       item.range = `${startText}${endText}${activeNote}`;
       item.units = [];
@@ -164,16 +164,16 @@ export default function HomeworkEditor({
   };
 
   return createPortal(
-    <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center">
+    <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-start pl-[5vw] md:pl-[10vw]">
       <motion.div 
         id="homework-editor-portal"
         drag 
         dragMomentum={false}
-        initial={{ opacity: 0, scale: 0.95, x: 100, y: 50 }}
+        initial={{ opacity: 0, scale: 0.95, x: -50, y: 0 }}
         animate={{ opacity: 1, scale: 1 }} 
         exit={{ opacity: 0, scale: 0.95 }}
         onClick={(e) => e.stopPropagation()} 
-        className="pointer-events-auto relative w-full max-w-[480px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-blue-500/30 rounded-sm shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] p-0 flex flex-col overflow-hidden"
+        className="pointer-events-auto relative w-full max-w-[680px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-blue-500/30 rounded-sm shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] p-0 flex flex-col overflow-hidden"
       >
         <div className="cursor-move bg-gradient-to-r from-blue-600/20 to-indigo-600/10 p-6 flex items-center justify-between border-b border-white/5 active:from-blue-600/30 transition-all">
           <div className="flex items-center gap-4">
@@ -182,7 +182,7 @@ export default function HomeworkEditor({
             </div>
             <div>
               <h4 className="font-black text-[13px] uppercase tracking-[0.2em] text-white">{title}</h4>
-              <p className="text-[9px] text-blue-400/60 font-bold uppercase tracking-wider mt-0.5">Automated Unit Discovery Enabled</p>
+              <p className="text-[9px] text-blue-400/60 font-bold uppercase tracking-wider mt-0.5">단원 자동 매칭 활성화</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
@@ -195,7 +195,7 @@ export default function HomeworkEditor({
               }}
               className="px-3 py-1.5 rounded-[2px] bg-red-500/10 text-red-500/60 hover:text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-500/10"
             >
-              <RefreshCcw size={12} /> Reset
+              <RefreshCcw size={12} /> 전체 초기화
             </button>
             <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-white transition-all hover:rotate-90 duration-300">
               <X size={20} />
@@ -242,15 +242,15 @@ export default function HomeworkEditor({
               onClick={() => onUpdate([...homeworkJson, { type: 'custom', book_name: '', range: '' }])}
               className="w-full py-4 border border-dashed border-white/10 rounded-sm text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-2 group"
             >
-              <Plus size={14} /> Add Custom Print/Task
+              <Plus size={14} /> 프린트 / 기타 과제 직접 추가
             </button>
           </div>
 
           {/* 💡 실시간 셀 미리보기 영역 (원장님 요청사항) */}
           <div className="bg-blue-500/5 border border-blue-500/20 rounded-sm p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black text-blue-400/60 uppercase tracking-widest flex items-center gap-1.5"><ClipboardList size={12} /> Live Preview</span>
-              <span className="text-[8px] font-bold text-gray-600 italic">Result on Daily Sheet</span>
+              <span className="text-[9px] font-black text-blue-400/60 uppercase tracking-widest flex items-center gap-1.5"><ClipboardList size={12} /> 실시간 미리보기</span>
+              <span className="text-[8px] font-bold text-gray-600 italic">데일리 시트에 연동될 결과</span>
             </div>
             <div className="min-h-[40px] max-h-[80px] overflow-y-auto custom-scrollbar-v text-[12px] text-white font-black whitespace-pre-wrap leading-tight opacity-90">
               {(() => {
@@ -266,7 +266,7 @@ export default function HomeworkEditor({
                     const displayTitle = fullTitle.replace(/^\[.*?\]\s*/, '');
                     return `${displayTitle} ${h.range}`;
                   });
-                return lines.length > 0 ? lines.join('\n') : 'No entries yet... Enter page ranges.';
+                return lines.length > 0 ? lines.join('\n') : '입력된 내용이 없습니다. 페이지 범위를 기입해 주세요.';
               })()}
             </div>
           </div>
@@ -276,7 +276,7 @@ export default function HomeworkEditor({
               onClick={(e) => { e.stopPropagation(); onClose(); }} 
               className="w-full bg-blue-600 py-4 rounded-sm font-black text-[13px] uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/40 hover:bg-blue-500 active:scale-[0.98] transition-all text-white border border-blue-400/20"
             >
-              Confirm and Save (Ctrl+Enter)
+              확인 및 저장 (Ctrl+Enter)
             </button>
           </div>
         </div>
@@ -295,6 +295,7 @@ function HomeworkRow({
   const [endPage, setEndPage] = useState('');
   const [note, setNote] = useState('');
   const [isUnitsExpanded, setIsUnitsExpanded] = useState(false);
+  const [lastClickedIndex, setLastClickedIndex] = useState<number | null>(null); // 💡 추가
 
   // 💡 데이터가 외부에서 초기화(Reset)되었거나 변경되었을 때 내부 state도 동기화
   useEffect(() => {
@@ -302,6 +303,7 @@ function HomeworkRow({
       setStartPage('');
       setEndPage('');
       setNote('');
+      setLastClickedIndex(null); // 💡 초기화
     } else {
       setNote(hw.note || '');
       if (hw.start_page !== undefined || hw.end_page !== undefined) {
@@ -359,7 +361,7 @@ function HomeworkRow({
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-1.5 p-1.5 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 rounded-[2px] transition-all group">
-        <div className="flex-1 min-w-0 flex items-center gap-1.5 overflow-hidden">
+        <div className="flex-1 max-w-[220px] min-w-0 flex items-center gap-1.5 overflow-hidden">
           <BookOpen size={11} className="text-blue-500/40 shrink-0" />
           {hw.type === 'custom' ? (
             <input 
@@ -379,56 +381,46 @@ function HomeworkRow({
           )}
         </div>
 
-        {hw.type === 'book' ? (
-          <div className="flex items-center gap-1 shrink-0 relative group/input">
-            <div className="absolute -top-4 left-0 text-[7px] font-black text-blue-500 opacity-0 group-hover/input:opacity-100 transition-opacity uppercase tracking-tighter">Alt+{idx+1}</div>
-            <input 
-              ref={startRef}
-              type="text" 
-              value={startPage} 
-              onChange={(e) => setStartPage(e.target.value)}
-              onKeyDown={(e) => handleInputKeyDown(e, 'start')}
-              onBlur={handleFinalize}
-              placeholder="Start"
-              className="w-10 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
-            />
-            <span className="text-gray-700 text-[10px]">-</span>
-            <input 
-              ref={endRef}
-              type="text" 
-              value={endPage} 
-              onChange={(e) => setEndPage(e.target.value)}
-              onKeyDown={(e) => handleInputKeyDown(e, 'end')}
-              onBlur={handleFinalize}
-              placeholder="End"
-              className="w-10 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
-            />
-            <input 
-              type="text" 
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  commitPageChange(startPage, endPage, e.currentTarget.value);
-                  onKeyDown?.('ArrowDown', 'end');
-                }
-              }}
-              onBlur={(e) => commitPageChange(startPage, endPage, e.target.value)}
-              placeholder="메모"
-              className="w-14 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-blue-400 focus:border-blue-500 text-center font-bold"
-              title="예: 오답, 처음풀기, 풀기"
-            />
-          </div>
-        ) : (
+        <div className="flex items-center gap-1 shrink-0 relative group/input">
+          <div className="absolute -top-4 left-0 text-[7px] font-black text-blue-500 opacity-0 group-hover/input:opacity-100 transition-opacity uppercase tracking-tighter">단축키 Alt+{idx+1}</div>
+          <input 
+            ref={startRef}
+            type="text" 
+            value={startPage} 
+            onChange={(e) => setStartPage(e.target.value)}
+            onKeyDown={(e) => handleInputKeyDown(e, 'start')}
+            onBlur={handleFinalize}
+            placeholder={hw.type === 'custom' ? "상세 내용" : "시작"}
+            className={`${hw.type === 'custom' ? 'w-40' : 'w-16'} bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold`}
+          />
+          <span className="text-gray-700 text-[10px]">-</span>
+          <input 
+            ref={endRef}
+            type="text" 
+            value={endPage} 
+            onChange={(e) => setEndPage(e.target.value)}
+            onKeyDown={(e) => handleInputKeyDown(e, 'end')}
+            onBlur={handleFinalize}
+            placeholder="끝"
+            className="w-16 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
+          />
           <input 
             type="text" 
-            value={hw.range} 
-            placeholder="상세 내용" 
-            onChange={(e) => onUpdate({ ...hw, range: e.target.value })}
-            className="w-32 bg-black/40 border border-white/5 rounded-md px-2 py-1.5 text-[11px] outline-none text-white focus:border-blue-500" 
+            value={note}
+            onChange={(e) => setNote(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                commitPageChange(startPage, endPage, e.currentTarget.value);
+                onKeyDown?.('ArrowDown', 'end');
+              }
+            }}
+            onBlur={(e) => commitPageChange(startPage, endPage, e.target.value)}
+            placeholder="메모"
+            className="w-28 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-blue-400 focus:border-blue-500 text-center font-bold"
+            title="예: 오답, 처음풀기, 풀기"
           />
-        )}
+        </div>
 
         {hw.type === 'book' && (
           <div className="w-16 shrink-0 flex items-center gap-1 overflow-hidden" onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}>
@@ -456,22 +448,64 @@ function HomeworkRow({
                 const isSelected = hw.units?.includes(u.unit);
                 const isInRange = parseInt(startPage) <= parseInt(u.end_page) && parseInt(endPage) >= parseInt(u.start_page);
                 return (
-                  <button key={i} onClick={() => {
+                  <button key={i} onClick={(clickEvent) => {
                     const currentUnits = hw.units || [];
-                    const newUnits = currentUnits.includes(u.unit) ? currentUnits.filter(x => x !== u.unit) : [...currentUnits, u.unit];
+                    let newUnits: string[] = [];
+
+                    if (clickEvent.shiftKey && lastClickedIndex !== null) {
+                      const startIdx = Math.min(lastClickedIndex, i);
+                      const endIdx = Math.max(lastClickedIndex, i);
+                      const rangeUnits = unitData.slice(startIdx, endIdx + 1).map(x => x.unit);
+                      const targetState = !currentUnits.includes(u.unit);
+
+                      if (targetState) {
+                        newUnits = Array.from(new Set([...currentUnits, ...rangeUnits]));
+                      } else {
+                        newUnits = currentUnits.filter(x => !rangeUnits.includes(x));
+                      }
+                    } else {
+                      newUnits = currentUnits.includes(u.unit)
+                        ? currentUnits.filter(x => x !== u.unit)
+                        : [...currentUnits, u.unit];
+                    }
+
+                    setLastClickedIndex(i);
                     
-                    // 💡 단원 선택 시 해당 단원의 시작/끝 페이지 자동 입력 (비어있거나 단원 번호가 들어간 경우 등 대응)
-                    const s = String(u.start_page);
-                    const e = String(u.end_page);
+                    // 💡 선택된 단원들의 전체 페이지 범위 산출 (최솟값 ~ 최댓값)
+                    let s = "";
+                    let e = "";
+                    if (newUnits.length > 0) {
+                      const selectedData = unitData.filter(x => newUnits.includes(x.unit));
+                      const startPages = selectedData.map(x => parseInt(String(x.start_page).replace(/\D/g, ''))).filter(n => !isNaN(n));
+                      const endPages = selectedData.map(x => parseInt(String(x.end_page).replace(/\D/g, ''))).filter(n => !isNaN(n));
+                      
+                      if (startPages.length > 0) {
+                        s = String(Math.min(...startPages));
+                      }
+                      if (endPages.length > 0) {
+                        e = String(Math.max(...endPages));
+                      }
+                    }
+
                     setStartPage(s);
                     setEndPage(e);
                     
                     const unitText = unitData.filter(x => newUnits.includes(x.unit)).map(x => x.unit).join(', ');
                     const activeNote = hw.note ? ` ${hw.note}` : '';
+                    
+                    let rangeText = "";
+                    if (s && e) {
+                      rangeText = (s === e) ? `p${s}` : `p${s}~${e}`;
+                    } else if (s) {
+                      rangeText = `p${s}`;
+                    } else if (e) {
+                      rangeText = `p${e}`;
+                    }
+
                     onUpdate({ 
                       ...hw, 
                       units: newUnits, 
-                      range: unitText ? `${unitText} p${s}~${e}${activeNote}` : `p${s}~${e}${activeNote}`,
+                      range: unitText ? `${unitText} ${rangeText}${activeNote}` : `${rangeText}${activeNote}`,
                       start_page: s,
                       end_page: e,
                       note: hw.note

@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
-  ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon
+  ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
@@ -204,10 +204,10 @@ export default function Sidebar({
           <SidebarLink icon={<LayoutDashboard size={14} />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Bell size={14} />} label="Notifications" active={viewMode === 'notifications'} onClick={() => { setViewMode('notifications'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<TableIcon size={14} />} label="Daily Sheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} />
+          <SidebarLink icon={<ClipboardCheck size={14} />} label="업무 및 보강 관리" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Activity size={14} />} label="Progress" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<UserCog size={14} />} label="학생정보수정" active={viewMode === 'studentEdit'} onClick={() => { setViewMode('studentEdit'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<ArrowLeftRight size={14} />} label="이번 달 변동 사항" active={viewMode === 'monthlyChanges'} onClick={() => { setViewMode('monthlyChanges'); setSelectedFilter('All'); }} />
-          <SidebarLink icon={<UserX size={14} />} label="Discharged" active={viewMode === 'board' && selectedFilter === 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('Discharged'); }} />
         </nav>
 
         <nav className="space-y-1">
@@ -223,17 +223,108 @@ export default function Sidebar({
           </div>
 
           <div className="px-1 space-y-3">
-            <div className="flex bg-white/5 rounded-[2px] p-0.5 border border-white/5 w-full">
-              {[
-                { label: 'ALL', key: 'All' }, { label: 'HS', key: '고' }, { label: 'MS', key: '중' }, { label: 'ES', key: '초' }
-              ].map((g) => (
-                <button key={g.key} onClick={() => setSelectedFilter(g.key)} className={`flex-1 flex flex-col items-center py-1 rounded-[1px] transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'}`}>
-                  <span className="text-[9px] font-black uppercase">{g.label}</span>
-                  <span className={`text-[7px] font-bold opacity-40 ${selectedFilter === g.key ? 'text-white' : 'text-gray-500'}`}>
-                    {g.key === 'All' ? students.filter(s => !s.is_deleted).length : students.filter(s => !s.is_deleted && s.grade.includes(g.key)).length}
-                  </span>
-                </button>
-              ))}
+            <div className="space-y-1.5 w-full">
+              <div className="flex bg-white/5 rounded-[2px] p-0.5 border border-white/5 w-full">
+                {[
+                  { label: 'ALL', key: 'All' }, { label: 'HS', key: '고' }, { label: 'MS', key: '중' }, { label: 'ES', key: '초' }
+                ].map((g) => {
+                  const isActive = selectedFilter === g.key || (g.key !== 'All' && selectedFilter.startsWith(g.key));
+                  return (
+                    <button 
+                      key={g.key} 
+                      onClick={() => {
+                        if (g.key === 'All') {
+                          setSelectedFilter('All');
+                        } else {
+                          setSelectedFilter(g.key);
+                        }
+                      }} 
+                      className={`flex-1 flex flex-col items-center py-1 rounded-[1px] transition-all ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'}`}
+                    >
+                      <span className="text-[9px] font-black uppercase">{g.label}</span>
+                      <span className={`text-[7px] font-bold opacity-40 ${isActive ? 'text-white' : 'text-gray-500'}`}>
+                        {g.key === 'All' ? students.filter(s => !s.is_deleted).length : students.filter(s => !s.is_deleted && s.grade.includes(g.key)).length}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* 💡 세부 학년 폴더형 칩 필터 애니메이션 */}
+              <AnimatePresence initial={false}>
+                {['초', '중', '고'].some(key => selectedFilter.startsWith(key)) && (
+                  <motion.div 
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    className="overflow-hidden w-full pt-1"
+                  >
+                    {selectedFilter.startsWith('초') && (
+                      <div className="grid grid-cols-6 gap-1">
+                        {['1', '2', '3', '4', '5', '6'].map(num => {
+                          const gradeKey = `초${num}`;
+                          const isSubActive = selectedFilter === gradeKey;
+                          return (
+                            <button
+                              key={num}
+                              onClick={() => setSelectedFilter(isSubActive ? '초' : gradeKey)}
+                              className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
+                                isSubActive 
+                                  ? 'bg-blue-600 text-white shadow-md' 
+                                  : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {selectedFilter.startsWith('중') && (
+                      <div className="grid grid-cols-3 gap-1">
+                        {['1', '2', '3'].map(num => {
+                          const gradeKey = `중${num}`;
+                          const isSubActive = selectedFilter === gradeKey;
+                          return (
+                            <button
+                              key={num}
+                              onClick={() => setSelectedFilter(isSubActive ? '중' : gradeKey)}
+                              className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
+                                isSubActive 
+                                  ? 'bg-blue-600 text-white shadow-md' 
+                                  : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                    {selectedFilter.startsWith('고') && (
+                      <div className="grid grid-cols-3 gap-1">
+                        {['1', '2', '3'].map(num => {
+                          const gradeKey = `고${num}`;
+                          const isSubActive = selectedFilter === gradeKey;
+                          return (
+                            <button
+                              key={num}
+                              onClick={() => setSelectedFilter(isSubActive ? '고' : gradeKey)}
+                              className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
+                                isSubActive 
+                                  ? 'bg-blue-600 text-white shadow-md' 
+                                  : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              {num}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
 
             <div className="space-y-2">

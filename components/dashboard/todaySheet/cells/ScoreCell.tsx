@@ -29,9 +29,9 @@ export const ScoreCell = React.memo(function ScoreCell({
   const isCountMode = formData.test_score_type === 'count';
 
   return (
-    <div className="relative w-full h-full flex items-center justify-start group/score">
+    <div className="relative w-full h-[56px] flex items-center justify-start group/score">
       {(isEditing || isActive) && (
-        <div className="flex items-center w-full h-full px-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center w-full h-[56px] px-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
           <input 
             ref={(el) => {
               // 💡 로컬 Ref와 외부 Ref(prop) 동시 지원
@@ -112,7 +112,7 @@ export const ScoreCell = React.memo(function ScoreCell({
         </div>
       )}
 
-      <div className="absolute right-1.5 flex flex-col items-center justify-center z-30">
+      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-30">
         <button 
           onClick={(e) => { e.stopPropagation(); onTestScoreTypeToggle(); }} 
           className={`w-5 h-5 rounded-full flex items-center justify-center transition-all text-[9px] font-black tracking-tighter ${formData.test_score_type === 'score' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}

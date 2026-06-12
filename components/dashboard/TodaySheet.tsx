@@ -8,7 +8,7 @@ import {
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
   SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
-  Maximize2, Minimize2, ArrowLeft, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer
+  Maximize2, Minimize2, ArrowLeft, ArrowRight, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer, ChevronDown, ChevronUp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRow';
@@ -40,7 +40,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'assign', label: '오늘숙제', minWidth: 220, canHide: true },
   { id: 'mission', label: '학생미션', minWidth: 220, canHide: true },
   { id: 'notes', label: '특이사항', minWidth: 160, canHide: true },
-  { id: 'action', label: '저장', minWidth: 60, isSticky: true, canHide: false }
+  { id: 'action', label: '', minWidth: 8, isSticky: true, canHide: false }
 ];
 
 // --- Sub-components ---
@@ -51,6 +51,9 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
       {activeColumns.map((col: any) => {
         const isStickyHorizontally = col.id === 'name' || col.id === 'action' || col.id === 'select';
         const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes'].includes(col.id);
+        const isAction = col.id === 'action';
+        const isSelect = col.id === 'select';
+        
         const styles: React.CSSProperties = {
           width: colWidths[col.id] || col.minWidth,
           minWidth: colWidths[col.id] || col.minWidth,
@@ -62,19 +65,32 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
           backgroundColor: '#000000',
         };
         return (
-          <th key={col.id} style={styles} className="py-3 px-3 text-[11px] font-black uppercase tracking-widest text-gray-400 text-left border-r border-white/10 shadow-[0_1px_0_rgba(255,255,255,0.1)]">
-            <div className={`flex items-center group relative gap-1.5 ${col.id === 'select' || col.id === 'action' ? 'justify-center' : 'justify-start'}`}>
-              {col.id === 'select' ? (
-                <input 
-                  type="checkbox" 
-                  checked={isAllSelected}
-                  onChange={(e) => onSelectAll(e.target.checked)}
-                  className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer"
-                />
-              ) : (
+          <th 
+            key={col.id} 
+            style={styles} 
+            className={`py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-gray-400 text-center border-r border-white/12 shadow-[0_1px_0_rgba(255,255,255,0.1)]`}
+          >
+            {!isAction && (
+              <div className="flex items-center justify-center group relative gap-1.5 w-full">
+                {isSelect ? (
+                  <input 
+                    type="checkbox" 
+                    checked={isAllSelected}
+                    onChange={(e) => onSelectAll(e.target.checked)}
+                    className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer"
+                  />
+                ) : (
                 <>
-                  <div className="flex items-center gap-1.5">
-                    {col.label}
+                  <div className={`flex items-center gap-1.5 ${col.id === 'review' ? 'italic' : ''}`}>
+                    {col.id === 'review' ? (
+                      <>
+                        <span className="text-blue-500/80 font-black mr-0.5">"</span>
+                        <span className="text-blue-200">{col.label}</span>
+                        <span className="text-blue-500/80 font-black ml-0.5">"</span>
+                      </>
+                    ) : (
+                      col.label
+                    )}
                     {canFocus && !focusColumn && (
                       <button 
                         onClick={(e) => { e.stopPropagation(); onFocusColumn(col.id); }}
@@ -104,11 +120,14 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
                 </>
               )}
 
-              <div 
-                onMouseDown={(e) => onMouseDown(e, col.id)}
-                className="absolute right-[-12px] w-1.5 h-5 cursor-col-resize hover:bg-blue-500/50 rounded transition-colors opacity-0 group-hover:opacity-100" 
-              />
-            </div>
+                {col.id !== 'action' && (
+                  <div 
+                    onMouseDown={(e) => onMouseDown(e, col.id)}
+                    className="absolute right-[-12px] w-1.5 h-5 cursor-col-resize hover:bg-blue-500/50 rounded transition-colors opacity-0 group-hover:opacity-100" 
+                  />
+                )}
+              </div>
+            )}
           </th>
         );
       })}
@@ -174,10 +193,25 @@ export default function TodaySheet({
   const [isSendingReport, setIsSendingReport] = useState<string | null>(null);
   const [isReportVisible, setIsReportVisible] = useState(false);
   const [isExportOpen, setIsExportOpen] = useState(false);
-  const [undoStack, setUndoStack] = useState<any[]>([]);
   const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
+
+  const [showSecondRow, setShowSecondRow] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem(`todaySheetShowSecondRow_${currentUser?.id || 'default'}`);
+      return saved === 'false' ? false : true;
+    }
+    return true;
+  });
+
+  const toggleSecondRow = useCallback(() => {
+    setShowSecondRow(prev => {
+      const next = !prev;
+      localStorage.setItem(`todaySheetShowSecondRow_${currentUser?.id || 'default'}`, String(next));
+      return next;
+    });
+  }, [currentUser?.id]);
 
   // 2. Memos
   const visibleColumns = useMemo(() => {
@@ -198,6 +232,7 @@ export default function TodaySheet({
   // 💡 포커스 모드용 컬럼 너비 계산
   const focusColWidths = useMemo(() => {
     const base = { ...colWidths };
+    base['action'] = 8; // 💡 저장 컬럼 너비를 8px로 강제 고정
     if (focusColumn) {
       // 포커스된 컬럼은 화면의 상당 부분을 차지하도록 확장
       base[focusColumn] = 800;
@@ -303,16 +338,11 @@ export default function TodaySheet({
     return cIdx >= rMin && cIdx <= rMax && currentColIdx >= cMin && currentColIdx <= cMax;
   }, [selectedRange, filteredStudents, activeColumns]);
 
-  const handleSaveWithUndo = useCallback(async (studentId: string, newData: any) => {
-    const student = filteredStudents.find((s: any) => s.id === studentId);
-    if (student) {
-      const prevData = { ...(student.todaySession || {}) };
-      setUndoStack(prev => [{ type: 'single', studentId, studentName: student.name, prevData, timestamp: Date.now() }, ...prev].slice(0, 20));
-    }
+  const handleSave = useCallback(async (studentId: string, newData: any) => {
     return onSave(studentId, newData);
-  }, [filteredStudents, onSave]);
+  }, [onSave]);
 
-  const handleBatchSaveWithUndo = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[]) => {
+  const handleBatchSave = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[]) => {
     if (updates.length === 0) return;
     
     // 💡 [낙관적 업데이트] DB 저장 전에 로컬 상태를 즉시 업데이트하여 UI 반응성 확보
@@ -331,8 +361,6 @@ export default function TodaySheet({
       }
       return s;
     }));
-
-    setUndoStack(prev => [{ type: 'batch', updates: updates.map(u => ({ studentId: u.studentId, prevData: u.prevData })), timestamp: Date.now() }, ...prev].slice(0, 20));
     
     // 💡 [수정] mission 필드와 일반 세션 로그 필드를 분기 처리하여 알맞은 API로 전송
     await Promise.all(updates.map(async (u) => {
@@ -348,14 +376,6 @@ export default function TodaySheet({
       }
     }));
   }, [onSave, onUpdateStudentInfo, setStudents]);
-
-  const performUndo = useCallback(async () => {
-    if (undoStack.length === 0) return;
-    const lastAction = undoStack[0];
-    if (lastAction.type === 'batch') { await Promise.all(lastAction.updates.map((u: any) => onSave(u.studentId, u.prevData))); }
-    else { await onSave(lastAction.studentId, lastAction.prevData); }
-    setUndoStack(prev => prev.slice(1));
-  }, [undoStack, onSave]);
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     if (!activeCell) return;
@@ -430,7 +450,7 @@ export default function TodaySheet({
           return s;
         }));
 
-        await handleBatchSaveWithUndo(updates); 
+        await handleBatchSave(updates); 
         setEditingCell(null); 
 
         // 💡 [최종 최적화] 브라우저의 다음 프레임에서 즉시 DOM 업데이트 (반응성 우선)
@@ -451,7 +471,7 @@ export default function TodaySheet({
         });
       }
     } catch (err) { console.error('Paste error:', err); }
-  }, [activeCell, editingCell, activeColumns, selectedIds, students, handleBatchSaveWithUndo]);
+  }, [activeCell, editingCell, activeColumns, selectedIds, students, handleBatchSave]);
 
   const handleExport = (type: 'csv' | 'excel' | 'copy' | 'aca2000') => {
     let headers: string[] = []; let dataRows: any[][] = [];
@@ -537,6 +557,7 @@ export default function TodaySheet({
       setSelectedRange({ startStudentId: studentId, startColId: colId, endStudentId: studentId, endColId: colId });
       setIsDragging(true);
       if (!isShift) { setActiveCell({ studentId, columnId: colId }); }
+      setEditingCell(null);
     });
   }, []);
 
@@ -545,7 +566,10 @@ export default function TodaySheet({
     setSelectedRange(prev => prev ? { ...prev, endStudentId: studentId, endColId: colId } : null);
   }, [isDragging, selectedRange]);
 
-  const handleActiveCellChange = useCallback((studentId: string, colId: string) => { setActiveCell({ studentId, columnId: colId }); }, []);
+  const handleActiveCellChange = useCallback((studentId: string, colId: string) => { 
+    setActiveCell({ studentId, columnId: colId }); 
+    setEditingCell(null);
+  }, []);
   const handleEditingCellChange = useCallback((studentId: string, colId: string | null) => { setEditingCell(colId ? { studentId, columnId: colId } : null); }, []);
   const toggleHistory = useCallback((studentId: string) => { setExpandedHistory(prev => ({ ...prev, [studentId]: prev[studentId] ? 0 : 3 })); }, []);
 
@@ -570,8 +594,7 @@ export default function TodaySheet({
     activeColumns,
     selectedRange, setSelectedRange,
     selectedDate,
-    performUndo,
-    handleBatchSaveWithUndo,
+    handleBatchSave,
     handleSetSwitch,
     setIsDragging,
     selectedIds,
@@ -592,7 +615,7 @@ export default function TodaySheet({
     setIsSendingReport('batch-cut');
     try {
       // 💡 [수정] 전체 세션 데이터를 보내지 않고 변경된 필드만 명시적으로 전송
-      await Promise.all(actives.map((s:any) => handleSaveWithUndo(s.id, { next_quiz_cut: cut })));
+      await Promise.all(actives.map((s:any) => handleSave(s.id, { next_quiz_cut: cut })));
       alert('변경 완료');
     } catch(e){} finally {
       setIsSendingReport(null);
@@ -641,10 +664,6 @@ export default function TodaySheet({
             <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className="bg-transparent text-[12px] font-black uppercase outline-none cursor-pointer [color-scheme:dark]" />
           </div>
 
-          <button onClick={performUndo} disabled={undoStack.length === 0} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-white hover:bg-blue-600/20 transition-all shadow-xl disabled:opacity-20" title="Cmd+Z">
-            <RotateCcw size={14} className="text-blue-500" /> 실행 취소 <span className="bg-white/10 px-1.5 py-0.5 rounded text-[8px] ml-1">{undoStack.length}</span>
-          </button>
-
           <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-black border-white/20 text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
           
           {/* 💡 [변경] 전체 리포트 발송 버튼 (1행 안전 구역으로 이동) */}
@@ -668,170 +687,202 @@ export default function TodaySheet({
             </AnimatePresence>
           </div>
 
+          {/* 2행 접기/펼치기 토글 버튼 */}
+          <button 
+            onClick={toggleSecondRow} 
+            className={`p-2 border rounded-[6px] transition-all shadow-xl ${showSecondRow ? 'bg-blue-600/20 border-blue-500/40 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+            title={showSecondRow ? "상세 설정 도구 접기" : "상세 설정 도구 펼치기"}
+          >
+            {showSecondRow ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
+          </button>
+
           <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/5 border border-white/10 rounded-[6px] text-gray-400 hover:text-white transition-all shadow-xl"><Settings2 size={18} /></button>
         </div>
       </div>
 
-      {/* 💡 [신설] 통합 필터 패널 (앞으로 추가될 필터 확장성 확보) */}
-      <div className="flex flex-wrap items-center justify-between gap-4 px-6 py-4 bg-[#0a0a0a]/60 border border-white/5 rounded-lg shrink-0 text-left no-print">
-        <div className="flex flex-wrap items-center gap-6">
-          
-          {/* 1. 담당 선생님 필터 */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Teacher</span>
-            <select 
-              value={selectedTeacherId} 
-              onChange={(e) => setSelectedTeacherId(e.target.value)}
-              className="bg-black border border-white/10 rounded-[4px] px-3 py-1.5 text-[11px] font-bold text-white outline-none focus:border-blue-500 [color-scheme:dark]"
-            >
-              <option value="All">전체 선생님</option>
-              {teachers.map((t: any) => (
-                <option key={t.id} value={t.id}>{t.name} 선생님 ({t.initials || '?'})</option>
-              ))}
-            </select>
-          </div>
+      <AnimatePresence initial={false}>
+        {showSecondRow && (
+          <motion.div 
+            initial={{ opacity: 0, height: 0, marginTop: 0 }}
+            animate={{ opacity: 1, height: 'auto', marginTop: 0 }}
+            exit={{ opacity: 0, height: 0, marginTop: 0 }}
+            transition={{ duration: 0.2, ease: 'easeInOut' }}
+            className="flex flex-wrap items-center justify-between gap-4 px-4 py-2.5 bg-[#0a0a0a]/60 border border-white/5 rounded-lg shrink-0 text-left no-print overflow-hidden"
+          >
+            {/* 2행 왼쪽: 세트 선택 스위치 & 전체화면 모드 필터들 */}
+            <div className="flex flex-wrap items-center gap-2.5">
+              <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
+                {['1', '2', '3', '4'].map((setId, idx) => {
+                  const keys = ['Q', 'W', 'E', 'R'];
+                  return (
+                    <button 
+                      key={setId} 
+                      onClick={() => handleSetSwitch(setId)} 
+                      className={`px-3 py-1.5 rounded-[4px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} 
+                      title={`Alt + ${keys[idx]}`}
+                    >
+                      SET {setId}
+                    </button>
+                  );
+                })}
+              </div>
 
-          {/* 2. 학년 필터 */}
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Grade</span>
-            <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
-              {[
-                { label: 'ALL', key: 'All' }, { label: 'ES (초)', key: '초' }, { label: 'MS (중)', key: '중' }, { label: 'HS (고)', key: '고' }
-              ].map((g) => (
-                <button 
-                  key={g.key} 
-                  onClick={() => setSelectedFilter(g.key)} 
-                  className={`px-3 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
-                >
-                  {g.label}
-                </button>
-              ))}
-            </div>
-          </div>
+              {isFullScreen && (
+                <>
+                  <div className="h-4 w-px bg-white/10" />
 
-          {/* 3. 요일 필터 */}
-          <div className="flex items-center gap-2.5">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Days</span>
-            <div className="flex gap-[3px]">
-              {['월', '화', '수', '목', '금', '토', '일'].map((day) => {
-                const isActive = selectedDays.includes(day);
-                return (
-                  <button 
-                    key={day} 
-                    onClick={() => {
-                      if (selectedDays.includes(day)) {
-                        setSelectedDays(selectedDays.filter((d: string) => d !== day));
-                      } else {
-                        setSelectedDays([...selectedDays, day]);
-                      }
-                    }} 
-                    className={`w-6 h-6 rounded-[3px] text-[9px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-white'}`}
+                  {/* 담당 선생님 필터 (라벨 제거) */}
+                  <select 
+                    value={selectedTeacherId} 
+                    onChange={(e) => setSelectedTeacherId(e.target.value)}
+                    className="bg-black border border-white/10 rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold text-white outline-none focus:border-blue-500 [color-scheme:dark]"
                   >
-                    {day}
-                  </button>
-                );
-              })}
+                    <option value="All">전체 선생님</option>
+                    {teachers.map((t: any) => (
+                      <option key={t.id} value={t.id}>{t.name} ({t.initials || '?'})</option>
+                    ))}
+                  </select>
+
+                  <div className="h-4 w-px bg-white/10" />
+
+                  {/* 학년 필터 (라벨 제거 & 초/중/고 축소) */}
+                  <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+                    {[
+                      { label: 'ALL', key: 'All' }, { label: '초', key: '초' }, { label: '중', key: '중' }, { label: '고', key: '고' }
+                    ].map((g) => (
+                      <button 
+                        key={g.key} 
+                        onClick={() => setSelectedFilter(g.key)} 
+                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      >
+                        {g.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="h-4 w-px bg-white/10" />
+
+                  {/* 요일 필터 (라벨 제거) */}
+                  <div className="flex items-center gap-1.5">
+                    <div className="flex gap-[3px]">
+                      {['월', '화', '수', '목', '금', '토', '일'].map((day) => {
+                        const isActive = selectedDays.includes(day);
+                        return (
+                          <button 
+                            key={day} 
+                            onClick={() => {
+                              if (selectedDays.includes(day)) {
+                                setSelectedDays(selectedDays.filter((d: string) => d !== day));
+                              } else {
+                                setSelectedDays([...selectedDays, day]);
+                              }
+                            }} 
+                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-white'}`}
+                          >
+                            {day}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {selectedDays.length > 0 && (
+                      <button 
+                        onClick={() => setIsAndFilter(!isAndFilter)} 
+                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'}`}
+                      >
+                        {isAndFilter ? 'AND' : 'OR'}
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
             </div>
-            {selectedDays.length > 0 && (
-              <button 
-                onClick={() => setIsAndFilter(!isAndFilter)} 
-                className={`px-2 py-1 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'}`}
-              >
-                {isAndFilter ? 'AND' : 'OR'}
-              </button>
-            )}
-          </div>
 
-        </div>
-
-        {/* 4. 정렬 방식 및 방향 필터 */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Sort By</span>
-            <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
-              {[
-                { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }
-              ].map((m) => (
+            {/* 2행 오른쪽: 정렬, 선택 숨김 제어, 화면 컨트롤 */}
+            <div className="flex flex-wrap items-center gap-4 ml-auto justify-end">
+              {/* 정렬 방식 및 방향 필터 */}
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Sort</span>
+                <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+                  {[
+                    { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }
+                  ].map((m) => (
+                    <button 
+                      key={m.key} 
+                      onClick={() => onSortModeChange(m.key as any)} 
+                      className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
                 <button 
-                  key={m.key} 
-                  onClick={() => onSortModeChange(m.key as any)} 
-                  className={`px-3 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                  onClick={() => onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')}
+                  className="px-2 py-1 rounded-[4px] bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1 text-[8px] font-black"
+                  title={sortDirection === 'asc' ? '오름차순 (Up)' : '내림차순 (Down)'}
                 >
-                  {m.label}
+                  {sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-purple-400" />}
+                  {sortDirection === 'asc' ? 'UP' : 'DOWN'}
                 </button>
-              ))}
-            </div>
-          </div>
-          
-          <button 
-            onClick={() => onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')}
-            className="px-2.5 py-1.5 rounded-[4px] bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1.5 text-[9px] font-black"
-            title={sortDirection === 'asc' ? '오름차순 (Up)' : '내림차순 (Down)'}
-          >
-            {sortDirection === 'asc' ? <ArrowUp size={12} className="text-blue-400" /> : <ArrowDown size={12} className="text-purple-400" />}
-            {sortDirection === 'asc' ? 'UP' : 'DOWN'}
-          </button>
-        </div>
+              </div>
 
-        {/* 5. 선택 학생 숨김/해제 제어 */}
-        <div className="flex items-center gap-2">
-          {selectedIds.length > 0 && (
-            <button
-              onClick={() => {
-                setHiddenStudentIds(prev => [...prev, ...selectedIds]);
-                setSelectedIds([]);
-              }}
-              className="px-2.5 py-1.5 rounded-[4px] bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1.5 text-[9px] font-black animate-pulse"
-              title="선택한 학생들을 임시로 숨깁니다"
-            >
-              <EyeOff size={12} />
-              선택 숨김 ({selectedIds.length})
-            </button>
-          )}
-          {hiddenStudentIds.length > 0 && (
-            <button
-              onClick={() => setHiddenStudentIds([])}
-              className="px-2.5 py-1.5 rounded-[4px] bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1.5 text-[9px] font-black"
-              title="숨겨진 학생들을 모두 다시 표시합니다"
-            >
-              <Eye size={12} />
-              숨김 해제 ({hiddenStudentIds.length})
-            </button>
-          )}
-        </div>
-      </div>
+              {(selectedIds.length > 0 || hiddenStudentIds.length > 0) && (
+                <div className="flex items-center gap-1.5">
+                  {selectedIds.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setHiddenStudentIds(prev => [...prev, ...selectedIds]);
+                        setSelectedIds([]);
+                      }}
+                      className="px-2 py-1 rounded-[4px] bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black animate-pulse"
+                      title="선택한 학생들을 임시로 숨깁니다"
+                    >
+                      <EyeOff size={10} />
+                      숨김 ({selectedIds.length})
+                    </button>
+                  )}
+                  {hiddenStudentIds.length > 0 && (
+                    <button
+                      onClick={() => setHiddenStudentIds([])}
+                      className="px-2 py-1 rounded-[4px] bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black"
+                      title="숨겨진 학생들을 모두 다시 표시합니다"
+                    >
+                      <Eye size={10} />
+                      해제 ({hiddenStudentIds.length})
+                    </button>
+                  )}
+                </div>
+              )}
 
-      <div className="flex items-center justify-between px-1">
-        <div className="flex items-center gap-2">
-          {focusColumn ? (
-            <button onClick={() => setFocusColumn(null)} className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest shadow-lg shadow-blue-900/40 transition-all"><ArrowLeft size={12} /> 전체 화면으로 돌아가기</button>
-          ) : (
-            <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
-              {['1', '2', '3', '4'].map((setId, idx) => {
-                const keys = ['Q', 'W', 'E', 'R'];
-                return (
-                  <button key={setId} onClick={() => handleSetSwitch(setId)} className={`px-4 py-1.5 rounded-[4px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} title={`Alt + ${keys[idx]}`}>SET {setId}</button>
-                );
-              })}
+              <div className="h-4 w-px bg-white/10" />
+
+              {/* 화면 컨트롤 (원래 크기로 복원, 전체화면, 인쇄하기) */}
+              <div className="flex items-center gap-1.5">
+                {focusColumn && (
+                  <button 
+                    onClick={() => setFocusColumn(null)} 
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all animate-pulse mr-1"
+                  >
+                    <ArrowLeft size={12} /> 원래 크기로
+                  </button>
+                )}
+                <button 
+                  onClick={onToggleFullScreen} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 rounded-[4px] text-[10px] font-black uppercase tracking-widest transition-all shadow-lg"
+                >
+                  {isFullScreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
+                  {isFullScreen ? '원래화면' : '전체화면'}
+                </button>
+                <button 
+                  onClick={() => window.print()} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg"
+                >
+                  <Printer size={12} /> 인쇄하기
+                </button>
+              </div>
             </div>
-          )}
-        </div>
-        <div className="flex items-center gap-4 no-print">
-          {/* 💡 [추가] 전체화면 버튼 */}
-          <button 
-            onClick={onToggleFullScreen} 
-            className="flex items-center gap-2 px-4 py-1.5 bg-blue-600 border border-blue-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-500 transition-all shadow-lg"
-          >
-            {isFullScreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
-            {isFullScreen ? '원래화면' : '전체화면'}
-          </button>
-          
-          {/* 💡 [변경] 인쇄하기 버튼 (테이블 바로 위로 이동) */}
-          <button onClick={() => window.print()} className="flex items-center gap-2 px-4 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg">
-            <Printer size={12} /> 인쇄하기
-          </button>
-        </div>
-      </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <div className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container`}>
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
@@ -856,17 +907,23 @@ export default function TodaySheet({
                 const prevStartTime = idx > 0 ? getStartTime(filteredStudents[idx - 1]) : null;
                 const isNewSection = sortMode === 'time' && currentStartTime !== prevStartTime && !focusColumn;
 
+                const timeSectionLabel = isNewSection 
+                  ? (currentStartTime === 999 
+                      ? '기타 타임' 
+                      : (currentStartTime >= 12 
+                          ? (currentStartTime === 12 ? `오후 12:${displayMinute}` : `오후 ${currentStartTime-12}:${displayMinute}`) 
+                          : `오전 ${currentStartTime}:${displayMinute}`) + ' 수업'
+                    )
+                  : undefined;
+
                 return (
                   <React.Fragment key={s.id}>
-                    {isNewSection && (
-                      <tr className="bg-blue-600/5"><td colSpan={activeColumns.length} className="px-4 py-2 border-b border-blue-500/30"><div className="flex items-center gap-3"><span className="text-[9px] font-black text-blue-400 uppercase tracking-[0.2em] whitespace-nowrap">{currentStartTime === 999 ? '기타 타임' : (currentStartTime >= 12 ? (currentStartTime === 12 ? `오후 12:${displayMinute}` : `오후 ${currentStartTime-12}:${displayMinute}`) : `오전 ${currentStartTime}:${displayMinute}`) + ' 수업'}</span><div className="flex-1 h-px bg-gradient-to-r from-blue-500/30 to-transparent" /></div></td></tr>
-                    )}
                     <TodaySheetRow
                       key={`${s.id}-${selectedDate}`}
                       student={s}
                       rowIndex={idx}
                       masterTextbooks={masterTextbooks}
-                      onSave={handleSaveWithUndo}
+                      onSave={handleSave}
                       onUpdateStudentInfo={onUpdateStudentInfo}
                       onViewProgress={onViewProgress}
                       onSelectStudent={onSelectStudent}
@@ -876,6 +933,7 @@ export default function TodaySheet({
                       isHistoryExpanded={!!expandedHistory[s.id]} 
                       onToggleHistory={toggleHistory} 
                       currentUser={currentUser} 
+                      academyInfo={academyInfo}
                       activeCell={activeCell}
                       editingCell={editingCell}
                       onActiveCellChange={handleActiveCellChange}
@@ -886,6 +944,8 @@ export default function TodaySheet({
                       isCellInRange={isCellInRange} 
                       onCellMouseDown={onCellMouseDown} 
                       onCellMouseEnter={onCellMouseEnter} 
+                      isFirstInTimeSection={isNewSection}
+                      timeSectionLabel={timeSectionLabel}
                     />
                   </React.Fragment>
                 );

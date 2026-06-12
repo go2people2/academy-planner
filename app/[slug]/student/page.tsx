@@ -91,6 +91,13 @@ export default function StudentPortal() {
     return sessionsBeforeToday.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || sessionsBeforeToday[0];
   }, [allLogs, selectedDate]);
 
+  const upcomingMakeups = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+    return allLogs
+      .filter(l => l.session_date >= todayStr && l.attendance_status === '보강')
+      .sort((a, b) => a.session_date.localeCompare(b.session_date));
+  }, [allLogs]);
+
   const fetchAllStudentData = useCallback(async (studentId: string) => {
     setIsLoading(true);
     try {
@@ -353,6 +360,7 @@ export default function StudentPortal() {
         target_date: selectedDate, 
         display_period_type: 'custom', 
         is_completed: false, 
+        created_by: student.teacher_id || '',
         type: 'manual' 
       }]).select();
       if (error) throw error; 
@@ -416,6 +424,30 @@ export default function StudentPortal() {
 
         {/* 오른쪽 섹션: 테스트 상태, 히스토리, 건의사항 */}
         <div className="hidden lg:flex w-[40%] bg-[#0a0a0a] flex-col overflow-y-auto custom-scrollbar-v p-8 xl:p-12 space-y-10 relative">
+          {upcomingMakeups.length > 0 && (
+            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 text-left space-y-3 shadow-lg shadow-amber-950/10 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                <h3 className="text-xs font-black uppercase tracking-widest text-amber-400">예정된 보강 스케줄</h3>
+              </div>
+              <div className="space-y-2">
+                {upcomingMakeups.map((m: any) => {
+                  const formatted = m.session_date.slice(5).replace('-', '.');
+                  return (
+                    <div key={m.id} className="flex items-center justify-between text-xs font-bold text-gray-300 bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-amber-200 font-extrabold">{formatted}</span>
+                        <span className="text-gray-700">|</span>
+                        <span>{m.moved_to_hour ? `${m.moved_to_hour}:00 수업` : '교시 미정'}</span>
+                      </div>
+                      <span className="bg-amber-500/20 text-amber-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase">예약 완료</span>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+          
           <TestStatusSection todaySession={todaySession} />
           
           <LearningHistoryList 
