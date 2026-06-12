@@ -284,6 +284,30 @@ export default function TeacherTasks({
     }
   };
 
+  const handleDeleteGroupMakeups = async (makeupsInGroup: any[]) => {
+    if (makeupsInGroup.length === 0) return;
+    const count = makeupsInGroup.length;
+    if (!confirm(`이 시간대의 보강 예약(${count}명)을 모두 취소하시겠습니까?`)) return;
+
+    try {
+      const idsToDelete = makeupsInGroup.map(m => m.id);
+      setMakeups(prev => prev.filter(m => !idsToDelete.includes(m.id)));
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .delete()
+        .in('id', idsToDelete);
+
+      if (error) throw error;
+
+      await onRefreshStudents(false);
+      fetchMakeups();
+    } catch (err) {
+      console.error('Error deleting group makeups:', err);
+      fetchMakeups();
+    }
+  };
+
   // --- Filtering & Memos ---
   const visibleTasks = useMemo(() => {
     let list = tasks.filter(task => {
@@ -606,16 +630,24 @@ export default function TeacherTasks({
                       >
                         <div className="space-y-3">
                           {/* 카드 헤더: 날짜와 시간 */}
-                          <div className="flex items-center justify-between pb-2 border-b border-white/5">
-                            <div className="flex items-center gap-2">
-                              <Calendar size={13} className="text-blue-400" />
-                              <span className="text-xs font-black text-white">{formattedDate}</span>
-                              {isToday && <span className="text-blue-500 font-black text-[9px]">(오늘)</span>}
+                          <div className="flex items-center justify-between pb-2 border-b border-white/5 gap-2">
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <Calendar size={13} className="text-blue-400 shrink-0" />
+                              <span className="text-xs font-black text-white truncate">{formattedDate}</span>
+                              {isToday && <span className="text-blue-500 font-black text-[9px] shrink-0">(오늘)</span>}
                             </div>
-                            <div className="flex items-center gap-1.5 text-gray-400 text-xs font-bold">
-                              <Clock size={12} className="text-gray-500" />
-                              <span>{group.time} 보강</span>
-                              <span className="bg-white/5 border border-white/10 px-1.5 py-0.5 rounded text-[9px] font-black text-gray-400 ml-1">{group.items.length}명</span>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex items-center gap-1 text-gray-400 text-[11px] font-bold">
+                                <Clock size={11} className="text-gray-500" />
+                                <span>{group.time} ({group.items.length}명)</span>
+                              </div>
+                              <button 
+                                type="button"
+                                onClick={() => handleDeleteGroupMakeups(group.items)}
+                                className="text-[8.5px] font-black px-1.5 py-0.5 border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500 text-rose-400 hover:text-white rounded transition-all"
+                              >
+                                전체 취소
+                              </button>
                             </div>
                           </div>
 
