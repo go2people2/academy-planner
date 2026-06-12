@@ -629,7 +629,10 @@ export default function TeacherTasks({
                                 <div key={makeup.id} className="flex items-center justify-between py-1.5 border-b border-white/5 last:border-0 group/row">
                                   <div className="flex flex-col min-w-0 pr-2">
                                     <span className="text-xs font-bold text-white truncate">{makeup.student_name}</span>
-                                    <span className="text-[8.5px] font-black text-gray-500 uppercase">{studentObj?.grade || '정보없음'}</span>
+                                    <span className="text-[8.5px] font-black text-gray-500 uppercase">
+                                      {studentObj?.grade || '정보없음'}
+                                      {studentObj?.class_days && studentObj.class_days.length > 0 ? ` · ${studentObj.class_days.join('')}` : ''}
+                                    </span>
                                   </div>
 
                                   <div className="flex items-center gap-1.5 shrink-0">
@@ -908,7 +911,7 @@ export default function TeacherTasks({
                               }}
                               className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-xs font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-white/5 text-gray-400 hover:text-white'}`}
                             >
-                              <span>{s.name} ({s.grade || '학년미정'} | {s.class || '반미정'})</span>
+                              <span>{s.name} ({s.grade || '학년미정'} | {s.class_days && s.class_days.length > 0 ? s.class_days.join('') : '요일미정'})</span>
                               <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isSelected ? 'border-blue-500 bg-blue-600 text-white' : 'border-white/20'}`}>
                                 {isSelected && <Check size={10} strokeWidth={4} />}
                               </div>
