@@ -207,7 +207,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       const hasRegularSession = hours.length > 0;
       
       // 💡 [개선] 오늘 수업 대상인지 판단 (정규 수업일 + 보강)
-      const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
+      const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null);
       const isAttended = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE, ATTENDANCE_STATUS.ABSENT].some(st => status.startsWith(st));
       
       // 수업 제외 상태면 표시 안함
