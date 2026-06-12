@@ -14,6 +14,7 @@ import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRow';
 import { HistoryRows } from './TodaySheetHistory';
 import ReportPreview from './ReportPreview';
+import PrintPreviewModal from './todaySheet/PrintPreviewModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
@@ -196,6 +197,7 @@ export default function TodaySheet({
   const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
+  const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false); // 💡 인쇄 미리보기 모달 상태 추가
 
   const [showSecondRow, setShowSecondRow] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -874,7 +876,7 @@ export default function TodaySheet({
                   {isFullScreen ? '원래화면' : '전체화면'}
                 </button>
                 <button 
-                  onClick={() => window.print()} 
+                  onClick={() => setIsPrintPreviewOpen(true)} 
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg"
                 >
                   <Printer size={12} /> 인쇄하기
@@ -884,6 +886,21 @@ export default function TodaySheet({
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* 💡 실제 인쇄(window.print) 시에만 최상단에 나타날 정갈한 헤더 타이틀 */}
+      <div className="hidden print:block text-left mb-6">
+        <div className="flex justify-between items-end border-b-2 border-gray-800 pb-3">
+          <div>
+            <h1 className="text-xl font-black text-black tracking-tight">{academyInfo?.academy_name || 'Hokma Math'} 수업 일지</h1>
+            <p className="text-[10px] text-gray-500 font-bold uppercase tracking-wider mt-0.5">Daily Study & Task Report</p>
+          </div>
+          <div className="text-right">
+            <span className="text-xs font-bold text-gray-700 bg-gray-100 px-3 py-1 border border-gray-200 rounded-full">
+              수업일자: {selectedDate.replace(/-/g, '.')} ({getDayOfWeek(selectedDate)}요일)
+            </span>
+          </div>
+        </div>
+      </div>
 
       <div className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container`}>
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
@@ -973,6 +990,14 @@ export default function TodaySheet({
       )}
 
       <AnimatePresence>{isReportVisible && <ReportPreview students={students} selectedDate={selectedDate} academyInfo={academyInfo} isSendingReport={isSendingReport} handleSendIndividual={handleSendIndividual} />}</AnimatePresence>
+      <PrintPreviewModal
+        isOpen={isPrintPreviewOpen}
+        onClose={() => setIsPrintPreviewOpen(false)}
+        students={filteredStudents}
+        selectedDate={selectedDate}
+        academyInfo={academyInfo}
+        activeColumns={activeColumns}
+      />
     </div>
   );
 }
