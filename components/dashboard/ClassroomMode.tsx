@@ -539,12 +539,11 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                             {!isTimeShiftOpen ? (
                               <div className="flex flex-col gap-1 w-full h-full p-0.5">
                                 <div className="grid grid-cols-2 gap-1 flex-1 min-h-0">
-                                  <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.PRESENT)} className="flex flex-col items-center justify-center bg-emerald-600/20 border border-emerald-500/20 rounded hover:bg-emerald-600 transition-all group p-1"><Check size={12} className="text-emerald-500 group-hover:text-white" /><span className="text-[7px] font-black uppercase mt-0.5">출석</span></button>
+                                  <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.BEFORE)} className="flex flex-col items-center justify-center bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all group p-1"><RotateCcw size={12} className="text-gray-400 group-hover:text-white" /><span className="text-[7px] font-black uppercase mt-0.5">초기화</span></button>
                                   <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.LATE)} className="flex flex-col items-center justify-center bg-amber-600/20 border border-amber-500/20 rounded hover:bg-amber-600 transition-all group p-1"><Clock size={12} className="text-amber-500 group-hover:text-white" /><span className="text-[7px] font-black uppercase mt-0.5">지각</span></button>
                                   <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.ABSENT)} className="flex flex-col items-center justify-center bg-red-600/20 border border-red-500/20 rounded hover:bg-red-600 transition-all group p-1"><X size={12} className="text-red-500 group-hover:text-white" /><span className="text-[7px] font-black uppercase mt-0.5">결석</span></button>
                                   <button onClick={() => setIsTimeShiftOpen(true)} className="flex flex-col items-center justify-center bg-blue-600/20 border border-blue-500/20 rounded hover:bg-blue-600 transition-all group p-1"><CalendarClock size={12} className="text-blue-500 group-hover:text-white" /><span className="text-[7px] font-black uppercase mt-0.5">시간 이동</span></button>
                                 </div>
-                                <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.BEFORE)} className="py-1 px-2 text-[7px] font-black uppercase text-gray-300 hover:text-white bg-white/10 hover:bg-white/20 rounded shrink-0 transition-colors">상태 초기화 (수업전)</button>
                               </div>
                             ) : (
                               <div className="flex flex-col w-full h-full p-1">
