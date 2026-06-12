@@ -4,11 +4,12 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, Calendar, Plus, Check, Trash2, Clock, 
-  User, CheckCircle, AlertCircle, Search, Sparkles, Loader2, CalendarRange, X, EyeOff
+  User, CheckCircle, AlertCircle, Search, Sparkles, Loader2, CalendarRange, X, EyeOff, ExternalLink
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
 import { SessionLog, Student, Teacher } from '@/types/dashboard';
+import TaskLinksTab from './TaskLinksTab';
 
 interface TeacherTasksProps {
   academyInfo: any;
@@ -29,6 +30,7 @@ interface TeacherTaskItem {
   is_completed: boolean;
   created_by: string; // 담당 선생님 ID
   created_at: string;
+  type?: string; // 💡 링크/일반 업무 구분용 타입 추가
 }
 
 export default function TeacherTasks({
@@ -38,7 +40,7 @@ export default function TeacherTasks({
   currentUser,
   onRefreshStudents
 }: TeacherTasksProps) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'links'>('tasks');
   const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
   const [makeups, setMakeups] = useState<any[]>([]);
   const [isTaskLoading, setIsTaskLoading] = useState(false);
@@ -65,6 +67,7 @@ export default function TeacherTasks({
   const [taskContent, setTaskContent] = useState('');
   const [taskTargetDate, setTaskTargetDate] = useState(getTodayStr());
   const [taskAssignee, setTaskAssignee] = useState(currentUser?.id || '');
+  const [isPermanentTask, setIsPermanentTask] = useState(false);
 
   // --- Makeup Form States ---
   const [isMakeupModalOpen, setIsMakeupModalOpen] = useState(false);
@@ -149,6 +152,8 @@ export default function TeacherTasks({
       setTaskTitle('');
       setTaskContent('');
       setTaskTargetDate(getTodayStr());
+      setTaskAssignee(currentUser?.id || '');
+      setIsPermanentTask(false);
       setIsTaskModalOpen(false);
       fetchTasks();
     } catch (err) {
@@ -311,6 +316,7 @@ export default function TeacherTasks({
   // --- Filtering & Memos ---
   const visibleTasks = useMemo(() => {
     let list = tasks.filter(task => {
+      if (task.type === 'link') return false; // 💡 링크 탭 전용 업무 제외
       const isSuggestion = task.title?.startsWith('[건의]');
       if (!isSuggestion) return true;
       const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'master';
@@ -434,6 +440,7 @@ export default function TeacherTasks({
   };
 
   const getDDay = (targetDateStr: string) => {
+    if (targetDateStr === '9999-12-31') return '상시';
     const target = new Date(targetDateStr);
     const today = new Date(getTodayStr());
     const diffTime = target.getTime() - today.getTime();
@@ -471,6 +478,12 @@ export default function TeacherTasks({
             className={`flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'makeups' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
           >
             <CalendarRange size={14} /> 보강 스케줄러
+          </button>
+          <button 
+            onClick={() => setActiveTab('links')}
+            className={`flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'links' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+          >
+            <ExternalLink size={14} /> 업무 링크
           </button>
         </div>
       </div>
@@ -533,7 +546,7 @@ export default function TeacherTasks({
                 <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 custom-scrollbar-v align-start content-start">
                   {visibleTasks.map((task) => {
                     const assignee = teachers.find(t => t.id === task.created_by);
-                    const isOverdue = new Date(task.target_date) < new Date(getTodayStr()) && !task.is_completed;
+                    const isOverdue = task.target_date !== '9999-12-31' && new Date(task.target_date) < new Date(getTodayStr()) && !task.is_completed;
                     
                     return (
                       <motion.div 
@@ -582,7 +595,15 @@ export default function TeacherTasks({
                             <span>{assignee?.nickname || assignee?.name || '지정되지 않음'}</span>
                           </div>
                           
-                          <div className={`px-2 py-0.5 rounded-[4px] uppercase font-black ${task.is_completed ? 'bg-emerald-500/10 text-emerald-400' : (isOverdue ? 'bg-rose-500/10 text-rose-400 animate-pulse' : 'bg-blue-500/10 text-blue-400')}`}>
+                          <div className={`px-2 py-0.5 rounded-[4px] uppercase font-black ${
+                            task.is_completed 
+                              ? 'bg-emerald-500/10 text-emerald-400' 
+                              : isOverdue 
+                                ? 'bg-rose-500/10 text-rose-400 animate-pulse' 
+                                : task.target_date === '9999-12-31'
+                                  ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
+                                  : 'bg-blue-500/10 text-blue-400'
+                          }`}>
                             {task.is_completed ? '완료' : getDDay(task.target_date)}
                           </div>
                         </div>
@@ -725,6 +746,17 @@ export default function TeacherTasks({
             </motion.div>
           )}
 
+          {/* TAB 3: Link Tasks */}
+          {activeTab === 'links' && (
+            <TaskLinksTab
+              academyInfo={academyInfo}
+              tasks={tasks}
+              teachers={teachers}
+              currentUser={currentUser}
+              onRefreshTasks={fetchTasks}
+            />
+          )}
+
         </AnimatePresence>
       </div>
 
@@ -768,37 +800,77 @@ export default function TeacherTasks({
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">마감 기한</label>
+                  <div className="space-y-1.5 col-span-2">
+                    <div className="flex items-center justify-between">
+                      <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">마감 기한</label>
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox" 
+                          checked={isPermanentTask}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setIsPermanentTask(checked);
+                            if (checked) {
+                              setTaskTargetDate('9999-12-31');
+                            } else {
+                              setTaskTargetDate(getTodayStr());
+                            }
+                          }}
+                          className="w-3.5 h-3.5 rounded border border-white/20 bg-black/40 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-600"
+                        />
+                        <span className="text-[9px] font-black text-gray-400 hover:text-white transition-all uppercase tracking-wider">상시 업무</span>
+                      </label>
+                    </div>
                     <input 
                       type="date" 
-                      value={taskTargetDate}
+                      value={isPermanentTask ? '' : taskTargetDate}
                       onChange={(e) => setTaskTargetDate(e.target.value)}
-                      required
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                      disabled={isPermanentTask}
+                      required={!isPermanentTask}
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark] disabled:opacity-40 disabled:cursor-not-allowed"
                     />
                   </div>
+                </div>
 
-                  <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">담당 강사</label>
-                    <select 
-                      value={taskAssignee}
-                      onChange={(e) => setTaskAssignee(e.target.value)}
-                      required
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all select-none"
-                    >
-                      <option value="" disabled>강사 선택</option>
-                      {teachers.map(t => (
-                        <option key={t.id} value={t.id} className="bg-black text-white">{t.nickname || t.name}</option>
-                      ))}
-                    </select>
+                <div className="space-y-2 text-left">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">담당 강사</label>
+                  <div className="flex flex-wrap gap-2 max-h-24 overflow-y-auto pr-1 custom-scrollbar-v">
+                    {teachers.map(t => {
+                      const isSelected = taskAssignee === t.id;
+                      return (
+                        <button
+                          key={t.id}
+                          type="button"
+                          onClick={() => setTaskAssignee(t.id)}
+                          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-black transition-all ${
+                            isSelected 
+                              ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
+                              : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
+                          }`}
+                        >
+                          <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black uppercase ${
+                            isSelected ? 'bg-white text-blue-600' : 'bg-white/10 text-gray-300'
+                          }`}>
+                            {(t.nickname || t.name || '?')[0]}
+                          </div>
+                          <span>{t.nickname || t.name}</span>
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2">
                   <button 
                     type="button" 
-                    onClick={() => setIsTaskModalOpen(false)}
+                    onClick={() => {
+                      setIsTaskModalOpen(false);
+                      setTaskTitle('');
+                      setTaskContent('');
+                      setTaskTargetDate(getTodayStr());
+                      setTaskAssignee(currentUser?.id || '');
+                      setIsPermanentTask(false);
+                    }}
                     className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg text-xs font-bold transition-all"
                   >
                     취소
