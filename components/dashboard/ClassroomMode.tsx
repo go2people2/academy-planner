@@ -60,26 +60,36 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
   const [studentTimerMap, setStudentTimerMap] = useState<Record<string, number>>({});
 
-  // 💡 [수정] 컴포넌트 마운트 시 기존 타이머 상태 복구 로직 (시작 시간 순 정렬로 안정화)
+  // 💡 [수정] 컴포넌트 마운트 시 기존 타이머 상태 복구 로직 (일의 자리에 인코딩된 슬롯 번호 기반 복구로 독립화)
   useEffect(() => {
-    const uniqueTimersMap = new Map<number, number>();
-    students.forEach(s => {
-      if (s.todaySession?.timer_started_at && s.todaySession?.timer_duration) {
-        uniqueTimersMap.set(s.todaySession.timer_started_at, s.todaySession.timer_duration);
-      }
-    });
-    if (uniqueTimersMap.size === 0) return;
-    const sortedStartTimes = Array.from(uniqueTimersMap.keys()).sort((a, b) => a - b);
     const recoveredTimers: Record<number, { startTime: number, duration: number }> = {};
     const newMapping: Record<string, number> = {};
-    sortedStartTimes.forEach((startTime, idx) => {
-      const slot = idx + 1;
-      if (slot <= 3) {
-        recoveredTimers[slot] = { startTime, duration: uniqueTimersMap.get(startTime)! };
-        students.forEach(s => { if (s.todaySession?.timer_started_at === startTime) newMapping[s.id] = slot; });
+    
+    students.forEach(s => {
+      const startTime = s.todaySession?.timer_started_at;
+      const duration = s.todaySession?.timer_duration;
+      if (startTime && duration) {
+        const slot = startTime % 10;
+        if (slot === 1 || slot === 2 || slot === 3) {
+          if (!recoveredTimers[slot] || recoveredTimers[slot].startTime > startTime) {
+            recoveredTimers[slot] = { startTime, duration };
+          }
+          newMapping[s.id] = slot;
+        }
       }
     });
-    setGlobalTimers(prev => ({ ...prev, ...recoveredTimers }));
+
+    setGlobalTimers(prev => {
+      const next = { ...prev };
+      [1, 2, 3].forEach(slot => {
+        if (recoveredTimers[slot]) {
+          next[slot] = recoveredTimers[slot];
+        } else {
+          next[slot] = { startTime: null, duration: next[slot].duration };
+        }
+      });
+      return next;
+    });
     setStudentTimerMap(newMapping);
   }, [students]);
 
@@ -136,7 +146,8 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   };
 
   const handleStartGlobalTimer = async (slot: number) => {
-    const now = Date.now();
+    // 💡 일의 자리를 slot 번호로 인코딩하여 슬롯 정체성을 DB에 박제
+    const now = Math.floor(Date.now() / 10) * 10 + slot;
     const duration = globalTimers[slot].duration;
     setGlobalTimers(prev => ({ ...prev, [slot]: { ...prev[slot], startTime: now } }));
     if (selectedIds.length > 0) {
@@ -152,10 +163,12 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     if (selectedIds.length === 0) return;
     const timer = globalTimers[slot];
     if (!timer.startTime) return;
+    // 💡 기존 타이머 시간에 슬롯 정보를 재인코딩하여 세션 연동
+    const startTimeForSlot = Math.floor(timer.startTime / 10) * 10 + slot;
     const newMapping = { ...studentTimerMap };
     selectedIds.forEach(id => { newMapping[id] = slot; });
     setStudentTimerMap(newMapping);
-    await Promise.all(selectedIds.map(id => onSave(id, { timer_started_at: timer.startTime, timer_duration: timer.duration })));
+    await Promise.all(selectedIds.map(id => onSave(id, { timer_started_at: startTimeForSlot, timer_duration: timer.duration })));
     setSelectedIds([]);
   };
 
