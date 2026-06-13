@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { Student, Task } from '@/types/dashboard';
+import SurveyManagement from './SurveyManagement';
 
 interface NotificationsViewProps {
   academyInfo: any;
@@ -21,6 +22,7 @@ export default function NotificationsView({ academyInfo, students, currentUser }
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [filterTab, setFilterTab] = useState<'all' | 'weekly' | 'monthly'>('all');
+  const [viewTab, setViewTab] = useState<'tasks' | 'surveys'>('tasks');
 
   const [newTask, setNewTask] = useState({ 
     title: '', 
@@ -176,13 +178,31 @@ const suggestionAlerts = useMemo(() => {
           </h2>
           <p className="text-[10px] text-gray-500 font-bold uppercase tracking-[0.3em]">학원 운영 및 업무 관리</p>
         </div>
-        {isAdmin && (
+        {isAdmin && viewTab === 'tasks' && (
           <button onClick={() => setIsAddingTask(true)} className="flex items-center gap-2 px-5 py-2.5 bg-blue-600 text-white text-[11px] font-black uppercase tracking-widest rounded-[2px] hover:bg-blue-500 transition-all shadow-lg shadow-blue-600/20">
             <Plus size={16} /> New Task
           </button>
         )}
       </div>
 
+      <div className="flex gap-4 border-b border-white/10 pb-2">
+        <button 
+          onClick={() => setViewTab('tasks')}
+          className={`pb-2 text-sm font-black uppercase tracking-widest transition-all ${viewTab === 'tasks' ? 'text-blue-500 border-b-2 border-blue-500' : 'text-gray-500 hover:text-gray-300'}`}
+        >
+          업무 / 공지사항
+        </button>
+        <button 
+          onClick={() => setViewTab('surveys')}
+          className={`pb-2 text-sm font-black uppercase tracking-widest transition-all ${viewTab === 'surveys' ? 'text-purple-500 border-b-2 border-purple-500' : 'text-gray-500 hover:text-gray-300'}`}
+        >
+          설문 / 수요조사
+        </button>
+      </div>
+
+      {viewTab === 'surveys' ? (
+        <SurveyManagement academyInfo={academyInfo} students={students} currentUser={currentUser} />
+      ) : (
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* 왼쪽: 업무 리스트 */}
         <div className="lg:col-span-7 space-y-6">
@@ -310,6 +330,7 @@ const suggestionAlerts = useMemo(() => {
           </div>
         </div>
       </div>
+      )}
 
       {/* 업무 추가 모달 */}
       <AnimatePresence>

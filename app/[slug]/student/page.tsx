@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { AnimatePresence } from 'framer-motion';
-import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, CalendarRange } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
@@ -13,6 +13,7 @@ import { TextbookOption, ExamSchedule } from '@/types/dashboard';
 import StudentHeader from '@/components/student/StudentHeader';
 import LearningDashboard from '@/components/student/LearningDashboard';
 import TextbookSystem from '@/components/student/TextbookSystem';
+import SurveyList from '@/components/student/SurveyList';
 import TestStatusSection from '@/components/student/TestStatusSection';
 import LearningHistoryList from '@/components/student/LearningHistoryList';
 import StudentSuggestion from '@/components/student/StudentSuggestion';
@@ -23,12 +24,14 @@ export default function StudentPortal() {
   const { slug } = useParams();
   const [student, setStudent] = useState<any>(null);
   const [academy, setAcademy] = useState<any>(null); 
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const [todaySession, setTodaySession] = useState<any>(null);
   const [allLogs, setAllLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [isDashboardSlim, setIsDashboardSlim] = useState(false); // 💡 대시보드 접기 상태를 전역으로 관리
   const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion'>('study'); // 💡 모바일 탭 상태 추가
   
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
@@ -327,6 +330,32 @@ export default function StudentPortal() {
     } catch (e) { console.error(e); } finally { setIsSaving(false); }
   };
 
+  const handleApprovalSubmit = async (status: 'none' | 'submitted') => {
+    if (!student) { alert("학생 정보를 불러오지 못했습니다."); return; }
+    if (!academy) { alert("학원 정보를 불러오지 못했습니다."); return; }
+    
+    setIsSaving(true);
+    try {
+      const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
+      const newResult = { ...currentResult, approval_status: status };
+      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, test_result: JSON.stringify(newResult) };
+      if (todaySession?.id && todaySession.id !== 'temp') { 
+        const { error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); 
+        if (error) throw error;
+      } else { 
+        const { error } = await supabase.from('ams_session_logs').insert([updateData]); 
+        if (error) throw error;
+      }
+      setTodaySession((prev: any) => ({ ...prev, test_result: JSON.stringify(newResult) }));
+    } catch (e: any) { 
+      console.error(e); 
+      alert("제출 처리 중 오류가 발생했습니다: " + (e.message || "알 수 없는 오류"));
+    } finally { 
+      setIsSaving(false); 
+      setConfirmSubmitOpen(false);
+    }
+  };
+
   const handleSelfEval = async (level: number) => {
     if (!student) return;
     const isToggleOff = currentSelfEval === level; 
@@ -371,6 +400,29 @@ export default function StudentPortal() {
     } catch (e) { console.error(e); alert('전송 중 오류가 발생했습니다.'); } finally { setIsSaving(false); }
   };
 
+  const handleSyncTasks = async (checkedTasks: string[], uncheckedTasks: string[]) => {
+    if (!student || !academy) return;
+    
+    let currentClasswork = localCompletedClasswork;
+    
+    // 제거할 태스크 삭제
+    uncheckedTasks.forEach(task => {
+      currentClasswork = currentClasswork.split('\n').filter(line => line.trim() !== task).join('\n');
+    });
+    
+    // 추가할 태스크 넣기 (중복 방지)
+    checkedTasks.forEach(task => {
+      if (!currentClasswork.split('\n').map(l => l.trim()).includes(task)) {
+        currentClasswork = currentClasswork ? `${currentClasswork}\n${task}` : task;
+      }
+    });
+
+    if (currentClasswork !== localCompletedClasswork) {
+      setLocalCompletedClasswork(currentClasswork);
+      await handleManualSave('completed_classwork', currentClasswork);
+    }
+  };
+
   const getRemainingClasses = useCallback((targetDate: string) => {
     if (!targetDate || !student?.class_days) return null;
     const today = new Date(selectedDate); const exam = new Date(targetDate);
@@ -395,6 +447,8 @@ export default function StudentPortal() {
     );
   }
 
+  const approvalStatus = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result).approval_status || 'none' : 'none';
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] font-sans flex flex-col overflow-hidden text-center">
       {/* 💡 헤더 컴포넌트 */}
@@ -413,6 +467,9 @@ export default function StudentPortal() {
               student={student} lastSession={lastSession} todaySession={todaySession} 
               selectedDate={selectedDate} currentSelfEval={currentSelfEval} 
               handleSelfEval={handleSelfEval} handleTodoAchievement={handleTodoAchievement} todayPlan={todayPlan}
+              isSlim={isDashboardSlim} setIsSlim={setIsDashboardSlim}
+              approvalStatus={approvalStatus}
+              onSyncTasks={handleSyncTasks}
             />
 
             <TextbookSystem 
@@ -420,7 +477,32 @@ export default function StudentPortal() {
               localCompletedClasswork={localCompletedClasswork} setLocalCompletedClasswork={setLocalCompletedClasswork}
               localHomework={localHomework} setLocalHomework={setLocalHomework}
               todayPlan={todayPlan} handleManualSave={handleManualSave} isSaving={isSaving}
+              onBookSelect={(isActive) => { if (isActive) setIsDashboardSlim(true); }}
+              approvalStatus={approvalStatus}
             />
+            {(() => {
+              return (
+                <div className="mt-8 mb-4">
+                  {approvalStatus === 'none' ? (
+                    <button 
+                      onClick={() => setConfirmSubmitOpen(true)} 
+                      disabled={isSaving}
+                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 text-lg transition-all animate-in slide-in-from-bottom-2"
+                    >
+                      🚀 오늘의 학습 제출하기
+                    </button>
+                  ) : (
+                    <div className="w-full py-4 bg-white/10 border border-white/20 text-white font-black rounded-xl text-lg flex items-center justify-center gap-2">
+                      {approvalStatus === 'approved' ? (
+                        <><Check size={24} className="text-blue-400" /> 선생님 검사 완료</>
+                      ) : (
+                        <><Lock size={24} className="text-amber-400" /> 검사 대기 중 (수정 불가)</>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           <div className={activeTab === 'history' ? 'block mt-4' : 'hidden lg:block lg:mt-8'}>
@@ -492,6 +574,11 @@ export default function StudentPortal() {
             )}
           </div>
 
+          {/* 설문조사 / 수요조사 */}
+          <div className={activeTab === 'suggestion' ? 'block mb-6' : 'hidden'}>
+            <SurveyList academyId={academy.id} student={student} />
+          </div>
+
           {upcomingMakeups.length > 0 && (
             <div className={activeTab === 'suggestion' ? 'block' : 'hidden lg:block'}>
               <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 md:p-6 text-left space-y-2 md:space-y-3 shadow-lg shadow-amber-950/10 shrink-0">
@@ -542,8 +629,8 @@ export default function StudentPortal() {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 h-[60px] bg-[#0c0c0c]/90 backdrop-blur-md border-t border-white/5 flex items-center justify-around z-30 px-2 shadow-2xl">
         {[
           { id: 'study', label: '오늘 학습', icon: <BookOpen size={16} /> },
-          { id: 'history', label: '평가 & 기록', icon: <TrendingUp size={16} /> },
-          { id: 'suggestion', label: '건의 & 보강', icon: <MessageSquare size={16} /> },
+          { id: 'history', label: '히스토리', icon: <CalendarRange size={16} /> },
+          { id: 'suggestion', label: '알림장 & 설문', icon: <MessageSquare size={16} /> },
         ].map(tab => {
           const isActive = activeTab === tab.id;
           return (
@@ -572,6 +659,50 @@ export default function StudentPortal() {
           />
         )}
       </AnimatePresence>
+      {/* 💡 커스텀 제출 확인 모달 */}
+      <AnimatePresence>
+        {confirmSubmitOpen && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSaving && setConfirmSubmitOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-[#111] border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full">
+              <h3 className="text-lg font-black text-white mb-4">제출할 내용을 확인해주세요</h3>
+              
+              <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4 text-[13px] space-y-4">
+                <div>
+                  <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><BookOpen size={14} /> 학원공부 / 오답고치기</p>
+                  <p className="text-emerald-400 font-black leading-snug">{localCompletedClasswork || '입력된 기록이 없습니다.'}</p>
+                </div>
+                <div>
+                  <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><FileText size={14} /> 집에서 할 숙제</p>
+                  <p className="text-blue-400 font-black leading-snug">{localHomework || '입력된 기록이 없습니다.'}</p>
+                </div>
+                <div className="flex gap-4 pt-2 border-t border-white/10">
+                  <div className="flex-1">
+                    <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><TrendingUp size={14} /> 오늘 달성률</p>
+                    <p className="text-white font-black">{todaySession?.todo_achievement ? `${todaySession.todo_achievement}%` : '입력 안함'}</p>
+                  </div>
+                  <div className="flex-1">
+                    <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><Check size={14} /> 숙제이행 평가</p>
+                    <p className="text-amber-400 font-black">
+                      {currentSelfEval === 1 ? '1단계 (미흡)' : currentSelfEval === 2 ? '2단계 (보통)' : currentSelfEval === 3 ? '3단계 (우수)' : '입력 안함'}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              <p className="text-[12px] text-gray-400 mb-6 text-center">제출하시면 선생님 확인 전까지 <b>수정하거나 취소할 수 없습니다.</b></p>
+              
+              <div className="flex gap-3">
+                <button onClick={() => setConfirmSubmitOpen(false)} disabled={isSaving} className="flex-1 py-3 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white font-bold rounded-xl transition-colors">좀 더 쓸래요</button>
+                <button onClick={() => handleApprovalSubmit('submitted')} disabled={isSaving} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 transition-colors flex justify-center items-center">
+                  {isSaving ? <Loader2 className="animate-spin" size={20} /> : "이대로 제출하기!"}
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }

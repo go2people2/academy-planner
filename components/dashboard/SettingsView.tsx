@@ -16,6 +16,7 @@ import TestManagement from './settings/TestManagement';
 import TeacherManagement from './settings/TeacherManagement';
 import AcademyProfile from './settings/AcademyProfile';
 import AccountSettings from './settings/AccountSettings';
+import SystemManual from './settings/SystemManual';
 
 interface SettingsViewProps {
   teachers: any[];
@@ -123,6 +124,7 @@ const updateTimerPreset = async (index: number, value: number) => {
     { id: 'teachers', label: 'Teachers', color: 'text-blue-500', roles: ['admin', 'master'] },
     { id: 'holidays', label: 'Holidays', color: 'text-emerald-500', roles: ['admin', 'master'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-500', roles: ['admin', 'master'] },
+    { id: 'manual', label: 'Manual', color: 'text-purple-500', roles: ['admin', 'master', 'teacher'] },
     // 💡 My Account는 향후 일반 선생님('teacher')에게도 개방 가능하도록 설계
     { id: 'account', label: 'My Account', color: 'text-blue-500', roles: ['admin', 'master', 'teacher'] }
   ], []);
@@ -210,6 +212,11 @@ const updateTimerPreset = async (index: number, value: number) => {
         {/* 💡 테스트 및 정답지 관리 탭 */}
         {activeTab === 'tests' && (
           <TestManagement academyId={academyInfo?.id} />
+        )}
+
+        {/* 💡 매뉴얼 관리 탭 */}
+        {activeTab === 'manual' && (
+          <SystemManual />
         )}
 
         {/* 선생님 계정 관리 탭 */}

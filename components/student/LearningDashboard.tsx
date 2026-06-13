@@ -1,8 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, CheckCircle2, ClipboardCheck, ChevronRight, TrendingUp, BookOpen, Target, Clock, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
+import { Zap, CheckCircle2, ClipboardCheck, ChevronRight, TrendingUp, BookOpen, Target, Clock, AlertTriangle, ChevronUp, ChevronDown, Check } from 'lucide-react';
 
 interface LearningDashboardProps {
   student: any;
@@ -13,6 +13,10 @@ interface LearningDashboardProps {
   handleSelfEval: (level: number) => void;
   handleTodoAchievement: (percentage: number) => void;
   todayPlan: string;
+  isSlim: boolean;
+  setIsSlim: (val: boolean) => void;
+  approvalStatus?: 'none' | 'submitted' | 'approved';
+  onSyncTasks?: (checkedTasks: string[], uncheckedTasks: string[]) => void;
 }
 
 function StudentTimer({ startedAt, duration }: { startedAt: number, duration: number }) {
@@ -77,9 +81,52 @@ export default function LearningDashboard({
   currentSelfEval,
   handleSelfEval,
   handleTodoAchievement,
-  todayPlan
+  todayPlan,
+  isSlim,
+  setIsSlim,
+  approvalStatus = 'none',
+  onSyncTasks
 }: LearningDashboardProps) {
-  const [isSlim, setIsSlim] = useState(false); // 💡 슬림 모드 상태 추가
+  const planTasks = useMemo(() => {
+    return todayPlan ? todayPlan.split('\n').filter(l => l.trim()) : [];
+  }, [todayPlan]);
+
+  const displayOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+
+  const achievementOptions = useMemo(() => {
+    const count = planTasks.length;
+    if (count === 1) return [0, 100];
+    if (count === 2) return [0, 50, 100];
+    if (count === 3) return [0, 30, 60, 100];
+    if (count === 4) return [0, 25, 50, 75, 100];
+    if (count === 5) return [0, 20, 40, 60, 80, 100];
+    return [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
+  }, [planTasks]);
+
+  const handleTodoClick = (num: number) => {
+    handleTodoAchievement(num);
+    if (onSyncTasks && planTasks.length > 0) {
+      let checkedCount = 0;
+      for (let i = 1; i < achievementOptions.length; i++) {
+        if (num >= achievementOptions[i]) {
+          checkedCount = i;
+        }
+      }
+      
+      const checked: string[] = [];
+      const unchecked: string[] = [];
+      
+      planTasks.forEach((task, i) => {
+        const cleanTask = task.replace(/^[0-9]+[\.\)]\s*|^[-*#]\s*/, '').trim();
+        if (i < checkedCount) {
+          checked.push(cleanTask);
+        } else {
+          unchecked.push(cleanTask);
+        }
+      });
+      onSyncTasks(checked, unchecked);
+    }
+  };
 
   const getScoreTheme = (score: number | null) => {
     if (score === null || score >= 8) return {
@@ -207,12 +254,13 @@ export default function LearningDashboard({
                     {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
                       <button 
                         key={num} 
-                        onClick={() => handleSelfEval(num)} 
+                        disabled={approvalStatus !== 'none'}
+                        onClick={() => approvalStatus === 'none' && handleSelfEval(num)} 
                         className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
                           (currentSelfEval !== null && num <= currentSelfEval) 
                             ? `${scoreTheme.bg} ${scoreTheme.border} text-white shadow-lg` 
                             : `bg-white/10 border-white/20 text-white ${scoreTheme.hoverBorder}`
-                        }`}
+                        } ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         {currentSelfEval === null ? num : (num === currentSelfEval ? num : '')}
                       </button>
@@ -263,30 +311,70 @@ export default function LearningDashboard({
                   </div>
                 </div>
                 <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
-                  {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(num => (
-                    <button 
-                      key={num} 
-                      onClick={() => handleTodoAchievement(num)} 
-                      className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
-                        (todaySession?.todo_achievement && num <= todaySession.todo_achievement) 
-                          ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
-                          : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50'
-                      }`}
-                    >
+                  {displayOptions.map(num => (
+                      <button 
+                        key={num} 
+                        disabled={approvalStatus !== 'none'}
+                        onClick={() => approvalStatus === 'none' && handleTodoClick(num)} 
+                        className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
+                          (todaySession?.todo_achievement !== undefined && num <= todaySession.todo_achievement) 
+                            ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
+                            : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50'
+                        } ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                      >
                       {(!todaySession?.todo_achievement) ? num : (num === todaySession?.todo_achievement ? num : '')}
                     </button>
                   ))}
                   <span className="text-[11px] font-black text-emerald-500/60 ml-1">%</span>
                 </div>
               </div>
-              <div className={`space-y-1 ${todayPlan ? "p-3 md:p-4" : "p-2"}`}>
-                {todayPlan ? (
-                  todayPlan.split('\n').filter(l => l.trim()).map((task, i) => (
-                    <div key={i} className="flex items-start gap-2 md:gap-3 group/task">
-                      <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] group-hover/task:scale-125 transition-transform" />
-                      <p className="text-[13px] md:text-[14.5px] font-bold text-white leading-tight">{task}</p>
-                    </div>
-                  ))
+              <div className={`space-y-1.5 ${planTasks.length > 0 ? "p-3 md:p-4" : "p-2"}`}>
+                {planTasks.length > 0 ? (
+                  planTasks.map((task, i) => {
+                    const cleanTask = task.replace(/^[0-9]+[\.\)]\s*|^[-*#]\s*/, '').trim();
+                    const isCheckboxStyle = task !== cleanTask;
+                    
+                    let checkedCount = 0;
+                    for (let j = 1; j < achievementOptions.length; j++) {
+                      if ((todaySession?.todo_achievement || 0) >= achievementOptions[j]) {
+                        checkedCount = j;
+                      }
+                    }
+                    const isChecked = i < checkedCount;
+
+                    return (
+                      <div 
+                        key={i} 
+                        onClick={() => {
+                          if (approvalStatus !== 'none') return;
+                          if (isCheckboxStyle) {
+                            // 클릭한 인덱스에 따라 달성률 계산 (토글 로직)
+                            const nextIndex = isChecked ? i : i + 1;
+                            const nextValue = achievementOptions[nextIndex] || 0;
+                            handleTodoClick(nextValue);
+                          }
+                        }}
+                        className={`flex items-start gap-2 md:gap-3 group/task transition-all ${
+                          isCheckboxStyle && approvalStatus === 'none' ? 'cursor-pointer hover:bg-white/5 rounded-md p-1 -m-1' : ''
+                        } ${isChecked ? 'opacity-50' : ''}`}
+                      >
+                        {isCheckboxStyle ? (
+                          <div className={`mt-0.5 shrink-0 w-4 h-4 rounded-sm border flex items-center justify-center transition-all ${
+                            isChecked ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500 bg-black/20 group-hover/task:border-emerald-400'
+                          }`}>
+                            {isChecked && <Check size={12} className="text-white" strokeWidth={4} />}
+                          </div>
+                        ) : (
+                          <div className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] group-hover/task:scale-125 transition-transform" />
+                        )}
+                        <p className={`text-[13px] md:text-[14.5px] font-bold leading-snug transition-all ${
+                          isChecked ? 'text-gray-400 line-through decoration-emerald-500/50' : 'text-white'
+                        }`}>
+                          {cleanTask}
+                        </p>
+                      </div>
+                    );
+                  })
                 ) : (
                   <div className="flex items-center gap-2 opacity-40 px-2 py-0.5">
                     <CheckCircle2 size={12} className="text-emerald-500" />

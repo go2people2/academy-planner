@@ -199,35 +199,44 @@ function BookProgressRow({ student, bookCode, textbook, onSaveLegacy }: { studen
     const title = textbook?.title || bookCode;
 
     student.allLogs.forEach((log: SessionLog) => {
-      // 1. 숙제 (Homework - Blue) 파싱
-      const hwText = log.homework_text || '';
-      if (hwText.includes(title)) {
-        const matches = hwText.matchAll(/p(\d+)\s*[~-]\s*p?(\d+)/gi);
-        for (const match of matches) {
-          const s = parseInt(match[1]); const e = match[2] ? parseInt(match[2]) : s;
-          if (!isNaN(s) && !isNaN(e)) { for (let i = Math.min(s, e); i <= Math.max(s, e); i++) { if (!statusMap.has(i)) statusMap.set(i, 'homework'); } }
-        }
-      }
-
-      // 2. 수업/수행 (Classwork/Wrong - Amber/Green) 파싱
-      const cwLines = (log.classwork_text || '').split('\n');
-      cwLines.forEach(line => {
-        if (line.includes(title)) {
-          const type = line.includes('[오답]') ? 'wrong' : 'classwork';
-          const matches = line.matchAll(/p(\d+)\s*[~-]\s*p?(\d+)/gi);
-          for (const match of matches) {
-            const s = parseInt(match[1]); const e = match[2] ? parseInt(match[2]) : s;
-            if (!isNaN(s) && !isNaN(e)) {
-              for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
-                const current = statusMap.get(i);
-                // Hierarchy: wrong > classwork > homework
-                if (type === 'wrong') statusMap.set(i, 'wrong');
-                else if (type === 'classwork' && current !== 'wrong') statusMap.set(i, 'classwork');
+      const processText = (t: string | undefined | null, baseType: 'classwork' | 'homework') => {
+        if (!t) return;
+        const displayTitle = (textbook?.title || bookCode).replace(/^\[.*?\]\s*/, '');
+        const cleanTitle = displayTitle.replace(/\s+/g, '').toLowerCase();
+        const cleanBookCode = actualBookCode.replace(/\s+/g, '').toLowerCase();
+        
+        t.split('\n').forEach(line => {
+          const cleanLine = line.replace(/\s+/g, '').toLowerCase();
+          if (cleanLine.includes(cleanTitle) || cleanLine.includes(cleanBookCode)) {
+            const isWrong = cleanLine.includes('[오답]');
+            const isCancel = cleanLine.includes('[취소]');
+            const status = baseType === 'classwork' ? (isWrong ? 'wrong' : 'classwork') : (isCancel ? 'cancel' : 'homework');
+            const regex = /p(\d+)[~-]?p?(\d+)?/gi;
+            let match;
+            while ((match = regex.exec(cleanLine)) !== null) {
+              const s = parseInt(match[1]); const e = match[2] ? parseInt(match[2]) : s;
+              if (!isNaN(s) && !isNaN(e)) {
+                for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
+                  const current = statusMap.get(i);
+                  if (status === 'cancel') {
+                    if (current === 'homework') statusMap.delete(i);
+                  } else if (status === 'wrong') {
+                    statusMap.set(i, 'wrong');
+                  } else if (status === 'classwork' && current !== 'wrong') {
+                    statusMap.set(i, 'classwork');
+                  } else if (status === 'homework' && !current) {
+                    statusMap.set(i, 'homework');
+                  }
+                }
               }
             }
           }
-        }
-      });
+        });
+      };
+
+      processText(log.homework_text, 'homework');
+      processText(log.classwork_text, 'classwork');
+      processText(log.completed_classwork_text, 'classwork');
 
       // 3. JSON 데이터 (보정용)
       const combinedJson = [...(log.classwork_json || []), ...(log.homework_json || [])];

@@ -14,6 +14,7 @@ import StudentStudyReportDrawer from '@/components/dashboard/StudentStudyReportD
 import MorningBriefingModal from '@/components/dashboard/MorningBriefingModal';
 import ClassroomMode from '@/components/dashboard/ClassroomMode';
 import TeacherTasks from '@/components/dashboard/TeacherTasks';
+import ApprovalModal from '@/components/dashboard/ApprovalModal';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
@@ -432,6 +433,9 @@ export default function DashboardPage() {
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [isClassroomModeOpen, setIsClassroomModeOpen] = useState(false);
+  
+  // 💡 [추가] 검사(승인) 대기열 모달 상태
+  const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [showMorningBriefing, setShowMorningBriefing] = useState(false);
   const [sortMode, setSortMode] = useState<'time' | 'name' | 'grade'>('time');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -1023,6 +1027,55 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     } catch (e) { console.error(e); } 
   };
 
+  // 💡 [추가] 제출 승인/반려 핸들러
+  const handleApproveSubmissions = async (studentIds: string[]) => {
+    if (!academy) return;
+    try {
+      const updates = studentIds.map(id => {
+        const s = students.find(x => x.id === id);
+        if (!s || !s.todaySession?.id || s.todaySession.id === 'temp') return null;
+        const currentRes = s.todaySession.test_result && typeof s.todaySession.test_result === 'string' ? JSON.parse(s.todaySession.test_result) : {};
+        return {
+          id: s.todaySession.id,
+          test_result: JSON.stringify({ ...currentRes, approval_status: 'approved' })
+        };
+      }).filter(Boolean);
+      
+      if (updates.length > 0) {
+        const { error } = await supabase.from('ams_session_logs').upsert(updates as any);
+        if (error) throw error;
+        await fetchAllData(true);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('승인 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handleRejectSubmissions = async (studentIds: string[]) => {
+    if (!academy) return;
+    try {
+      const updates = studentIds.map(id => {
+        const s = students.find(x => x.id === id);
+        if (!s || !s.todaySession?.id || s.todaySession.id === 'temp') return null;
+        const currentRes = s.todaySession.test_result && typeof s.todaySession.test_result === 'string' ? JSON.parse(s.todaySession.test_result) : {};
+        return {
+          id: s.todaySession.id,
+          test_result: JSON.stringify({ ...currentRes, approval_status: 'none' })
+        };
+      }).filter(Boolean);
+      
+      if (updates.length > 0) {
+        const { error } = await supabase.from('ams_session_logs').upsert(updates as any);
+        if (error) throw error;
+        await fetchAllData(true);
+      }
+    } catch (e) {
+      console.error(e);
+      alert('반려 중 오류가 발생했습니다.');
+    }
+  };
+
   const selectedDayKey = getDayOfWeek(selectedDate);
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
@@ -1067,6 +1120,27 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         <Sidebar viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} filterTarget={filterTarget} setFilterTarget={setFilterTarget} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} />
       )}
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
+        {(() => {
+          // 제출 대기 중인 학생 필터링
+          const pendingStudents = todayStudents.filter(s => {
+            const tr = s.todaySession?.test_result;
+            if (!tr || typeof tr !== 'string' || !tr.startsWith('{')) return false;
+            try { return JSON.parse(tr).approval_status === 'submitted'; } catch { return false; }
+          });
+          
+          return pendingStudents.length > 0 ? (
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40">
+              <button 
+                onClick={() => setIsApprovalModalOpen(true)}
+                className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-full shadow-2xl shadow-blue-900/50 flex items-center gap-3 transition-all animate-bounce"
+              >
+                <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center text-[12px]">{pendingStudents.length}</div>
+                명 제출 검사 대기 중! 클릭해서 확인
+              </button>
+            </div>
+          ) : null;
+        })()}
+
         {isLoading ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><Loader2 className="animate-spin mb-4" size={32} /><p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Academy Data...</p></div>) : (
           <div className="h-full">
             {viewMode === 'board' && <Overview todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} />}
@@ -1127,6 +1201,24 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         {selectedStudentId && selectedStudent && !isBatchMode && (viewMode === 'studentEdit' ? <StudentDetailDrawer student={selectedStudent} availableTextbooks={availableTextbooks} isRefreshingBooks={isRefreshingBooks} onRefreshBooks={refreshTextbooks} onUpdateInfo={updateStudentInfo} onAddToToday={addStudentToToday} onClose={() => setSelectedStudentId(null)} teachers={teachers} /> : <StudentStudyReportDrawer student={selectedStudent} availableTextbooks={availableTextbooks} onClose={() => setSelectedStudentId(null)} onEditMode={() => navigateTo('studentEdit')} />)}
       </AnimatePresence>
       <AnimatePresence>{selectedStudentId && !isBatchMode && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedStudentId(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />)}</AnimatePresence>
+      {isApprovalModalOpen && (
+        <ApprovalModal 
+          pendingStudents={todayStudents.filter(s => {
+            const tr = s.todaySession?.test_result;
+            if (!tr || typeof tr !== 'string' || !tr.startsWith('{')) return false;
+            try { return JSON.parse(tr).approval_status === 'submitted'; } catch { return false; }
+          })}
+          onClose={() => setIsApprovalModalOpen(false)}
+          onApprove={async (ids) => {
+            await handleApproveSubmissions(ids);
+            setIsApprovalModalOpen(false);
+          }}
+          onReject={async (ids) => {
+            await handleRejectSubmissions(ids);
+            setIsApprovalModalOpen(false);
+          }}
+        />
+      )}
     </div>
   );
 }

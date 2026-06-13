@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  BookOpen, TrendingUp, ClipboardList, Loader2, Check, ArrowLeft, X 
+  BookOpen, TrendingUp, ClipboardList, Loader2, Check, ArrowLeft, X, ArrowRight
 } from 'lucide-react';
 import { TextbookOption } from '@/types/dashboard';
 
@@ -18,6 +18,8 @@ interface TextbookSystemProps {
   todayPlan: string;
   handleManualSave: (field: 'classwork' | 'completed_classwork' | 'homework' | 'special_notes', value: string) => Promise<void>;
   isSaving: boolean;
+  onBookSelect?: (isActive: boolean) => void;
+  approvalStatus?: 'none' | 'submitted' | 'approved';
 }
 
 export default function TextbookSystem({
@@ -30,7 +32,9 @@ export default function TextbookSystem({
   setLocalHomework,
   todayPlan,
   handleManualSave,
-  isSaving
+  isSaving,
+  onBookSelect,
+  approvalStatus = 'none'
 }: TextbookSystemProps) {
   const [activeBook, setActiveBook] = useState<any>(null);
   const [activeUnit, setActiveUnit] = useState<any>(null);
@@ -41,57 +45,154 @@ export default function TextbookSystem({
   const [selectedPages, setSelectedPages] = useState<number[]>([]);
   const [selectionRange, setSelectionRange] = useState<{ start: number | null, end: number | null }>({ start: null, end: null });
   const [lastClickedUnitIdx, setLastClickedUnitIdx] = useState<number | null>(null);
+  const [isTeacher, setIsTeacher] = useState(false);
 
-  // 💡 데이터 추출 및 병합 로직
-  const solvedPages = useMemo(() => {
-    if (!activeBook || !allLogs) return new Set<number>();
-    const pages = new Set<number>();
-    allLogs.forEach(log => {
-      // 1. JSON 기반 추출 (선생님 앱 등 연동)
-      const classwork = log.classwork_json || [];
-      const homework = log.homework_json || [];
-      const allJson = [...classwork, ...homework];
-      allJson.forEach((h: any) => {
+  // 💡 모바일 스와이프 제스처를 위한 상태
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+
+  // 💡 장수 계산 팝업 애니메이션을 위한 상태
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState({ sheets: 0, pages: 0 });
+
+  // 💡 activeBook 상태 변경 시 외부 콜백 호출 (대시보드 접기용)
+  useEffect(() => {
+    if (onBookSelect) {
+      onBookSelect(activeBook !== null);
+    }
+  }, [activeBook, onBookSelect]);
+
+  useEffect(() => {
+    if (selectedPages.length > 1 && (activeUnit || isMergedViewActive)) {
+      setToastMessage({
+        sheets: selectedPages.length / 2,
+        pages: selectedPages.length
+      });
+      setShowToast(true);
+      
+      const timer = setTimeout(() => {
+        setShowToast(false);
+      }, 1500); // 1.5초 후 자연스럽게 사라짐
+
+      return () => clearTimeout(timer);
+    } else {
+      // 💡 상세페이지를 나가거나 선택이 풀렸을 때 애니메이션 강제 종료
+      setShowToast(false);
+    }
+  }, [selectedPages, activeUnit, isMergedViewActive]); 
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEndAction = () => {
+    if (!touchStart || !touchEnd) return;
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > 50;
+    const isRightSwipe = distance < -50;
+
+    if (isLeftSwipe && selectedUnits.length > 0 && !isMergedViewActive && !activeUnit) {
+      // 화면을 왼쪽으로 쓱 밀면 상세(쪽수) 페이지로 진입!
+      setIsMergedViewActive(true);
+      setSelectedPages([]);
+    } else if (isRightSwipe && (isMergedViewActive || activeUnit)) {
+      // 상세 화면에서 오른쪽으로 쓱 밀면 뒤로가기(단원목록)!
+      setIsMergedViewActive(false);
+      setActiveUnit(null);
+      setSelectedPages([]);
+    }
+  };
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const teacherToken = localStorage.getItem('ams_user');
+      if (teacherToken) setIsTeacher(true);
+    }
+  }, []);
+
+  // 💡 데이터 추출 및 병합 로직 (각 페이지별 상태: classwork, wrong, homework)
+  const pageStatusMap = useMemo(() => {
+    if (!activeBook) return new Map<number, 'classwork' | 'wrong' | 'homework'>();
+    const map = new Map<number, 'classwork' | 'wrong' | 'homework'>();
+    
+    const setStatus = (start: number, end: number, status: 'classwork' | 'wrong' | 'homework') => {
+      for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+        const current = map.get(i);
+        if (status === 'wrong') map.set(i, 'wrong');
+        else if (status === 'classwork' && current !== 'wrong') map.set(i, 'classwork');
+        else if (status === 'homework' && !current) map.set(i, 'homework');
+      }
+    };
+
+    const processJson = (arr: any[], type: 'classwork' | 'homework') => {
+      arr.forEach(h => {
         if (h.book_name === activeBook.bookcode && h.range) {
-          const segments = h.range.split(',').map((s: string) => s.trim());
-          segments.forEach((seg: string) => {
+          h.range.split(',').forEach((seg: string) => {
             const matches = seg.match(/p(\d+)\s*[~-]\s*p?(\d+)/i) || seg.match(/p(\d+)/i);
             if (matches) {
               const s = parseInt(matches[1]); const e = matches[2] ? parseInt(matches[2]) : s;
-              if (!isNaN(s) && !isNaN(e)) { 
-                for (let i = Math.min(s, e); i <= Math.max(s, e); i++) pages.add(i);
-              }
+              if (!isNaN(s) && !isNaN(e)) setStatus(s, e, type);
             }
           });
         }
       });
+    };
 
-      // 2. 텍스트 기반 추출 (학생 대시보드 직접 입력)
-      const texts = [log.classwork_text, log.completed_classwork_text, log.homework_text].filter(Boolean) as string[];
+    const processText = (t: string | undefined | null, baseType: 'classwork' | 'homework') => {
+      if (!t) return;
       const displayTitle = activeBook.title.replace(/^\[.*?\]\s*/, '');
       const cleanTitle = displayTitle.replace(/\s+/g, '').toLowerCase();
       const cleanBookCode = activeBook.bookcode.replace(/\s+/g, '').toLowerCase();
-      
-      texts.forEach(t => {
-        const lines = t.split('\n');
-        lines.forEach(line => {
-          const cleanLine = line.replace(/\s+/g, '').toLowerCase();
-          if (cleanLine.includes(cleanTitle) || cleanLine.includes(cleanBookCode)) {
-            const regex = /p(\d+)[~-]?p?(\d+)?/gi;
-            let match;
-            while ((match = regex.exec(cleanLine)) !== null) {
-              const s = parseInt(match[1]);
-              const e = match[2] ? parseInt(match[2]) : s;
-              if (!isNaN(s) && !isNaN(e)) {
-                for (let i = Math.min(s, e); i <= Math.max(s, e); i++) pages.add(i);
+      t.split('\n').forEach(line => {
+        const cleanLine = line.replace(/\s+/g, '').toLowerCase();
+        if (cleanLine.includes(cleanTitle) || cleanLine.includes(cleanBookCode)) {
+          const isWrong = cleanLine.includes('[오답]');
+          const isCancel = cleanLine.includes('[취소]');
+          const status = baseType === 'classwork' ? (isWrong ? 'wrong' : 'classwork') : (isCancel ? 'cancel' : 'homework');
+          const regex = /p(\d+)[~-]?p?(\d+)?/gi;
+          let match;
+          while ((match = regex.exec(cleanLine)) !== null) {
+            const s = parseInt(match[1]); const e = match[2] ? parseInt(match[2]) : s;
+            if (!isNaN(s) && !isNaN(e)) {
+              for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
+                const current = map.get(i);
+                if (status === 'cancel') {
+                  if (current === 'homework') map.delete(i);
+                } else if (status === 'wrong') {
+                  map.set(i, 'wrong');
+                } else if (status === 'classwork' && current !== 'wrong') {
+                  map.set(i, 'classwork');
+                } else if (status === 'homework' && !current) {
+                  map.set(i, 'homework');
+                }
               }
             }
           }
-        });
+        }
       });
-    });
-    return pages;
-  }, [activeBook, allLogs]);
+    };
+
+    if (allLogs) {
+      allLogs.forEach(log => {
+        processJson(log.classwork_json || [], 'classwork');
+        processJson(log.homework_json || [], 'homework');
+        processText(log.classwork_text, 'classwork');
+        processText(log.completed_classwork_text, 'classwork');
+        processText(log.homework_text, 'homework');
+      });
+    }
+
+    // 💡 방금 추가한 텍스트 값 즉시 반영 (낙관적 업데이트)
+    processText(localCompletedClasswork, 'classwork');
+    processText(localHomework, 'homework');
+
+    return map;
+  }, [activeBook, allLogs, localCompletedClasswork, localHomework]);
 
   const mergedPageRange = useMemo(() => {
     if (selectedUnits.length === 0) return null;
@@ -152,13 +253,11 @@ export default function TextbookSystem({
       });
     } else {
       const isSelected = selectedUnits.some(selected => selected.unit === u.unit);
-      // 💡 원장님 제안: 이미 선택된 단원을 누르면 상세 페이지로 진입
       if (isSelected) {
-        setActiveUnit(u);
-        setIsMergedViewActive(false);
-      } 
-      // 💡 처음 누르면 파란색으로 '담기' (강조)
-      else {
+        // 이미 선택된 단원을 다시 누르면 선택 취소
+        setSelectedUnits(prev => prev.filter(selected => selected.unit !== u.unit));
+      } else {
+        // 처음 누르면 선택 추가
         setSelectedUnits(prev => [...prev, u]);
       }
     }
@@ -187,7 +286,7 @@ export default function TextbookSystem({
     }
   };
 
-  const handleRecordLearning = async (type: 'classwork' | 'homework' | 'wrong', customPages?: number[]) => {
+  const handleRecordLearning = async (type: 'classwork' | 'homework' | 'wrong' | 'cancel', customPages?: number[]) => {
     const pagesToUse = customPages || selectedPages;
     if (pagesToUse.length === 0 || !activeBook || !student) return;
     const ranges: string[] = []; let start = pagesToUse[0];
@@ -212,6 +311,25 @@ export default function TextbookSystem({
       if (firstNum && lastNum && suffix && last.includes(suffix)) unitText = `${firstNum}~${lastNum}${suffix}`; else unitText = `${first}~${last}`;
     } else if (targetUnits.length === 1) unitText = targetUnits[0].unit; else unitText = activeUnit?.unit || '';
 
+    if (type === 'cancel') {
+      const isMatch = (line: string) => line.includes(displayTitle) && (!unitText || line.includes(unitText));
+      
+      const newHomework = localHomework.split('\n').filter(line => !isMatch(line)).join('\n');
+      if (newHomework !== localHomework) {
+        setLocalHomework(newHomework);
+        await handleManualSave('homework', newHomework);
+      }
+      
+      const newClasswork = localCompletedClasswork.split('\n').filter(line => !isMatch(line)).join('\n');
+      if (newClasswork !== localCompletedClasswork) {
+        setLocalCompletedClasswork(newClasswork);
+        await handleManualSave('completed_classwork', newClasswork);
+      }
+      
+      setSelectedPages([]);
+      return;
+    }
+
     const fullText = `${type === 'wrong' ? '[오답] ' : ''}${displayTitle} ${unitText ? `${unitText} ` : ''}${rangeText}`;
     const targetField = type === 'homework' ? 'homework' : 'classwork';
     const currentText = targetField === 'homework' ? localHomework : localCompletedClasswork;
@@ -222,7 +340,7 @@ export default function TextbookSystem({
     setSelectedPages([]);
   };
 
-  const handleQuickAddUnits = async (type: 'classwork' | 'homework' | 'wrong') => {
+  const handleQuickAddUnits = async (type: 'classwork' | 'homework' | 'wrong' | 'cancel') => {
     if (selectedUnits.length === 0) return;
     const allPages: number[] = [];
     selectedUnits.forEach(u => { 
@@ -278,55 +396,124 @@ export default function TextbookSystem({
         {/* 오버레이: 단원 및 페이지 선택 */}
         <AnimatePresence>
           {activeBook && (
-            <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} className="absolute inset-0 z-40 bg-[#0a0a0a] border-l border-emerald-500/20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden">
-              <div className="p-6 space-y-6 flex-1 flex flex-col overflow-y-auto custom-scrollbar-v">
+            <motion.div 
+              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} 
+              className="absolute inset-0 z-40 bg-[#0a0a0a] border-l border-emerald-500/20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden"
+              onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEndAction}
+            >
+              {/* 💡 장수 계산 팝업 애니메이션 (스크롤과 독립적으로 최상단 고정) */}
+              <AnimatePresence mode="wait">
+                {showToast && (
+                  <motion.div
+                    key={toastMessage.pages}
+                    initial={{ opacity: 0, scale: 0.5, y: 20 }}
+                    animate={{ opacity: 1, scale: 1, y: 0 }}
+                    exit={{ opacity: 0, scale: 1.2, filter: 'blur(10px)' }}
+                    transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+                    className="absolute top-[25%] left-0 right-0 pointer-events-none flex flex-col items-center justify-center z-[100]"
+                  >
+                    <div className="bg-black/80 backdrop-blur-xl px-12 py-8 rounded-[2.5rem] border border-white/10 shadow-[0_20px_60px_rgba(16,185,129,0.2)] flex flex-col items-center justify-center transform -translate-y-1/2">
+                      <p className="text-7xl font-black text-transparent bg-clip-text bg-gradient-to-br from-emerald-300 to-blue-500 tracking-tighter drop-shadow-2xl">
+                        {toastMessage.sheets}장
+                      </p>
+                      <p className="text-[14px] font-bold text-white/50 mt-3 tracking-widest uppercase bg-white/5 px-4 py-1 rounded-full">
+                        총 {toastMessage.pages}쪽
+                      </p>
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <div className="p-3 md:p-4 space-y-3 flex-1 flex flex-col overflow-y-auto custom-scrollbar-v">
                 {!activeUnit && !isMergedViewActive ? (
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between px-1">
-                      <div className="flex items-center gap-3"><span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Select Unit</span></div>
-                      <button onClick={() => { setActiveBook(null); setSelectedUnits([]); setLastClickedUnitIdx(null); }} className="text-[9px] font-black text-gray-400 hover:text-white uppercase px-2 py-1 bg-white/5 rounded">Close</button>
+                  <div className="space-y-2">
+                    <div className="flex flex-col gap-2 px-1">
+                      <div className="flex items-center justify-between pb-1 border-b border-white/5">
+                        <div className="flex items-center gap-3">
+                          {selectedUnits.length > 0 ? (
+                            <span className="text-[12px] font-black text-blue-400">옵션을 선택해주세요 👇</span>
+                          ) : (
+                            <span className="text-[11px] font-black text-gray-500">단원을 선택해주세요</span>
+                          )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => { setIsMergedViewActive(true); setSelectedPages([]); }} 
+                            disabled={selectedUnits.length === 0}
+                            className="text-[11px] font-black text-emerald-400 hover:text-white disabled:opacity-30 disabled:grayscale px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/30 border border-emerald-500/20 transition-colors rounded-md flex items-center gap-1.5"
+                          >
+                            <BookOpen size={12} /> 쪽수고르기
+                          </button>
+                          <button 
+                            onClick={() => { setActiveBook(null); setSelectedUnits([]); setLastClickedUnitIdx(null); }} 
+                            className="text-[11px] font-black text-gray-400 hover:text-red-400 px-3 py-1.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 transition-colors rounded-md flex items-center gap-1.5"
+                          >
+                            <X size={12} /> 닫기
+                          </button>
+                        </div>
+                      </div>
+                      
+                      {/* 💡 레이아웃 쉬프트 방지: 옵션 버튼들을 항상 노출하고, 선택값이 없을 땐 비활성화(disabled) */}
+                      <div className="flex flex-col gap-2 pb-2">
+                        <div className="flex gap-2">
+                          <button onClick={() => handleQuickAddUnits('classwork')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-1.5 bg-emerald-600/90 hover:bg-emerald-500 disabled:opacity-20 disabled:grayscale text-white text-[11px] font-black rounded-lg transition-all shadow-lg border border-emerald-500/20">학원에서 공부</button>
+                          <button onClick={() => handleQuickAddUnits('wrong')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-1.5 bg-amber-600/90 hover:bg-amber-500 disabled:opacity-20 disabled:grayscale text-white text-[11px] font-black rounded-lg transition-all shadow-lg border border-amber-500/20">오답고치기</button>
+                          <button onClick={() => handleQuickAddUnits('homework')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-1.5 bg-blue-600/90 hover:bg-blue-500 disabled:opacity-20 disabled:grayscale text-white text-[11px] font-black rounded-lg transition-all shadow-lg border border-blue-500/20">집에서 할 숙제</button>
+                        </div>
+                        <div className="flex justify-end">
+                          <button onClick={() => handleQuickAddUnits('cancel')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="py-1 px-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-20 disabled:grayscale font-black text-[10px] rounded border border-red-500/20 transition-colors">선택 단원 숙제 취소</button>
+                        </div>
+                      </div>
                     </div>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-24">
                       {units.map((u, i) => {
                         const isSelected = selectedUnits.some(s => s.unit === u.unit);
+                        const unitStart = parseInt(u.start_page);
+                        const unitEnd = parseInt(u.end_page);
+                        const sparkline = [];
+                        for (let p = unitStart; p <= unitEnd; p++) {
+                          const status = pageStatusMap.get(p);
+                          sparkline.push(
+                            <div 
+                              key={p} 
+                              className={`h-full flex-1 ${
+                                status === 'wrong' ? 'bg-amber-500' :
+                                status === 'homework' ? 'bg-blue-500' :
+                                status === 'classwork' ? 'bg-emerald-500' :
+                                'bg-transparent'
+                              }`} 
+                            />
+                          );
+                        }
+
                         return (
                           <button 
                             key={i} 
                             onClick={(e) => handleUnitToggle(e, u, i)}
-                            className={`w-full flex items-center justify-between p-4 bg-white/[0.05] border-2 rounded-lg transition-all transform active:scale-[0.98] group relative overflow-hidden ${
+                            className={`w-full flex items-center justify-between px-3 py-2 bg-white/[0.05] border-2 rounded-lg transition-all transform active:scale-[0.98] group relative overflow-hidden ${
                               isSelected 
                                 ? 'bg-blue-600/30 border-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.15)]' 
                                 : 'border-white/10 hover:border-emerald-500/50'
                             }`}
                           >
-                            <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-3 flex-1 min-w-0 pr-2">
                               {isSelected && (
-                                <div className="w-6 h-6 bg-blue-500 rounded-full flex items-center justify-center text-white shrink-0 shadow-lg animate-in zoom-in">
-                                  <Check size={14} strokeWidth={4} />
+                                <div className="w-5 h-5 bg-blue-500 rounded-full flex items-center justify-center text-white shrink-0 shadow-lg animate-in zoom-in">
+                                  <Check size={12} strokeWidth={4} />
                                 </div>
                               )}
-                              <div className="text-left">
-                                <span className={`text-[15px] font-black block ${isSelected ? 'text-white' : 'text-white/90'}`}>{u.unit}</span>
-                                <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mt-0.5 block">
-                                  {isSelected ? "Click again to view detail" : `Start from p${u.start_page}`}
-                                </span>
+                              <div className="text-left flex-1 min-w-0">
+                                <span className={`text-[14px] font-black block truncate ${isSelected ? 'text-white' : 'text-white/90'}`}>{u.unit}</span>
+                                <div className="mt-1.5 flex w-[85%] h-1.5 bg-white/10 rounded-full overflow-hidden shadow-inner">
+                                  {sparkline}
+                                </div>
                               </div>
                             </div>
 
-                            <div className="flex items-center gap-3">
-                              <span className={`text-[11px] font-black tabular-nums px-2.5 py-1 rounded-md transition-colors ${
+                            <div className="flex items-center gap-2 shrink-0">
+                              <span className={`text-[10px] font-black tabular-nums px-1.5 py-0.5 rounded transition-colors ${
                                 isSelected ? 'bg-blue-500 text-white' : 'bg-emerald-500/10 text-emerald-400'
                               }`}>p{u.start_page}~{u.end_page}</span>
-
-                              {/* 💡 개별 선택 취소 버튼 (선택된 상태에서만 노출) */}
-                              {isSelected && (
-                                <div 
-                                  onClick={(e) => handleUnitUnselect(e, u.unit)}
-                                  className="w-5 h-5 bg-red-500/20 text-red-400 rounded-full flex items-center justify-center hover:bg-red-500 hover:text-white transition-all border border-red-500/20"
-                                >
-                                  <X size={10} strokeWidth={4} />
-                                </div>
-                              )}
                             </div>
                           </button>
                         );
@@ -334,11 +521,11 @@ export default function TextbookSystem({
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-6 flex-1 flex flex-col">
+                  <div className="space-y-6 flex-1 flex flex-col relative">
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 border-b border-white/5 shrink-0 -mx-2 px-2">
                       {units.map((u, i) => {
                         const isActive = activeUnit?.unit === u.unit; const isSelected = selectedUnits.some(s => s.unit === u.unit);
-                        return (<button key={i} onClick={(e) => handleUnitToggle(e, u, i)} className={`relative px-4 py-2 rounded-[4px] text-[11px] font-black whitespace-nowrap transition-all border ${isActive || isSelected ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'}`}>{u.unit}{selectedPages.some(p => p >= parseInt(u.start_page) && p <= parseInt(u.end_page)) && !isActive && !isSelected && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_rgba(16,185,129,0.8)]" />}</button>);
+                        return (<button key={i} onClick={(e) => handleUnitToggle(e, u, i)} className={`relative px-4 py-2 rounded-[4px] text-[11px] font-black whitespace-nowrap transition-all border ${isActive || isSelected ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-900/20' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'}`}>{u.unit}{selectedPages.some(p => p >= parseInt(u.start_page) && p <= parseInt(u.end_page)) && !isActive && !isSelected && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_rgba(16,185,129,0.8)]" />}</button>);
                       })}
                     </div>
                     <div className="flex items-center justify-between">
@@ -353,41 +540,30 @@ export default function TextbookSystem({
                         const range = mergedPageRange || (activeUnit ? { start: parseInt(activeUnit.start_page), end: parseInt(activeUnit.end_page), pages: [] } : null); if (!range) return null;
                         const pagesToRender = range.pages.length > 0 ? range.pages : (() => { const p = []; for (let i = range.start; i <= range.end; i++) p.push(i); return p; })();
                         return pagesToRender.map(p => {
-                          const isSel = selectedPages.includes(p); const isSol = solvedPages.has(p);
-                          return (<button key={p} onClick={() => handlePageClick(p)} className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black tabular-nums transition-all border relative ${isSel ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] scale-105' : isSol ? 'bg-emerald-500/20 border-emerald-500/40 text-emerald-500' : 'bg-white/10 border-white/20 text-white hover:bg-emerald-500/30'}`}>{p}{isSol && !isSel && <div className="absolute top-0.5 right-0.5 opacity-50"><Check size={7} strokeWidth={4} /></div>}</button>);
+                          const isSel = selectedPages.includes(p); const solStatus = pageStatusMap.get(p);
+                          const isSol = !!solStatus;
+                          const solColor = solStatus === 'wrong' ? 'text-amber-500 bg-amber-500/20 border-amber-500/40' : solStatus === 'homework' ? 'text-blue-500 bg-blue-500/20 border-blue-500/40' : 'text-emerald-500 bg-emerald-500/20 border-emerald-500/40';
+                          return (<button key={p} onClick={() => handlePageClick(p)} className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black tabular-nums transition-all border relative ${isSel ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] scale-105' : isSol ? solColor : 'bg-white/10 border-white/20 text-white hover:bg-emerald-500/30'}`}>{p}{isSol && !isSel && <div className="absolute top-0.5 right-0.5 opacity-50"><Check size={7} strokeWidth={4} /></div>}</button>);
                         });
                       })()}
                     </div>
                     <div className="pt-4 border-t border-white/10 flex flex-col gap-3 mt-auto">
-                      <div className="p-3 bg-white/10 rounded-md border border-white/10"><span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1 block">Selected Pages</span><p className="text-[15px] font-black text-white truncate">{selectedPages.length > 0 ? (() => { const ranges: string[] = []; let s = selectedPages[0]; for (let i = 1; i <= selectedPages.length; i++) { if (selectedPages[i] !== selectedPages[i - 1] + 1) { const e = selectedPages[i - 1]; ranges.push(s === e ? `${s}` : `${s}~${e}`); s = selectedPages[i]; } } return `p${ranges.join(', p')}`; })() : '페이지를 선택하세요'}</p></div>
-                      <div className="flex gap-2">
-                        <button onClick={() => handleRecordLearning('classwork')} disabled={(selectedPages.length === 0 && selectedUnits.length === 0) || isSaving} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 text-white font-black rounded-md transition-all text-[10px] uppercase shadow-lg shadow-emerald-900/20">+ 처음풀기</button>
-                        <button onClick={() => handleRecordLearning('wrong')} disabled={(selectedPages.length === 0 && selectedUnits.length === 0) || isSaving} className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 text-white font-black rounded-md transition-all text-[10px] uppercase shadow-lg shadow-amber-900/20">+ 오답고치기</button>
-                        <button onClick={() => handleRecordLearning('homework')} disabled={(selectedPages.length === 0 && selectedUnits.length === 0) || isSaving} className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white font-black rounded-md transition-all text-[10px] uppercase shadow-lg shadow-blue-900/20">+ 숙제추가</button>
+                      <div className="p-3 bg-white/10 rounded-md border border-white/10">
+                        <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1 block">Selected Pages</span>
+                        <p className="text-[15px] font-black text-white truncate">{selectedPages.length > 0 ? (() => { const ranges: string[] = []; let s = selectedPages[0]; for (let i = 1; i <= selectedPages.length; i++) { if (selectedPages[i] !== selectedPages[i - 1] + 1) { const e = selectedPages[i - 1]; ranges.push(s === e ? `${s}` : `${s}~${e}`); s = selectedPages[i]; } } return `p${ranges.join(', p')}`; })() : '페이지를 선택하세요'}</p>
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        <div className="flex gap-2">
+                          <button onClick={() => handleRecordLearning('classwork')} disabled={(selectedPages.length === 0 && selectedUnits.length === 0) || isSaving || approvalStatus !== 'none'} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-30 disabled:grayscale text-white font-black rounded-md transition-all text-[10px] uppercase shadow-lg shadow-emerald-900/20">+ 처음풀기</button>
+                          <button onClick={() => handleRecordLearning('wrong')} disabled={(selectedPages.length === 0 && selectedUnits.length === 0) || isSaving || approvalStatus !== 'none'} className="flex-1 py-3 bg-amber-600 hover:bg-amber-500 disabled:opacity-30 disabled:grayscale text-white font-black rounded-md transition-all text-[10px] uppercase shadow-lg shadow-amber-900/20">+ 오답고치기</button>
+                          <button onClick={() => handleRecordLearning('homework')} disabled={(selectedPages.length === 0 && selectedUnits.length === 0) || isSaving || approvalStatus !== 'none'} className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 disabled:grayscale text-white font-black rounded-md transition-all text-[10px] uppercase shadow-lg shadow-blue-900/20">+ 숙제추가</button>
+                        </div>
+                        <div className="flex justify-end">
+                          <button onClick={() => handleRecordLearning('cancel')} disabled={(selectedPages.length === 0 && selectedUnits.length === 0) || isSaving || approvalStatus !== 'none'} className="py-1 px-4 bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-30 disabled:grayscale text-[10px] font-black rounded border border-red-500/20 transition-colors">기록 지우기 (취소)</button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                )}
-                {/* 플로팅 바 (다중 선택 시) */}
-                {!activeUnit && !isMergedViewActive && selectedUnits.length > 1 && (
-                  <motion.div initial={{ y: 100 }} animate={{ y: 0 }} className="absolute bottom-6 left-6 right-6 bg-blue-600 p-5 rounded-2xl shadow-[0_20px_50px_rgba(0,0,0,0.5)] flex flex-col lg:flex-row items-center justify-between gap-6 border border-blue-400/50 z-50">
-                    <div className="flex items-center gap-4">
-                      <div className="relative group">
-                        <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center text-white shrink-0 shadow-inner border border-white/10"><span className="text-xl font-black">{selectedUnits.length}</span></div>
-                        <button onClick={() => { setSelectedUnits([]); setLastClickedUnitIdx(null); }} className="absolute -top-1 -right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center shadow-lg border-2 border-blue-600 hover:bg-red-600 transition-all transform hover:scale-110 active:scale-90" title="전체 취소 (ESC)"><X size={14} strokeWidth={4} /></button>
-                      </div>
-                      <div className="text-left">
-                        <span className="text-[10px] font-black text-blue-100 uppercase tracking-[0.2em] mb-1 block">Units Ready to Add</span>
-                        <p className="text-[15px] font-black text-white leading-tight">{(() => { const sorted = [...selectedUnits].sort((a,b) => parseInt(a.start_page) - parseInt(b.start_page)); return `${sorted[0].unit.match(/\d+/)?.[0]}~${sorted[sorted.length-1].unit.match(/\d+/)?.[0]}${sorted[0].unit.replace(/\d+/g, '').trim()} (p${sorted[0].start_page}~${sorted[sorted.length-1].end_page})`; })()}</p>
-                      </div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 w-full lg:w-auto justify-center">
-                      <button onClick={() => handleQuickAddUnits('classwork')} className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white text-[10px] font-black rounded-xl border border-white/20 transition-all uppercase">처음풀기</button>
-                      <button onClick={() => handleQuickAddUnits('wrong')} className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white text-[10px] font-black rounded-xl border border-white/20 transition-all uppercase">오답고치기</button>
-                      <button onClick={() => handleQuickAddUnits('homework')} className="px-4 py-3 bg-white/10 hover:bg-white/20 text-white text-[10px] font-black rounded-xl border border-white/20 transition-all uppercase">숙제추가</button>
-                      <button onClick={() => setIsMergedViewActive(true)} className="px-4 py-3 bg-white text-blue-600 text-[10px] font-black rounded-xl shadow-xl hover:bg-blue-50 transition-all uppercase">상세페이지 가기</button>
-                    </div>
-                  </motion.div>
                 )}
               </div>
             </motion.div>
