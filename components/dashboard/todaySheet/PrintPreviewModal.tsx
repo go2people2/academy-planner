@@ -12,6 +12,7 @@ interface PrintPreviewModalProps {
   selectedDate: string;
   academyInfo: any;
   activeColumns: any[];
+  columnWidths?: Record<string, number>;
 }
 
 export default function PrintPreviewModal({
@@ -20,12 +21,16 @@ export default function PrintPreviewModal({
   students,
   selectedDate,
   academyInfo,
-  activeColumns
+  activeColumns,
+  columnWidths
 }: PrintPreviewModalProps) {
   if (!isOpen) return null;
 
-  // Filter columns to exclude interactive ones (checkbox, action buttons)
-  const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action');
+  // Filter columns to exclude interactive ones (checkbox, action buttons) and date column
+  const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action' && c.id !== 'date');
+
+  // 화면상 설정된 너비 비율을 기반으로 각 열의 프린트 너비 비율(%) 계산
+  const totalScreenWidth = displayCols.reduce((sum, col) => sum + (columnWidths?.[col.id] || col.minWidth || 100), 0);
 
   const handlePrint = () => {
     window.print();
@@ -85,12 +90,13 @@ export default function PrintPreviewModal({
   const MIN_STUDENTS_FOR_NEW_PAGE = 3;
   const pages: any[][] = [];
   let currentPage: any[] = [];
+  let globalIndex = 1;
 
   groups.forEach((group) => {
     const groupRows: any[] = [];
     groupRows.push({ type: 'divider', label: group.label });
     group.students.forEach(s => {
-      groupRows.push({ type: 'student', data: s });
+      groupRows.push({ type: 'student', data: s, printIndex: globalIndex++ });
     });
 
     const isSmallGroup = group.students.length < MIN_STUDENTS_FOR_NEW_PAGE;
@@ -197,15 +203,19 @@ export default function PrintPreviewModal({
                 <table className="w-full border-collapse table-fixed text-[9px] text-left border border-gray-300">
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-300">
-                      {displayCols.map(col => (
-                        <th 
-                          key={col.id} 
-                          style={{ width: col.id === 'name' ? '70px' : col.id === 'date' ? '45px' : 'auto' }}
-                          className="px-2 py-1.2 font-black text-gray-800 border border-gray-300 uppercase tracking-widest text-[8.5px]"
-                        >
-                          {col.label}
-                        </th>
-                      ))}
+                      {displayCols.map(col => {
+                        const screenWidth = columnWidths?.[col.id] || col.minWidth || 100;
+                        const widthPercent = (screenWidth / totalScreenWidth) * 100;
+                        return (
+                          <th 
+                            key={col.id} 
+                            style={{ width: `${widthPercent}%` }}
+                            className="px-2 py-1.2 font-black text-gray-800 border border-gray-300 uppercase tracking-widest text-[8.5px]"
+                          >
+                            {col.label}
+                          </th>
+                        );
+                      })}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
@@ -224,6 +234,7 @@ export default function PrintPreviewModal({
                       }
 
                       const s = row.data;
+                      const printIndex = row.printIndex;
                       const session = s.todaySession;
                       const displayDateShort = selectedDate.slice(5).replace('-', '.');
 
@@ -233,11 +244,23 @@ export default function PrintPreviewModal({
                           className={`border-b border-gray-200 transition-colors ${rIdx % 2 === 1 ? 'bg-gray-50/20' : 'bg-white'}`}
                         >
                           {displayCols.map(col => {
-                            let cellContent = '-';
+                            let cellContent: React.ReactNode = '-';
                             if (col.id === 'date') {
                               cellContent = displayDateShort;
                             } else if (col.id === 'name') {
-                              cellContent = s.name;
+                              const classDays = s.class_days && s.class_days.length > 0
+                                ? [...s.class_days].sort((a, b) => {
+                                    const order: any = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                                    return (order[a] || 0) - (order[b] || 0);
+                                  }).join('')
+                                : '무';
+                              cellContent = (
+                                <div className="flex flex-col gap-0.5 mt-0.5 relative pl-3">
+                                  <span className="absolute -left-0.5 top-0 text-[7.5px] text-gray-400 font-bold tracking-tighter">{printIndex}.</span>
+                                  <span className="font-black text-[9.5px] text-gray-900 leading-none tracking-tight">{s.name}-{s.teacher_initial || '?'}-{classDays}</span>
+                                  <span className="text-[7px] text-gray-500 font-bold uppercase tracking-tighter leading-none">{s.school} · {s.grade}</span>
+                                </div>
+                              );
                             } else if (col.id === 'attendance') {
                               const stat = session?.attendance_status || '수업전';
                               if (stat.startsWith('출석')) cellContent = '출석';

@@ -89,14 +89,14 @@ export default function SurveyList({ academyId, student }: SurveyListProps) {
       target_date: new Date().toISOString().split('T')[0],
       display_period_type: 'custom',
       is_completed: true,
-      created_by: student.id,
+      created_by: null,
       type: 'survey_response'
     }]);
 
     if (!error) {
       setResponses(prev => [...prev, survey.id]);
     } else {
-      alert('제출 중 오류가 발생했습니다.');
+      alert(`제출 오류: ${error.message}`);
     }
     
     setSubmittingId(null);

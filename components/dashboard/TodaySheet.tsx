@@ -717,11 +717,34 @@ export default function TodaySheet({
             </div>
           )}
 
-          <div onClick={(e) => { const input = e.currentTarget.querySelector('input'); if (input && 'showPicker' in input) try { (input as any).showPicker(); } catch (err) { console.error(err); } }}
-            className="flex items-center gap-2 bg-black border border-white/20 rounded-[6px] px-4 py-2 text-gray-400 hover:text-white transition-all group cursor-pointer shadow-xl">
-            <CalendarIcon size={16} className="group-hover:text-blue-500" />
-            <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className="bg-transparent text-[12px] font-black uppercase outline-none cursor-pointer [color-scheme:dark]" />
-          </div>
+          {(() => {
+            const now = new Date();
+            const utc = now.getTime() + (now.getTimezoneOffset() * 60000);
+            const seoulTime = new Date(utc + (9 * 3600000));
+            const todayStr = `${seoulTime.getFullYear()}-${String(seoulTime.getMonth() + 1).padStart(2, '0')}-${String(seoulTime.getDate()).padStart(2, '0')}`;
+            const isNotToday = selectedDate !== todayStr;
+            
+            const [y, m, d] = selectedDate.split('-');
+            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+            const selectedDayStr = (y && m && d) ? `(${dayNames[new Date(parseInt(y), parseInt(m) - 1, parseInt(d)).getDay()]})` : '';
+
+            return (
+              <div onClick={(e) => { const input = e.currentTarget.querySelector('input'); if (input && 'showPicker' in input) try { (input as any).showPicker(); } catch (err) { console.error(err); } }}
+                className={`flex items-center gap-2 border rounded-[6px] px-4 py-2 hover:text-white transition-all group cursor-pointer shadow-xl ${isNotToday ? 'bg-red-950/40 border-red-500/50 text-red-400' : 'bg-[#121212] border-amber-500/20 text-gray-300'}`}>
+                <CalendarIcon size={16} className={isNotToday ? 'text-red-500 animate-pulse' : 'text-amber-500/80 group-hover:text-amber-400'} />
+                <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className={`bg-transparent text-[12px] font-black uppercase outline-none cursor-pointer [color-scheme:dark] ${isNotToday ? 'text-red-400' : 'text-white'}`} />
+                {isNotToday ? (
+                  <div className="ml-1 px-2 py-0.5 bg-red-600/90 text-white text-[10px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+                    {selectedDayStr}
+                  </div>
+                ) : (
+                  <div className="ml-1 px-2 py-0.5 bg-gradient-to-r from-amber-500 to-yellow-400 text-black text-[10px] font-black rounded-sm whitespace-nowrap shadow-[0_0_10px_rgba(245,158,11,0.3)]">
+                    TODAY {selectedDayStr}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-black border-white/20 text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
           
@@ -1038,6 +1061,7 @@ export default function TodaySheet({
         selectedDate={selectedDate}
         academyInfo={academyInfo}
         activeColumns={activeColumns}
+        columnWidths={colWidths}
       />
     </div>
   );

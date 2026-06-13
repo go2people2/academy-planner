@@ -13,6 +13,7 @@ export default function ApprovalModal({
   onReject: (studentIds: string[]) => Promise<void>;
 }) {
   const [selectedIds, setSelectedIds] = useState<string[]>(pendingStudents.map(s => s.id));
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
   const toggleAll = () => {
@@ -66,23 +67,78 @@ export default function ApprovalModal({
           {pendingStudents.map(s => {
             const isSelected = selectedIds.includes(s.id);
             return (
-              <div 
-                key={s.id} 
-                onClick={() => toggleStudent(s.id)}
-                className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center gap-4 ${
-                  isSelected ? 'bg-emerald-600/10 border-emerald-500/30' : 'bg-white/5 border-white/10 hover:border-white/20'
-                }`}
-              >
-                <div className={`shrink-0 ${isSelected ? 'text-emerald-400' : 'text-gray-500'}`}>
-                  {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+              <div key={s.id} className="flex flex-col gap-2">
+                <div 
+                  onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
+                  className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center gap-4 ${
+                    isSelected ? 'bg-emerald-600/10 border-emerald-500/30' : 'bg-white/5 border-white/10 hover:border-white/20'
+                  }`}
+                >
+                  <div 
+                    className={`shrink-0 cursor-pointer ${isSelected ? 'text-emerald-400' : 'text-gray-500'}`}
+                    onClick={(e) => { e.stopPropagation(); toggleStudent(s.id); }}
+                  >
+                    {isSelected ? <CheckSquare size={20} /> : <Square size={20} />}
+                  </div>
+                  <div>
+                    <h3 className="text-[14px] font-black text-white">{s.name}</h3>
+                    <p className="text-[11px] text-gray-400 mt-0.5">{s.school} {s.course}</p>
+                  </div>
+                  <div className="ml-auto text-right text-[11px]">
+                    <span className="text-gray-400 font-bold bg-white/5 px-2 py-1 rounded">
+                      {expandedId === s.id ? '접기 ▲' : '상세보기 ▼'}
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <h3 className="text-[14px] font-black text-white">{s.name}</h3>
-                  <p className="text-[11px] text-gray-400 mt-0.5">{s.school} {s.course}</p>
-                </div>
-                <div className="ml-auto text-right text-[11px]">
-                  <p className="text-gray-400">선택해서 상세 확인 가능</p>
-                </div>
+
+                {expandedId === s.id && (
+                  <div className="p-4 bg-black/40 border border-white/5 rounded-xl ml-8 animate-in slide-in-from-top-2 text-[12px] space-y-3">
+                    <div>
+                      <span className="text-emerald-400 font-bold">학원공부 / 오답고치기</span>
+                      <p className="text-gray-300 mt-1 whitespace-pre-wrap">{s.todaySession?.completed_classwork_text || '-'}</p>
+                    </div>
+                    <div>
+                      <span className="text-blue-400 font-bold">집에서 할 숙제</span>
+                      <p className="text-gray-300 mt-1 whitespace-pre-wrap">{s.todaySession?.homework_text || '-'}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-6 border-t border-white/10 pt-3">
+                      <div>
+                        <span className="text-gray-400 font-bold">오늘 달성률</span>
+                        <p className="text-white font-black mt-0.5">{s.todaySession?.todo_achievement || 0}%</p>
+                      </div>
+                      <div>
+                        <span className="text-gray-400 font-bold">숙제이행 평가</span>
+                        <p className="text-amber-400 font-black mt-0.5">
+                          {s.todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/)?.[1] ? 
+                            `${s.todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/)?.[1]}단계` : '미입력'}
+                        </p>
+                      </div>
+                      <div className="flex-1 min-w-[150px]">
+                        <span className="text-gray-400 font-bold">테스트 결과</span>
+                        {s.todaySession?.test_id ? (
+                          <div className="mt-0.5">
+                            <p className="text-white font-bold truncate">{s.todaySession.test_id}</p>
+                            <p className="text-[11px] mt-0.5">
+                              {s.todaySession.test_score !== undefined && s.todaySession.test_score !== null ? (
+                                <span className={`font-black ${
+                                  s.todaySession.test_cut !== undefined && s.todaySession.test_score >= s.todaySession.test_cut 
+                                    ? 'text-blue-400' : 'text-rose-400'
+                                }`}>
+                                  {s.todaySession.test_score}점 
+                                  {s.todaySession.test_cut ? ` (커트라인 ${s.todaySession.test_cut}점)` : ''}
+                                </span>
+                              ) : (
+                                <span className="text-gray-500">결과 미입력</span>
+                              )}
+                            </p>
+                          </div>
+                        ) : (
+                          <p className="text-gray-500 font-bold mt-0.5">배정된 테스트 없음</p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

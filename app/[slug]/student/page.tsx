@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, CalendarRange } from 'lucide-react';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
@@ -336,9 +336,7 @@ export default function StudentPortal() {
     
     setIsSaving(true);
     try {
-      const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
-      const newResult = { ...currentResult, approval_status: status };
-      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, test_result: JSON.stringify(newResult) };
+      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, approval_status: status };
       if (todaySession?.id && todaySession.id !== 'temp') { 
         const { error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); 
         if (error) throw error;
@@ -346,7 +344,7 @@ export default function StudentPortal() {
         const { error } = await supabase.from('ams_session_logs').insert([updateData]); 
         if (error) throw error;
       }
-      setTodaySession((prev: any) => ({ ...prev, test_result: JSON.stringify(newResult) }));
+      setTodaySession((prev: any) => ({ ...prev, approval_status: status }));
     } catch (e: any) { 
       console.error(e); 
       alert("제출 처리 중 오류가 발생했습니다: " + (e.message || "알 수 없는 오류"));
@@ -447,7 +445,7 @@ export default function StudentPortal() {
     );
   }
 
-  const approvalStatus = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result).approval_status || 'none' : 'none';
+  const approvalStatus = todaySession?.approval_status || 'none';
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] font-sans flex flex-col overflow-hidden text-center">
@@ -629,7 +627,7 @@ export default function StudentPortal() {
       <div className="lg:hidden fixed bottom-0 left-0 right-0 h-[60px] bg-[#0c0c0c]/90 backdrop-blur-md border-t border-white/5 flex items-center justify-around z-30 px-2 shadow-2xl">
         {[
           { id: 'study', label: '오늘 학습', icon: <BookOpen size={16} /> },
-          { id: 'history', label: '히스토리', icon: <CalendarRange size={16} /> },
+          { id: 'history', label: '히스토리', icon: <History size={16} /> },
           { id: 'suggestion', label: '알림장 & 설문', icon: <MessageSquare size={16} /> },
         ].map(tab => {
           const isActive = activeTab === tab.id;
@@ -670,11 +668,11 @@ export default function StudentPortal() {
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4 text-[13px] space-y-4">
                 <div>
                   <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><BookOpen size={14} /> 학원공부 / 오답고치기</p>
-                  <p className="text-emerald-400 font-black leading-snug">{localCompletedClasswork || '입력된 기록이 없습니다.'}</p>
+                  <p className="text-emerald-400 font-black leading-snug whitespace-pre-wrap">{localCompletedClasswork || '입력된 기록이 없습니다.'}</p>
                 </div>
                 <div>
                   <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><FileText size={14} /> 집에서 할 숙제</p>
-                  <p className="text-blue-400 font-black leading-snug">{localHomework || '입력된 기록이 없습니다.'}</p>
+                  <p className="text-blue-400 font-black leading-snug whitespace-pre-wrap">{localHomework || '입력된 기록이 없습니다.'}</p>
                 </div>
                 <div className="flex gap-4 pt-2 border-t border-white/10">
                   <div className="flex-1">

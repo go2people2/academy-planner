@@ -95,7 +95,13 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
 
   return (
     <>
-      <tr className={`group/row transition-all duration-300 border-b border-white/10 ${isSelected ? 'bg-blue-600/10' : (!!(student.todaySession?.id && student.todaySession.id !== 'temp') ? 'bg-white/[0.01]' : 'bg-transparent')} hover:bg-white/[0.03]`}>
+      <tr className={`group/row transition-all duration-300 border-b border-white/10 ${
+        isSelected 
+          ? 'bg-[#0f172a] hover:bg-[#1e293b]' // 투명도 없는 진한 남색
+          : (rowIndex !== undefined && rowIndex % 2 !== 0)
+            ? 'bg-[#1c1c1e] hover:bg-[#2a2a2d]' // 홀수 행
+            : 'bg-black hover:bg-[#111111]' // 짝수 행
+      }`}>
         {activeColumns.map((col) => {
           const isSticky = col.id === 'name' || col.id === 'action' || col.id === 'select';
           const isLastDataCol = col.id === lastDataColumnId;
@@ -115,7 +121,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
                 left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) - 1 : 'auto'),
                 right: col.id === 'action' ? 0 : 'auto',
                 zIndex: isSticky ? 30 : (col.id === 'notes' ? 25 : 10),
-                backgroundColor: isSticky ? '#080808' : 'transparent',
+                backgroundColor: isSticky ? 'inherit' : 'transparent',
                 padding: 0,
                 verticalAlign: 'middle'
               }}

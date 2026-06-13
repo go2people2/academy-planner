@@ -117,7 +117,9 @@ const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
       }
       return null;
     })(),
-    hasHwTo: nq.hasHwTo, hasTestResult: tr.hasTestResult
+    hasHwTo: nq.hasHwTo, hasTestResult: tr.hasTestResult,
+    approval_status: l.approval_status || 'none',
+    test_result: l.test_result || null
   };
 };
 
@@ -628,7 +630,7 @@ const getFilteredBaseFields = (sessionData: any) => {
   const ALLOWED_COLUMNS = [
     'status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 
     'completed_classwork_text', 'completed_classwork_json',
-    'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 
+    'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 'approval_status', 
     'session_date', 'academy_id', 'student_id', 'homework_to', 'timer_started_at', 'timer_duration',
     'moved_to_hour'
   ];
@@ -1034,16 +1036,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       const updates = studentIds.map(id => {
         const s = students.find(x => x.id === id);
         if (!s || !s.todaySession?.id || s.todaySession.id === 'temp') return null;
-        const currentRes = s.todaySession.test_result && typeof s.todaySession.test_result === 'string' ? JSON.parse(s.todaySession.test_result) : {};
-        return {
-          id: s.todaySession.id,
-          test_result: JSON.stringify({ ...currentRes, approval_status: 'approved' })
-        };
+        return supabase.from('ams_session_logs').update({
+          approval_status: 'approved'
+        }).eq('id', s.todaySession.id);
       }).filter(Boolean);
       
       if (updates.length > 0) {
-        const { error } = await supabase.from('ams_session_logs').upsert(updates as any);
-        if (error) throw error;
+        await Promise.all(updates);
         await fetchAllData(true);
       }
     } catch (e) {
@@ -1058,16 +1057,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       const updates = studentIds.map(id => {
         const s = students.find(x => x.id === id);
         if (!s || !s.todaySession?.id || s.todaySession.id === 'temp') return null;
-        const currentRes = s.todaySession.test_result && typeof s.todaySession.test_result === 'string' ? JSON.parse(s.todaySession.test_result) : {};
-        return {
-          id: s.todaySession.id,
-          test_result: JSON.stringify({ ...currentRes, approval_status: 'none' })
-        };
+        return supabase.from('ams_session_logs').update({
+          approval_status: 'none'
+        }).eq('id', s.todaySession.id);
       }).filter(Boolean);
       
       if (updates.length > 0) {
-        const { error } = await supabase.from('ams_session_logs').upsert(updates as any);
-        if (error) throw error;
+        await Promise.all(updates);
         await fetchAllData(true);
       }
     } catch (e) {
@@ -1122,14 +1118,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
         {(() => {
           // 제출 대기 중인 학생 필터링
-          const pendingStudents = todayStudents.filter(s => {
-            const tr = s.todaySession?.test_result;
-            if (!tr || typeof tr !== 'string' || !tr.startsWith('{')) return false;
-            try { return JSON.parse(tr).approval_status === 'submitted'; } catch { return false; }
-          });
+          const pendingStudents = todayStudents.filter(s => s.todaySession?.approval_status === 'submitted');
           
           return pendingStudents.length > 0 ? (
-            <div className="absolute top-4 left-1/2 -translate-x-1/2 z-40">
+            <div className="sticky top-0 z-40 flex justify-center py-3 bg-[#080808]/90 backdrop-blur-sm">
               <button 
                 onClick={() => setIsApprovalModalOpen(true)}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-full shadow-2xl shadow-blue-900/50 flex items-center gap-3 transition-all animate-bounce"
@@ -1203,11 +1195,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       <AnimatePresence>{selectedStudentId && !isBatchMode && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedStudentId(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />)}</AnimatePresence>
       {isApprovalModalOpen && (
         <ApprovalModal 
-          pendingStudents={todayStudents.filter(s => {
-            const tr = s.todaySession?.test_result;
-            if (!tr || typeof tr !== 'string' || !tr.startsWith('{')) return false;
-            try { return JSON.parse(tr).approval_status === 'submitted'; } catch { return false; }
-          })}
+          pendingStudents={todayStudents.filter(s => s.todaySession?.approval_status === 'submitted')}
           onClose={() => setIsApprovalModalOpen(false)}
           onApprove={async (ids) => {
             await handleApproveSubmissions(ids);

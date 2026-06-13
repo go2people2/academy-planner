@@ -383,12 +383,12 @@ export default function TextbookSystem({
         <div className="grid grid-cols-1 md:grid-cols-2 h-full divide-y md:divide-y-0 md:divide-x divide-white/5 bg-black/20">
           <div className="p-4 md:p-6 space-y-3 flex flex-col">
             <div className="flex items-center gap-2 px-1"><TrendingUp className="text-emerald-500" size={18} /><span className="text-[14px] md:text-[16px] font-black text-emerald-500 tracking-tight">학원에서 한 공부</span></div>
-            <textarea value={localCompletedClasswork || ''} onChange={(e) => setLocalCompletedClasswork(e.target.value)} onBlur={() => handleManualSave('completed_classwork', localCompletedClasswork)} placeholder="오늘 학원에서 공부한 내용을 적어주세요." rows={Math.max(3, (localCompletedClasswork || '').split('\n').length)} className="w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10" />
+            <textarea value={localCompletedClasswork || ''} onChange={(e) => setLocalCompletedClasswork(e.target.value)} onBlur={() => handleManualSave('completed_classwork', localCompletedClasswork)} readOnly={approvalStatus !== 'none'} placeholder="오늘 학원에서 공부한 내용을 적어주세요." rows={Math.max(3, (localCompletedClasswork || '').split('\n').length)} className={`w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10 ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`} />
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Auto-sync Active</span>{isSaving && <Loader2 size={10} className="animate-spin text-emerald-500" />}</div>
           </div>
           <div className="p-4 md:p-6 space-y-3 flex flex-col">
             <div className="flex items-center gap-2 px-1"><ClipboardList className="text-blue-500" size={18} /><span className="text-[14px] md:text-[16px] font-black text-blue-500 tracking-tight">집에서 할 공부 (숙제)</span></div>
-            <textarea value={localHomework} onChange={(e) => setLocalHomework(e.target.value)} onBlur={() => handleManualSave('homework', localHomework)} placeholder="다음 수업까지 집에서 해올 숙제를 적어주세요." rows={Math.max(3, localHomework.split('\n').length)} className="w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10" />
+            <textarea value={localHomework} onChange={(e) => setLocalHomework(e.target.value)} onBlur={() => handleManualSave('homework', localHomework)} readOnly={approvalStatus !== 'none'} placeholder="다음 수업까지 집에서 해올 숙제를 적어주세요." rows={Math.max(3, localHomework.split('\n').length)} className={`w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10 ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`} />
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Real-time Cloud Sync</span>{isSaving && <Loader2 size={10} className="animate-spin text-blue-500" />}</div>
           </div>
         </div>
@@ -489,7 +489,7 @@ export default function TextbookSystem({
                         return (
                           <button 
                             key={i} 
-                            onClick={(e) => handleUnitToggle(e, u, i)}
+                            onClick={(e) => approvalStatus === 'none' && handleUnitToggle(e, u, i)}
                             className={`w-full flex items-center justify-between px-3 py-2 bg-white/[0.05] border-2 rounded-lg transition-all transform active:scale-[0.98] group relative overflow-hidden ${
                               isSelected 
                                 ? 'bg-blue-600/30 border-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.15)]' 
@@ -525,7 +525,7 @@ export default function TextbookSystem({
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 border-b border-white/5 shrink-0 -mx-2 px-2">
                       {units.map((u, i) => {
                         const isActive = activeUnit?.unit === u.unit; const isSelected = selectedUnits.some(s => s.unit === u.unit);
-                        return (<button key={i} onClick={(e) => handleUnitToggle(e, u, i)} className={`relative px-4 py-2 rounded-[4px] text-[11px] font-black whitespace-nowrap transition-all border ${isActive || isSelected ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-900/20' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'}`}>{u.unit}{selectedPages.some(p => p >= parseInt(u.start_page) && p <= parseInt(u.end_page)) && !isActive && !isSelected && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_rgba(16,185,129,0.8)]" />}</button>);
+                        return (<button key={i} onClick={(e) => approvalStatus === 'none' && handleUnitToggle(e, u, i)} className={`relative px-4 py-2 rounded-[4px] text-[11px] font-black whitespace-nowrap transition-all border ${isActive || isSelected ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-900/20' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'}`}>{u.unit}{selectedPages.some(p => p >= parseInt(u.start_page) && p <= parseInt(u.end_page)) && !isActive && !isSelected && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_rgba(16,185,129,0.8)]" />}</button>);
                       })}
                     </div>
                     <div className="flex items-center justify-between">
@@ -543,7 +543,7 @@ export default function TextbookSystem({
                           const isSel = selectedPages.includes(p); const solStatus = pageStatusMap.get(p);
                           const isSol = !!solStatus;
                           const solColor = solStatus === 'wrong' ? 'text-amber-500 bg-amber-500/20 border-amber-500/40' : solStatus === 'homework' ? 'text-blue-500 bg-blue-500/20 border-blue-500/40' : 'text-emerald-500 bg-emerald-500/20 border-emerald-500/40';
-                          return (<button key={p} onClick={() => handlePageClick(p)} className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black tabular-nums transition-all border relative ${isSel ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] scale-105' : isSol ? solColor : 'bg-white/10 border-white/20 text-white hover:bg-emerald-500/30'}`}>{p}{isSol && !isSel && <div className="absolute top-0.5 right-0.5 opacity-50"><Check size={7} strokeWidth={4} /></div>}</button>);
+                          return (<button key={p} onClick={() => approvalStatus === 'none' && handlePageClick(p)} className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black tabular-nums transition-all border relative ${isSel ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] scale-105' : isSol ? solColor : 'bg-white/10 border-white/20 text-white hover:bg-emerald-500/30'}`}>{p}{isSol && !isSel && <div className="absolute top-0.5 right-0.5 opacity-50"><Check size={7} strokeWidth={4} /></div>}</button>);
                         });
                       })()}
                     </div>

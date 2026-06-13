@@ -97,13 +97,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   
   const colId = col.id;
 
-  // 💡 56px 높이 고정을 위한 정밀 수학적 계산 (Line-height: 18px 기준)
+  // 💡 42px 높이 고정을 위한 정밀 수학적 계산 (Line-height: 18px 기준)
   const getDynamicPadding = (text: string) => {
     const lineCount = (text?.match(/\n/g) || []).length + 1;
-    if (lineCount <= 1) return 'pt-[19px] pb-[19px]'; // 18 + 38 = 56px
-    if (lineCount === 2) return 'pt-[10px] pb-[10px]'; // 36 + 20 = 56px
-    if (lineCount === 3) return 'pt-[1px] pb-[1px]';   // 54 + 2 = 56px
-    return 'pt-[1px] pb-[1px]';                        // 4줄 이상 확장
+    if (lineCount <= 1) return 'pt-[12px] pb-[12px]'; // 18 + 24 = 42px
+    if (lineCount === 2) return 'pt-[3px] pb-[3px]';  // 36 + 6 = 42px
+    return 'pt-[1px] pb-[1px]';                       // 3줄 이상 확장
   };
 
   const currentText = colId === 'test_id' ? formData.test_id :
@@ -260,10 +259,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           }
         />
       ) : (
-        <div className={`flex items-start min-h-[56px] h-full w-full ${['select', 'action', 'date'].includes(colId) ? 'justify-center' : 'justify-start'}`}>
+        <div className={`flex items-start min-h-[42px] h-full w-full ${['select', 'action', 'date'].includes(colId) ? 'justify-center' : 'justify-start'}`}>
         
         {colId === 'select' && (
-          <div className="flex items-center justify-center w-full h-[56px] relative z-30 group/select select-none">
+          <div className="flex items-center justify-center w-full h-[42px] relative z-30 group/select select-none">
             {isSelected ? (
               <div className="flex items-center justify-center">
                 <input 
@@ -295,14 +294,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'date' && (
-          <div className="flex flex-col gap-1.5 items-center justify-center py-2.5 w-full h-[56px]">
+          <div className="flex flex-col gap-0.5 items-center justify-center py-1.5 w-full h-[42px]">
             <span className="font-black text-gray-500 text-[10px] tabular-nums">{displayDateShort}</span>
             <button onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }} className={`w-6 h-6 rounded-[2px] flex items-center justify-center transition-all ${isHistoryExpanded ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 text-gray-500 hover:bg-white/10'}`}><HistoryIcon size={12} /></button>
           </div>
         )}
 
         {colId === 'name' && (
-          <div className="flex items-center justify-between gap-3 px-4 py-2.5 w-full h-[56px] relative group/namecell">
+          <div className="flex items-center justify-between gap-3 px-4 py-1.5 w-full h-[42px] relative group/namecell">
             {isFirstInTimeSection && timeSectionLabel && (
               <div className="absolute -top-[4px] right-4 z-[45] pointer-events-none select-none">
                 <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-black text-white tracking-widest uppercase shadow-[0_2px_8px_rgba(37,99,235,0.4)] border border-blue-400/40">
@@ -501,7 +500,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             
             {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 */}
             {!isEditing && !isActive && (
-              <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[56px] flex flex-col items-start justify-start`}>
+              <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[42px] flex flex-col items-start justify-start`}>
                 <div className="w-full">{currentText || '-'}</div>
                 {colId === 'test_id' && formData.test_cut > 0 && (
                   <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter">
