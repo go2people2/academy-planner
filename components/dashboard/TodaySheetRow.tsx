@@ -87,11 +87,19 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     handleSave, handleAttendanceToggle, handleSupplementTimeSelect, selectFeedback, syncTextFromData
   } = handlers;
 
+  // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
+  const lastDataColumnId = React.useMemo(() => {
+    const dataCols = activeColumns.filter((c: any) => c.id !== 'action');
+    return dataCols.length > 0 ? dataCols[dataCols.length - 1].id : null;
+  }, [activeColumns]);
+
   return (
     <>
       <tr className={`group/row transition-all duration-300 border-b border-white/10 ${isSelected ? 'bg-blue-600/10' : (!!(student.todaySession?.id && student.todaySession.id !== 'temp') ? 'bg-white/[0.01]' : 'bg-transparent')} hover:bg-white/[0.03]`}>
         {activeColumns.map((col) => {
           const isSticky = col.id === 'name' || col.id === 'action' || col.id === 'select';
+          const isLastDataCol = col.id === lastDataColumnId;
+
           return (
             <TodaySheetCell
               key={col.id}
@@ -101,7 +109,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               isFirstInTimeSection={isFirstInTimeSection}
               timeSectionLabel={timeSectionLabel}
               styles={{
-                width: colWidths[col.id] || col.minWidth,
+                width: isLastDataCol ? 'auto' : (colWidths[col.id] || col.minWidth),
+                minWidth: colWidths[col.id] || col.minWidth,
                 position: isSticky ? 'sticky' : 'relative',
                 left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) - 1 : 'auto'),
                 right: col.id === 'action' ? 0 : 'auto',

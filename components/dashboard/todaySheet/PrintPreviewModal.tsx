@@ -35,61 +35,95 @@ export default function PrintPreviewModal({
   const [_, configM] = (academyInfo?.operation_settings?.first_period_time || "00:00").split(':').map(Number);
   const displayMinute = configM.toString().padStart(2, '0');
 
-  // 1. Flatten all rows (Dividers & Student rows) to decide page breaks
-  const flatRows: any[] = [];
-  students.forEach((s: any, idx: number) => {
-    const session = s.todaySession;
-    
-    // Class time calculation
-    const getStartTime = (st: any) => {
-      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-        return st.todaySession.moved_to_hour;
-      }
-      const stat = st.todaySession?.attendance_status || '수업전';
-      if (stat.includes(':')) {
-        const parts = stat.split(':');
-        const val = parseInt(parts[parts.length - 1]);
-        if (!isNaN(val) && val < 24) return val;
-      }
-      const hours = st.day_schedules?.[dayKey] || [];
-      return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
-    };
-
-    const currentStartTime = getStartTime(s);
-    const prevStartTime = idx > 0 ? getStartTime(students[idx - 1]) : null;
-    const isNewSection = currentStartTime !== prevStartTime;
-
-    const timeSectionLabel = isNewSection 
-      ? (currentStartTime === 999 
-          ? '보강 / 기타 수업' 
-          : (currentStartTime >= 12 
-              ? (currentStartTime === 12 ? `오후 12:${displayMinute}` : `오후 ${currentStartTime-12}:${displayMinute}`) 
-              : `오전 ${currentStartTime}:${displayMinute}`) + ' 수업'
-        )
-      : undefined;
-
-    if (isNewSection && timeSectionLabel) {
-      flatRows.push({ type: 'divider', label: timeSectionLabel });
+  // Class time calculation helper
+  const getStartTime = (st: any) => {
+    if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
+      return st.todaySession.moved_to_hour;
     }
-    
-    flatRows.push({ type: 'student', data: s });
+    const stat = st.todaySession?.attendance_status || '수업전';
+    if (stat.includes(':')) {
+      const parts = stat.split(':');
+      const val = parseInt(parts[parts.length - 1]);
+      if (!isNaN(val) && val < 24) return val;
+    }
+    const hours = st.day_schedules?.[dayKey] || [];
+    return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
+  };
+
+  const getTimeLabel = (time: number) => {
+    if (time === 999) return '보강 / 기타 수업';
+    return (time >= 12 
+      ? (time === 12 ? `오후 12:${displayMinute}` : `오후 ${time-12}:${displayMinute}`) 
+      : `오전 ${time}:${displayMinute}`) + ' 수업';
+  };
+
+  // 1. Group students by start time
+  interface TimeGroup {
+    time: number;
+    label: string;
+    students: any[];
+  }
+
+  const groups: TimeGroup[] = [];
+  students.forEach((s: any) => {
+    const time = getStartTime(s);
+    const label = getTimeLabel(time);
+    let group = groups.find(g => g.time === time);
+    if (!group) {
+      group = { time, label, students: [] };
+      groups.push(group);
+    }
+    group.students.push(s);
   });
 
-  // 2. Chunk rows into pages (MAX_ROWS_PER_PAGE = 13 for optimal A4 Landscape fit)
-  const MAX_ROWS_PER_PAGE = 13;
+  // Sort groups by class time
+  groups.sort((a, b) => a.time - b.time);
+
+  // 2. Distribute groups into pages using smart logic (MAX_ROWS_PER_PAGE = 20)
+  // Threshold: if a group has < 3 students, it is merged with the previous page to save paper
+  const MAX_ROWS_PER_PAGE = 20;
+  const MIN_STUDENTS_FOR_NEW_PAGE = 3;
   const pages: any[][] = [];
   let currentPage: any[] = [];
-  let currentRowCount = 0;
 
-  flatRows.forEach(row => {
-    if (currentRowCount >= MAX_ROWS_PER_PAGE) {
+  groups.forEach((group) => {
+    const groupRows: any[] = [];
+    groupRows.push({ type: 'divider', label: group.label });
+    group.students.forEach(s => {
+      groupRows.push({ type: 'student', data: s });
+    });
+
+    const isSmallGroup = group.students.length < MIN_STUDENTS_FOR_NEW_PAGE;
+    const currentLength = currentPage.length;
+    const willExceedLimit = currentLength + groupRows.length > MAX_ROWS_PER_PAGE;
+
+    // Split page if:
+    // 1) Current page is not empty
+    // 2) Group is NOT a small group (>= 3 students) OR merging would exceed page limit (20 rows)
+    if (currentLength > 0 && (!isSmallGroup || willExceedLimit)) {
       pages.push(currentPage);
       currentPage = [];
-      currentRowCount = 0;
     }
-    currentPage.push(row);
-    currentRowCount++;
+
+    // Distribute group rows (splitting within group if group itself exceeds MAX_ROWS_PER_PAGE)
+    let remainingRows = groupRows;
+    while (remainingRows.length > 0) {
+      const spaceLeft = MAX_ROWS_PER_PAGE - currentPage.length;
+      if (remainingRows.length <= spaceLeft) {
+        currentPage.push(...remainingRows);
+        remainingRows = [];
+      } else {
+        currentPage.push(...remainingRows.slice(0, spaceLeft));
+        pages.push(currentPage);
+        currentPage = [];
+        remainingRows = remainingRows.slice(spaceLeft);
+        if (remainingRows.length > 0 && remainingRows[0].type === 'student') {
+          remainingRows.unshift({ type: 'divider', label: `${group.label} (이어서)` });
+        }
+      }
+    }
   });
+
   if (currentPage.length > 0) {
     pages.push(currentPage);
   }
@@ -100,9 +134,9 @@ export default function PrintPreviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[250] flex flex-col items-center justify-start p-4 md:p-8 bg-black/85 backdrop-blur-md overflow-y-auto no-print">
+    <div className="fixed inset-0 z-[250] flex flex-col items-center justify-start p-4 md:p-8 bg-black/85 backdrop-blur-md overflow-y-auto print-preview-modal-container">
       {/* Control bar */}
-      <div className="w-full max-w-5xl flex items-center justify-between mb-6 bg-gray-900/90 border border-white/10 rounded-xl p-4 shadow-xl shrink-0">
+      <div className="w-full max-w-5xl flex items-center justify-between mb-6 bg-gray-900/90 border border-white/10 rounded-xl p-4 shadow-xl shrink-0 no-print">
         <div className="flex items-center gap-3">
           <div className="w-9 h-9 rounded-lg bg-indigo-500/10 flex items-center justify-center text-indigo-400 border border-indigo-500/20">
             <FileText size={18} />
@@ -143,7 +177,7 @@ export default function PrintPreviewModal({
             >
               <div>
                 {/* Paper Header (Rendered on every single page) */}
-                <div className="flex justify-between items-end border-b-2 border-gray-800 pb-3 mb-5 text-left">
+                <div className="flex justify-between items-end border-b-2 border-gray-800 pb-2 mb-3 text-left">
                   <div>
                     <h1 className="text-lg font-black text-black tracking-tight leading-none">
                       {academyInfo?.academy_name || 'Hokma Math'} 수업 일지
@@ -160,14 +194,14 @@ export default function PrintPreviewModal({
                 </div>
 
                 {/* Paper Table */}
-                <table className="w-full border-collapse table-fixed text-[9.5px] text-left border border-gray-300">
+                <table className="w-full border-collapse table-fixed text-[9px] text-left border border-gray-300">
                   <thead>
                     <tr className="bg-gray-100 border-b border-gray-300">
                       {displayCols.map(col => (
                         <th 
                           key={col.id} 
                           style={{ width: col.id === 'name' ? '70px' : col.id === 'date' ? '45px' : 'auto' }}
-                          className="px-2.5 py-2 font-black text-gray-800 border border-gray-300 uppercase tracking-widest text-[8.5px]"
+                          className="px-2 py-1.2 font-black text-gray-800 border border-gray-300 uppercase tracking-widest text-[8.5px]"
                         >
                           {col.label}
                         </th>
@@ -181,7 +215,7 @@ export default function PrintPreviewModal({
                           <tr key={`div-${rIdx}`} className="bg-gray-50 border-y border-gray-300">
                             <td 
                               colSpan={displayCols.length} 
-                              className="px-2.5 py-1 text-[8.5px] font-black text-indigo-700 tracking-wider bg-indigo-50/40 border border-gray-300"
+                              className="px-2 py-0.8 text-[8.5px] font-black text-indigo-700 tracking-wider bg-indigo-50/40 border border-gray-300"
                             >
                               🕒 {row.label}
                             </td>
@@ -204,39 +238,54 @@ export default function PrintPreviewModal({
                               cellContent = displayDateShort;
                             } else if (col.id === 'name') {
                               cellContent = s.name;
-                            } else if (col.id === 'test_score') {
-                              if (session?.test_id) {
-                                cellContent = `${session.test_id}${session.test_score ? ` (${session.test_score}%)` : ''}`;
-                              }
-                            } else if (col.id === 'classwork') {
-                              cellContent = session?.classwork_text || '-';
-                            } else if (col.id === 'homework') {
-                              cellContent = session?.homework_text || '-';
-                            } else if (col.id === 'next_quiz') {
-                              if (session?.next_quiz_text) {
-                                cellContent = `${session.next_quiz_text} (목표: 오답 ${session.next_quiz_cut || 0}개 이하)`;
-                              }
-                            } else if (col.id === 'notes') {
-                              cellContent = session?.special_notes || '-';
-                            } else if (col.id === 'completed_classwork') {
-                              cellContent = session?.completed_classwork_text || '-';
-                            } else if (col.id === 'status') {
+                            } else if (col.id === 'attendance') {
                               const stat = session?.attendance_status || '수업전';
                               if (stat.startsWith('출석')) cellContent = '출석';
                               else if (stat.startsWith('지각')) cellContent = '지각';
                               else if (stat.startsWith('결석')) cellContent = '결석';
                               else if (stat.startsWith('보강')) cellContent = '보강';
                               else cellContent = '수업전';
+                            } else if (col.id === 'test_id') {
+                              cellContent = session?.test_id || '-';
+                            } else if (col.id === 'test_score') {
+                              if (session?.test_score) {
+                                const isScoreMode = session.test_score_type === 'score';
+                                if (isScoreMode) {
+                                  cellContent = `${session.test_score}점`;
+                                } else {
+                                  cellContent = session.test_total_count 
+                                    ? `${session.test_score}개 / ${session.test_total_count}개` 
+                                    : `${session.test_score}개`;
+                                }
+                              } else {
+                                cellContent = '-';
+                              }
+                            } else if (col.id === 'next_quiz') {
+                              if (session?.next_quiz_text) {
+                                cellContent = `${session.next_quiz_text} (목표: 오답 ${session.next_quiz_cut || 0}개 이하)`;
+                              }
+                            } else if (col.id === 'review') {
+                              cellContent = s.lastSession?.homework_text ? `"${s.lastSession.homework_text}"` : '기존 숙제 없음';
+                            } else if (col.id === 'classwork') {
+                              cellContent = session?.classwork_text || '-';
+                            } else if (col.id === 'completed_classwork') {
+                              cellContent = session?.completed_classwork_text || '-';
+                            } else if (col.id === 'assign') {
+                              cellContent = session?.homework_text || '-';
+                            } else if (col.id === 'mission') {
+                              cellContent = session?.mission || s.recent_mission || '-';
+                            } else if (col.id === 'notes') {
+                              cellContent = session?.special_notes || '-';
                             }
 
                             return (
                               <td 
                                 key={col.id} 
-                                className="px-2.5 py-2 text-gray-800 border border-gray-300 align-middle whitespace-pre-wrap break-all leading-relaxed"
+                                className="px-2 py-1.2 text-gray-800 border border-gray-300 align-middle whitespace-pre-wrap break-all leading-relaxed"
                               >
                                 {col.id === 'name' ? (
                                   <span className="font-black text-black">{cellContent}</span>
-                                ) : col.id === 'status' ? (
+                                ) : col.id === 'attendance' ? (
                                   <span className={`font-black px-1.5 py-0.5 rounded-[3px] text-[7.5px] border leading-none inline-block ${
                                     cellContent === '출석' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
                                     cellContent === '지각' ? 'bg-amber-50 text-amber-700 border-amber-200' :
@@ -260,7 +309,7 @@ export default function PrintPreviewModal({
               </div>
 
               {/* Paper Footer with page numbers */}
-              <div className="mt-6 pt-3 border-t border-gray-100 flex items-center justify-between text-[8px] text-gray-400 font-bold uppercase tracking-widest shrink-0">
+              <div className="mt-3.5 pt-1.5 border-t border-gray-100 flex items-center justify-between text-[8px] text-gray-400 font-bold uppercase tracking-widest shrink-0">
                 <span>© {academyInfo?.academy_name || 'Hokma Math'} Management System</span>
                 <span className="text-[10px] text-gray-700 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
                   {pageIdx + 1} / {pages.length} 페이지

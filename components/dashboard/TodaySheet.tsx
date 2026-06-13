@@ -46,7 +46,13 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 // --- Sub-components ---
 
-function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCut, onSelectAll, isAllSelected, onFocusColumn, focusColumn }: any) {
+function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onBatchQuizCut, onSelectAll, isAllSelected, onFocusColumn, focusColumn }: any) {
+  // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
+  const lastDataColumnId = React.useMemo(() => {
+    const dataCols = activeColumns.filter((c: any) => c.id !== 'action');
+    return dataCols.length > 0 ? dataCols[dataCols.length - 1].id : null;
+  }, [activeColumns]);
+
   return (
     <tr className="bg-black border-b border-white/20 select-none">
       {activeColumns.map((col: any) => {
@@ -54,9 +60,10 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
         const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes'].includes(col.id);
         const isAction = col.id === 'action';
         const isSelect = col.id === 'select';
+        const isLastDataCol = col.id === lastDataColumnId;
         
         const styles: React.CSSProperties = {
-          width: colWidths[col.id] || col.minWidth,
+          width: isLastDataCol ? 'auto' : (colWidths[col.id] || col.minWidth),
           minWidth: colWidths[col.id] || col.minWidth,
           position: 'sticky',
           top: 0,
@@ -68,11 +75,12 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
         return (
           <th 
             key={col.id} 
+            data-col-id={col.id}
             style={styles} 
-            className={`py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-gray-400 text-center border-r border-white/12 shadow-[0_1px_0_rgba(255,255,255,0.1)]`}
+            className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-gray-400 text-center border-r border-white/12 shadow-[0_1px_0_rgba(255,255,255,0.1)]`}
           >
             {!isAction && (
-              <div className="flex items-center justify-center group relative gap-1.5 w-full">
+              <div className="flex items-center justify-center gap-1.5 w-full">
                 {isSelect ? (
                   <input 
                     type="checkbox" 
@@ -104,7 +112,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
                   </div>
                   {col.id === 'next_quiz' && onBatchQuizCut && (
                     <div className="relative group/batch" title="모든 학생 커트라인 일괄 설정">
-                      <select 
+                       <select 
                         onChange={(e) => onBatchQuizCut(parseInt(e.target.value))}
                         className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                         defaultValue=""
@@ -120,14 +128,16 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onBatchQuizCu
                   )}
                 </>
               )}
-
-                {col.id !== 'action' && (
-                  <div 
-                    onMouseDown={(e) => onMouseDown(e, col.id)}
-                    className="absolute right-[-12px] w-1.5 h-5 cursor-col-resize hover:bg-blue-500/50 rounded transition-colors opacity-0 group-hover:opacity-100" 
-                  />
-                )}
               </div>
+            )}
+
+            {!isAction && (
+              <div 
+                onMouseDown={(e) => onMouseDown(e, col.id)}
+                onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(col.id); }}
+                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-500/50 transition-colors z-30 opacity-0 group-hover:opacity-100" 
+                title="더블클릭하여 자동 크기 조절 / 드래그하여 수동 조절"
+              />
             )}
           </th>
         );
@@ -609,6 +619,52 @@ export default function TodaySheet({
   const onMouseMove = (e: MouseEvent) => { if (!resizingCol.current) return; const { id, startX, startWidth } = resizingCol.current; const newWidth = Math.max(40, startWidth + (e.pageX - startX)); setColWidths(prev => ({ ...prev, [id]: newWidth })); };
   const onMouseUp = () => { if (resizingCol.current) { setColWidths(latest => { localStorage.setItem('todaySheetColWidths', JSON.stringify(latest)); return latest; }); } resizingCol.current = null; document.removeEventListener('mousemove', onMouseMove); document.removeEventListener('mouseup', onMouseUp); document.body.style.cursor = 'default'; };
 
+  // 💡 더블클릭 자동 열폭 맞춤 핸들러 추가 (DOM 데이터 파싱 방식)
+  const handleDoubleClickResize = useCallback((colId: string) => {
+    const cells = document.querySelectorAll(`[data-col-id="${colId}"]`);
+    if (cells.length === 0) return;
+
+    const calcTextWidth = (text: string) => {
+      if (!text) return 0;
+      let width = 0;
+      for (let i = 0; i < text.length; i++) {
+        const char = text.charCodeAt(i);
+        if (char > 127) width += 12; // 한글
+        else width += 7.2; // 영문, 숫자, 공백 등
+      }
+      return width;
+    };
+
+    let maxContentWidth = 60;
+
+    cells.forEach((cell: any) => {
+      let val = '';
+      
+      // 셀 내부에 textarea나 input이 있다면 그 value를 가져오고, 없으면 innerText를 사용
+      const inputEl = cell.querySelector('textarea, input');
+      if (inputEl) {
+        val = inputEl.value || '';
+      } else {
+        val = cell.innerText || '';
+      }
+
+      // 줄바꿈이 있는 텍스트는 가장 긴 라인을 기준으로 계산
+      const lines = val.split('\n');
+      lines.forEach((line: string) => {
+        const w = calcTextWidth(line.trim()) + 28; // 셀 패딩 및 여백 확보
+        if (w > maxContentWidth) maxContentWidth = w;
+      });
+    });
+
+    const col = activeColumns.find((c: any) => c.id === colId);
+    const finalWidth = Math.min(450, Math.max(col?.minWidth || 60, maxContentWidth));
+    setColWidths(prev => {
+      const next = { ...prev, [colId]: finalWidth };
+      localStorage.setItem('todaySheetColWidths', JSON.stringify(next));
+      return next;
+    });
+  }, [activeColumns]);
+
   const handleSendAll = async () => { if (!confirm(`${students.length}명 일괄 발송하시겠습니까?`)) return; setIsSendingReport('all'); let count = 0; for (const s of students) { try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: s.id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) count++; } catch(e){} } alert(`${count}명 완료`); setIsSendingReport(null); };
   const handleSendIndividual = async (id: string) => { const s = students.find((st:any) => st.id === id); if (!s) return; setIsSendingReport(id); try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) alert(`${s.name} 발송 완료`); } catch(e){} finally { setIsSendingReport(null); } };
   const handleBatchQuizCut = async (cut: number) => {
@@ -889,7 +945,7 @@ export default function TodaySheet({
 
       <div className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}>
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} /></thead>
           <tbody className="divide-y divide-white/10">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);

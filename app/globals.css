@@ -116,12 +116,6 @@ body {
     word-break: break-all !important;
   }
 
-  /* 테이블 내 불필요한 열 인쇄 숨김 (체크박스 열, 삭제/관리 열) */
-  th:first-child, td:first-child,
-  th:last-child, td:last-child {
-    display: none !important;
-  }
-
   /* 인쇄 시 교시 라벨 스타일 보정 */
   .absolute.-top-\[4px\].right-4.z-\[45\] {
     position: static !important;
@@ -139,5 +133,32 @@ body {
     padding: 1px 3px !important;
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
+  }
+
+  /* 💡 인쇄 미리보기 모달 전용 인쇄 스타일 */
+  .print-preview-modal-container {
+    display: block !important;
+    position: absolute !important;
+    left: 0 !important;
+    top: 0 !important;
+    width: 100% !important;
+    height: auto !important;
+    background: white !important;
+    backdrop-filter: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    overflow: visible !important;
+    z-index: 9999 !important;
+  }
+
+  .print-page-panel {
+    border: none !important;
+    box-shadow: none !important;
+    border-radius: 0 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    page-break-after: always !important;
+    background: white !important;
+    min-height: auto !important;
   }
 }

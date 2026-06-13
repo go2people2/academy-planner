@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { AnimatePresence } from 'framer-motion';
-import { Loader2 } from 'lucide-react';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
@@ -29,6 +29,7 @@ export default function StudentPortal() {
   const [isSaving, setIsSaving] = useState(false);
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+  const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion'>('study'); // 💡 모바일 탭 상태 추가
   
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [examSchedules, setExamSchedules] = useState<ExamSchedule[]>([]);
@@ -401,66 +402,166 @@ export default function StudentPortal() {
         student={student} teachers={teachers} selectedDate={selectedDate} 
         setSelectedDate={setSelectedDate} matchedExam={matchedExam} 
         getRemainingClasses={getRemainingClasses} handleLogout={handleLogout} getInitial={getInitial}
+        academy={academy}
       />
 
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden pb-[64px] lg:pb-0">
         {/* 왼쪽 섹션: 대시보드 및 교재 시스템 */}
-        <div className="w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-8 xl:p-12 pt-6 xl:pt-8 space-y-12 relative">
-          <LearningDashboard 
-            student={student} lastSession={lastSession} todaySession={todaySession} 
-            selectedDate={selectedDate} currentSelfEval={currentSelfEval} 
-            handleSelfEval={handleSelfEval} handleTodoAchievement={handleTodoAchievement} todayPlan={todayPlan}
-          />
+        <div className={`w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 relative lg:block ${activeTab === 'study' || activeTab === 'history' ? 'block' : 'hidden lg:block'}`}>
+          <div className={activeTab === 'study' ? 'block space-y-4 md:space-y-8' : 'hidden lg:block lg:space-y-8'}>
+            <LearningDashboard 
+              student={student} lastSession={lastSession} todaySession={todaySession} 
+              selectedDate={selectedDate} currentSelfEval={currentSelfEval} 
+              handleSelfEval={handleSelfEval} handleTodoAchievement={handleTodoAchievement} todayPlan={todayPlan}
+            />
 
-          <TextbookSystem 
-            student={student} availableTextbooks={availableTextbooks} allLogs={allLogs}
-            localCompletedClasswork={localCompletedClasswork} setLocalCompletedClasswork={setLocalCompletedClasswork}
-            localHomework={localHomework} setLocalHomework={setLocalHomework}
-            todayPlan={todayPlan} handleManualSave={handleManualSave} isSaving={isSaving}
-          />
+            <TextbookSystem 
+              student={student} availableTextbooks={availableTextbooks} allLogs={allLogs}
+              localCompletedClasswork={localCompletedClasswork} setLocalCompletedClasswork={setLocalCompletedClasswork}
+              localHomework={localHomework} setLocalHomework={setLocalHomework}
+              todayPlan={todayPlan} handleManualSave={handleManualSave} isSaving={isSaving}
+            />
+          </div>
 
-          <PerformanceChart logs={allLogs} />
+          <div className={activeTab === 'history' ? 'block mt-4' : 'hidden lg:block lg:mt-8'}>
+            <PerformanceChart logs={allLogs} />
+          </div>
         </div>
 
         {/* 오른쪽 섹션: 테스트 상태, 히스토리, 건의사항 */}
-        <div className="hidden lg:flex w-[40%] bg-[#0a0a0a] flex-col overflow-y-auto custom-scrollbar-v p-8 xl:p-12 space-y-10 relative">
-          {upcomingMakeups.length > 0 && (
-            <div className="bg-amber-500/10 border border-amber-500/20 rounded-2xl p-6 text-left space-y-3 shadow-lg shadow-amber-950/10 shrink-0">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
-                <h3 className="text-xs font-black uppercase tracking-widest text-amber-400">예정된 보강 스케줄</h3>
+        <div className={`w-full lg:w-[40%] bg-[#0a0a0a] flex-col overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 space-y-4 md:space-y-8 relative lg:flex ${activeTab === 'history' || activeTab === 'suggestion' ? 'flex' : 'hidden lg:flex'}`}>
+          
+          {/* 모바일 전용: 시험일정 및 학원 채널 링크 (3번째 탭 'suggestion' 일 때 노출) */}
+          <div className={`lg:hidden space-y-6 ${activeTab === 'suggestion' ? 'block' : 'hidden'}`}>
+            {/* 1. 시험 일정 카드 */}
+            {matchedExam && (
+              <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 md:p-6 text-left space-y-2 md:space-y-3 shadow-lg shadow-rose-950/10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <FileText className="text-rose-500" size={16} />
+                  <h3 className="text-[10px] md:text-xs font-black uppercase tracking-widest text-rose-400">다가오는 시험 일정</h3>
+                </div>
+                <div className="flex items-center justify-between text-[10px] md:text-xs font-bold text-gray-300 bg-white/[0.02] border border-white/5 rounded-lg p-3 md:p-4">
+                  <span className="text-rose-200 font-extrabold">
+                    {new Date(matchedExam.target_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
+                  </span>
+                  <span className="text-[11px] font-black text-rose-500 uppercase tracking-widest">
+                    잔여 <span className="text-[14px] ml-0.5">{getRemainingClasses(matchedExam.target_date)}</span>회
+                  </span>
+                </div>
               </div>
-              <div className="space-y-2">
-                {upcomingMakeups.map((m: any) => {
-                  const formatted = m.session_date.slice(5).replace('-', '.');
-                  return (
-                    <div key={m.id} className="flex items-center justify-between text-xs font-bold text-gray-300 bg-white/[0.02] border border-white/5 rounded-lg p-3">
-                      <div className="flex items-center gap-2">
-                        <span className="text-amber-200 font-extrabold">{formatted}</span>
-                        <span className="text-gray-700">|</span>
-                        <span>{m.moved_to_hour ? `${m.moved_to_hour}:00 수업` : '교시 미정'}</span>
+            )}
+
+            {/* 2. 학원 공식 채널 바로가기 버튼 */}
+            {(academy?.operation_settings?.homepage_url || academy?.operation_settings?.naver_cafe_url) && (
+              <div className="bg-blue-600/5 border border-blue-500/10 rounded-xl p-4 md:p-6 text-left space-y-3 md:space-y-4 shadow-lg shadow-blue-950/5 shrink-0">
+                <div className="flex items-center gap-2">
+                  <Globe className="text-blue-500" size={16} />
+                  <h3 className="text-xs font-black uppercase tracking-widest text-blue-400">학원 공식 채널</h3>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {academy?.operation_settings?.homepage_url && (
+                    <a 
+                      href={(() => {
+                        const url = academy.operation_settings.homepage_url.trim();
+                        return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+                      })()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 py-3 rounded-lg bg-blue-600/10 text-blue-400 border border-blue-500/20 text-xs font-black transition-all hover:bg-blue-600/20 animate-none"
+                    >
+                      <Globe size={14} />
+                      <span>{academy.operation_settings.homepage_title || "홈페이지"}</span>
+                    </a>
+                  )}
+                  {academy?.operation_settings?.naver_cafe_url && (
+                    <a 
+                      href={(() => {
+                        const url = academy.operation_settings.naver_cafe_url.trim();
+                        return /^https?:\/\//i.test(url) ? url : `https://${url}`;
+                      })()}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-center gap-2 py-3 rounded-lg bg-emerald-600/10 text-emerald-400 border border-emerald-500/20 text-xs font-black transition-all hover:bg-emerald-600/20 animate-none"
+                    >
+                      <ExternalLink size={14} />
+                      <span>{academy.operation_settings.naver_cafe_title || "네이버 카페"}</span>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {upcomingMakeups.length > 0 && (
+            <div className={activeTab === 'suggestion' ? 'block' : 'hidden lg:block'}>
+              <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-4 md:p-6 text-left space-y-2 md:space-y-3 shadow-lg shadow-amber-950/10 shrink-0">
+                <div className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" />
+                  <h3 className="text-xs font-black uppercase tracking-widest text-amber-400">예정된 보강 스케줄</h3>
+                </div>
+                <div className="space-y-2">
+                  {upcomingMakeups.map((m: any) => {
+                    const formatted = m.session_date.slice(5).replace('-', '.');
+                    return (
+                      <div key={m.id} className="flex items-center justify-between text-xs font-bold text-gray-300 bg-white/[0.02] border border-white/5 rounded-lg p-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-amber-200 font-extrabold">{formatted}</span>
+                          <span className="text-gray-700">|</span>
+                          <span>{m.moved_to_hour ? `${m.moved_to_hour}:00 수업` : '교시 미정'}</span>
+                        </div>
+                        <span className="bg-amber-500/20 text-amber-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase">예약 완료</span>
                       </div>
-                      <span className="bg-amber-500/20 text-amber-400 text-[8px] font-black px-1.5 py-0.5 rounded uppercase">예약 완료</span>
-                    </div>
-                  );
-                })}
+                    );
+                  })}
+                </div>
               </div>
             </div>
           )}
           
-          <TestStatusSection todaySession={todaySession} />
+          <div className={activeTab === 'history' ? 'block' : 'hidden lg:block'}>
+            <TestStatusSection todaySession={todaySession} />
+          </div>
           
-          <LearningHistoryList 
-            allLogs={allLogs} isHistoryOpen={isHistoryOpen} setIsHistoryOpen={setIsHistoryOpen} 
-          />
+          <div className={activeTab === 'history' ? 'block' : 'hidden lg:block'}>
+            <LearningHistoryList 
+              allLogs={allLogs} isHistoryOpen={isHistoryOpen} setIsHistoryOpen={setIsHistoryOpen} 
+            />
+          </div>
 
-          <StudentSuggestion 
-            suggestion={suggestion} setSuggestion={setSuggestion} 
-            selectedDate={selectedDate} handleSuggestionSubmit={handleSuggestionSubmit} isSaving={isSaving}
-            mySuggestions={mySuggestions}
-          />
+          <div className={activeTab === 'suggestion' ? 'block' : 'hidden lg:block'}>
+            <StudentSuggestion 
+              suggestion={suggestion} setSuggestion={setSuggestion} 
+              selectedDate={selectedDate} handleSuggestionSubmit={handleSuggestionSubmit} isSaving={isSaving}
+              mySuggestions={mySuggestions}
+            />
+          </div>
         </div>
       </main>
+
+      {/* 모바일 하단 플로팅 탭 네비게이션 (lg 미만에서만 노출) */}
+      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-[60px] bg-[#0c0c0c]/90 backdrop-blur-md border-t border-white/5 flex items-center justify-around z-30 px-2 shadow-2xl">
+        {[
+          { id: 'study', label: '오늘 학습', icon: <BookOpen size={16} /> },
+          { id: 'history', label: '평가 & 기록', icon: <TrendingUp size={16} /> },
+          { id: 'suggestion', label: '건의 & 보강', icon: <MessageSquare size={16} /> },
+        ].map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 transition-all ${
+                isActive ? 'text-blue-500 font-extrabold scale-105' : 'text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              <div className={isActive ? 'text-blue-500' : 'text-gray-500'}>
+                {tab.icon}
+              </div>
+              <span className="text-[9px] font-bold tracking-tight">{tab.label}</span>
+            </button>
+          );
+        })}
+      </div>
 
       {/* 테스트 답안 모달 */}
       <AnimatePresence>

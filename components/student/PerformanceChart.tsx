@@ -39,27 +39,51 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
           </div>
           <div className="border-t border-solid border-white/30 w-full" />
         </div>
-        {chartData.map((data, i) => (
-          <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative z-10">
-            <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-white text-black text-[11px] font-black px-2.5 py-1.5 rounded-[2px] opacity-0 group-hover:opacity-100 transition-all z-20 whitespace-nowrap shadow-2xl scale-75 group-hover:scale-100 origin-bottom">
-              {data.test_score}%
+        {chartData.map((data, i) => {
+          let todoAchievement = 0;
+          try { if (data.test_result?.startsWith('{')) todoAchievement = JSON.parse(data.test_result).todo_achievement || 0; } catch (e) {}
+          
+          const hwEvalMatch = data.special_notes ? data.special_notes.match(/\[숙제이행:\s*(\d+)단계\]/) : null;
+          const hwEval = hwEvalMatch ? parseInt(hwEvalMatch[1]) : null;
+
+          return (
+            <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative z-10">
+              <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-[#1a1a1a] border border-white/10 text-white text-[10px] font-black px-2 py-1.5 rounded-[4px] opacity-0 group-hover:opacity-100 transition-all z-30 whitespace-nowrap shadow-2xl scale-75 group-hover:scale-100 origin-bottom pointer-events-none flex flex-col gap-0.5 items-center">
+                <span>TEST {data.test_score}%</span>
+                {todoAchievement > 0 && <span className="text-emerald-400">TODO {todoAchievement}%</span>}
+                {hwEval !== null && <span className="text-blue-400">HW Lvl {hwEval}</span>}
+              </div>
+              <div className="w-full max-w-[28px] bg-white/5 rounded-t-[2px] relative flex items-end h-[140px] overflow-hidden group-hover:bg-white/10 transition-colors">
+                <motion.div 
+                  initial={{ height: 0 }} 
+                  animate={{ height: `${Math.min(100, Math.max(0, data.test_score))}%` }} 
+                  transition={{ delay: i * 0.05, duration: 1, ease: [0.33, 1, 0.68, 1] }} 
+                  className={`w-full rounded-t-[1px] opacity-60 group-hover:opacity-100 transition-opacity ${
+                    data.test_score >= 80 ? 'bg-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.5)]' : 
+                    data.test_score >= 60 ? 'bg-amber-600/80' : 'bg-red-500/80'
+                  }`} 
+                />
+                
+                {todoAchievement > 0 && (
+                  <div 
+                    className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-full bg-emerald-400 shadow-[0_0_8px_rgba(52,211,153,1)] z-20"
+                    style={{ bottom: `calc(${todoAchievement}% - 4px)` }}
+                  />
+                )}
+                
+                {hwEval !== null && (
+                  <div 
+                    className="absolute left-1/2 -translate-x-1/2 w-2 h-2 rounded-sm bg-blue-400 shadow-[0_0_8px_rgba(96,165,250,1)] z-20"
+                    style={{ bottom: `calc(${hwEval * 10}% - 4px)` }}
+                  />
+                )}
+              </div>
+              <span className="text-[9px] font-black text-gray-500 rotate-45 origin-left whitespace-nowrap ml-2 mt-1 group-hover:text-white transition-colors">
+                {data.session_date.slice(5).replace('-', '.')}
+              </span>
             </div>
-            <div className="w-full max-w-[28px] bg-white/5 rounded-t-[2px] relative flex items-end h-[140px] overflow-hidden group-hover:bg-white/10 transition-colors">
-              <motion.div 
-                initial={{ height: 0 }} 
-                animate={{ height: `${Math.min(100, Math.max(0, data.test_score))}%` }} 
-                transition={{ delay: i * 0.05, duration: 1, ease: [0.33, 1, 0.68, 1] }} 
-                className={`w-full rounded-t-[1px] ${
-                  data.test_score >= 80 ? 'bg-blue-500 shadow-[0_0_20px_rgba(59,130,246,0.5)]' : 
-                  data.test_score >= 60 ? 'bg-amber-500' : 'bg-red-500'
-                }`} 
-              />
-            </div>
-            <span className="text-[9px] font-black text-gray-500 rotate-45 origin-left whitespace-nowrap ml-2 mt-1 group-hover:text-white transition-colors">
-              {data.session_date.slice(5).replace('-', '.')}
-            </span>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );

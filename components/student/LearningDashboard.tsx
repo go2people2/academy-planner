@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, CheckCircle2, ClipboardCheck, ChevronRight, TrendingUp, BookOpen, Target, Clock, AlertTriangle } from 'lucide-react';
+import { Zap, CheckCircle2, ClipboardCheck, ChevronRight, TrendingUp, BookOpen, Target, Clock, AlertTriangle, ChevronUp, ChevronDown } from 'lucide-react';
 
 interface LearningDashboardProps {
   student: any;
@@ -81,8 +81,33 @@ export default function LearningDashboard({
 }: LearningDashboardProps) {
   const [isSlim, setIsSlim] = useState(false); // 💡 슬림 모드 상태 추가
 
+  const getScoreTheme = (score: number | null) => {
+    if (score === null || score >= 8) return {
+      bg: 'bg-blue-600', border: 'border-blue-400', text: 'text-blue-500',
+      textLight: 'text-blue-200', textQuote: 'text-blue-400', borderL: 'border-l-blue-500',
+      lightBg: 'bg-blue-600/5', shadow: 'shadow-blue-900/10', hoverBorder: 'hover:border-blue-500/50'
+    };
+    if (score <= 3) return {
+      bg: 'bg-rose-600', border: 'border-rose-400', text: 'text-rose-500',
+      textLight: 'text-rose-200', textQuote: 'text-rose-400', borderL: 'border-l-rose-500',
+      lightBg: 'bg-rose-600/5', shadow: 'shadow-rose-900/10', hoverBorder: 'hover:border-rose-500/50'
+    };
+    if (score <= 5) return {
+      bg: 'bg-orange-500', border: 'border-orange-400', text: 'text-orange-500',
+      textLight: 'text-orange-200', textQuote: 'text-orange-400', borderL: 'border-l-orange-500',
+      lightBg: 'bg-orange-500/5', shadow: 'shadow-orange-900/10', hoverBorder: 'hover:border-orange-500/50'
+    };
+    return { // 6-7
+      bg: 'bg-emerald-500', border: 'border-emerald-400', text: 'text-emerald-500',
+      textLight: 'text-emerald-200', textQuote: 'text-emerald-400', borderL: 'border-l-emerald-500',
+      lightBg: 'bg-emerald-500/5', shadow: 'shadow-emerald-900/10', hoverBorder: 'hover:border-emerald-500/50'
+    };
+  };
+
+  const scoreTheme = getScoreTheme(currentSelfEval);
+
   return (
-    <div className="space-y-3">
+    <div className="space-y-2 md:space-y-3">
       {/* 💡 타이머 섹션 (선생님이 설정했을 때만 노출) */}
       {todaySession?.timer_started_at && todaySession?.timer_duration && (
         <div className="mb-6">
@@ -98,34 +123,34 @@ export default function LearningDashboard({
         </div>
         <button 
           onClick={() => setIsSlim(!isSlim)}
-          className={`px-2.5 py-0.5 rounded-full text-[8px] font-black uppercase tracking-tighter transition-all border ${
+          className={`w-6 h-6 flex items-center justify-center rounded-full transition-all border ${
             isSlim 
               ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-900/20' 
-              : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'
+              : 'bg-gray-800 border-gray-600 text-gray-200 shadow-md hover:bg-gray-700 hover:text-white'
           }`}
         >
-          {isSlim ? 'Expand Cards' : 'Minimize Info'}
+          {isSlim ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
         </button>
       </div>
 
-      <div className={isSlim ? "grid grid-cols-1 gap-1.5" : "space-y-8"}>
+      <div className={isSlim ? "grid grid-cols-1 gap-1.5" : "space-y-4 md:space-y-8"}>
         {/* 1. 학생 미션 */}
         {student?.recent_mission ? (
           <motion.div 
             layout
             className={isSlim 
               ? "bg-[#0a0a0a] border border-amber-500/20 rounded-md p-1.5 flex items-center gap-3 overflow-hidden shadow-lg shadow-amber-900/10"
-              : "bg-gradient-to-r from-amber-400/50 to-orange-500/50 p-0.5 rounded-xl mb-2 shadow-[0_0_30px_rgba(245,158,11,0.2)]"
+              : "bg-gradient-to-r from-amber-400/50 to-orange-500/50 p-0.5 rounded-xl mb-1 md:mb-2 shadow-[0_0_30px_rgba(245,158,11,0.2)]"
             }
           >
-            <div className={isSlim ? "flex items-center gap-3 w-full" : "bg-[#0a0a0a] rounded-[10px] p-6 flex items-center gap-6 border border-amber-400/10"}>
-              <div className={isSlim ? "w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center shrink-0 border border-amber-300/50" : "w-14 h-14 bg-amber-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-amber-900/40 border border-amber-300/50"}>
-                <Zap className="text-black fill-black" size={isSlim ? 10 : 28} strokeWidth={3} />
+            <div className={isSlim ? "flex items-center gap-3 w-full" : "bg-[#0a0a0a] rounded-[10px] p-3 md:p-6 flex items-center gap-4 md:gap-6 border border-amber-400/10"}>
+              <div className={isSlim ? "w-6 h-6 bg-amber-500 rounded-full flex items-center justify-center shrink-0 border border-amber-300/50" : "w-10 h-10 md:w-14 md:h-14 bg-amber-500 rounded-full flex items-center justify-center shrink-0 shadow-lg shadow-amber-900/40 border border-amber-300/50"}>
+                <Zap className="text-black fill-black" size={isSlim ? 10 : 22} strokeWidth={3} />
               </div>
               <div className={`text-left flex-1 min-w-0 ${isSlim ? "overflow-x-auto no-scrollbar" : ""}`}>
-                <p className={`${isSlim ? "text-[13px] whitespace-nowrap" : "text-[22px]"} font-black text-white tracking-tight`}>{student.recent_mission}</p>
+                <p className={`${isSlim ? "text-[13px] whitespace-nowrap" : "text-[16px] md:text-[22px]"} font-black text-white tracking-tight`}>{student.recent_mission}</p>
                 {!isSlim && (
-                  <p className="text-[11px] font-bold text-amber-400 mt-2.5 flex items-center gap-1.5">
+                  <p className="text-[10px] md:text-[11px] font-bold text-amber-400 mt-1.5 md:mt-2.5 flex items-center gap-1.5">
                     <CheckCircle2 size={12} /> 최근에 이거 꼭 해야 해! 집중해서 완료하자.
                   </p>
                 )}
@@ -146,47 +171,47 @@ export default function LearningDashboard({
           <motion.div 
             layout
             className={isSlim 
-              ? "bg-[#0a0a0a] border border-blue-500/20 rounded-md p-1.5 flex items-center gap-3 overflow-hidden shadow-lg shadow-blue-900/10"
-              : "bg-blue-600/5 border border-blue-500/20 rounded-lg shadow-xl text-left border-l-4 border-l-blue-500 flex flex-col overflow-hidden"
+              ? `bg-[#0a0a0a] border ${scoreTheme.border}/20 rounded-md p-1.5 flex items-center gap-3 overflow-hidden shadow-lg ${scoreTheme.shadow}`
+              : `${scoreTheme.lightBg} border ${scoreTheme.border}/20 rounded-lg shadow-xl text-left border-l-4 ${scoreTheme.borderL} flex flex-col overflow-hidden`
             }
           >
             {isSlim ? (
               <div className="flex items-center gap-3 w-full">
-                <div className="w-6 h-6 bg-blue-600 rounded-full flex items-center justify-center shrink-0 border border-blue-400/50">
+                <div className={`w-6 h-6 ${scoreTheme.bg} rounded-full flex items-center justify-center shrink-0 border ${scoreTheme.border}/50`}>
                   <ClipboardCheck className="text-white" size={10} />
                 </div>
                 <div className="text-left flex-1 min-w-0 overflow-x-auto no-scrollbar">
-                  <p className="text-[13px] font-bold text-blue-200 whitespace-nowrap">{lastSession.homework_text || '기록된 숙제가 없습니다.'}</p>
+                  <p className={`text-[13px] font-bold ${scoreTheme.textLight} whitespace-nowrap`}>{lastSession.homework_text || '기록된 숙제가 없습니다.'}</p>
                 </div>
-                {currentSelfEval && (
-                  <div className="bg-blue-600 px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg shrink-0">
+                {currentSelfEval !== null && (
+                  <div className={`${scoreTheme.bg} px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg shrink-0`}>
                     Lvl {currentSelfEval}
                   </div>
                 )}
               </div>
             ) : (
               <>
-                <div className="px-6 py-1 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div className="px-3 md:px-6 py-1 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 md:gap-2">
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="flex items-center gap-1.5">
-                      <ClipboardCheck className="text-blue-500" size={14} />
-                      <h4 className="text-[11px] font-black text-white uppercase tracking-widest">과제확인</h4>
+                      <ClipboardCheck className={scoreTheme.text} size={14} />
+                      <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest">과제확인</h4>
                     </div>
-                    <div className="flex items-center gap-1.5 text-[9px] font-black text-blue-400 tabular-nums">
+                    <div className={`flex items-center gap-1.5 text-[9px] font-black ${scoreTheme.textQuote} tabular-nums`}>
                       <span>({lastSession.session_date.slice(5).replace('-', '.')})</span>
-                      <ChevronRight size={10} className="text-blue-500/50" />
-                      <span className="bg-blue-500/10 px-1.5 py-0.5 rounded text-blue-300">({selectedDate.slice(5).replace('-', '.')})</span>
+                      <ChevronRight size={10} className={`${scoreTheme.textQuote}/50`} />
+                      <span className={`${scoreTheme.bg}/10 px-1.5 py-0.5 rounded ${scoreTheme.textQuote}`}>({selectedDate.slice(5).replace('-', '.')})</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
-                    {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
                       <button 
                         key={num} 
                         onClick={() => handleSelfEval(num)} 
-                        className={`w-7 h-7 shrink-0 rounded-[2px] text-[13px] font-black transition-all border ${
+                        className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
                           (currentSelfEval !== null && num <= currentSelfEval) 
-                            ? 'bg-blue-600 border-blue-400 text-white shadow-lg' 
-                            : 'bg-white/10 border-white/20 text-white hover:border-blue-500/50'
+                            ? `${scoreTheme.bg} ${scoreTheme.border} text-white shadow-lg` 
+                            : `bg-white/10 border-white/20 text-white ${scoreTheme.hoverBorder}`
                         }`}
                       >
                         {currentSelfEval === null ? num : (num === currentSelfEval ? num : '')}
@@ -194,11 +219,11 @@ export default function LearningDashboard({
                     ))}
                   </div>
                 </div>
-                <div className="p-6">
-                  <p className="text-[18px] font-bold text-blue-200 leading-tight italic whitespace-pre-wrap">
-                    <span className="text-blue-400 text-2xl font-black mr-1 opacity-80">"</span>
+                <div className="p-3 md:p-6">
+                  <p className={`text-[14px] md:text-[18px] font-bold ${scoreTheme.textLight} leading-tight italic whitespace-pre-wrap`}>
+                    <span className={`${scoreTheme.textQuote} text-xl md:text-2xl font-black mr-1 opacity-80`}>"</span>
                     {lastSession.homework_text || '기록된 숙제가 없습니다.'}
-                    <span className="text-blue-400 text-2xl font-black ml-1 opacity-80">"</span>
+                    <span className={`${scoreTheme.textQuote} text-xl md:text-2xl font-black ml-1 opacity-80`}>"</span>
                   </p>
                 </div>
               </>
@@ -230,17 +255,19 @@ export default function LearningDashboard({
             </div>
           ) : (
             <>
-              <div className="px-6 py-0.5 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div className="flex items-center gap-2">
-                  <TrendingUp className="text-emerald-500" size={16} />
-                  <h4 className="text-[12px] font-black text-white uppercase tracking-widest">오늘 할 일 (To-Do)</h4>
+              <div className="px-3 md:px-6 py-1 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 md:gap-2">
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex items-center gap-1.5">
+                    <TrendingUp className="text-emerald-500" size={14} />
+                    <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest">오늘 할 일</h4>
+                  </div>
                 </div>
-                <div className="flex-1 flex items-center justify-end gap-0.5 overflow-x-auto no-scrollbar pr-2">
-                  {[10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(num => (
+                <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+                  {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(num => (
                     <button 
                       key={num} 
                       onClick={() => handleTodoAchievement(num)} 
-                      className={`w-7 h-7 shrink-0 rounded-[2px] text-[13px] font-black transition-all border ${
+                      className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
                         (todaySession?.todo_achievement && num <= todaySession.todo_achievement) 
                           ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
                           : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50'
@@ -252,21 +279,21 @@ export default function LearningDashboard({
                   <span className="text-[11px] font-black text-emerald-500/60 ml-1">%</span>
                 </div>
               </div>
-              <div className="p-4 space-y-1.5">
+              <div className={`space-y-1 ${todayPlan ? "p-3 md:p-4" : "p-2"}`}>
                 {todayPlan ? (
                   todayPlan.split('\n').filter(l => l.trim()).map((task, i) => (
-                    <div key={i} className="flex items-start gap-3 group/task">
+                    <div key={i} className="flex items-start gap-2 md:gap-3 group/task">
                       <div className="mt-1.5 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] group-hover/task:scale-125 transition-transform" />
-                      <p className="text-[14.5px] font-bold text-white leading-tight">{task}</p>
+                      <p className="text-[13px] md:text-[14.5px] font-bold text-white leading-tight">{task}</p>
                     </div>
                   ))
                 ) : (
-                  <div className="flex flex-col items-center justify-center py-4 text-center opacity-30">
-                    <CheckCircle2 size={24} className="text-emerald-500 mb-2" />
-                    <p className="text-[12px] font-bold text-white italic">
+                  <div className="flex items-center gap-2 opacity-40 px-2 py-0.5">
+                    <CheckCircle2 size={12} className="text-emerald-500" />
+                    <p className="text-[11px] font-bold text-white italic">
                       {new Date(selectedDate) < new Date(new Date().setHours(0,0,0,0)) 
-                        ? '이 날짜에는 기록된 학습 정보가 없습니다.' 
-                        : '오늘 학원에서 할일이 입력될 예정입니다.'}
+                        ? '기록된 학습 정보가 없습니다.' 
+                        : '할일이 입력될 예정입니다.'}
                     </p>
                   </div>
                 )}

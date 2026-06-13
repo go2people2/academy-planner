@@ -22,7 +22,7 @@ const nextConfig: NextConfig = {
   reactStrictMode: false,
   // 💡 HMR(Hot Module Replacement) 크로스 오리진 차단 해제
   // Next.js 16에서는 experimental이 아니라 루트 레벨에 설정합니다.
-  allowedDevOrigins: ['192.168.0.207', 'localhost', '127.0.0.1'],
+  allowedDevOrigins: [getLocalIp(), 'localhost', '127.0.0.1'],
 } as any; // Type 오류 우회를 위해 as any 추가 (NextConfig type이 완벽히 지원하지 않을 수 있음)
 
 export default nextConfig;

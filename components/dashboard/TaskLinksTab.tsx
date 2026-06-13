@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Plus, Check, Trash2, ExternalLink, User, Loader2, Sparkles, X 
+  Plus, Check, Trash2, ExternalLink, User, Loader2, Sparkles, X, Edit2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
@@ -25,6 +25,7 @@ export default function TaskLinksTab({
 }: TaskLinksTabProps) {
   const [showOnlyMyLinks, setShowOnlyMyLinks] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [editingLinkTask, setEditingLinkTask] = useState<any | null>(null);
   
   // Link Form States
   const [linkTitle, setLinkTitle] = useState('');
@@ -109,6 +110,70 @@ export default function TaskLinksTab({
     }
   };
 
+  const handleOpenCreateModal = () => {
+    setEditingLinkTask(null);
+    setLinkTitle('');
+    setLinkContent('');
+    setLinkUrl('');
+    setLinkAssignee(currentUser?.id || '');
+    setIsLinkModalOpen(true);
+  };
+
+  const handleOpenEditModal = (task: any) => {
+    setEditingLinkTask(task);
+    setLinkTitle(task.title);
+    setLinkUrl(task.url);
+    setLinkContent(task.textContent);
+    setLinkAssignee(task.created_by);
+    setIsLinkModalOpen(true);
+  };
+
+  const handleEditLink = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!linkTitle.trim() || !linkUrl.trim() || !academyInfo?.id || !editingLinkTask) return;
+
+    setIsSaving(true);
+    try {
+      let formattedUrl = linkUrl.trim();
+      if (!/^https?:\/\//i.test(formattedUrl)) {
+        formattedUrl = `https://${formattedUrl}`;
+      }
+
+      const { error } = await supabase
+        .from('ams_tasks')
+        .update({
+          title: linkTitle.trim(),
+          content: JSON.stringify({ text: linkContent.trim(), link: formattedUrl }),
+          created_by: linkAssignee || currentUser?.id || ''
+        })
+        .eq('id', editingLinkTask.id);
+
+      if (error) throw error;
+
+      setLinkTitle('');
+      setLinkContent('');
+      setLinkUrl('');
+      setLinkAssignee(currentUser?.id || '');
+      setEditingLinkTask(null);
+      setIsLinkModalOpen(false);
+      await onRefreshTasks();
+    } catch (err) {
+      console.error('Error editing link task:', err);
+      alert('링크 업무 수정에 실패했습니다.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (editingLinkTask) {
+      handleEditLink(e);
+    } else {
+      handleAddLink(e);
+    }
+  };
+
   const handleToggleLink = async (id: string, currentStatus: boolean) => {
     try {
       const { error } = await supabase
@@ -167,7 +232,7 @@ export default function TaskLinksTab({
         </div>
         
         <button 
-          onClick={() => setIsLinkModalOpen(true)}
+          onClick={handleOpenCreateModal}
           className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10"
         >
           <Plus size={14} /> 새 링크 등록
@@ -175,18 +240,18 @@ export default function TaskLinksTab({
       </div>
 
       {/* Grid of Link Cards */}
-      <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 custom-scrollbar-v align-start content-start">
+      <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 custom-scrollbar-v align-start content-start">
         {linkTasks.map((task) => {
           const assignee = teachers.find(t => t.id === task.created_by);
           return (
             <motion.div 
               key={task.id}
               layout
-              className={`group relative flex flex-col justify-between border rounded-xl p-4 bg-[#0a0a0a] transition-all ${
+              className={`group relative flex flex-col justify-between border rounded-xl p-3 bg-[#0a0a0a] transition-all ${
                 task.is_completed ? 'border-emerald-500/20 opacity-60' : 'border-white/10 hover:border-white/20'
               }`}
             >
-              <div className="space-y-2.5">
+              <div className="space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
                   <h4 className={`text-sm font-black leading-tight ${task.is_completed ? 'text-gray-500 line-through' : 'text-white'}`}>
                     {task.title}
@@ -205,6 +270,14 @@ export default function TaskLinksTab({
                     </button>
 
                     <button 
+                      onClick={() => handleOpenEditModal(task)}
+                      className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-all opacity-0 group-hover:opacity-100"
+                      title="수정"
+                    >
+                      <Edit2 size={10} />
+                    </button>
+
+                    <button 
                       onClick={() => handleDeleteLink(task.id)}
                       className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
                       title="완전 삭제"
@@ -220,12 +293,12 @@ export default function TaskLinksTab({
               </div>
 
               {/* Lower Section */}
-              <div className="mt-4 pt-3 border-t border-white/5 flex flex-col gap-3">
+              <div className="mt-3 pt-2.5 border-t border-white/5 flex flex-col gap-2">
                 {/* Link button */}
                 <button
                   onClick={() => handleOpenLink(task.url)}
                   disabled={!task.url}
-                  className={`w-full py-2 rounded-lg flex items-center justify-center gap-1.5 text-xs font-black transition-all ${
+                  className={`w-full py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-black transition-all ${
                     task.is_completed
                       ? 'bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed'
                       : 'bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 active:scale-95 shadow-md shadow-indigo-900/10'
@@ -269,17 +342,25 @@ export default function TaskLinksTab({
               className="bg-[#0f0f0f] border border-white/10 w-full max-w-md rounded-2xl p-6 shadow-2xl relative"
             >
               <button 
-                onClick={() => setIsLinkModalOpen(false)}
+                onClick={() => { setIsLinkModalOpen(false); setEditingLinkTask(null); }}
                 className="absolute top-4 right-4 text-gray-500 hover:text-white transition-all"
               >
                 <X size={20} />
               </button>
 
               <h3 className="text-base font-black text-white uppercase tracking-wider mb-6 flex items-center gap-2">
-                <Plus size={18} className="text-blue-500" /> 새 업무 링크 등록
+                {editingLinkTask ? (
+                  <>
+                    <Edit2 size={18} className="text-blue-500" /> 업무 링크 수정
+                  </>
+                ) : (
+                  <>
+                    <Plus size={18} className="text-blue-500" /> 새 업무 링크 등록
+                  </>
+                )}
               </h3>
 
-              <form onSubmit={handleAddLink} className="space-y-4 text-left">
+              <form onSubmit={handleSubmit} className="space-y-4 text-left">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">업무 링크 제목</label>
                   <input 
@@ -347,7 +428,7 @@ export default function TaskLinksTab({
                 <div className="pt-2 flex justify-end gap-2">
                   <button 
                     type="button" 
-                    onClick={() => setIsLinkModalOpen(false)}
+                    onClick={() => { setIsLinkModalOpen(false); setEditingLinkTask(null); }}
                     className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg text-xs font-bold transition-all"
                   >
                     취소
@@ -358,7 +439,7 @@ export default function TaskLinksTab({
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5"
                   >
                     {isSaving && <Loader2 size={12} className="animate-spin" />}
-                    <span>등록</span>
+                    <span>{editingLinkTask ? '수정' : '등록'}</span>
                   </button>
                 </div>
               </form>

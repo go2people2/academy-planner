@@ -47,6 +47,7 @@ export default function TextbookSystem({
     if (!activeBook || !allLogs) return new Set<number>();
     const pages = new Set<number>();
     allLogs.forEach(log => {
+      // 1. JSON 기반 추출 (선생님 앱 등 연동)
       const classwork = log.classwork_json || [];
       const homework = log.homework_json || [];
       const allJson = [...classwork, ...homework];
@@ -63,6 +64,30 @@ export default function TextbookSystem({
             }
           });
         }
+      });
+
+      // 2. 텍스트 기반 추출 (학생 대시보드 직접 입력)
+      const texts = [log.classwork_text, log.completed_classwork_text, log.homework_text].filter(Boolean) as string[];
+      const displayTitle = activeBook.title.replace(/^\[.*?\]\s*/, '');
+      const cleanTitle = displayTitle.replace(/\s+/g, '').toLowerCase();
+      const cleanBookCode = activeBook.bookcode.replace(/\s+/g, '').toLowerCase();
+      
+      texts.forEach(t => {
+        const lines = t.split('\n');
+        lines.forEach(line => {
+          const cleanLine = line.replace(/\s+/g, '').toLowerCase();
+          if (cleanLine.includes(cleanTitle) || cleanLine.includes(cleanBookCode)) {
+            const regex = /p(\d+)[~-]?p?(\d+)?/gi;
+            let match;
+            while ((match = regex.exec(cleanLine)) !== null) {
+              const s = parseInt(match[1]);
+              const e = match[2] ? parseInt(match[2]) : s;
+              if (!isNaN(s) && !isNaN(e)) {
+                for (let i = Math.min(s, e); i <= Math.max(s, e); i++) pages.add(i);
+              }
+            }
+          }
+        });
       });
     });
     return pages;
@@ -221,9 +246,9 @@ export default function TextbookSystem({
               key={code} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} 
               onClick={() => { 
                 if (activeBook?.bookcode === code) { 
-                  setActiveBook(null); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); 
+                  setActiveBook(null); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); setIsMergedViewActive(false);
                 } else { 
-                  setActiveBook(book); fetchUnits(code); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); 
+                  setActiveBook(book); fetchUnits(code); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); setIsMergedViewActive(false);
                 } 
               }} 
               className={`flex items-center gap-2 border rounded-[4px] px-3 py-1.5 transition-all shrink-0 ${isActive ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50 hover:bg-emerald-500/10'}`}
@@ -235,17 +260,17 @@ export default function TextbookSystem({
         })}
       </div>
 
-      <div className="relative flex-1 min-h-[260px] overflow-hidden">
+      <div className="relative flex-1 overflow-hidden">
         {/* 텍스트 영역 2단 그리드 */}
         <div className="grid grid-cols-1 md:grid-cols-2 h-full divide-y md:divide-y-0 md:divide-x divide-white/5 bg-black/20">
-          <div className="p-6 space-y-4 flex flex-col min-h-[300px]">
-            <div className="flex items-center gap-2 px-1"><TrendingUp className="text-emerald-500" size={16} /><span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest">수행진도 (Completed)</span></div>
-            <textarea value={localCompletedClasswork || ''} onChange={(e) => setLocalCompletedClasswork(e.target.value)} onBlur={() => handleManualSave('completed_classwork', localCompletedClasswork)} placeholder="오늘 수행한 진도를 적어주세요." rows={Math.max(10, (localCompletedClasswork || '').split('\n').length)} className="w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10" />
+          <div className="p-4 md:p-6 space-y-3 flex flex-col">
+            <div className="flex items-center gap-2 px-1"><TrendingUp className="text-emerald-500" size={18} /><span className="text-[14px] md:text-[16px] font-black text-emerald-500 tracking-tight">학원에서 한 공부</span></div>
+            <textarea value={localCompletedClasswork || ''} onChange={(e) => setLocalCompletedClasswork(e.target.value)} onBlur={() => handleManualSave('completed_classwork', localCompletedClasswork)} placeholder="오늘 학원에서 공부한 내용을 적어주세요." rows={Math.max(3, (localCompletedClasswork || '').split('\n').length)} className="w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10" />
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Auto-sync Active</span>{isSaving && <Loader2 size={10} className="animate-spin text-emerald-500" />}</div>
           </div>
-          <div className="p-6 space-y-4 flex flex-col min-h-[300px]">
-            <div className="flex items-center gap-2 px-1"><ClipboardList className="text-blue-500" size={16} /><span className="text-[10px] font-black text-blue-500 uppercase tracking-widest">부여된 숙제 (Homework)</span></div>
-            <textarea value={localHomework} onChange={(e) => setLocalHomework(e.target.value)} onBlur={() => handleManualSave('homework', localHomework)} placeholder="다음 수업까지의 숙제를 적어주세요." rows={Math.max(10, localHomework.split('\n').length)} className="w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10" />
+          <div className="p-4 md:p-6 space-y-3 flex flex-col">
+            <div className="flex items-center gap-2 px-1"><ClipboardList className="text-blue-500" size={18} /><span className="text-[14px] md:text-[16px] font-black text-blue-500 tracking-tight">집에서 할 공부 (숙제)</span></div>
+            <textarea value={localHomework} onChange={(e) => setLocalHomework(e.target.value)} onBlur={() => handleManualSave('homework', localHomework)} placeholder="다음 수업까지 집에서 해올 숙제를 적어주세요." rows={Math.max(3, localHomework.split('\n').length)} className="w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10" />
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Real-time Cloud Sync</span>{isSaving && <Loader2 size={10} className="animate-spin text-blue-500" />}</div>
           </div>
         </div>

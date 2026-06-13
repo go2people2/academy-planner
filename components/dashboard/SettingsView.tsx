@@ -59,7 +59,11 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
     late_threshold: 0,
     alert_threshold: 0,
     timer_presets: [] as number[],
-    holidays: [] as any[] // 💡 휴일 필드 추가
+    holidays: [] as any[], // 💡 휴일 필드 추가
+    homepage_url: "", // 💡 학원 홈페이지
+    homepage_title: "", // 💡 학원 홈페이지 버튼 라벨
+    naver_cafe_url: "", // 💡 네이버 카페
+    naver_cafe_title: "" // 💡 네이버 카페 버튼 라벨
   });
 
   // 데이터 로드 여부 추적
@@ -78,7 +82,11 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
           late_threshold: dbSettings.late_threshold ?? 10,
           alert_threshold: dbSettings.alert_threshold ?? 15,
           timer_presets: dbSettings.timer_presets || [30, 60, 90],
-          holidays: dbSettings.holidays || []
+          holidays: dbSettings.holidays || [],
+          homepage_url: dbSettings.homepage_url || "",
+          homepage_title: dbSettings.homepage_title || "홈페이지",
+          naver_cafe_url: dbSettings.naver_cafe_url || "",
+          naver_cafe_title: dbSettings.naver_cafe_title || "네이버 카페"
         });
       }
     }
@@ -89,12 +97,9 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
   const updateOpSetting = async (key: string, value: any) => {
     if (!onUpdateAcademyInfo || !academyInfo) return;
 
-    // 💡 함수형 업데이트를 사용하여 최신 로컬 상태를 기준으로 다음 상태 계산
-    let nextSettings: any = {};
-    setOpSettings(prev => {
-      nextSettings = { ...prev, [key]: value };
-      return nextSettings;
-    });
+    // 💡 동기식으로 즉시 계산하여 React 배치 처리 및 비동기 스케줄링 시 데이터 유실(Race Condition) 방지
+    const nextSettings = { ...opSettings, [key]: value };
+    setOpSettings(nextSettings);
 
     // 💡 즉시 계산된 nextSettings를 서버에 저장
     await onUpdateAcademyInfo({ operation_settings: nextSettings });

@@ -24,8 +24,8 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
     if (!searchQuery.trim()) return students;
     const query = searchQuery.toLowerCase();
     return students.filter(s => 
-      s.name.toLowerCase().includes(query) || 
-      s.grade.toLowerCase().includes(query)
+      (s.name || '').toLowerCase().includes(query) || 
+      (s.grade || '').toLowerCase().includes(query)
     );
   }, [students, searchQuery]);
 

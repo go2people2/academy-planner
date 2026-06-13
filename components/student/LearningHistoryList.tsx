@@ -39,6 +39,13 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
               ) : (
                 allLogs.map((log, i) => {
                   const displayDate = log.session_date.slice(5).replace('-', '.'); // MM.DD
+                  
+                  let todoAchievement = 0;
+                  try { if (log.test_result?.startsWith('{')) todoAchievement = JSON.parse(log.test_result).todo_achievement || 0; } catch (e) {}
+                  
+                  const hwEvalMatch = log.special_notes ? log.special_notes.match(/\[숙제이행:\s*(\d+)단계\]/) : null;
+                  const hwEval = hwEvalMatch ? parseInt(hwEvalMatch[1]) : null;
+
                   return (
                     <div key={i} className="flex gap-5 items-start">
                       {/* 💡 날짜를 완전한 흰색으로 강조 */}
@@ -59,11 +66,17 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                               {/* 💡 Classwork 제목 제거 */}
                               <p className="text-[12px] font-bold text-gray-200 leading-snug whitespace-pre-wrap">{log.classwork_text || '-'}</p>
                             </div>
-                            {log.test_score !== null && log.test_score !== undefined && (
-                              <div className="shrink-0 text-right">
-                                <span className="text-[9px] font-black text-blue-500 tabular-nums">SCORE {log.test_score}%</span>
-                              </div>
-                            )}
+                            <div className="shrink-0 flex flex-col items-end gap-1 mt-0.5">
+                              {todoAchievement > 0 && (
+                                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 tabular-nums">To-Do {todoAchievement}%</span>
+                              )}
+                              {hwEval !== null && (
+                                <span className="text-[9px] font-black text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20 tabular-nums">HW Lvl {hwEval}</span>
+                              )}
+                              {log.test_score !== null && log.test_score !== undefined && (
+                                <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 tabular-nums">SCORE {log.test_score}%</span>
+                              )}
+                            </div>
                           </div>
 
                           {/* 💡 Homework 제목 제거 및 따옴표/기울임꼴 적용 (줄간격 극소화) */}

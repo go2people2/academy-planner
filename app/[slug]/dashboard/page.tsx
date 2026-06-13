@@ -1103,7 +1103,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
               />
             )}
 
-            {viewMode === 'progress' && <ProgressSequencer students={filteredAllStudents} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
+            {viewMode === 'progress' && <ProgressSequencer students={students.filter(s => !s.is_deleted)} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} onSelectStudent={setSelectedStudentId} />}
             {viewMode === 'notifications' && <NotificationsView academyInfo={academy} students={students} currentUser={currentUser} />}
             {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} noticeDrafts={noticeDrafts} onNoticeDraftChange={handleNoticeDraftChange} />}

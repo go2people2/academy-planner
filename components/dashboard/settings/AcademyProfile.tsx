@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Shield, Key, Clock } from 'lucide-react';
+import { Shield, Key, Clock, Globe } from 'lucide-react';
 
 interface AcademyProfileProps {
   academyInfo: any;
@@ -135,6 +135,68 @@ export default function AcademyProfile({
             * 1교시 시작 시각은 시간표의 파랑/주황 색상 구분(3교시 단위)의 기준이 됩니다.<br/>
             * 지각 및 연락 알림 설정은 수업 시작 (LIVE) 모드에서 실시간으로 반영됩니다.
           </p>
+        </div>
+
+        {/* 💡 학원 외부 링크 설정 */}
+        <div className="pt-6 border-t border-white/5 space-y-6">
+          <div className="flex items-center gap-3">
+            <Globe className="text-blue-500" size={20} />
+            <h3 className="text-sm font-black text-white uppercase tracking-widest">학원 외부 링크 설정 (학생 페이지 노출)</h3>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 text-left">
+            {/* 홈페이지 설정 */}
+            <div className="space-y-4 border border-white/5 bg-white/[0.01] p-4 rounded">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">학원 홈페이지 주소</label>
+                <input 
+                  type="url"
+                  placeholder="https://example.com"
+                  value={opSettings.homepage_url || ""}
+                  onChange={(e) => setOpSettings((prev:any) => ({ ...prev, homepage_url: e.target.value }))}
+                  onBlur={(e) => updateOpSetting('homepage_url', e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-blue-400 outline-none focus:border-blue-500 transition-all"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">홈페이지 버튼 이름</label>
+                <input 
+                  type="text"
+                  placeholder="홈페이지"
+                  value={opSettings.homepage_title || ""}
+                  onChange={(e) => setOpSettings((prev:any) => ({ ...prev, homepage_title: e.target.value }))}
+                  onBlur={(e) => updateOpSetting('homepage_title', e.target.value || "홈페이지")}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-blue-300 outline-none focus:border-blue-500 transition-all"
+                />
+              </div>
+            </div>
+
+            {/* 네이버 카페 설정 */}
+            <div className="space-y-4 border border-white/5 bg-white/[0.01] p-4 rounded">
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">네이버 카페 주소</label>
+                <input 
+                  type="url"
+                  placeholder="https://cafe.naver.com/..."
+                  value={opSettings.naver_cafe_url || ""}
+                  onChange={(e) => setOpSettings((prev:any) => ({ ...prev, naver_cafe_url: e.target.value }))}
+                  onBlur={(e) => updateOpSetting('naver_cafe_url', e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-green-400 outline-none focus:border-green-500 transition-all"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">네이버 카페 버튼 이름</label>
+                <input 
+                  type="text"
+                  placeholder="네이버 카페"
+                  value={opSettings.naver_cafe_title || ""}
+                  onChange={(e) => setOpSettings((prev:any) => ({ ...prev, naver_cafe_title: e.target.value }))}
+                  onBlur={(e) => updateOpSetting('naver_cafe_title', e.target.value || "네이버 카페")}
+                  className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-green-300 outline-none focus:border-green-500 transition-all"
+                />
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </motion.div>

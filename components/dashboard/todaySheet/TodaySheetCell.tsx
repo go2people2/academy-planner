@@ -222,6 +222,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       ref={tdRef}
       style={styles} 
       tabIndex={0}
+      data-col-id={colId}
       className={`border-r border-white/12 relative group/td outline-none align-top ${
         isFirstInTimeSection ? 'border-t-[3px] border-t-blue-500/60 shadow-[inset_0_1px_0_rgba(59,130,246,0.2)]' : ''
       } ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''}`}
@@ -393,7 +394,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
                 <span className="text-[13px] font-black text-white truncate group-hover/namecell:text-blue-400 transition-colors">
-                  {student.name}-{student.teacher_initial || '?'}-{student.class_days?.join('') || '무'}
+                  {student.name}-{student.teacher_initial || '?'}-{student.class_days 
+                    ? [...student.class_days].sort((a, b) => {
+                        const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                        return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+                      }).join('')
+                    : '무'}
                 </span>
                 {/* 💡 학생 포털 바로가기 아이콘 추가 */}
                 <button 

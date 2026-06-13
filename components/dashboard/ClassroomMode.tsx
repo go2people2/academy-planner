@@ -451,9 +451,9 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
             const isAnyMarked = isPureAttend || isLate || isAbsent;
             const isBeforeClass = status === ATTENDANCE_STATUS.BEFORE;
             const isSupplementPending = status === ATTENDANCE_STATUS.SUPPLEMENT && !hasMovedHour; // 💡 다시 정의
-            const isCurrentSession = studentHour === currentHour || studentHour === 999;
-            const isLateWarning = isCurrentSession && !isAnyMarked && !isBeforeClass && !isSupplementPending && studentElapsed >= (settings.late_threshold || 10);
-            const isCriticalWarning = isCurrentSession && !isAnyMarked && !isBeforeClass && !isSupplementPending && studentElapsed >= (settings.alert_threshold || 15);
+            const isTimePassed = studentHour !== 999 && studentHour <= currentHour;
+            const isLateWarning = isTimePassed && !isAnyMarked && !isSupplementPending && studentElapsed >= (settings.late_threshold || 10);
+            const isCriticalWarning = isTimePassed && !isAnyMarked && !isSupplementPending && studentElapsed >= (settings.alert_threshold || 15);
             const sharedTimer = assignedSlot ? globalTimers[assignedSlot] : null;
             let remainingSec = 0, progress = 0, isTimerExpired = false;
             if (sharedTimer && sharedTimer.startTime) {

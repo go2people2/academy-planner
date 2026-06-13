@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { User, Lock, ArrowRight, Loader2 } from 'lucide-react';
+import { User, Lock, ArrowRight, Loader2, Phone } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 
@@ -11,8 +11,8 @@ export default function LoginForm({ academy }: { academy: any }) {
   const [loginType, setLoginType] = useState<'teacher' | 'student'>('teacher');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
-  const [studentName, setStudentName] = useState('');
   const [phoneLast4, setPhoneLast4] = useState('');
+  const [candidateStudents, setCandidateStudents] = useState<any[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const router = useRouter();
 
@@ -33,6 +33,11 @@ export default function LoginForm({ academy }: { academy: any }) {
       </div>
     );
   }
+
+  const handleSelectStudent = (student: any) => {
+    localStorage.setItem('ams_student', JSON.stringify(student));
+    router.push(`/${slug}/student`);
+  };
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -85,31 +90,62 @@ export default function LoginForm({ academy }: { academy: any }) {
         const masterPasskey = academy.student_passkey || '2324';
         const isMasterAccess = phoneLast4 === masterPasskey;
 
-        let query = supabase
-          .from('ams_students')
-          .select('*')
-          .eq('academy_id', academy.id)
-          .eq('name', studentName);
-        
-        if (!isMasterAccess) {
-          query = query.like('phone', `%${phoneLast4}`);
-        }
-
-        const { data: student, error: sErr } = await query.maybeSingle();
-
-        if (sErr) {
-          console.error('Student fetch error:', sErr);
-          alert('학생 정보 조회 중 오류가 발생했습니다.');
+        if (!phoneLast4 || phoneLast4.length < 4) {
+          alert('번호 4자리를 입력해 주세요.');
           setIsLoading(false);
           return;
         }
 
-        if (student) {
-          localStorage.setItem('ams_student', JSON.stringify(student));
-          setIsLoading(false);
-          router.push(`/${slug}/student`);
-        } else {
-          alert(isMasterAccess ? '해당 이름의 학생을 찾을 수 없습니다.' : '학생 정보를 찾을 수 없습니다.');
+        try {
+          if (isMasterAccess) {
+            // 마스터 패스키인 경우: 학원의 모든 학생 목록 로드 (가나다순)
+            const { data: allStudents, error: sErr } = await supabase
+              .from('ams_students')
+              .select('*')
+              .eq('academy_id', academy.id)
+              .is('is_deleted', false)
+              .order('name', { ascending: true });
+
+            if (sErr) throw sErr;
+
+            if (allStudents && allStudents.length > 0) {
+              setCandidateStudents(allStudents);
+            } else {
+              alert('학원에 등록된 학생이 없습니다.');
+            }
+            setIsLoading(false);
+            return;
+          }
+
+          // 일반 4자리 조회
+          const { data: list, error: sErr } = await supabase
+            .from('ams_students')
+            .select('*')
+            .eq('academy_id', academy.id)
+            .is('is_deleted', false)
+            .like('phone', `%${phoneLast4}`);
+
+          if (sErr) throw sErr;
+
+          // 실제 전화번호 뒷 4자리 재검증
+          const matchedList = (list || []).filter(s => {
+            const sCleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
+            return sCleanPhone.endsWith(phoneLast4);
+          });
+
+          if (matchedList.length === 0) {
+            alert('등록된 학생 정보를 찾을 수 없습니다.');
+          } else if (matchedList.length === 1) {
+            localStorage.setItem('ams_student', JSON.stringify(matchedList[0]));
+            router.push(`/${slug}/student`);
+          } else {
+            // 중복 시 선택 리스트 생성
+            setCandidateStudents(matchedList);
+          }
+        } catch (err) {
+          console.error('Student login error:', err);
+          alert('학생 로그인 중 오류가 발생했습니다.');
+        } finally {
           setIsLoading(false);
         }
       }
@@ -188,57 +224,79 @@ export default function LoginForm({ academy }: { academy: any }) {
           </>
         ) : (
           <>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
-                Student Name
-              </label>
-              <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
-                <input 
-                  type="text"
-                  placeholder="성함을 입력하세요"
-                  value={studentName}
-                  onChange={(e) => setStudentName(e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
-                  required
-                />
-              </div>
-            </div>
+            {candidateStudents && candidateStudents.length > 0 ? (
+              <div className="space-y-4 text-left">
+                <div className="text-center pb-2 border-b border-white/5">
+                  <h3 className="text-sm font-black text-white uppercase tracking-widest">
+                    {phoneLast4 === (academy.student_passkey || '2324') ? '전체 학생 목록 (마스터)' : '본인 이름을 선택해 주세요'}
+                  </h3>
+                  <p className="text-gray-500 text-[10px] mt-1 font-bold">
+                    {phoneLast4 === (academy.student_passkey || '2324') ? '접속할 학생을 클릭하세요.' : '전화번호 뒷자리가 일치하는 학생 목록입니다.'}
+                  </p>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar-v">
+                  {candidateStudents.map(s => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => handleSelectStudent(s)}
+                      className="py-3.5 px-3 bg-white/5 border border-white/10 hover:bg-blue-600 hover:border-blue-500 text-white rounded-[2px] transition-all text-left flex flex-col justify-between h-16"
+                    >
+                      <span className="font-black text-xs block truncate">{s.name}</span>
+                      <span className="text-[9px] text-gray-500 block truncate font-bold uppercase mt-1">
+                        {s.school || '학원생'} {s.grade || ''}
+                      </span>
+                    </button>
+                  ))}
+                </div>
 
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
-                Phone Last 4 Digits
-              </label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
-                <input 
-                  type="text"
-                  maxLength={4}
-                  placeholder="0000"
-                  value={phoneLast4}
-                  onChange={(e) => setPhoneLast4(e.target.value.replace(/[^0-9]/g, ''))}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
-                  required
-                />
+                <button
+                  type="button"
+                  onClick={() => setCandidateStudents(null)}
+                  className="w-full py-3.5 bg-white/5 border border-white/10 text-gray-400 hover:text-white rounded-[2px] text-[10px] font-black uppercase tracking-widest transition-all mt-2"
+                >
+                  뒤로 가기 (다시 입력)
+                </button>
               </div>
-            </div>
+            ) : (
+              <div className="space-y-1">
+                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
+                  Student Passkey (전화번호 뒷 4자리)
+                </label>
+                <div className="relative group">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-400 transition-colors" />
+                  <input 
+                    type="tel"
+                    maxLength={4}
+                    placeholder="번호 4자리 입력"
+                    value={phoneLast4}
+                    onChange={(e) => setPhoneLast4(e.target.value.replace(/[^0-9]/g, ''))}
+                    className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all font-black text-lg tracking-[0.3em] text-center"
+                    required
+                  />
+                </div>
+              </div>
+            )}
           </>
         )}
 
-        <button
-          type="submit"
-          disabled={isLoading}
-          className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-[2px] transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-        >
-          {isLoading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
-          ) : (
-            <>
-              <span className="uppercase tracking-widest text-[11px]">Sign In Securely</span>
-              <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-            </>
-          )}
-        </button>
+        {!(loginType === 'student' && candidateStudents && candidateStudents.length > 0) && (
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-[2px] transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+          >
+            {isLoading ? (
+              <Loader2 className="w-5 h-5 animate-spin" />
+            ) : (
+              <>
+                <span className="uppercase tracking-widest text-[11px]">Sign In Securely</span>
+                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+              </>
+            )}
+          </button>
+        )}
       </form>
     </motion.div>
   );
