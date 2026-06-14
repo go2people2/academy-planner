@@ -98,6 +98,8 @@ export function useTodaySheetRowLogic({
       test_cut: session?.test_cut || 0,
       test_total_count: session?.test_total_count || 0,
       test_completed: session?.test_completed,
+      hw_checked_today: session?.hw_checked_today ?? false,
+      hw_passed_today: session?.hw_passed_today ?? false,
       mission: translateBookCodes(student.recent_mission || ''),
       moved_to_hour: session?.moved_to_hour, // 💡 추가
       isTodayClassDay
@@ -188,7 +190,12 @@ export function useTodaySheetRowLogic({
       delete savePayload.attendance_status;
     }
 
-    const hasChange = Object.keys(mergedUpdates).some(key => String((finalData as any)[key] || '') !== String((initial as any)[key] || ''));
+    const hasChange = Object.keys(mergedUpdates).some(key => {
+      const fVal = (finalData as any)[key];
+      const iVal = (initial as any)[key];
+      if (typeof fVal === 'boolean' || typeof iVal === 'boolean') return fVal !== iVal;
+      return String(fVal || '') !== String(iVal || '');
+    });
     if (!hasChange) return;
 
     // 3. 저장 실행 및 플래그 설정

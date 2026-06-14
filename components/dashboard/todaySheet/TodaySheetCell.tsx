@@ -442,8 +442,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'review' && (
-          <div className="relative w-full h-full flex items-stretch justify-start bg-blue-600/[0.03]">
-            <div className="flex-1 py-3 px-4 flex flex-col justify-center text-left">
+          <div className="relative w-full h-full flex flex-col items-start justify-center bg-blue-600/[0.03] py-2 px-3 gap-1">
+            <div className="flex-1 w-full flex flex-col justify-center text-left">
               {student.lastSession?.homework_text ? (
                 <p className="text-[12px] font-bold text-blue-200 leading-tight italic whitespace-pre-wrap">
                   <span className="text-blue-500/80 text-[16px] font-black mr-1">"</span>
@@ -454,6 +454,55 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 <span className="italic opacity-30 text-gray-500 font-medium text-[11px] px-2">기존 숙제 없음</span>
               )}
             </div>
+            {student.lastSession?.homework_text && (() => {
+              const attStatus = student.todaySession?.attendance_status || '';
+              const isPresent = ['출석', '지각'].some(st => attStatus.startsWith(st));
+              const isSupplement = attStatus.startsWith('보강');
+              const hasAttendance = isPresent || isSupplement || attStatus !== '';
+              const isRegularClass = student.todaySession?.isTodayClassDay === true;
+
+              if (!hasAttendance) return null;
+
+              if (isPresent && isRegularClass) {
+                // 정규 출석 시 기본적으로 자동 검사(break)되므로, 패스(pass) 버튼 제공
+                const isPassed = student.todaySession?.hw_passed_today === true;
+                return (
+                  <button
+                    type="button"
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onSave({ hw_passed_today: !isPassed });
+                    }}
+                    className={`relative z-30 self-end mt-0.5 px-2 py-0.5 rounded text-[9.5px] font-black tracking-tighter border transition-colors ${
+                      isPassed
+                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
+                        : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40'
+                    }`}
+                  >
+                    {isPassed ? '⏭️ 과제 패스됨 (취소)' : '✅ 자동 검사됨 (패스하기)'}
+                  </button>
+                );
+              } else {
+                // 보강 등 그 외 상태일 때 기본적으로 패스(continue)되므로, 강제 검사(check) 버튼 제공
+                const isChecked = student.todaySession?.hw_checked_today === true;
+                return (
+                  <button
+                    type="button"
+                    onClick={(e) => { 
+                      e.stopPropagation(); 
+                      onSave({ hw_checked_today: !isChecked });
+                    }}
+                    className={`relative z-30 self-end mt-0.5 px-2 py-0.5 rounded text-[9.5px] font-black tracking-tighter border transition-colors ${
+                      isChecked
+                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                        : 'bg-gray-800 text-gray-400 border-gray-600 hover:bg-gray-700 hover:text-gray-200'
+                    }`}
+                  >
+                    {isChecked ? '✅ 오늘 검사됨 (패스 취소)' : '🔳 오늘 검사하기'}
+                  </button>
+                );
+              }
+            })()}
           </div>
         )}
 

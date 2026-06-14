@@ -66,6 +66,8 @@ const parseTestResult = (testResultRaw: any, testStatus: string) => {
   let sType: 'score' | 'count' = 'score';
   let tTotal = 0;
   let hasTestResult = false;
+  let hwCheckedToday = false;
+  let hwPassedToday = false;
   try {
     if (testResultRaw?.startsWith('{')) {
       const res = JSON.parse(testResultRaw);
@@ -75,10 +77,12 @@ const parseTestResult = (testResultRaw: any, testStatus: string) => {
       todoAchievement = res.todo_achievement || 0;
       sType = res.score_type || 'score';
       tTotal = res.total_count || 0;
+      hwCheckedToday = res.hw_checked_today === true;
+      hwPassedToday = res.hw_passed_today === true;
       if (isTestCompleted !== undefined || testStatus || missionSnapshot || todoAchievement > 0) hasTestResult = true;
     }
   } catch (e) {}
-  return { isTestCompleted, tCut, missionSnapshot, todoAchievement, sType, tTotal, hasTestResult };
+  return { isTestCompleted, tCut, missionSnapshot, todoAchievement, sType, tTotal, hasTestResult, hwCheckedToday, hwPassedToday };
 };
 
 // 4. 개별 DB 로그를 SessionLog 형식으로 변환
@@ -118,13 +122,15 @@ const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
       return null;
     })(),
     hasHwTo: nq.hasHwTo, hasTestResult: tr.hasTestResult,
+    hw_checked_today: tr.hwCheckedToday,
+    hw_passed_today: tr.hwPassedToday,
     approval_status: l.approval_status || 'none',
     test_result: l.test_result || null
   };
 };
 
 // 5. 과거 숙제 내역 취합 유틸리티
-const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any) => {
+const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: any) => {
   let aggregatedHw = "";
   if (pastLogs.length === 0) return "";
 
@@ -139,7 +145,17 @@ const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any) => {
       const line = `${dateStr}(${getDayOfWeek(log.date)})\n${log.homework_text}`;
       aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
     }
-    if ([ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].some(st => log.attendance_status.startsWith(st))) break;
+
+    if (log.hw_passed_today === true) continue;
+
+    const dayName = getDayOfWeek(log.date);
+    const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
+    const isPresent = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].some(st => log.attendance_status.startsWith(st));
+
+    if (
+      log.hw_checked_today === true || 
+      (isPresent && isRegularClass)
+    ) break;
   }
   return aggregatedHw;
 };
@@ -237,7 +253,7 @@ const getEnrichedStudentData = (
   const isTodayClassDay = (isScheduledToday || isMakeup) && !isSkipped; // 💡 최종 수업 대상 여부
   
   const pastLogs = logs.filter(l => l.date < selectedDate).sort((a, b) => b.date.localeCompare(a.date));
-  const aggregatedHw = calculateAggregatedHw(pastLogs, academy);
+  const aggregatedHw = calculateAggregatedHw(pastLogs, academy, s);
   const todaySession = determineTodaySession(s, todayLog, baseSession, isTodayClassDay, selectedDate, academy);
 
   const tInfo = findTeacherInfo(teachers, s.teacher_id, s.teacher_name);
@@ -640,7 +656,7 @@ const getFilteredBaseFields = (sessionData: any) => {
     if (dbKey === 'test_id') dbKey = 'test_status';
     
     // JSON 필드 및 파생 필드 제외 (메인에서 별도 처리)
-    if (['next_quiz_text', 'next_quiz_cut', 'next_quiz_trial', 'next_quiz_json', 'test_result', 'homework_to', 'test_completed', 'test_cut', 'mission', 'todo_achievement', 'test_score_type', 'test_total_count'].includes(dbKey)) return;
+    if (['next_quiz_text', 'next_quiz_cut', 'next_quiz_trial', 'next_quiz_json', 'test_result', 'homework_to', 'test_completed', 'test_cut', 'mission', 'todo_achievement', 'test_score_type', 'test_total_count', 'hw_checked_today', 'hw_passed_today'].includes(dbKey)) return;
     
     if (ALLOWED_COLUMNS.includes(dbKey)) {
       let val = (sessionData as any)[key];
@@ -662,7 +678,7 @@ const getFilteredBaseFields = (sessionData: any) => {
 
 // 2. 테스트 결과 JSON 안전 병합 (기존 모든 키 보존)
 const buildMergedTestResult = (existingJsonRaw: any, sessionData: any, fallbacks: {
-  completed: any, mission: string, cut: string | number, achievement: number, sType: string, tTotal: number
+  completed: any, mission: string, cut: string | number, achievement: number, sType: string, tTotal: number, hwCheckedToday: boolean, hwPassedToday: boolean
 }) => {
   let existing = {};
   try {
@@ -678,7 +694,9 @@ const buildMergedTestResult = (existingJsonRaw: any, sessionData: any, fallbacks
     mission: ('mission' in sessionData) ? sessionData.mission : fallbacks.mission,
     todo_achievement: ('todo_achievement' in sessionData) ? sessionData.todo_achievement : fallbacks.achievement,
     score_type: ('test_score_type' in sessionData) ? sessionData.test_score_type : fallbacks.sType,
-    total_count: ('test_total_count' in sessionData) ? sessionData.test_total_count : fallbacks.tTotal
+    total_count: ('test_total_count' in sessionData) ? sessionData.test_total_count : fallbacks.tTotal,
+    hw_checked_today: ('hw_checked_today' in sessionData) ? sessionData.hw_checked_today : fallbacks.hwCheckedToday,
+    hw_passed_today: ('hw_passed_today' in sessionData) ? sessionData.hw_passed_today : fallbacks.hwPassedToday
   });
 };
 
@@ -716,7 +734,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       cut: student.todaySession?.test_cut ?? 0,
       achievement: student.todaySession?.todo_achievement ?? 0,
       sType: student.todaySession?.test_score_type ?? 'score',
-      tTotal: student.todaySession?.test_total_count ?? 0
+      tTotal: student.todaySession?.test_total_count ?? 0,
+      hwCheckedToday: student.todaySession?.hw_checked_today ?? false,
+      hwPassedToday: student.todaySession?.hw_passed_today ?? false
     }
   );
 
@@ -740,6 +760,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           next_quiz_trial: nqObj.trial,
           next_quiz_json: nqObj.json,
           hasHwTo: !!nqObj.text,
+          hw_checked_today: ('hw_checked_today' in sessionData) ? sessionData.hw_checked_today : s.todaySession?.hw_checked_today,
+          hw_passed_today: ('hw_passed_today' in sessionData) ? sessionData.hw_passed_today : s.todaySession?.hw_passed_today,
           hasTestResult: isTestCompleted !== undefined || ('test_cut' in sessionData) || ('mission' in sessionData) || ('todo_achievement' in sessionData)
         }
       };
@@ -790,6 +812,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                 next_quiz_trial: nextQuiz.trial || 1,
                 next_quiz_json: nextQuiz.json || [],
                 hasHwTo: !!nextQuiz.text,
+                hw_checked_today: testRes.hw_checked_today === true,
+                hw_passed_today: testRes.hw_passed_today === true,
                 hasTestResult: true
               }
             };

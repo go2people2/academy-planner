@@ -74,6 +74,11 @@ export function useTodaySheetClipboard({
 
   // 2. 붙여넣기 핸들러
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
+    // 💡 사용자가 입력 중이거나 활성 요소가 폼 태그일 경우 네이티브 붙여넣기에 맡김
+    const target = e.target as HTMLElement;
+    const isEditing = !!editingCell || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+    if (isEditing) return;
+
     if (!activeCell) return;
     const clipboardData = e.clipboardData?.getData('text/plain');
     if (!clipboardData) return;
@@ -82,7 +87,6 @@ export function useTodaySheetClipboard({
       const dataMatrix = parseClipboardText(clipboardData);
       if (dataMatrix.length === 0) return;
 
-      if (editingCell) setEditingCell(null);
       e.preventDefault();
 
       const updates: any[] = [];

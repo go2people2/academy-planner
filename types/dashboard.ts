@@ -20,9 +20,10 @@ export interface SessionLog {
   classwork_text: string;
   classwork_json: HomeworkItem[];
   completed_classwork_text?: string; // 💡 실제 수행 진도 텍스트
-  completed_classwork_json?: HomeworkItem[]; // 💡 실제 수행 진도 데이터
   homework_text: string;
   homework_json: HomeworkItem[];
+  hw_checked_today?: boolean; // 💡 추가 (보강 시 오늘 숙제 검사 완료 여부)
+  hw_passed_today?: boolean; // 💡 추가 (정규 수업 시 오늘 숙제 검사 건너뛰기)
   next_quiz_text?: string; // 💡 추가
   next_quiz_json?: HomeworkItem[]; // 💡 추가
   next_quiz_cut?: string | number; // 💡 추가 (0~4개 커트라인)
