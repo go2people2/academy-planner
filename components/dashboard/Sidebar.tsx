@@ -44,6 +44,7 @@ export default function Sidebar({
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMultiMode, setIsMultiMode] = useState(false);
   const [tempNotices, setTempNotices] = useState<any>({});
 
   const isAdmin = user?.role === 'admin';
