@@ -44,6 +44,9 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                   let todoAchievement = 0;
                   try { if (log.test_result?.startsWith('{')) todoAchievement = JSON.parse(log.test_result).todo_achievement || 0; } catch (e) {}
                   
+                  let assignedHomework = log.homework_text || '';
+                  try { if (log.homework_to?.startsWith('{')) assignedHomework = JSON.parse(log.homework_to).text || assignedHomework; } catch (e) {}
+                  
                   let hwEval: number | null = null;
                   const notes = log.special_notes || '';
                   const match = notes.match(/\[숙제이행: (\d+)단계\]/);
@@ -112,11 +115,11 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                           </div>
 
                           {/* 💡 Homework 제목 제거 및 따옴표/기울임꼴 적용 (줄간격 극소화) */}
-                          {log.homework_text && (
+                          {assignedHomework && (
                             <div className="pt-1 border-t border-white/5">
                               <p className="text-[12px] font-medium text-blue-200 leading-tight italic whitespace-pre-wrap">
                                 <span className="text-blue-500/80 text-[12px] font-black mr-1">"</span>
-                                {log.homework_text}
+                                {assignedHomework}
                                 <span className="text-blue-500/80 text-[12px] font-black ml-1">"</span>
                               </p>
                             </div>
