@@ -489,12 +489,14 @@ function HomeworkRow({
           <RefreshCcw size={12} />
         </button>
 
-        <button 
-          onClick={onDelete} 
-          className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center"
-        >
-          <Trash2 size={12} />
-        </button>
+        {hw.type === 'custom' && (
+          <button 
+            onClick={onDelete} 
+            className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center"
+          >
+            <Trash2 size={12} />
+          </button>
+        )}
       </div>
 
       <AnimatePresence>
