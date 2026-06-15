@@ -23,10 +23,12 @@ export default function SystemManual() {
             <p className="text-amber-400 font-black mb-1.5 flex items-center gap-1.5 tracking-wide"><Table size={12}/> 오늘 테스트 초간단 입력 문법</p>
             <ul className="space-y-1.5 text-[11px] text-gray-300">
               <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 기출 : 85</span> ➜ 100점 만점으로 자동 인식 (85점 획득)</li>
+              <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 기출 : </span> ➜ 점수를 비워두면 <b>'채점 전'</b> 대기 상태 (회색 뱃지)</li>
               <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 퀴즈 : 7/10</span> ➜ 10개 만점으로 자동 인식 (7개 획득)</li>
               <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 퀴즈 : 7/10/2</span> ➜ 마지막 숫자는 커트라인(오답 허용 개수)</li>
+              <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 퀴즈 : /10/2</span> ➜ 점수를 비워둔 채 <b>만점</b>과 <b>컷라인</b>만 미리 세팅 (채점 전 대기)</li>
               <li className="text-gray-500 italic mt-2 border-t border-white/5 pt-1.5">
-                * 쉼표(,) 뒤에 쓰거나 줄을 바꿔서 쓰는 글은 학생/학부모 리포트에는 노출되지 않는 '선생님 전용 비밀 메모'가 됩니다.
+                * 쉼표(,) 뒤에 쓰거나 줄을 바꿔서 쓰는 글은 학생 리포트에는 노출되지 않는 '선생님 전용 비밀 메모'가 됩니다.
               </li>
             </ul>
           </div>
