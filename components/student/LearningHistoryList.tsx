@@ -79,15 +79,15 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                             </div>
                             <div className="shrink-0 flex flex-col items-end gap-1 mt-0.5">
                               {todoAchievement > 0 && (
-                                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 tabular-nums">To-Do {todoAchievement}%</span>
+                                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 tabular-nums">진도 {todoAchievement}%</span>
                               )}
                               {hwEval !== null && (
                                 <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border tabular-nums text-blue-400 bg-blue-500/10 border-blue-500/20`}>
-                                  HW Lvl {hwEval}
+                                  과제 {hwEval}
                                 </span>
                               )}
                               {log.test_score !== null && log.test_score !== undefined && (
-                                <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 tabular-nums">SCORE {log.test_score}%</span>
+                                <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 tabular-nums">테스트 {log.test_score}%</span>
                               )}
                             </div>
                           </div>
