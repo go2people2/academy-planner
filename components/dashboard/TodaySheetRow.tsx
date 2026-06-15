@@ -151,20 +151,26 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               onViewProgress={onViewProgress}
               onViewDetail={onSelectStudent}
               onApplyTestPreset={(preset: any, cid: 'test_id' | 'next_quiz') => {
-                const updates: any = {};
-                if (cid === 'test_id') {
-                  updates.test_id = preset.name;
-                  updates.test_cut = preset.default_cut || 0;
-                  updates.test_score_type = preset.type;
-                  if (preset.type === 'count') {
-                    updates.test_total_count = preset.max || 0;
+                states.setFormData((prev: any) => {
+                  const updates: any = {};
+                  if (cid === 'test_id') {
+                    const existing = prev.test_id ? prev.test_id.trim() : '';
+                    updates.test_id = existing ? `${existing} ${preset.name}` : preset.name;
+                    updates.test_cut = preset.default_cut || 0;
+                    updates.test_score_type = preset.type;
+                    if (preset.type === 'count') {
+                      updates.test_total_count = preset.max || 0;
+                    }
+                  } else if (cid === 'next_quiz') {
+                    const existing = prev.next_quiz_text ? prev.next_quiz_text.trim() : '';
+                    updates.next_quiz_text = existing ? `${existing} ${preset.name}` : preset.name;
+                    updates.next_quiz_cut = preset.default_cut || 0;
                   }
-                } else if (cid === 'next_quiz') {
-                  updates.next_quiz_text = preset.name;
-                  updates.next_quiz_cut = preset.default_cut || 0;
-                }
-                states.setFormData((prev: any) => ({ ...prev, ...updates }));
-                handleSave(updates);
+                  
+                  // 로컬 상태 즉시 업데이트 및 서버 저장 요청
+                  handleSave(updates);
+                  return { ...prev, ...updates };
+                });
                 
                 onEditingCellChange?.(student.id, null);
                 if (refs.tdRefs.current[cid]) {
