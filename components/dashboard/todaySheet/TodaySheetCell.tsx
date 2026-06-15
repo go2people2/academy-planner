@@ -203,6 +203,64 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
   const textColClass = colId === 'mission' ? 'text-amber-200/90 font-bold' : 'text-white font-extrabold';
   const commonTextStyle = `w-full text-[12px] leading-[14px] text-left ${textColClass} ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
+  // 💡 인라인 테스트 문법 하이라이팅 (뷰 모드용)
+  const renderHighlightedText = (text: string, columnId: string) => {
+    if (!text) return '-';
+    if (columnId !== 'test_id' && columnId !== 'next_quiz') return text;
+    
+    return text.split('\n').map((line, i) => {
+      const isLast = i === text.split('\n').length - 1;
+      if (!line.trim().startsWith('-')) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
+      
+      const colonIdx = line.indexOf(':');
+      if (colonIdx === -1) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
+      
+      const beforeColon = line.substring(0, colonIdx + 1);
+      const afterColon = line.substring(colonIdx + 1);
+      
+      const commaIdx = afterColon.indexOf(',');
+      const scorePart = commaIdx !== -1 ? afterColon.substring(0, commaIdx) : afterColon;
+      const memoPart = commaIdx !== -1 ? afterColon.substring(commaIdx) : '';
+      
+      const highlightScore = (str: string) => {
+        if (!str.includes('/')) return <span className="text-emerald-400 font-black">{str}</span>;
+        
+        const parts = str.split('/');
+        return (
+          <span className="font-black">
+            <span className="text-emerald-400">{parts[0]}</span>
+            {parts.length > 1 && (
+              <>
+                <span className="text-gray-600 mx-0.5">/</span>
+                <span className="text-blue-400">{parts[1]}</span>
+              </>
+            )}
+            {parts.length > 2 && (
+              <>
+                <span className="text-gray-600 mx-0.5">/</span>
+                <span className="text-orange-400">{parts[2]}</span>
+              </>
+            )}
+            {parts.slice(3).map((p, idx) => (
+              <React.Fragment key={idx}>
+                <span className="text-gray-600 mx-0.5">/</span>
+                <span>{p}</span>
+              </React.Fragment>
+            ))}
+          </span>
+        );
+      };
+
+      return (
+        <React.Fragment key={i}>
+          <span>{beforeColon}</span>
+          {highlightScore(scorePart)}
+          <span className="text-gray-500 italic">{memoPart}</span>
+          {!isLast && '\n'}
+        </React.Fragment>
+      );
+    });
+  };
 
   return (
     <td 
@@ -559,10 +617,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               />
             )}
             
-            {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 */}
+            {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 (하이라이팅 적용) */}
             {!isEditing && !isActive && (
               <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start`}>
-                <div className="w-full">{currentText || '-'}</div>
+                <div className="w-full">{renderHighlightedText(currentText, colId)}</div>
               </div>
             )}
             
