@@ -68,6 +68,9 @@ export function useTodaySheetRowLogic({
       const current = existingJson || [];
       const merged = [...current];
       assigned.forEach(bookName => {
+        const courseVal = String(student.book_courses?.[bookName] || '');
+        if (courseVal.endsWith('-keep') || courseVal.endsWith('-done')) return;
+        
         if (!current.some(b => b.book_name === bookName)) {
           merged.push({ type: 'book', book_name: bookName, range: '', units: [] });
         }

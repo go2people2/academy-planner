@@ -173,7 +173,10 @@ export default function StudentDetailDrawer({
             <div className="flex flex-col gap-2 py-1 border-y border-white/5 mx-1">
               <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest px-1">Book Courses (Overridable)</label>
               <div className="flex flex-wrap gap-1.5">
-                {student.assigned_books.filter(code => !!code).map((code, idx) => {
+                {student.assigned_books.filter(code => {
+                  const rawCourseValue = localBookCourses[code] || localCourse;
+                  return !!code && !String(rawCourseValue).endsWith('-done'); // 💡 완료된 교재는 위쪽 목록에서 제외
+                }).map((code, idx) => {
                   const book = availableTextbooks.find(b => b.bookcode === code);
                   const rawCourseValue = localBookCourses[code] || localCourse;
                   const isKeep = String(rawCourseValue).endsWith('-keep');
@@ -206,11 +209,64 @@ export default function StudentDetailDrawer({
                           onUpdateInfo(student.id, 'book_courses', newCourses);
                         }}
                         className={`text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all ${isKeep ? 'bg-amber-500 text-black' : 'bg-white/5 text-gray-500 hover:bg-amber-500/20 hover:text-amber-500 border border-transparent'}`}
+                        title="보류 상태로 변경 (오늘 과제에서 숨김)"
                       >
                         KEEP
                       </button>
 
-                      <button onClick={() => toggleBookSelection(code)} className="text-gray-600 hover:text-red-500 transition-colors ml-1"><X size={10} strokeWidth={3} /></button>
+                      <button 
+                        onClick={() => {
+                          const newVal = `${currentCourse}-done`;
+                          const newCourses = { ...localBookCourses, [code]: newVal };
+                          setLocalBookCourses(newCourses);
+                          onUpdateInfo(student.id, 'book_courses', newCourses);
+                        }}
+                        className="text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all bg-white/5 text-gray-500 hover:bg-emerald-500/20 hover:text-emerald-500 border border-transparent"
+                        title="교재 완료 처리 (Book History로 이동)"
+                      >
+                        완료
+                      </button>
+
+                      <button onClick={() => toggleBookSelection(code)} className="text-gray-600 hover:text-red-500 transition-colors ml-1" title="완전 삭제"><X size={10} strokeWidth={3} /></button>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* 💡 Book History (완료된 교재) 섹션 */}
+          {student.assigned_books.some(code => String(localBookCourses[code] || localCourse).endsWith('-done')) && (
+            <div className="flex flex-col gap-2 py-1 border-b border-white/5 mx-1 pb-3">
+              <label className="text-[9px] font-black text-emerald-500/60 uppercase tracking-widest px-1">Book History (완료된 교재)</label>
+              <div className="flex flex-wrap gap-1.5">
+                {student.assigned_books.filter(code => String(localBookCourses[code] || localCourse).endsWith('-done')).map((code, idx) => {
+                  const book = availableTextbooks.find(b => b.bookcode === code);
+                  const rawCourseValue = localBookCourses[code] || localCourse;
+                  const currentCourse = String(rawCourseValue).replace('-done', '');
+
+                  return (
+                    <div key={`done-${code}-${idx}`} className="flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-emerald-500/5 border border-emerald-500/20 opacity-80 hover:opacity-100 transition-opacity">
+                      <span className="text-[9px] font-black px-1.5 text-emerald-500/80">
+                        {book ? book.title : `(${code})`}
+                      </span>
+                      <span className="bg-emerald-500/20 text-emerald-500 text-[9px] font-black rounded-[2px] px-1 py-0.5">
+                        {currentCourse}
+                      </span>
+                      
+                      <button 
+                        onClick={() => {
+                          const newCourses = { ...localBookCourses, [code]: currentCourse };
+                          setLocalBookCourses(newCourses);
+                          onUpdateInfo(student.id, 'book_courses', newCourses);
+                        }}
+                        className="text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all bg-black/20 text-gray-500 hover:bg-blue-500/20 hover:text-blue-400 ml-1"
+                        title="완료 해제 (다시 진행 중으로 복구)"
+                      >
+                        복구
+                      </button>
+
+                      <button onClick={() => toggleBookSelection(code)} className="text-gray-600 hover:text-red-500 transition-colors ml-1" title="완전 삭제"><X size={10} strokeWidth={3} /></button>
                     </div>
                   );
                 })}
