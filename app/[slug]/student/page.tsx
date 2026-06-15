@@ -426,7 +426,12 @@ export default function StudentPortal() {
       
       // 실제 체크박스 항목(totalCount) 중 몇 개가 체크되었는지에 따라 퍼센트 재계산 (최대 100)
       const validChecked = currentChecked.filter(idx => idx < totalCount);
-      let newPercentage = totalCount > 0 ? Math.round((validChecked.length / totalCount) * 100) : 0;
+      let rawPercentage = totalCount > 0 ? (validChecked.length / totalCount) * 100 : 0;
+      // UI 상단의 10단위 버튼과 맞추기 위해 10 단위로 반올림 (예: 33.3 -> 30, 66.6 -> 70)
+      // 만약 체크가 1개라도 있다면 최소 10, 모두 체크라면 100을 보장
+      let newPercentage = Math.round(rawPercentage / 10) * 10;
+      if (validChecked.length > 0 && newPercentage === 0) newPercentage = 10;
+      if (validChecked.length === totalCount) newPercentage = 100;
       // 20단위 버튼과 호환되게 가장 가까운 20단위로 맞추거나 정확한 퍼센트 유지
       // 옵션이 [20, 40, 60, 80, 100]이므로, 실제 퍼센트를 그대로 넘기되,
       // UI에서는 20, 40, 60에 가장 가까운 버튼을 하이라이트 할 수 있음.
