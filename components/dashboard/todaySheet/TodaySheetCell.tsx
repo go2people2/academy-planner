@@ -615,13 +615,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   </div>
 
                   {formData.test_id && <button onClick={onOpenPdf} className="w-5 h-5 rounded-[1px] bg-red-600/30 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><FileText size={10} /></button>}
-                  <button onClick={onOpenTestEditor} className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
                 </>
               )}
               {colId === 'next_quiz' && (
                 <div className="flex items-center gap-1">
-                  <button onClick={onOpenNqEditor} className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 hover:bg-emerald-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
-                  
                   {/* 💡 다음 테스트 커스텀 커트라인 픽커 버튼 */}
                   <div onClick={handleOpenCutPicker} className="relative cursor-pointer group/cut">
                     <div className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 group-hover/cut:bg-emerald-600 group-hover/cut:text-white transition-all shadow-sm flex items-center justify-center">
