@@ -49,7 +49,7 @@ export const ScoreCell = React.memo(function ScoreCell({
           return (
             <div 
               key={idx} 
-              className="text-[12px] font-bold leading-snug text-right tracking-tight" 
+              className="text-[12px] font-normal leading-snug text-right tracking-tight" 
               title={t.name}
             >
               {t.maxScore === 100 ? (
@@ -105,7 +105,7 @@ export const ScoreCell = React.memo(function ScoreCell({
             }} 
             onChange={(e) => handleLocalInput(e, 'test_score')} 
             placeholder="-" 
-            className="bg-transparent border-0 outline-none text-[14px] text-emerald-400 font-black p-0 m-0 w-full text-left" 
+            className="bg-transparent border-0 outline-none text-[14px] text-emerald-400 font-normal p-0 m-0 w-full text-left" 
           />
         </div>
       )}
@@ -114,7 +114,7 @@ export const ScoreCell = React.memo(function ScoreCell({
         <div 
           onClick={(e) => handleCellInteraction(e, colId, 'click')}
           onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
-          className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-text group-hover/td:bg-white/[0.02] transition-colors"
+          className="px-4 text-[14px] text-left text-emerald-400 font-normal pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-text group-hover/td:bg-white/[0.02] transition-colors"
         >
           {formData.test_score ? `${formData.test_score}점` : '-'}
         </div>

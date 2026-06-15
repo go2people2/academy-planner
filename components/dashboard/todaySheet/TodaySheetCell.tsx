@@ -201,7 +201,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
-  const textColClass = colId === 'mission' ? 'text-amber-200/90 font-bold' : 'text-white font-extrabold';
+  const textColClass = colId === 'mission' ? 'text-amber-200/90 font-normal' : 'text-white font-normal';
   const commonTextStyle = `w-full text-[12px] leading-[14px] text-left ${textColClass} ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
   // 💡 인라인 테스트 문법 하이라이팅 (뷰 모드용)
   const renderHighlightedText = (text: string, columnId: string) => {
@@ -223,11 +223,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       const memoPart = commaIdx !== -1 ? afterColon.substring(commaIdx) : '';
       
       const highlightScore = (str: string) => {
-        if (!str.includes('/')) return <span className="text-emerald-400 font-black">{str}</span>;
+        if (!str.includes('/')) return <span className="text-emerald-400 font-normal">{str}</span>;
         
         const parts = str.split('/');
         return (
-          <span className="font-black">
+          <span className="font-normal">
             <span className="text-pink-300">{parts[0]}</span>
             {parts.length > 1 && (
               <>
@@ -330,7 +330,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 </div>
                 <button 
                   onClick={() => onSelectOne?.(student.id, !isSelected)}
-                  className="hidden group-hover/select:flex items-center justify-center w-5 h-5 rounded bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-blue-600/10 text-[9px] font-black text-gray-400 hover:text-blue-400 transition-colors"
+                  className="hidden group-hover/select:flex items-center justify-center w-5 h-5 rounded bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-blue-600/10 text-[9px] font-normal text-gray-400 hover:text-blue-400 transition-colors"
                 >
                   {(rowIndex ?? 0) + 1}
                 </button>
@@ -341,7 +341,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'date' && (
           <div className="flex flex-col gap-0.5 items-center justify-center py-1 w-full min-h-[22px]">
-            <span className="font-black text-gray-500 text-[10px] tabular-nums">{displayDateShort}</span>
+            <span className="font-normal text-gray-500 text-[10px] tabular-nums">{displayDateShort}</span>
             <button onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }} className={`w-6 h-6 rounded-[2px] flex items-center justify-center transition-all ${isHistoryExpanded ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 text-gray-500 hover:bg-white/10'}`}><HistoryIcon size={12} /></button>
           </div>
         )}
@@ -350,7 +350,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="flex items-center justify-between gap-2 px-1.5 py-1 w-full min-h-[22px] relative group/namecell">
             {isFirstInTimeSection && timeSectionLabel && (
               <div className="absolute -top-[4px] right-4 z-[45] pointer-events-none select-none">
-                <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-black text-white tracking-widest uppercase shadow-[0_2px_8px_rgba(37,99,235,0.4)] border border-blue-400/40">
+                <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-normal text-white tracking-widest uppercase shadow-[0_2px_8px_rgba(37,99,235,0.4)] border border-blue-400/40">
                   {timeSectionLabel}
                 </span>
               </div>
@@ -381,11 +381,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                           left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
                           zIndex: 9999
                         }}
-                        className="w-80 p-5 bg-amber-50 text-amber-950 text-[13px] font-black rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.5)] border-2 border-amber-200 ring-4 ring-black/20 pointer-events-none"
+                        className="w-80 p-5 bg-amber-50 text-amber-950 text-[13px] font-normal rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.5)] border-2 border-amber-200 ring-4 ring-black/20 pointer-events-none"
                       >
                         <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-200">
                           <AlertTriangle size={14} className="text-amber-600 animate-bounce" />
-                          <span className="text-[10px] uppercase tracking-widest text-amber-600 font-black">Student Management Alert</span>
+                          <span className="text-[10px] uppercase tracking-widest text-amber-600 font-normal">Student Management Alert</span>
                         </div>
                         <p className="whitespace-pre-wrap leading-relaxed text-[14px]">"{student.management_notes}"</p>
                       </motion.div>
@@ -418,7 +418,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                           left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
                           zIndex: 9999
                         }}
-                        className="w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-black rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-2 border-blue-200 pointer-events-none"
+                        className="w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-normal rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-2 border-blue-200 pointer-events-none"
                       >
                         <div className="flex items-center gap-2 mb-2 pb-2 border-b border-blue-200/50">
                           <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
@@ -438,7 +438,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             </div>
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[13px] font-extrabold text-white truncate group-hover/namecell:text-blue-400 transition-colors">
+                <span className="text-[13px] font-normal text-white truncate group-hover/namecell:text-blue-400 transition-colors">
                   {student.name}-{student.teacher_initial || '?'}-{student.class_days 
                     ? [...student.class_days].sort((a, b) => {
                         const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
@@ -472,7 +472,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   </button>
                 )}
               </div>
-              <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-tighter truncate text-gray-500">
+              <div className="flex items-center gap-1 text-[9px] font-normal uppercase tracking-tighter truncate text-gray-500">
                 {student.school} · {student.grade}
               </div>
             </div>
@@ -483,7 +483,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'attendance' && (
-          <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-black cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
+          <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-normal cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
             formData.attendance_status === ATTENDANCE_STATUS.BEFORE ? 'text-gray-600' :
             formData.attendance_status.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400' : 
             formData.attendance_status.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-red-400' : 
@@ -504,10 +504,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="relative w-full h-full flex items-start justify-between bg-blue-600/[0.03] py-1 px-2 gap-2">
             <div className="flex-1 text-left min-w-0">
               {student.lastSession?.homework_text ? (
-                <p className="text-[12px] font-bold text-blue-200 leading-tight italic whitespace-pre-wrap">
-                  <span className="text-blue-500/80 text-[16px] font-black mr-1">"</span>
+                <p className="text-[12px] font-normal text-blue-200 leading-tight italic whitespace-pre-wrap">
+                  <span className="text-blue-500/80 text-[16px] font-normal mr-1">"</span>
                   {student.lastSession.homework_text}
-                  <span className="text-blue-500/80 text-[16px] font-black ml-1">"</span>
+                  <span className="text-blue-500/80 text-[16px] font-normal ml-1">"</span>
                 </p>
               ) : (
                 <span className="italic opacity-30 text-gray-500 font-medium text-[11px] px-2">기존 숙제 없음</span>
@@ -534,7 +534,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         e.stopPropagation(); 
                         onSave({ hw_checked_today: !isChecked });
                       }}
-                      className={`relative z-30 shrink-0 px-2 py-0.5 rounded text-[9.5px] font-black tracking-tighter border transition-colors ${
+                      className={`relative z-30 shrink-0 px-2 py-0.5 rounded text-[9.5px] font-normal tracking-tighter border transition-colors ${
                         isChecked
                           ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
                           : 'bg-gray-800 text-gray-400 border-gray-600 hover:bg-gray-700 hover:text-gray-200'
@@ -563,7 +563,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }}
                       className="absolute right-full top-0 mr-2 flex gap-1 bg-[#1a1a1a] p-1 rounded-md border border-white/10 shadow-2xl z-[100]">
                       {(['perfect', 'good', 'neutral', 'poor', 'bad', 'none'] as const).map((k) => (
-                        <button key={k} onClick={(e) => { e.stopPropagation(); onSelectFeedback(k); }} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-black transition-all hover:scale-110 ${statusMap[k as keyof typeof statusMap].color} shadow-md`}>{statusMap[k as keyof typeof statusMap].label}</button>
+                        <button key={k} onClick={(e) => { e.stopPropagation(); onSelectFeedback(k); }} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-normal transition-all hover:scale-110 ${statusMap[k as keyof typeof statusMap].color} shadow-md`}>{statusMap[k as keyof typeof statusMap].label}</button>
                       ))}
                       <button onClick={(e) => { e.stopPropagation(); onCloseFeedback(); }} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-white"><X size={14} /></button>
                     </motion.div>
