@@ -191,13 +191,13 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               isFeedbackOpen={isFeedbackOpen}
               onSelectFeedback={selectFeedback}
               onCloseFeedback={() => setIsFeedbackOpen(false)}
-              onOpenCwEditor={(e) => { e.stopPropagation(); setIsCwEditorOpen(true); }}
-              onOpenCcwEditor={(e) => { e.stopPropagation(); setIsCcwEditorOpen(true); }}
-              onOpenHwEditor={(e) => { e.stopPropagation(); setIsHwEditorOpen(true); }}
-              onOpenNqEditor={(e) => { e.stopPropagation(); setIsNqEditorOpen(true); }}
-              onOpenTestEditor={(e) => { e.stopPropagation(); setIsTestEditorOpen(true); }}
-              onOpenTestModal={(e) => { e.stopPropagation(); setIsTestModalOpen(true); }}
-              onOpenPdf={(e) => { e.stopPropagation(); window.open(`/api/pdf/${formData.test_id}`, '_blank'); }}
+              onOpenCwEditor={(e) => { e?.stopPropagation(); setIsCwEditorOpen(true); }}
+              onOpenCcwEditor={(e) => { e?.stopPropagation(); setIsCcwEditorOpen(true); }}
+              onOpenHwEditor={(e) => { e?.stopPropagation(); setIsHwEditorOpen(true); }}
+              onOpenNqEditor={(e) => { e?.stopPropagation(); setIsNqEditorOpen(true); }}
+              onOpenTestEditor={(e) => { e?.stopPropagation(); setIsTestEditorOpen(true); }}
+              onOpenTestModal={(e) => { e?.stopPropagation(); setIsTestModalOpen(true); }}
+              onOpenPdf={(e) => { e?.stopPropagation(); window.open(`/api/pdf/${formData.test_id}`, '_blank'); }}
               onExecuteTest={(e) => {
                 e.stopPropagation();
                 if (!formData.next_quiz_text) return;
