@@ -81,28 +81,28 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                               {todoAchievement > 0 && (
                                 <div className="flex items-center gap-2">
                                   <div className="flex gap-[1px] w-[60px]">
-                                    {[...Array(11)].map((_, j) => (
-                                      <div key={j} className={`flex-1 h-[6px] rounded-sm ${j <= Math.round(todoAchievement / 10) ? 'bg-emerald-400' : 'bg-emerald-900/50'}`} />
+                                    {[...Array(10)].map((_, j) => (
+                                      <div key={j} className={`flex-1 h-[6px] ${j < Math.round(todoAchievement / 10) ? 'bg-emerald-400' : 'bg-emerald-900/50'}`} />
                                     ))}
                                   </div>
                                   <span className="text-[10px] font-black text-emerald-400 tabular-nums leading-none w-[42px] text-right">진도 {todoAchievement}%</span>
                                 </div>
                               )}
-                              {hwEval !== null && (
+                              {(hwEval !== null && hwEval > 0) && (
                                 <div className="flex items-center gap-2">
                                   <div className="flex gap-[1px] w-[60px]">
-                                    {[...Array(11)].map((_, j) => (
-                                      <div key={j} className={`flex-1 h-[6px] rounded-sm ${j <= hwEval ? 'bg-blue-400' : 'bg-blue-900/50'}`} />
+                                    {[...Array(10)].map((_, j) => (
+                                      <div key={j} className={`flex-1 h-[6px] ${j < hwEval ? 'bg-blue-400' : 'bg-blue-900/50'}`} />
                                     ))}
                                   </div>
                                   <span className="text-[10px] font-black text-blue-400 tabular-nums leading-none w-[42px] text-right">과제 {hwEval}</span>
                                 </div>
                               )}
-                              {log.test_score !== null && log.test_score !== undefined && (
+                              {(log.test_score !== null && log.test_score !== undefined && log.test_score > 0) && (
                                 <div className="flex items-center gap-2">
                                   <div className="flex gap-[1px] w-[60px]">
-                                    {[...Array(11)].map((_, j) => (
-                                      <div key={j} className={`flex-1 h-[6px] rounded-sm ${j <= Math.round(log.test_score / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
+                                    {[...Array(10)].map((_, j) => (
+                                      <div key={j} className={`flex-1 h-[6px] ${j < Math.round(log.test_score / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
                                     ))}
                                   </div>
                                   <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none w-[42px] text-right">테스트 {log.test_score}%</span>
