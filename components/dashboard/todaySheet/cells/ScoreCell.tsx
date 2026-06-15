@@ -34,10 +34,28 @@ export const ScoreCell = React.memo(function ScoreCell({
 
   if (parsedTests) {
     return (
-      <div className="relative w-full min-h-[22px] flex items-center justify-start group/score py-1 px-1">
-        <div className="px-2 py-0.5 text-[10px] text-center text-white font-black bg-blue-500/40 border border-blue-500/60 rounded-[4px] w-fit shadow-sm">
-          기록 {parsedTests.length}건
-        </div>
+      <div className="relative w-full min-h-[22px] flex flex-wrap items-center gap-1 group/score py-1 px-1">
+        {parsedTests.map((t, idx) => {
+          const isPending = t.numericScore === null;
+          const scoreText = isPending 
+            ? (t.maxScore === 100 ? '채점 전' : `- / ${t.maxScore}`)
+            : (t.maxScore === 100 ? `${t.numericScore}점` : `${t.numericScore}/${t.maxScore}`);
+            
+          let colorClass = 'bg-gray-500/20 text-gray-400 border-gray-500/40';
+          if (!isPending) {
+            colorClass = t.isPass ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40';
+          }
+
+          return (
+            <div 
+              key={idx} 
+              className={`px-1.5 py-0.5 text-[9px] font-black border rounded-[2px] shadow-sm tracking-tight ${colorClass}`} 
+              title={t.name}
+            >
+              {scoreText}
+            </div>
+          );
+        })}
       </div>
     );
   }
