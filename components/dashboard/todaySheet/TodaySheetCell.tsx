@@ -597,7 +597,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     </div>
                   </div>
 
-                  {formData.test_id && <button onClick={onOpenPdf} className="w-5 h-5 rounded-[1px] bg-red-600/30 text-red-400 border border-red-500/40 hover:bg-red-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><FileText size={10} /></button>}
                 </>
               )}
               {colId === 'next_quiz' && (
