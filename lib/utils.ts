@@ -42,6 +42,8 @@ export function getInitial(name: string): string {
 export interface ParsedTest {
   name: string;
   score: string;
+  numericScore: number;
+  maxScore: number;
   memo: string;
 }
 
@@ -64,13 +66,25 @@ export function parseInlineTests(text: string | undefined | null): ParsedTest[] 
         
         // 쉼표(,)를 기준으로 점수와 메모 분리
         const scoreMemoParts = rest.split(',');
-        const score = scoreMemoParts[0].trim();
+        const scoreStr = scoreMemoParts[0].trim();
         const memo = scoreMemoParts.slice(1).join(',').trim(); // 쉼표가 메모 안에 또 있을 경우 대비
         
-        currentTest = { name, score, memo };
+        let numericScore = 0;
+        let maxScore = 100; // 슬래시 없으면 기본 100점
+        
+        const cleanScore = scoreStr.replace(/[^0-9/]/g, ''); // 숫자와 슬래시만 추출
+        if (cleanScore.includes('/')) {
+          const parts = cleanScore.split('/');
+          numericScore = parseInt(parts[0]) || 0;
+          maxScore = parseInt(parts[1]) || 10;
+        } else {
+          numericScore = parseInt(cleanScore) || 0;
+        }
+        
+        currentTest = { name, score: scoreStr, numericScore, maxScore, memo };
       } else {
         // 콜론(:)이 없는 경우 전부 이름으로 간주
-        currentTest = { name: content, score: '', memo: '' };
+        currentTest = { name: content, score: '', numericScore: 0, maxScore: 100, memo: '' };
       }
     } else {
       // 💡 하이픈으로 시작하지 않는 줄은 이전 테스트의 메모에 줄바꿈과 함께 이어붙임!

@@ -118,19 +118,22 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                               {(() => {
                                 const parsedTests = parseInlineTests(log.test_id);
                                 if (parsedTests) {
-                                  return parsedTests.map((t, idx) => (
-                                    <div key={`test-${idx}`} className="flex items-center justify-end gap-2 text-right">
-                                      <span className="text-[10px] font-bold text-amber-500/80 max-w-[100px] truncate" title={t.name}>{t.name}</span>
-                                      <div className="flex gap-[1px] w-[30px]">
-                                        {[...Array(5)].map((_, j) => (
-                                          <div key={j} className="flex-1 h-[6px] bg-amber-500" />
-                                        ))}
+                                  return parsedTests.map((t, idx) => {
+                                    const pct = t.maxScore > 0 ? (t.numericScore / t.maxScore) * 100 : 0;
+                                    return (
+                                      <div key={`test-${idx}`} className="flex items-center justify-end gap-2 text-right mt-1.5 first:mt-0">
+                                        <span className="text-[10px] font-bold text-amber-500/80 max-w-[100px] truncate" title={t.name}>{t.name}</span>
+                                        <div className="flex gap-[1px] w-[60px]">
+                                          {[...Array(10)].map((_, j) => (
+                                            <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
+                                          ))}
+                                        </div>
+                                        <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap">
+                                          {t.maxScore === 100 ? `${t.numericScore}점` : `${t.numericScore}/${t.maxScore}`}
+                                        </span>
                                       </div>
-                                      <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[30px] whitespace-nowrap">
-                                        {t.score ? t.score : '-'}
-                                      </span>
-                                    </div>
-                                  ));
+                                    );
+                                  });
                                 } else if (log.test_score !== null && log.test_score !== undefined && log.test_score > 0) {
                                   return (
                                     <div className="flex items-center gap-2">
