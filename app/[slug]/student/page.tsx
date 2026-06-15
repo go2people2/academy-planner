@@ -727,7 +727,7 @@ export default function StudentPortal() {
           
           <div className={activeTab === 'history' ? 'block' : 'hidden lg:block'}>
             <LearningHistoryList 
-              allLogs={allLogs} isHistoryOpen={isHistoryOpen} setIsHistoryOpen={setIsHistoryOpen} 
+              allLogs={allLogs.map(l => l.session_date === selectedDate && todaySession ? { ...l, ...todaySession } : l)} isHistoryOpen={isHistoryOpen} setIsHistoryOpen={setIsHistoryOpen} 
             />
           </div>
 
