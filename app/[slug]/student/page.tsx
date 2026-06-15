@@ -66,7 +66,18 @@ export default function StudentPortal() {
     // 1. 현재 학기(period) 필터링 및 과거 시험 제외 (다가오는 시험만)
     const upcomingSchedules = examSchedules.filter(ex => ex.target_date >= selectedDate);
     const currentPeriodSchedules = currentPeriod 
-      ? upcomingSchedules.filter(ex => ex.exam_name === currentPeriod)
+      ? upcomingSchedules.filter(ex => {
+          if (ex.exam_name.startsWith(currentPeriod)) return true;
+          const periodType = currentPeriod.split('-').slice(1).join('-');
+          const legacyNames: any = {
+            '1-MID': ['1학기 중간', '1학기 중간고사'],
+            '1-FINAL': ['1학기 기말', '1학기 기말고사'],
+            '2-MID': ['2학기 중간', '2학기 중간고사'],
+            '2-FINAL': ['2학기 기말', '2학기 기말고사']
+          };
+          if ((legacyNames[periodType] || []).includes(ex.exam_name)) return true;
+          return false;
+        })
       : upcomingSchedules; // 설정이 없으면 전체에서 검색 (하위 호환성)
 
     // 2. 학교명 + 학년 완벽 일치
