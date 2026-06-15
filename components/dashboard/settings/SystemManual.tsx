@@ -16,7 +16,22 @@ export default function SystemManual() {
     {
       icon: <Table size={20} className="text-emerald-400" />,
       title: "Daily Sheet (오늘의 출결 및 기록표)",
-      desc: "가장 핵심적인 메뉴입니다! 선생님이 오늘 등원한 학생들의 '학원 공부', '집에서 할 숙제', '오늘 할 일 목록'을 부여합니다. 학생들이 제출(Submit)한 학습 기록을 일괄 승인하거나 반려하여 진행률을 확정 짓는 공간입니다. (할 일을 번호(1., 2.)나 기호(-, *)로 작성하면 학생 화면에 자동으로 체크박스로 나타납니다!)"
+      desc: (
+        <div className="space-y-3">
+          <p>가장 핵심적인 메뉴입니다! 선생님이 오늘 등원한 학생들의 '학원 공부', '집에서 할 숙제', '오늘 할 일 목록'을 부여합니다. 학생들이 제출(Submit)한 학습 기록을 일괄 승인하거나 반려하여 진행률을 확정 짓는 공간입니다. (할 일을 번호나 기호로 작성하면 체크박스로 자동 변환됩니다!)</p>
+          <div className="p-3 bg-[#0a0a0a] rounded-[4px] border border-white/10 shadow-inner leading-relaxed">
+            <p className="text-amber-400 font-black mb-1.5 flex items-center gap-1.5 tracking-wide"><Table size={12}/> 오늘 테스트 초간단 입력 문법</p>
+            <ul className="space-y-1.5 text-[11px] text-gray-300">
+              <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 기출 : 85</span> ➜ 100점 만점으로 자동 인식 (85점 획득)</li>
+              <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 퀴즈 : 7/10</span> ➜ 10개 만점으로 자동 인식 (7개 획득)</li>
+              <li><span className="text-white font-bold bg-white/10 px-1.5 py-0.5 rounded mr-1">- 퀴즈 : 7/10/2</span> ➜ 마지막 숫자는 커트라인(오답 허용 개수)</li>
+              <li className="text-gray-500 italic mt-2 border-t border-white/5 pt-1.5">
+                * 쉼표(,) 뒤에 쓰거나 줄을 바꿔서 쓰는 글은 학생/학부모 리포트에는 노출되지 않는 '선생님 전용 비밀 메모'가 됩니다.
+              </li>
+            </ul>
+          </div>
+        </div>
+      )
     },
     {
       icon: <ClipboardCheck size={20} className="text-purple-400" />,
@@ -70,9 +85,9 @@ export default function SystemManual() {
               </div>
               <h4 className="text-[15px] font-black text-white tracking-wide">{item.title}</h4>
             </div>
-            <p className="text-[13px] leading-relaxed text-gray-400 break-keep">
+            <div className="text-[13px] leading-relaxed text-gray-400 break-keep">
               {item.desc}
-            </p>
+            </div>
           </motion.div>
         ))}
       </div>
