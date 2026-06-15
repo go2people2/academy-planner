@@ -140,7 +140,7 @@ export default function PrintPreviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[250] flex flex-col items-center justify-start p-4 md:p-8 bg-black/85 backdrop-blur-md overflow-y-auto print-preview-modal-container">
+    <div className="fixed inset-0 z-[250] flex flex-col items-center justify-start p-4 md:p-8 bg-black/85 backdrop-blur-md overflow-y-auto print:static print:overflow-visible print:p-0 print:bg-white print-preview-modal-container">
       {/* Control bar */}
       <div className="w-full max-w-5xl flex items-center justify-between mb-6 bg-gray-900/90 border border-white/10 rounded-xl p-4 shadow-xl shrink-0 no-print">
         <div className="flex items-center gap-3">
@@ -173,12 +173,12 @@ export default function PrintPreviewModal({
       </div>
 
       {/* Pages Container */}
-      <div className="w-full max-w-5xl flex flex-col gap-8">
+      <div className="w-full max-w-5xl flex flex-col gap-8 print:block print:gap-0">
         {pages.map((pageRows, pageIdx) => {
           return (
             <div 
               key={pageIdx} 
-              className="print-page-panel w-full bg-white text-gray-900 rounded-2xl shadow-2xl p-8 md:p-12 overflow-x-auto border border-gray-200 flex flex-col justify-between"
+              className="print-page-panel w-full bg-white text-gray-900 rounded-2xl shadow-2xl p-8 md:p-12 overflow-x-auto border border-gray-200 flex flex-col justify-between print:break-after-page print:border-none print:shadow-none print:p-0 print:overflow-visible print:mb-0 mb-8"
               style={{ minHeight: '680px' }} // Proportional A4 landscape height
             >
               <div>
