@@ -269,7 +269,7 @@ export default function HomeworkEditor({
                     onClick={() => setIsKeepListOpen(!isKeepListOpen)}
                     className="flex items-center gap-1.5 w-full text-[9px] text-amber-500/80 font-bold uppercase tracking-widest hover:text-amber-400 transition-colors"
                   >
-                    <BookOpen size={10} /> 보류(Keep) 중인 교재가 있습니다 ({keepBooks.length}권)
+                    <BookOpen size={10} /> 보류 중인 교재가 있습니다 ({keepBooks.length}권)
                   </button>
                   {isKeepListOpen && (
                     <div className="flex flex-wrap gap-1.5 pt-2">
@@ -289,9 +289,9 @@ export default function HomeworkEditor({
                           <button
                             onClick={() => onToggleKeepBook && onToggleKeepBook(m.bookcode, false)}
                             className="ml-1 px-1.5 py-1 bg-black/20 hover:bg-red-500/20 text-gray-400 hover:text-red-400 text-[8px] rounded-[1px] transition-all whitespace-nowrap"
-                            title="Keep 해제 (활성 교재로 복구)"
+                            title="보류 해제 (활성 교재로 복구)"
                           >
-                            해제
+                            보류 해제
                           </button>
                         </div>
                       ))}
@@ -475,9 +475,9 @@ function HomeworkRow({
           <button 
             onClick={onToggleKeep}
             className="w-12 shrink-0 py-1 bg-amber-500/10 text-amber-500/80 border border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all text-[8px] font-bold rounded-[2px]"
-            title="목록에서 가리고 Keep(보류) 상태로 변경"
+            title="목록에서 가리고 보류 상태로 변경"
           >
-            KEEP
+            보류
           </button>
         )}
 
