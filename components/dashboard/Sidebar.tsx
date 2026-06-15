@@ -149,8 +149,8 @@ export default function Sidebar({
       <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar-v">
         <nav className="space-y-1">
           <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2 px-2">Menu</h3>
-          <SidebarLink icon={<LayoutDashboard size={14} />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Bell size={14} />} label="Notifications" active={viewMode === 'notifications'} onClick={() => { setViewMode('notifications'); setSelectedFilter('All'); }} />
+          <SidebarLink icon={<LayoutDashboard size={14} />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<TableIcon size={14} />} label="Daily Sheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} />
           <SidebarLink icon={<ClipboardCheck size={14} />} label="업무 및 보강 관리" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Activity size={14} />} label="Progress" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} />
