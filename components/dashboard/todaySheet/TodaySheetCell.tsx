@@ -548,24 +548,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {(['test_id', 'classwork', 'completed_classwork', 'assign', 'next_quiz'].includes(colId)) && (
           <div className="relative w-full h-full flex items-start justify-start group/cell">
-            {/* 💡 테스트 템플릿(프리셋) 자동완성 버튼 바 */}
-            {isEditing && (colId === 'test_id' || colId === 'next_quiz') && testPresets && testPresets.length > 0 && (
-              <div className="absolute -top-[28px] left-0 flex gap-1 z-50">
-                {testPresets.map((preset: any, idx: number) => (
-                  <button 
-                    key={idx}
-                    onMouseDown={(e) => {
-                      e.preventDefault(); // blur 방지
-                      e.stopPropagation();
-                      onApplyTestPreset?.(preset, colId as 'test_id' | 'next_quiz');
-                    }}
-                    className="px-2 py-1 bg-[#1a1a1e] border border-white/20 rounded-[2px] shadow-lg text-[10px] font-black text-white whitespace-nowrap hover:bg-emerald-600 hover:border-emerald-500 transition-colors"
-                  >
-                    {preset.name} <span className="opacity-50 font-normal ml-0.5">{preset.type === 'count' ? `(개수)` : `(백분율)`}</span>
-                  </button>
-                ))}
-              </div>
-            )}
+            {/* 💡 칩카드 UI가 제거되었습니다. 선생님이 직접 텍스트로 테스트를 기록합니다. */}
             
             {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
             {(isEditing || isActive) && (

@@ -1,6 +1,7 @@
 'use client';
 
 import React from 'react';
+import { parseInlineTests } from '@/lib/utils';
 
 interface ScoreCellProps {
   student: any;
@@ -27,6 +28,19 @@ export const ScoreCell = React.memo(function ScoreCell({
   const numeratorInputRef = React.useRef<HTMLInputElement>(null);
   const totalInputRef = React.useRef<HTMLInputElement>(null);
   const isCountMode = formData.test_score_type === 'count';
+
+  // 💡 인라인 테스트 모드 감지 (하이픈 문법을 썼다면 점수칸은 요약 뱃지로 변신)
+  const parsedTests = parseInlineTests(formData.test_id);
+
+  if (parsedTests) {
+    return (
+      <div className="relative w-full min-h-[22px] flex items-center justify-start group/score py-1 px-1">
+        <div className="px-2 py-0.5 text-[10px] text-center text-white font-black bg-blue-500/40 border border-blue-500/60 rounded-[4px] w-fit shadow-sm">
+          기록 {parsedTests.length}건
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="relative w-full min-h-[22px] flex items-center justify-start group/score py-1 px-1">

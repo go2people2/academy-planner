@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Plus } from 'lucide-react';
+import { parseInlineTests } from '@/lib/utils';
 
 interface LearningHistoryListProps {
   allLogs: any[];
@@ -114,21 +115,41 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                   <span className="text-[10px] font-black text-blue-400 tabular-nums leading-none w-[42px] text-right">과제 {hwEval}</span>
                                 </div>
                               )}
-                              {(log.test_score !== null && log.test_score !== undefined && log.test_score > 0) && (
-                                <div className="flex items-center gap-2">
-                                  <div className="flex gap-[1px] w-[60px]">
-                                    {[...Array(10)].map((_, j) => {
-                                      const pct = testType === 'count' && testTotalCount > 0 ? (log.test_score / testTotalCount) * 100 : log.test_score;
-                                      return (
-                                        <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
-                                      );
-                                    })}
-                                  </div>
-                                  <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap">
-                                    {testType === 'count' && testTotalCount > 0 ? `테스트 ${log.test_score}/${testTotalCount}` : `테스트 ${log.test_score}점`}
-                                  </span>
-                                </div>
-                              )}
+                              {(() => {
+                                const parsedTests = parseInlineTests(log.test_id);
+                                if (parsedTests) {
+                                  return parsedTests.map((t, idx) => (
+                                    <div key={`test-${idx}`} className="flex items-center justify-end gap-2 text-right">
+                                      <span className="text-[10px] font-bold text-amber-500/80 max-w-[100px] truncate" title={t.name}>{t.name}</span>
+                                      <div className="flex gap-[1px] w-[30px]">
+                                        {[...Array(5)].map((_, j) => (
+                                          <div key={j} className="flex-1 h-[6px] bg-amber-500" />
+                                        ))}
+                                      </div>
+                                      <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[30px] whitespace-nowrap">
+                                        {t.score ? t.score : '-'}
+                                      </span>
+                                    </div>
+                                  ));
+                                } else if (log.test_score !== null && log.test_score !== undefined && log.test_score > 0) {
+                                  return (
+                                    <div className="flex items-center gap-2">
+                                      <div className="flex gap-[1px] w-[60px]">
+                                        {[...Array(10)].map((_, j) => {
+                                          const pct = testType === 'count' && testTotalCount > 0 ? (Number(log.test_score) / testTotalCount) * 100 : Number(log.test_score);
+                                          return (
+                                            <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
+                                          );
+                                        })}
+                                      </div>
+                                      <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap">
+                                        {testType === 'count' && testTotalCount > 0 ? `테스트 ${log.test_score}/${testTotalCount}` : `테스트 ${log.test_score}점`}
+                                      </span>
+                                    </div>
+                                  );
+                                }
+                                return null;
+                              })()}
                             </div>
                           </div>
 

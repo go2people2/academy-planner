@@ -34,3 +34,53 @@ export function getInitial(name: string): string {
   return mapping[firstChar] || firstChar.toUpperCase();
 }
 
+/**
+ * 💡 인라인 테스트 파싱 함수
+ * "- [제목] : [점수] , [메모]" 형식을 파싱합니다.
+ * 쉼표 이후의 모든 텍스트(줄바꿈 포함)는 다음 하이픈('-')이 나타나기 전까지 메모로 간주합니다.
+ */
+export interface ParsedTest {
+  name: string;
+  score: string;
+  memo: string;
+}
+
+export function parseInlineTests(text: string | undefined | null): ParsedTest[] | null {
+  if (!text) return null;
+  const lines = text.split('\n');
+  const tests: ParsedTest[] = [];
+  let currentTest: ParsedTest | null = null;
+  
+  for (const line of lines) {
+    if (line.trim().startsWith('-')) {
+      if (currentTest) tests.push(currentTest);
+      
+      const content = line.trim().substring(1).trim(); // 맨 앞의 '-' 제거
+      const parts = content.split(':');
+      
+      if (parts.length >= 2) {
+        const name = parts[0].trim();
+        const rest = parts.slice(1).join(':').trim(); // 콜론이 여러 개일 경우 대비
+        
+        // 쉼표(,)를 기준으로 점수와 메모 분리
+        const scoreMemoParts = rest.split(',');
+        const score = scoreMemoParts[0].trim();
+        const memo = scoreMemoParts.slice(1).join(',').trim(); // 쉼표가 메모 안에 또 있을 경우 대비
+        
+        currentTest = { name, score, memo };
+      } else {
+        // 콜론(:)이 없는 경우 전부 이름으로 간주
+        currentTest = { name: content, score: '', memo: '' };
+      }
+    } else {
+      // 💡 하이픈으로 시작하지 않는 줄은 이전 테스트의 메모에 줄바꿈과 함께 이어붙임!
+      if (currentTest) {
+        currentTest.memo += (currentTest.memo ? '\n' : '') + line.trim();
+      }
+    }
+  }
+  
+  if (currentTest) tests.push(currentTest);
+  
+  return tests.length > 0 ? tests : null;
+}
