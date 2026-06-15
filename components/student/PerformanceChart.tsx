@@ -43,6 +43,9 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
           let todoAchievement = 0;
           try { if (data.test_result?.startsWith('{')) todoAchievement = JSON.parse(data.test_result).todo_achievement || 0; } catch (e) {}
           
+          let hwEval: number | null = null;
+          const match = (data.special_notes || '').match(/\[숙제이행: (\d+)단계\]/);
+          if (match) hwEval = parseInt(match[1]);
 
           return (
             <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative z-10">
