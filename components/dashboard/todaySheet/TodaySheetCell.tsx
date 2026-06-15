@@ -127,10 +127,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     });
   }, [isEditing, isActive, currentText]);
 
-  // 💡 커트라인 픽커 전용 상태
-  const [isCutPickerOpen, setIsCutPickerOpen] = useState(false);
-  const [pickerCoords, setPickerCoords] = useState({ top: 0, left: 0 });
-
   // 💡 [추가] 포탈형 툴팁 상태
   const [activeTooltip, setActiveTooltip] = useState<'note' | 'suggestion' | null>(null);
   const [tooltipCoords, setTooltipCoords] = useState({ top: 0, left: 0, right: 0, bottom: 0 });
@@ -152,13 +148,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       window.removeEventListener('resize', handleClose);
     };
   }, [activeTooltip]);
-
-  const handleOpenCutPicker = (e: React.MouseEvent) => {
-    e.stopPropagation();
-    const rect = e.currentTarget.getBoundingClientRect();
-    setPickerCoords({ top: rect.bottom + window.scrollY, left: rect.left + window.scrollX });
-    setIsCutPickerOpen(true);
-  };
 
   const handleLocalInput = (e: React.FormEvent<HTMLTextAreaElement | HTMLInputElement>, field: string) => {
     const target = e.target as any;
@@ -574,91 +563,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             {!isEditing && !isActive && (
               <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start`}>
                 <div className="w-full">{currentText || '-'}</div>
-                {colId === 'test_id' && formData.test_cut > 0 && (
-                  <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter">
-                    Cut: {formData.test_cut}개
-                  </div>
-                )}
-                {colId === 'next_quiz' && formData.next_quiz_cut > 0 && (
-                  <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter">
-                    Cut: {formData.next_quiz_cut}개
-                  </div>
-                )}
               </div>
             )}
             
             <div className="absolute right-1 top-1 flex items-center gap-1 opacity-30 group-hover/cell:opacity-100 focus-within:opacity-100 transition-all duration-200 z-30">
-              {colId === 'test_id' && (
-                <>
-                  {/* 💡 오늘 테스트 커트라인 픽커 버튼 */}
-                  <div onClick={handleOpenCutPicker} className="relative cursor-pointer group/cut">
-                    <div className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 group-hover/cut:bg-emerald-600 group-hover/cut:text-white transition-all shadow-sm flex items-center justify-center">
-                      <span className="text-[10px] font-black">{formData.test_cut || 0}</span>
-                    </div>
-                  </div>
-
-                </>
-              )}
-              {colId === 'next_quiz' && (
-                <div className="flex items-center gap-1">
-                  {/* 💡 다음 테스트 커스텀 커트라인 픽커 버튼 */}
-                  <div onClick={handleOpenCutPicker} className="relative cursor-pointer group/cut">
-                    <div className="w-5 h-5 rounded-[1px] bg-emerald-600/30 text-emerald-400 border border-emerald-500/40 group-hover/cut:bg-emerald-600 group-hover/cut:text-white transition-all shadow-sm flex items-center justify-center">
-                      <span className="text-[10px] font-black">{formData.next_quiz_cut || 0}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
               {(colId === 'classwork' || colId === 'completed_classwork' || colId === 'assign') && (
                 <button onClick={colId === 'classwork' ? onOpenCwEditor : colId === 'completed_classwork' ? onOpenCcwEditor : onOpenHwEditor} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
-              )}
-
-              {/* 💡 [공용] 포탈로 띄우는 정사각형 픽커 */}
-              {isCutPickerOpen && createPortal(
-                <>
-                  <div className="fixed inset-0 z-[1000]" onClick={() => setIsCutPickerOpen(false)} />
-                  <motion.div 
-                    initial={{ opacity: 0, scale: 0.95, y: -10 }} animate={{ opacity: 1, scale: 1, y: 0 }}
-                    style={{ top: pickerCoords.top + 5, left: Math.min(pickerCoords.left, window.innerWidth - 180) }}
-                    className="fixed z-[1001] bg-[#121212] border border-emerald-500/30 rounded-lg shadow-2xl p-4 w-44 space-y-4"
-                  >
-                    <div className="grid grid-cols-5 gap-1.5">
-                      {[0, 1, 2, 3, 4].map(num => (
-                        <button 
-                          key={num} 
-                          onClick={() => { 
-                            if (colId === 'test_id') onSetTodayTestCut(num);
-                            else onSetNextQuizCut(num);
-                            setIsCutPickerOpen(false); 
-                          }}
-                          className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black transition-all border ${Number(colId === 'test_id' ? formData.test_cut : formData.next_quiz_cut) === num ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-white/5 border-white/10 text-white hover:bg-emerald-500/30'}`}
-                        >
-                          {num}
-                        </button>
-                      ))}
-                    </div>
-                    <div className="pt-3 border-t border-white/5 flex flex-col gap-2">
-                      <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">커트라인 직접 입력</label>
-                      <input 
-                        type="number"
-                        autoFocus
-                        placeholder="직접 입력"
-                        defaultValue={colId === 'test_id' ? formData.test_cut : formData.next_quiz_cut}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            const val = parseInt((e.target as HTMLInputElement).value);
-                            const finalVal = isNaN(val) ? 0 : val;
-                            if (colId === 'test_id') onSetTodayTestCut(finalVal);
-                            else onSetNextQuizCut(finalVal);
-                            setIsCutPickerOpen(false);
-                          }
-                        }}
-                        className="w-full bg-black/40 border border-white/10 rounded-md px-3 py-2 text-xs font-bold text-white outline-none focus:border-emerald-500 [color-scheme:dark]"
-                      />
-                    </div>
-                  </motion.div>
-                </>,
-                document.body
               )}
             </div>
           </div>
