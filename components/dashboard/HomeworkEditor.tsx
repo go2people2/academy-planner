@@ -178,13 +178,13 @@ export default function HomeworkEditor({
         onClick={(e) => e.stopPropagation()} 
         className="pointer-events-auto relative w-full max-w-[680px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-blue-500/30 rounded-sm shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] p-0 flex flex-col overflow-hidden"
       >
-        <div className="cursor-move bg-gradient-to-r from-blue-600/20 to-indigo-600/10 p-6 flex items-center justify-between border-b border-white/5 active:from-blue-600/30 transition-all">
-          <div className="flex items-center gap-4">
-            <div className="w-8 h-8 rounded-[2px] bg-blue-600/30 flex items-center justify-center shadow-inner shadow-blue-400/20">
-              <ClipboardList size={16} className="text-blue-400" />
+        <div className="cursor-move bg-gradient-to-r from-blue-600/20 to-indigo-600/10 px-4 py-3 flex items-center justify-between border-b border-white/5 active:from-blue-600/30 transition-all">
+          <div className="flex items-center gap-3">
+            <div className="w-7 h-7 rounded-[2px] bg-blue-600/30 flex items-center justify-center shadow-inner shadow-blue-400/20">
+              <ClipboardList size={14} className="text-blue-400" />
             </div>
             <div>
-              <h4 className="font-black text-[13px] uppercase tracking-[0.2em] text-white">{title}</h4>
+              <h4 className="font-black text-[12px] uppercase tracking-[0.2em] text-white">{title}</h4>
               <p className="text-[9px] text-blue-400/60 font-bold uppercase tracking-wider mt-0.5">단원 자동 매칭 활성화</p>
             </div>
           </div>
@@ -200,8 +200,8 @@ export default function HomeworkEditor({
             >
               <RefreshCcw size={12} /> 전체 초기화
             </button>
-            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="w-10 h-10 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-white transition-all hover:rotate-90 duration-300">
-              <X size={20} />
+            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-white transition-all hover:rotate-90 duration-300">
+              <X size={18} />
             </button>
           </div>
         </div>
@@ -569,9 +569,9 @@ function HomeworkRow({
                       end_page: e,
                       note: hw.note
                     });
-                  }} className={`flex items-center justify-between px-3 py-1.5 rounded-[2px] text-[10px] font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-600 hover:bg-white/5 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-500/60' : ''}`}>
+                  }} className={`flex items-center justify-between px-3 py-2 rounded-[2px] text-[12px] font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-300 hover:bg-white/5 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-400/80' : ''}`}>
                     <div className="flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-500' : isInRange ? 'bg-emerald-500/30' : 'bg-transparent border border-white/10'}`} /><span className="truncate max-w-[200px]">{u.unit}</span></div>
-                    <span className="text-[8px] opacity-40 italic tabular-nums">p{u.start_page}~{u.end_page}</span>
+                    <span className="text-[10px] opacity-60 italic tabular-nums">p{u.start_page}~{u.end_page}</span>
                   </button>
                 );
               })}
