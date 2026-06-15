@@ -43,7 +43,8 @@ export default function Sidebar({
   const [user, setUser] = useState<any>(null);
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [isMultiMode, setIsMultiMode] = useState(false);
+  const [isEditingStrategy, setIsEditingStrategy] = useState(false);
   const [tempNotices, setTempNotices] = useState<any>({});
 
   const isAdmin = user?.role === 'admin';
@@ -125,6 +126,58 @@ export default function Sidebar({
             </h1>
             <p className="text-[7px] font-bold text-blue-500 tracking-[0.2em] uppercase mt-0.5">Management</p>
           </div>
+        </div>
+
+        {/* 💡 학원 전략 위젯 */}
+        <div className="relative bg-white/5 border border-white/5 rounded-[4px] p-3 space-y-2 group/strategy">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[8px] font-black text-gray-500 uppercase tracking-widest flex items-center gap-1.5">
+              <TrendingUp size={10} className="text-blue-500" /> Academy Strategy
+            </h3>
+            {isAdmin && (
+              <button onClick={() => setIsEditingStrategy(true)} className="opacity-0 group-hover/strategy:opacity-100 transition-opacity p-1 hover:bg-white/10 rounded-[2px] text-gray-400 hover:text-white">
+                <Edit2 size={10} />
+              </button>
+            )}
+          </div>
+          <div className="space-y-1.5 min-h-[30px]">
+            {announcements.daily ? (
+              <p className="text-[10px] font-bold text-gray-200 leading-snug line-clamp-2 italic">"{announcements.daily}"</p>
+            ) : (
+              <p className="text-[9px] text-gray-600 italic">No active strategy</p>
+            )}
+          </div>
+
+          <AnimatePresence>
+            {isEditingStrategy && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+                <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }}
+                  className="bg-[#121212] border border-white/10 rounded-[4px] w-full max-w-sm shadow-2xl p-6 space-y-5"
+                >
+                  <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                    <h4 className="text-xs font-black text-white uppercase tracking-widest flex items-center gap-2"><Settings size={14} className="text-blue-500" /> Quick Edit Notice</h4>
+                    <button onClick={() => setIsEditingStrategy(false)} className="text-gray-500 hover:text-white"><X size={16} /></button>
+                  </div>
+                  <div className="space-y-4">
+                    {[
+                      { key: 'monthly', label: 'Month Focus', icon: <Calendar size={12} /> },
+                      { key: 'weekly', label: 'Week Goal', icon: <TrendingUp size={12} /> },
+                      { key: 'daily', label: 'Daily Note', icon: <MessageSquare size={12} /> }
+                    ].map(item => (
+                      <div key={item.key} className="space-y-1.5">
+                        <label className="text-[9px] font-black text-gray-500 uppercase flex items-center gap-1.5">{item.icon} {item.label}</label>
+                        <textarea value={tempNotices[item.key] || ''} onChange={(e) => setTempNotices({ ...tempNotices, [item.key]: e.target.value })}
+                          className="w-full bg-black/40 border border-white/10 rounded-[2px] p-2.5 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all min-h-[60px] resize-none" />
+                      </div>
+                    ))}
+                  </div>
+                  <button onClick={async () => { if (onUpdateAcademyInfo) await onUpdateAcademyInfo({ announcements: tempNotices }); setIsEditingStrategy(false); }}
+                    className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black uppercase tracking-widest rounded-[2px] shadow-lg transition-all flex items-center justify-center gap-2"
+                  ><Save size={14} /> Update All Notices</button>
+                </motion.div>
+              </div>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* 2 & 3. 날짜 및 사용자 정보 */}
