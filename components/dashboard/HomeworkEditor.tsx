@@ -8,6 +8,7 @@ import { HomeworkItem, TextbookOption } from '@/types/dashboard';
 
 interface HomeworkEditorProps {
   title?: string;
+  student?: any; // 💡 추가: 학생 정보 (Keep 교재 확인용)
   homeworkJson: HomeworkItem[];
   masterTextbooks: TextbookOption[];
   onUpdate: (newHw: HomeworkItem[]) => void;
@@ -15,7 +16,7 @@ interface HomeworkEditorProps {
 }
 
 export default function HomeworkEditor({ 
-  title = "Smart Study Editor", homeworkJson, masterTextbooks, onUpdate, onClose 
+  title = "Smart Study Editor", student, homeworkJson, masterTextbooks, onUpdate, onClose 
 }: HomeworkEditorProps) {
   const [mounted, setMounted] = useState(false);
   const [unitDataMap, setUnitDataMap] = useState<Record<string, any[]>>({});
@@ -240,10 +241,42 @@ export default function HomeworkEditor({
             
             <button 
               onClick={() => onUpdate([...homeworkJson, { type: 'custom', book_name: '', range: '' }])}
-              className="w-full py-4 border border-dashed border-white/10 rounded-sm text-[10px] font-black uppercase tracking-widest text-gray-600 hover:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-2 group"
+              className="w-full py-4 border border-dashed border-white/10 rounded-sm text-[10px] font-normal uppercase tracking-widest text-gray-600 hover:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-2 group"
             >
               <Plus size={14} /> 프린트 / 기타 과제 직접 추가
             </button>
+
+            {/* 💡 원장님 요청사항: 보류(Keep) 상태인 교재를 모달에서 즉시 불러오기 */}
+            {(() => {
+              const keepBooks = student?.assigned_books?.filter((code: string) => 
+                String(student.book_courses?.[code] || '').endsWith('-keep')
+              ).map((code: string) => masterTextbooks.find(m => m.bookcode === code)).filter(Boolean) || [];
+
+              if (keepBooks.length === 0) return null;
+
+              return (
+                <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/10 rounded-sm space-y-2">
+                  <div className="flex items-center gap-1.5 text-[9px] text-amber-500/60 font-bold uppercase tracking-widest">
+                    <BookOpen size={10} /> 보류(Keep) 중인 교재 불러오기
+                  </div>
+                  <div className="flex flex-wrap gap-1.5">
+                    {keepBooks.map((m: any) => (
+                      <button
+                        key={m.bookcode}
+                        onClick={() => {
+                          if (!homeworkJson.some(h => h.book_name === m.bookcode)) {
+                            onUpdate([...homeworkJson, { type: 'book', book_name: m.bookcode, range: '', units: [], start_page: '', end_page: '', note: '' }]);
+                          }
+                        }}
+                        className="px-2 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all text-[10px] font-bold rounded-[2px] truncate max-w-[180px] shadow-sm flex items-center gap-1"
+                      >
+                        <Plus size={10} /> {m.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              );
+            })()}
           </div>
 
           {/* 💡 실시간 셀 미리보기 영역 (원장님 요청사항) */}
