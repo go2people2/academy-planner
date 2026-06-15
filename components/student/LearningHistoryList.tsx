@@ -61,11 +61,12 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                     if (match) {
                       hwEval = parseInt(match[1]);
                     } else if (teacherPresets) {
-                    if (teacherPresets.perfect && notes.includes(teacherPresets.perfect)) hwEval = 10;
-                    else if (teacherPresets.good && notes.includes(teacherPresets.good)) hwEval = 8;
-                    else if (teacherPresets.neutral && notes.includes(teacherPresets.neutral)) hwEval = 6;
-                    else if (teacherPresets.poor && notes.includes(teacherPresets.poor)) hwEval = 4;
-                    else if (teacherPresets.bad && notes.includes(teacherPresets.bad)) hwEval = 2;
+                      if (teacherPresets.perfect && notes.includes(teacherPresets.perfect)) hwEval = 10;
+                      else if (teacherPresets.good && notes.includes(teacherPresets.good)) hwEval = 8;
+                      else if (teacherPresets.neutral && notes.includes(teacherPresets.neutral)) hwEval = 6;
+                      else if (teacherPresets.poor && notes.includes(teacherPresets.poor)) hwEval = 4;
+                      else if (teacherPresets.bad && notes.includes(teacherPresets.bad)) hwEval = 2;
+                    }
                   }
 
                   return (
