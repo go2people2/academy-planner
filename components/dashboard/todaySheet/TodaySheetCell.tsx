@@ -231,7 +231,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
       onKeyDown={(e) => handleKeyDown(e, colId)}
     >
-      {!isEditing && !['select', 'action', 'attendance'].includes(colId) && (
+      {!isEditing && !['select', 'action', 'attendance', 'name'].includes(colId) && (
         <div className="absolute inset-0 z-20 cursor-default" />
       )}
 

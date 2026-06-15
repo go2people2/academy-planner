@@ -91,9 +91,52 @@ export default function StudentPortal() {
 
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;
-    const sessionsBeforeToday = allLogs.filter(l => l.session_date < selectedDate);
-    return sessionsBeforeToday.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || sessionsBeforeToday[0];
-  }, [allLogs, selectedDate]);
+    const pastLogs = allLogs.filter(l => l.session_date < selectedDate).sort((a, b) => b.session_date.localeCompare(a.session_date));
+    
+    let aggregatedHw = "";
+    for (const log of pastLogs) {
+      if (log.homework_text) {
+        const dateStr = log.session_date ? log.session_date.slice(5).replace('-', '.') : '';
+        const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(log.session_date).getDay()];
+        let hText = log.homework_text;
+        availableTextbooks.forEach(tb => { hText = hText.split(`[${tb.id}]`).join(tb.title); });
+        const line = `${dateStr}(${dayName})\n${hText}`;
+        aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
+      }
+
+      const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === log.session_date);
+      if (isLogHoliday && !log.attendance_status?.startsWith('보강')) continue;
+      if (!log.attendance_status || log.attendance_status === '수업전') continue;
+      if (['결석', '수업취소', '수업제외'].includes(log.attendance_status)) continue;
+
+      let hwPassedToday = false;
+      let hwCheckedToday = false;
+      try {
+        if (log.test_result?.startsWith('{')) {
+          const res = JSON.parse(log.test_result);
+          hwPassedToday = res.hw_passed_today === true;
+          hwCheckedToday = res.hw_checked_today === true;
+        }
+      } catch (e) {}
+
+      if (hwPassedToday) continue;
+
+      const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(log.session_date).getDay()];
+      const isRegularClass = student?.class_days?.includes(dayName);
+      const isPresent = ['출석', '지각'].some(st => log.attendance_status?.startsWith(st));
+
+      if (hwCheckedToday || (isPresent && isRegularClass)) break;
+    }
+
+    const baseSession = pastLogs.find(l => {
+      const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === l.session_date);
+      const isMakeup = l.attendance_status?.startsWith('보강');
+      return (l.homework_to || l.test_status || l.classwork_text || l.homework_text) && 
+             !['결석', '수업취소', '수업제외'].includes(l.attendance_status) && (!isLogHoliday || isMakeup); 
+    }) || pastLogs.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || pastLogs[0];
+    
+    return baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', session_date: selectedDate, homework_text: aggregatedHw } : null);
+  }, [allLogs, selectedDate, academy, student, availableTextbooks]);
 
   const upcomingMakeups = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
