@@ -12,13 +12,15 @@ interface HomeworkEditorProps {
   homeworkJson: HomeworkItem[];
   masterTextbooks: TextbookOption[];
   onUpdate: (newHw: HomeworkItem[]) => void;
+  onToggleKeepBook?: (bookCode: string, isKeep: boolean) => void;
   onClose: () => void;
 }
 
 export default function HomeworkEditor({ 
-  title = "Smart Study Editor", student, homeworkJson, masterTextbooks, onUpdate, onClose 
+  title = "Smart Study Editor", student, homeworkJson, masterTextbooks, onUpdate, onToggleKeepBook, onClose 
 }: HomeworkEditorProps) {
   const [mounted, setMounted] = useState(false);
+  const [isKeepListOpen, setIsKeepListOpen] = useState(false);
   const [unitDataMap, setUnitDataMap] = useState<Record<string, any[]>>({});
   const [isLoadingUnits, setIsLoadingUnits] = useState(false);
   
@@ -236,6 +238,13 @@ export default function HomeworkEditor({
                   const newHw = homeworkJson.filter((_, i) => i !== idx);
                   onUpdate(newHw);
                 }}
+                onToggleKeep={() => {
+                  if (hw.type === 'book' && onToggleKeepBook) {
+                    onToggleKeepBook(hw.book_name, true);
+                    const newHw = homeworkJson.filter((_, i) => i !== idx);
+                    onUpdate(newHw);
+                  }
+                }}
               />
             ))}
             
@@ -246,7 +255,7 @@ export default function HomeworkEditor({
               <Plus size={14} /> 프린트 / 기타 과제 직접 추가
             </button>
 
-            {/* 💡 원장님 요청사항: 보류(Keep) 상태인 교재를 모달에서 즉시 불러오기 */}
+            {/* 💡 원장님 요청사항: 보류(Keep) 상태인 교재를 모달에서 토글 */}
             {(() => {
               const keepBooks = student?.assigned_books?.filter((code: string) => 
                 String(student.book_courses?.[code] || '').endsWith('-keep')
@@ -256,24 +265,38 @@ export default function HomeworkEditor({
 
               return (
                 <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/10 rounded-sm space-y-2">
-                  <div className="flex items-center gap-1.5 text-[9px] text-amber-500/60 font-bold uppercase tracking-widest">
-                    <BookOpen size={10} /> 보류(Keep) 중인 교재 불러오기
-                  </div>
-                  <div className="flex flex-wrap gap-1.5">
-                    {keepBooks.map((m: any) => (
-                      <button
-                        key={m.bookcode}
-                        onClick={() => {
-                          if (!homeworkJson.some(h => h.book_name === m.bookcode)) {
-                            onUpdate([...homeworkJson, { type: 'book', book_name: m.bookcode, range: '', units: [], start_page: '', end_page: '', note: '' }]);
-                          }
-                        }}
-                        className="px-2 py-1.5 bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all text-[10px] font-bold rounded-[2px] truncate max-w-[180px] shadow-sm flex items-center gap-1"
-                      >
-                        <Plus size={10} /> {m.title}
-                      </button>
-                    ))}
-                  </div>
+                  <button 
+                    onClick={() => setIsKeepListOpen(!isKeepListOpen)}
+                    className="flex items-center gap-1.5 w-full text-[9px] text-amber-500/80 font-bold uppercase tracking-widest hover:text-amber-400 transition-colors"
+                  >
+                    <BookOpen size={10} /> 보류(Keep) 중인 교재가 있습니다 ({keepBooks.length}권)
+                  </button>
+                  {isKeepListOpen && (
+                    <div className="flex flex-wrap gap-1.5 pt-2">
+                      {keepBooks.map((m: any) => (
+                        <div key={m.bookcode} className="flex items-center bg-amber-500/10 border border-amber-500/20 rounded-[2px] pr-1">
+                          <button
+                            onClick={() => {
+                              if (!homeworkJson.some(h => h.book_name === m.bookcode)) {
+                                onUpdate([...homeworkJson, { type: 'book', book_name: m.bookcode, range: '', units: [], start_page: '', end_page: '', note: '' }]);
+                              }
+                            }}
+                            className="px-2 py-1.5 text-amber-500 hover:text-white transition-all text-[10px] font-bold truncate max-w-[150px] flex items-center gap-1"
+                            title="오늘 과제에 임시 추가"
+                          >
+                            <Plus size={10} /> {m.title}
+                          </button>
+                          <button
+                            onClick={() => onToggleKeepBook && onToggleKeepBook(m.bookcode, false)}
+                            className="ml-1 px-1.5 py-1 bg-black/20 hover:bg-red-500/20 text-gray-400 hover:text-red-400 text-[8px] rounded-[1px] transition-all whitespace-nowrap"
+                            title="Keep 해제 (활성 교재로 복구)"
+                          >
+                            해제
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               );
             })()}
@@ -320,9 +343,9 @@ export default function HomeworkEditor({
 }
 
 function HomeworkRow({ 
-  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, onDuplicate, startRef, endRef, onKeyDown 
+  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, onDuplicate, onToggleKeep, startRef, endRef, onKeyDown 
 }: { 
-  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void
+  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, onToggleKeep?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void
 }) {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
@@ -464,12 +487,29 @@ function HomeworkRow({
           </div>
         )}
 
+        {hw.type === 'book' && onToggleKeep && (
+          <button 
+            onClick={onToggleKeep}
+            className="w-12 shrink-0 py-1 bg-amber-500/10 text-amber-500/80 border border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all text-[8px] font-bold rounded-[2px]"
+            title="목록에서 가리고 Keep(보류) 상태로 변경"
+          >
+            KEEP
+          </button>
+        )}
+
         <button 
           onClick={onReset} 
           className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-blue-500 hover:bg-blue-500/10 transition-all flex items-center justify-center"
           title="이 교재의 입력 내용 초기화"
         >
           <RefreshCcw size={12} />
+        </button>
+
+        <button 
+          onClick={onDelete} 
+          className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center"
+        >
+          <Trash2 size={12} />
         </button>
       </div>
 

@@ -92,6 +92,21 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     return dataCols.length > 0 ? dataCols[dataCols.length - 1].id : null;
   }, [activeColumns]);
 
+  // 💡 교재 Keep 처리 핸들러
+  const handleToggleKeepBook = async (bookCode: string, isKeep: boolean) => {
+    if (!props.onUpdateStudentInfo || !student) return;
+    const newBookCourses = { ...(student.book_courses || {}) };
+    const currentVal = newBookCourses[bookCode] || '';
+    if (isKeep) {
+      if (!currentVal.endsWith('-keep')) {
+        newBookCourses[bookCode] = currentVal ? `${currentVal}-keep` : '-keep';
+      }
+    } else {
+      newBookCourses[bookCode] = currentVal.replace('-keep', '');
+    }
+    await props.onUpdateStudentInfo(student.id, 'book_courses', newBookCourses);
+  };
+
   return (
     <>
       <tr className={`group/row transition-all duration-300 border-b border-white/10 ${
@@ -226,10 +241,10 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
       <tr style={{ display: 'none' }}>
         <td colSpan={activeColumns.length}>
           <AnimatePresence>
-            {isCwEditorOpen && <HomeworkEditor title="Smart Classwork Editor" student={student} homeworkJson={formData.classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'classwork')} onClose={() => setIsCwEditorOpen(false)} />}
-            {isCcwEditorOpen && <HomeworkEditor title="Smart Completed Classwork Editor" student={student} homeworkJson={formData.completed_classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'completed_classwork')} onClose={() => setIsCcwEditorOpen(false)} />}
-            {isHwEditorOpen && <HomeworkEditor title="Smart Homework Editor" student={student} homeworkJson={formData.homework_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'homework')} onClose={() => setIsHwEditorOpen(false)} />}
-            {isNqEditorOpen && <HomeworkEditor title="Next Quiz Range Editor" student={student} homeworkJson={formData.next_quiz_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'next_quiz')} onClose={() => setIsNqEditorOpen(false)} />}
+            {isCwEditorOpen && <HomeworkEditor title="Smart Classwork Editor" student={student} homeworkJson={formData.classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'classwork')} onToggleKeepBook={handleToggleKeepBook} onClose={() => setIsCwEditorOpen(false)} />}
+            {isCcwEditorOpen && <HomeworkEditor title="Smart Completed Classwork Editor" student={student} homeworkJson={formData.completed_classwork_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'completed_classwork')} onToggleKeepBook={handleToggleKeepBook} onClose={() => setIsCcwEditorOpen(false)} />}
+            {isHwEditorOpen && <HomeworkEditor title="Smart Homework Editor" student={student} homeworkJson={formData.homework_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'homework')} onToggleKeepBook={handleToggleKeepBook} onClose={() => setIsHwEditorOpen(false)} />}
+            {isNqEditorOpen && <HomeworkEditor title="Next Quiz Range Editor" student={student} homeworkJson={formData.next_quiz_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'next_quiz')} onToggleKeepBook={handleToggleKeepBook} onClose={() => setIsNqEditorOpen(false)} />}
             {isTestEditorOpen && <TestEditor testData={formData.test_id} onUpdate={(formattedText, averageScore) => { const newData = { ...formData, test_id: formattedText, test_score: averageScore !== null ? String(averageScore) : formData.test_score }; states.setFormData((prev: any) => ({ ...prev, ...newData })); handleSave(newData); }} onClose={() => setIsTestEditorOpen(false)} />}
             {isTestModalOpen && <TestAnswerModal testId={formData.test_id} studentName={student.name} onClose={() => setIsTestModalOpen(false)} onSave={(res) => { const newData = { ...formData, test_score: String(res.score || ''), test_completed: res.completed }; states.setFormData((prev: any) => ({ ...prev, ...newData })); handleSave({ test_score: newData.test_score, test_completed: res.completed }); setIsTestModalOpen(false); }} />}
           </AnimatePresence>
