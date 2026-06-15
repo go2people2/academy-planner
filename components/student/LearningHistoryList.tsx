@@ -9,9 +9,10 @@ interface LearningHistoryListProps {
   isHistoryOpen: boolean;
   setIsHistoryOpen: (open: boolean) => void;
   teacherPresets?: any;
+  opSettings?: any;
 }
 
-export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHistoryOpen, teacherPresets }: LearningHistoryListProps) {
+export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHistoryOpen, teacherPresets, opSettings }: LearningHistoryListProps) {
   return (
     <div className="space-y-6">
       <button 
@@ -116,19 +117,27 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                 </div>
                               )}
                               {(() => {
-                                const parsedTests = parseInlineTests(log.test_id);
+                                const parsedTests = parseInlineTests(
+                                  log.test_id, 
+                                  opSettings?.default_score_cut, 
+                                  opSettings?.default_count_cut
+                                );
                                 if (parsedTests) {
                                   return parsedTests.map((t, idx) => {
                                     const pct = t.maxScore > 0 ? (t.numericScore / t.maxScore) * 100 : 0;
+                                    const activeColor = t.isPass ? 'bg-emerald-400' : 'bg-red-400';
+                                    const inactiveColor = t.isPass ? 'bg-emerald-900/40' : 'bg-red-900/40';
+                                    const textColor = t.isPass ? 'text-emerald-400' : 'text-red-400';
+                                    
                                     return (
                                       <div key={`test-${idx}`} className="flex items-center justify-end gap-2 text-right mt-1.5 first:mt-0">
-                                        <span className="text-[10px] font-bold text-amber-500/80 max-w-[100px] truncate" title={t.name}>{t.name}</span>
+                                        <span className={`text-[10px] font-bold ${textColor} max-w-[100px] truncate`} title={t.name}>{t.name}</span>
                                         <div className="flex gap-[1px] w-[60px]">
                                           {[...Array(10)].map((_, j) => (
-                                            <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
+                                            <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? activeColor : inactiveColor}`} />
                                           ))}
                                         </div>
-                                        <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap">
+                                        <span className={`text-[10px] font-black ${textColor} tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap`}>
                                           {t.maxScore === 100 ? `${t.numericScore}점` : `${t.numericScore}/${t.maxScore}`}
                                         </span>
                                       </div>

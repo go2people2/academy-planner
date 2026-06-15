@@ -44,10 +44,15 @@ export interface ParsedTest {
   score: string;
   numericScore: number;
   maxScore: number;
+  isPass: boolean;
   memo: string;
 }
 
-export function parseInlineTests(text: string | undefined | null): ParsedTest[] | null {
+export function parseInlineTests(
+  text: string | undefined | null, 
+  defaultScoreCut: number = 80, 
+  defaultCountCut: number = 2
+): ParsedTest[] | null {
   if (!text) return null;
   const lines = text.split('\n');
   const tests: ParsedTest[] = [];
@@ -71,20 +76,36 @@ export function parseInlineTests(text: string | undefined | null): ParsedTest[] 
         
         let numericScore = 0;
         let maxScore = 100; // 슬래시 없으면 기본 100점
+        let explicitCut: number | null = null;
+        let isPass = true;
         
         const cleanScore = scoreStr.replace(/[^0-9/]/g, ''); // 숫자와 슬래시만 추출
         if (cleanScore.includes('/')) {
           const parts = cleanScore.split('/');
           numericScore = parseInt(parts[0]) || 0;
           maxScore = parseInt(parts[1]) || 10;
+          if (parts.length >= 3) {
+            explicitCut = parseInt(parts[2]); // 3번째 값은 커트라인(오답허용개수 혹은 100점만점시 목표점수)
+          }
         } else {
           numericScore = parseInt(cleanScore) || 0;
         }
         
-        currentTest = { name, score: scoreStr, numericScore, maxScore, memo };
+        // 💡 통과(Pass) 여부 계산 로직
+        if (maxScore === 100) {
+          // 100점 만점일 때는 커트라인이 '목표 점수' (이상이어야 통과)
+          const targetScore = explicitCut !== null && !isNaN(explicitCut) ? explicitCut : defaultScoreCut;
+          isPass = numericScore >= targetScore;
+        } else {
+          // 100점 만점이 아닐 때(개수형)는 커트라인이 '오답 허용 개수' (이하로 틀려야 통과)
+          const allowableMisses = explicitCut !== null && !isNaN(explicitCut) ? explicitCut : defaultCountCut;
+          isPass = (maxScore - numericScore) <= allowableMisses;
+        }
+        
+        currentTest = { name, score: scoreStr, numericScore, maxScore, isPass, memo };
       } else {
         // 콜론(:)이 없는 경우 전부 이름으로 간주
-        currentTest = { name: content, score: '', numericScore: 0, maxScore: 100, memo: '' };
+        currentTest = { name: content, score: '', numericScore: 0, maxScore: 100, isPass: true, memo: '' };
       }
     } else {
       // 💡 하이픈으로 시작하지 않는 줄은 이전 테스트의 메모에 줄바꿈과 함께 이어붙임!

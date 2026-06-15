@@ -138,7 +138,46 @@ export default function AcademyProfile({
           </div>
 
 
-          <p className="text-[9px] text-gray-600 italic">
+          <div className="pt-6 border-t border-white/5">
+            <h4 className="text-[11px] font-black text-white tracking-widest mb-4 flex items-center gap-2">
+              <Shield size={12} className="text-emerald-500" /> 기본 통과 기준 설정
+            </h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="bg-black/40 border border-white/10 rounded-[2px] p-4 space-y-2">
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">백분율형(100점) 기본 통과 점수</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" 
+                    value={opSettings.default_score_cut !== undefined ? opSettings.default_score_cut : 80} 
+                    onChange={(e) => {
+                      setOpSettings((prev:any) => ({ ...prev, default_score_cut: parseInt(e.target.value) || 0 }));
+                    }}
+                    onBlur={(e) => updateOpSetting('default_score_cut', parseInt(e.target.value) || 0)}
+                    className="w-full bg-transparent border-b border-white/10 px-2 py-1 text-sm font-black text-white outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-gray-400 font-bold">점 이상 통과</span>
+                </div>
+              </div>
+
+              <div className="bg-black/40 border border-white/10 rounded-[2px] p-4 space-y-2">
+                <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest block">개수형 기본 오답 허용 개수</label>
+                <div className="flex items-center gap-2">
+                  <input 
+                    type="number" 
+                    value={opSettings.default_count_cut !== undefined ? opSettings.default_count_cut : 2} 
+                    onChange={(e) => {
+                      setOpSettings((prev:any) => ({ ...prev, default_count_cut: parseInt(e.target.value) || 0 }));
+                    }}
+                    onBlur={(e) => updateOpSetting('default_count_cut', parseInt(e.target.value) || 0)}
+                    className="w-full bg-transparent border-b border-white/10 px-2 py-1 text-sm font-black text-white outline-none focus:border-blue-500"
+                  />
+                  <span className="text-[10px] text-gray-400 font-bold">개 이하 틀림 통과</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <p className="text-[9px] text-gray-600 italic mt-6">
             * 1교시 시작 시각은 시간표의 파랑/주황 색상 구분(3교시 단위)의 기준이 됩니다.<br/>
             * 지각 및 연락 알림 설정은 수업 시작 (LIVE) 모드에서 실시간으로 반영됩니다.
           </p>
