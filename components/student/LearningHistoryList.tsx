@@ -79,33 +79,33 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                             </div>
                             <div className="shrink-0 flex flex-col items-end gap-2 mt-0.5">
                               {todoAchievement > 0 && (
-                                <div className="flex flex-col items-end gap-1 w-[50px]">
-                                  <span className="text-[9px] font-black text-emerald-400 tabular-nums leading-none">진도 {todoAchievement}%</span>
-                                  <div className="flex gap-[1px] w-full">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex gap-[1px] w-[30px]">
                                     {[...Array(11)].map((_, j) => (
-                                      <div key={j} className={`flex-1 h-[2px] rounded-sm ${j <= Math.round(todoAchievement / 10) ? 'bg-emerald-400' : 'bg-emerald-900/50'}`} />
+                                      <div key={j} className={`flex-1 h-[3px] rounded-sm ${j <= Math.round(todoAchievement / 10) ? 'bg-emerald-400' : 'bg-emerald-900/50'}`} />
                                     ))}
                                   </div>
+                                  <span className="text-[10px] font-black text-emerald-400 tabular-nums leading-none w-[42px] text-right">진도 {todoAchievement}%</span>
                                 </div>
                               )}
                               {hwEval !== null && (
-                                <div className="flex flex-col items-end gap-1 w-[50px]">
-                                  <span className="text-[9px] font-black text-blue-400 tabular-nums leading-none">과제 {hwEval}</span>
-                                  <div className="flex gap-[1px] w-full">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex gap-[1px] w-[30px]">
                                     {[...Array(11)].map((_, j) => (
-                                      <div key={j} className={`flex-1 h-[2px] rounded-sm ${j <= hwEval ? 'bg-blue-400' : 'bg-blue-900/50'}`} />
+                                      <div key={j} className={`flex-1 h-[3px] rounded-sm ${j <= hwEval ? 'bg-blue-400' : 'bg-blue-900/50'}`} />
                                     ))}
                                   </div>
+                                  <span className="text-[10px] font-black text-blue-400 tabular-nums leading-none w-[42px] text-right">과제 {hwEval}</span>
                                 </div>
                               )}
                               {log.test_score !== null && log.test_score !== undefined && (
-                                <div className="flex flex-col items-end gap-1 w-[50px]">
-                                  <span className="text-[9px] font-black text-amber-500 tabular-nums leading-none">테스트 {log.test_score}%</span>
-                                  <div className="flex gap-[1px] w-full">
+                                <div className="flex items-center gap-2">
+                                  <div className="flex gap-[1px] w-[30px]">
                                     {[...Array(11)].map((_, j) => (
-                                      <div key={j} className={`flex-1 h-[2px] rounded-sm ${j <= Math.round(log.test_score / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
+                                      <div key={j} className={`flex-1 h-[3px] rounded-sm ${j <= Math.round(log.test_score / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
                                     ))}
                                   </div>
+                                  <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none w-[42px] text-right">테스트 {log.test_score}%</span>
                                 </div>
                               )}
                             </div>
