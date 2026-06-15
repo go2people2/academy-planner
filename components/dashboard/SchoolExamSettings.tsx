@@ -208,8 +208,8 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
                 <div className="flex items-center gap-3 shrink-0">
                   <div className="text-right">
                     <p className="text-[12px] font-black text-white whitespace-nowrap">
-                      {new Date(exam.target_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
-                      {exam.end_date && exam.end_date !== exam.target_date && ` ~ ${new Date(exam.end_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}`}
+                      {new Date(exam.target_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })}
+                      {exam.end_date && exam.end_date !== exam.target_date && ` ~ ${new Date(exam.end_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', weekday: 'short' })}`}
                     </p>
                     <p className={`text-[10px] font-bold ${diff < 0 ? 'text-gray-500' : diff === 0 ? 'text-rose-500' : 'text-blue-400'}`}>
                       {diff < 0 ? '종료됨' : diff === 0 ? 'D-Day' : `D-${diff}`}

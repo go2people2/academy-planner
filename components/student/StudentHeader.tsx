@@ -110,7 +110,7 @@ export default function StudentHeader({
               {matchedExam ? (
                 <div className="flex items-center gap-3">
                   <span className="text-[14px] font-black text-white tracking-tight whitespace-nowrap">
-                    {new Date(matchedExam.target_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
+                    {new Date(matchedExam.target_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
                   </span>
                   <div className="w-[1px] h-3 bg-white/10" />
                   <span className="text-[11px] font-black text-rose-500 uppercase tracking-widest whitespace-nowrap">
