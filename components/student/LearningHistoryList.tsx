@@ -124,11 +124,23 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                 );
                                 if (parsedTests) {
                                   return parsedTests.map((t, idx) => {
-                                    const pct = t.maxScore > 0 ? (t.numericScore / t.maxScore) * 100 : 0;
-                                    const activeColor = t.isPass ? 'bg-emerald-400' : 'bg-red-400';
-                                    const inactiveColor = t.isPass ? 'bg-emerald-900/40' : 'bg-red-900/40';
-                                    const textColor = t.isPass ? 'text-emerald-400' : 'text-red-400';
+                                    const isPending = t.numericScore === null;
+                                    const pct = (!isPending && t.maxScore > 0) ? (t.numericScore! / t.maxScore) * 100 : 0;
                                     
+                                    let activeColor = 'bg-gray-500';
+                                    let inactiveColor = 'bg-gray-800/40';
+                                    let textColor = 'text-gray-400';
+                                    
+                                    if (!isPending) {
+                                      activeColor = t.isPass ? 'bg-emerald-400' : 'bg-red-400';
+                                      inactiveColor = t.isPass ? 'bg-emerald-900/40' : 'bg-red-900/40';
+                                      textColor = t.isPass ? 'text-emerald-400' : 'text-red-400';
+                                    }
+                                    
+                                    const scoreDisplay = isPending 
+                                      ? (t.maxScore === 100 ? '채점 전' : `- / ${t.maxScore}`)
+                                      : (t.maxScore === 100 ? `${t.numericScore}점` : `${t.numericScore}/${t.maxScore}`);
+
                                     return (
                                       <div key={`test-${idx}`} className="flex items-center justify-end gap-2 text-right mt-1.5 first:mt-0">
                                         <span className={`text-[10px] font-bold ${textColor} max-w-[100px] truncate`} title={t.name}>{t.name}</span>
@@ -138,7 +150,7 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                           ))}
                                         </div>
                                         <span className={`text-[10px] font-black ${textColor} tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap`}>
-                                          {t.maxScore === 100 ? `${t.numericScore}점` : `${t.numericScore}/${t.maxScore}`}
+                                          {scoreDisplay}
                                         </span>
                                       </div>
                                     );

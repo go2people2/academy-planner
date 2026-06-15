@@ -42,9 +42,9 @@ export function getInitial(name: string): string {
 export interface ParsedTest {
   name: string;
   score: string;
-  numericScore: number;
+  numericScore: number | null;
   maxScore: number;
-  isPass: boolean;
+  isPass: boolean | null;
   memo: string;
 }
 
@@ -74,38 +74,40 @@ export function parseInlineTests(
         const scoreStr = scoreMemoParts[0].trim();
         const memo = scoreMemoParts.slice(1).join(',').trim(); // 쉼표가 메모 안에 또 있을 경우 대비
         
-        let numericScore = 0;
+        let numericScore: number | null = null;
         let maxScore = 100; // 슬래시 없으면 기본 100점
         let explicitCut: number | null = null;
-        let isPass = true;
+        let isPass: boolean | null = null;
         
         const cleanScore = scoreStr.replace(/[^0-9/]/g, ''); // 숫자와 슬래시만 추출
         if (cleanScore.includes('/')) {
           const parts = cleanScore.split('/');
-          numericScore = parseInt(parts[0]) || 0;
+          numericScore = parts[0] === '' ? null : (parseInt(parts[0]) || 0);
           maxScore = parseInt(parts[1]) || 10;
-          if (parts.length >= 3) {
+          if (parts.length >= 3 && parts[2] !== '') {
             explicitCut = parseInt(parts[2]); // 3번째 값은 커트라인(오답허용개수 혹은 100점만점시 목표점수)
           }
         } else {
-          numericScore = parseInt(cleanScore) || 0;
+          numericScore = cleanScore === '' ? null : (parseInt(cleanScore) || 0);
         }
         
-        // 💡 통과(Pass) 여부 계산 로직
-        if (maxScore === 100) {
-          // 100점 만점일 때는 커트라인이 '목표 점수' (이상이어야 통과)
-          const targetScore = explicitCut !== null && !isNaN(explicitCut) ? explicitCut : defaultScoreCut;
-          isPass = numericScore >= targetScore;
-        } else {
-          // 100점 만점이 아닐 때(개수형)는 커트라인이 '오답 허용 개수' (이하로 틀려야 통과)
-          const allowableMisses = explicitCut !== null && !isNaN(explicitCut) ? explicitCut : defaultCountCut;
-          isPass = (maxScore - numericScore) <= allowableMisses;
+        // 💡 통과(Pass) 여부 계산 로직 (채점 전이면 isPass는 null 유지)
+        if (numericScore !== null) {
+          if (maxScore === 100) {
+            // 100점 만점일 때는 커트라인이 '목표 점수' (이상이어야 통과)
+            const targetScore = explicitCut !== null && !isNaN(explicitCut) ? explicitCut : defaultScoreCut;
+            isPass = numericScore >= targetScore;
+          } else {
+            // 100점 만점이 아닐 때(개수형)는 커트라인이 '오답 허용 개수' (이하로 틀려야 통과)
+            const allowableMisses = explicitCut !== null && !isNaN(explicitCut) ? explicitCut : defaultCountCut;
+            isPass = (maxScore - numericScore) <= allowableMisses;
+          }
         }
         
         currentTest = { name, score: scoreStr, numericScore, maxScore, isPass, memo };
       } else {
         // 콜론(:)이 없는 경우 전부 이름으로 간주
-        currentTest = { name: content, score: '', numericScore: 0, maxScore: 100, isPass: true, memo: '' };
+        currentTest = { name: content, score: '', numericScore: null, maxScore: 100, isPass: null, memo: '' };
       }
     } else {
       // 💡 하이픈으로 시작하지 않는 줄은 이전 테스트의 메모에 줄바꿈과 함께 이어붙임!
