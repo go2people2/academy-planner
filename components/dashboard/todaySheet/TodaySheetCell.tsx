@@ -605,6 +605,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 data-student-id={student.id}
                 data-col-id={colId}
                 onKeyDown={(e) => {
+                  if (((e.ctrlKey || e.metaKey) && e.key === '/') || (e.altKey && e.key === 'Enter')) {
+                    e.preventDefault();
+                    if (colId === 'classwork') onOpenCwEditor?.();
+                    else if (colId === 'completed_classwork') onOpenCcwEditor?.();
+                    else if (colId === 'assign') onOpenHwEditor?.();
+                    return;
+                  }
                   if (e.key === 'Enter' && !e.shiftKey) {
                     onSave(colId, (e.target as HTMLTextAreaElement).value);
                   }
