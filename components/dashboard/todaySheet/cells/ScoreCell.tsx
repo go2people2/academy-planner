@@ -29,9 +29,9 @@ export const ScoreCell = React.memo(function ScoreCell({
   const isCountMode = formData.test_score_type === 'count';
 
   return (
-    <div className="relative w-full h-[56px] flex items-center justify-start group/score">
+    <div className="relative w-full min-h-[22px] flex items-center justify-start group/score py-1 px-1">
       {(isEditing || isActive) && (
-        <div className="flex items-center w-full h-[56px] px-4 overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center w-full min-h-[22px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
           <input 
             ref={(el) => {
               // 💡 로컬 Ref와 외부 Ref(prop) 동시 지원
@@ -100,7 +100,7 @@ export const ScoreCell = React.memo(function ScoreCell({
         <div 
           onClick={(e) => handleCellInteraction(e, colId, 'click')}
           onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
-          className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full h-[56px] flex items-center justify-start cursor-text group-hover/td:bg-white/[0.02] transition-colors"
+          className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-text group-hover/td:bg-white/[0.02] transition-colors"
         >
           {formData.test_score ? (
             formData.test_score_type === 'score' ? (

@@ -143,21 +143,26 @@ const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: a
       aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
     }
 
+    const dayName = getDayOfWeek(log.date);
+    const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
+    const isPresent = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].some(st => log.attendance_status?.startsWith(st));
+    const hasHomework = !!log.homework_text;
+
+    // 💡 [수정] 출결이 '수업전'이라도 정규수업에 선생님이 숙제를 입력했다면, 새로운 숙제 주기의 시작이므로 과거 숙제 취합을 중단(break)
+    if (
+      log.hw_checked_today === true || 
+      (isPresent && isRegularClass) ||
+      (hasHomework && isRegularClass)
+    ) {
+      break;
+    }
+
     const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === log.date);
     if (isLogHoliday && !log.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT)) continue;
     if (!log.attendance_status || log.attendance_status === ATTENDANCE_STATUS.BEFORE) continue;
     if ([ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(log.attendance_status as any)) continue;
 
     if (log.hw_passed_today === true) continue;
-
-    const dayName = getDayOfWeek(log.date);
-    const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
-    const isPresent = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].some(st => log.attendance_status.startsWith(st));
-
-    if (
-      log.hw_checked_today === true || 
-      (isPresent && isRegularClass)
-    ) break;
   }
   return aggregatedHw;
 };
@@ -430,6 +435,16 @@ export default function DashboardPage() {
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('All');
+
+  // 💡 선택한 선생님 필터 상태 로컬스토리지 연동
+  useEffect(() => {
+    const saved = localStorage.getItem('ams_selectedTeacherId');
+    if (saved) setSelectedTeacherId(saved);
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('ams_selectedTeacherId', selectedTeacherId);
+  }, [selectedTeacherId]);
   const [isAndFilter, setIsAndFilter] = useState(false);
   const [filterTarget, setFilterTarget] = useState<'all' | 'today' | 'rest'>('all');
   const [searchQuery, setSearchQuery] = useState('');

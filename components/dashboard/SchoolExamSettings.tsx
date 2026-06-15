@@ -16,6 +16,8 @@ interface SchoolExamSettingsProps {
 export default function SchoolExamSettings({ academyInfo, students, onUpdateAcademyInfo }: SchoolExamSettingsProps) {
   const [examSchedules, setExamSchedules] = useState<any[]>([]);
   const [isSaving, setIsSaving] = useState(false);
+  const [editingExamId, setEditingExamId] = useState<string | null>(null);
+  const [editExamData, setEditExamData] = useState<any>({});
   
   const EXAM_TYPES = [
     { id: '1-MID', label: '1학기 중간' },
@@ -46,7 +48,8 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
     school_name: '',
     grade: '',
     subject: '',
-    target_date: new Date().toISOString().split('T')[0]
+    target_date: new Date().toISOString().split('T')[0],
+    end_date: new Date().toISOString().split('T')[0]
   });
 
   const fetchExams = async () => {
@@ -116,10 +119,10 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
     try {
       const periodKey = `${selectedYear}-${selectedType}`;
       const finalExamName = newExam.subject ? `${periodKey}:${newExam.subject}` : periodKey;
-      const payload = { academy_id: academyInfo.id, school_name: newExam.school_name, grade: newExam.grade || null, exam_name: finalExamName, target_date: newExam.target_date };
+      const payload = { academy_id: academyInfo.id, school_name: newExam.school_name, grade: newExam.grade || null, exam_name: finalExamName, target_date: newExam.target_date, end_date: newExam.end_date || newExam.target_date };
       const { error } = await supabase.from('ams_exam_schedules').insert([payload]);
       if (error) throw error;
-      setNewExam({ ...newExam, subject: '', target_date: new Date().toISOString().split('T')[0] });
+      setNewExam({ ...newExam, subject: '', target_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0] });
       await fetchExams();
     } catch (e: any) { alert(`오류: ${e.message}`); } finally { setIsSaving(false); }
   };
@@ -128,6 +131,39 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
     if (!confirm('삭제하시겠습니까?')) return;
     const { error } = await supabase.from('ams_exam_schedules').delete().eq('id', id);
     if (!error) fetchExams();
+  };
+
+  const handleUpdateExam = async (id: string) => {
+    if (!editExamData.school_name || !editExamData.target_date) {
+      alert('학교와 시작 날짜는 필수입니다.');
+      return;
+    }
+    const finalExamName = editExamData.subject ? `${selectedYear}-${selectedType}:${editExamData.subject}` : `${selectedYear}-${selectedType}`;
+    const payload = {
+      school_name: editExamData.school_name,
+      grade: editExamData.grade || null,
+      exam_name: finalExamName,
+      target_date: editExamData.target_date,
+      end_date: editExamData.end_date || editExamData.target_date
+    };
+    const { error } = await supabase.from('ams_exam_schedules').update(payload).eq('id', id);
+    if (error) {
+      alert(`오류: ${error.message}`);
+    } else {
+      setEditingExamId(null);
+      fetchExams();
+    }
+  };
+
+  const startEditing = (exam: any, subject: string) => {
+    setEditingExamId(exam.id);
+    setEditExamData({
+      school_name: exam.school_name,
+      grade: exam.grade || '',
+      subject: subject || '',
+      target_date: exam.target_date,
+      end_date: exam.end_date || exam.target_date
+    });
   };
 
   const ExamList = ({ title, list }: { title: string, list: any[] }) => (
@@ -142,22 +178,49 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
           <div className="py-6 text-center text-[11px] text-gray-700 font-black uppercase italic">Empty</div>
         ) : (
           list.map(exam => {
-            const subject = exam.exam_name.split(':')[1];
+            const subject = exam.exam_name.split(':')[1] || '';
             const diff = Math.ceil((new Date(exam.target_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
+            
+            if (editingExamId === exam.id) {
+              return (
+                <div key={exam.id} className="flex flex-wrap items-center gap-2 px-4 py-3 bg-white/[0.08] transition-all">
+                  <input type="text" value={editExamData.school_name} onChange={e => setEditExamData({...editExamData, school_name: e.target.value})} className="w-24 bg-black/40 border border-white/20 rounded-[2px] px-2 py-1 text-[12px] text-white focus:outline-none focus:border-blue-500" placeholder="학교명" />
+                  <input type="text" value={editExamData.grade} onChange={e => setEditExamData({...editExamData, grade: e.target.value})} className="w-12 bg-black/40 border border-white/20 rounded-[2px] px-2 py-1 text-[12px] text-white text-center focus:outline-none focus:border-blue-500" placeholder="학년" />
+                  <input type="text" value={editExamData.subject} onChange={e => setEditExamData({...editExamData, subject: e.target.value})} className="w-16 bg-black/40 border border-white/20 rounded-[2px] px-2 py-1 text-[12px] text-white focus:outline-none focus:border-blue-500" placeholder="과목" />
+                  <input type="date" value={editExamData.target_date} onChange={e => setEditExamData({...editExamData, target_date: e.target.value})} className="w-28 bg-black/40 border border-white/20 rounded-[2px] px-2 py-1 text-[12px] text-white focus:outline-none focus:border-blue-500 [color-scheme:dark]" />
+                  <span className="text-gray-500 text-[10px]">~</span>
+                  <input type="date" value={editExamData.end_date} onChange={e => setEditExamData({...editExamData, end_date: e.target.value})} className="w-28 bg-black/40 border border-white/20 rounded-[2px] px-2 py-1 text-[12px] text-white focus:outline-none focus:border-blue-500 [color-scheme:dark]" />
+                  <div className="flex gap-1 ml-auto">
+                    <button onClick={() => handleUpdateExam(exam.id)} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black rounded shadow">저장</button>
+                    <button onClick={() => setEditingExamId(null)} className="px-3 py-1 bg-gray-600 hover:bg-gray-500 text-white text-[10px] font-black rounded shadow">취소</button>
+                  </div>
+                </div>
+              );
+            }
+
             return (
               <div key={exam.id} className="flex items-center justify-between px-4 py-2 group hover:bg-white/[0.04] transition-all">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <span className="text-[14px] font-black text-white truncate">{exam.school_name}</span>
-                  {subject && <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-rose-600 text-white shadow-lg">{subject}</span>}
+                  {exam.grade && <span className="px-1.5 py-0.5 rounded bg-white/10 text-[10px] font-bold text-white whitespace-nowrap">{exam.grade}학년</span>}
+                  {subject && <span className="px-1.5 py-0.5 rounded border border-white/20 text-[10px] font-bold text-gray-300 whitespace-nowrap truncate">{subject}</span>}
                 </div>
-                <div className="flex items-center gap-4 ml-2 shrink-0">
-                  <span className="text-[13px] font-black text-white tabular-nums opacity-90">{exam.target_date.replace(/-/g, '.')}</span>
-                  <div className="min-w-[44px] text-right">
-                    <span className={`text-[13px] font-black tabular-nums tracking-tighter ${diff <= 7 ? 'text-rose-500' : diff <= 14 ? 'text-amber-400' : 'text-emerald-400'}`}>
-                      {diff === 0 ? 'DAY' : diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`}
-                    </span>
+                <div className="flex items-center gap-3 shrink-0">
+                  <div className="text-right">
+                    <p className="text-[12px] font-black text-white whitespace-nowrap">
+                      {new Date(exam.target_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}
+                      {exam.end_date && exam.end_date !== exam.target_date && ` ~ ${new Date(exam.end_date).toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })}`}
+                    </p>
+                    <p className={`text-[10px] font-bold ${diff < 0 ? 'text-gray-500' : diff === 0 ? 'text-rose-500' : 'text-blue-400'}`}>
+                      {diff < 0 ? '종료됨' : diff === 0 ? 'D-Day' : `D-${diff}`}
+                    </p>
                   </div>
-                  <button onClick={() => handleDeleteExam(exam.id)} className="opacity-0 group-hover:opacity-100 p-1 hover:text-red-500 transition-all"><Trash2 size={14} /></button>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                    <button onClick={() => startEditing(exam, subject)} className="p-1 hover:text-blue-400 text-gray-400 transition-all">
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></svg>
+                    </button>
+                    <button onClick={() => handleDeleteExam(exam.id)} className="p-1 hover:text-red-500 text-gray-400 transition-all"><Trash2 size={14} /></button>
+                  </div>
                 </div>
               </div>
             );
@@ -169,11 +232,9 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      {/* 💡 [슈퍼 원라인] 모든 컨트롤을 한 줄로 통합 + 크기 확대 */}
       <div className="bg-white/5 border border-white/10 rounded-[6px] overflow-hidden shadow-2xl">
         <div className="px-4 py-2.5 flex flex-wrap items-center justify-between gap-6 bg-white/[0.02]">
           <div className="flex items-center gap-4 flex-1">
-            {/* 1. 연도 설정 */}
             <div className="flex items-center gap-2">
               <Calendar size={16} className="text-rose-500 opacity-50" />
               <input 
@@ -186,7 +247,6 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
             
             <div className="h-5 w-px bg-white/10" />
 
-            {/* 2. 학기 버튼 */}
             <div className="flex gap-1">
               {EXAM_TYPES.map(type => (
                 <button 
@@ -201,7 +261,6 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
 
             <div className="h-5 w-px bg-white/10" />
 
-            {/* 3. 학교 입력 필드 (통합) */}
             <div className="flex items-center gap-2 flex-1 max-w-2xl">
               <input 
                 type="text" 
@@ -217,12 +276,22 @@ export default function SchoolExamSettings({ academyInfo, students, onUpdateAcad
                 onChange={e => setNewExam({...newExam, grade: e.target.value})} 
                 className="w-14 bg-black/40 border border-white/10 rounded-[2px] px-2 py-1.5 text-[13px] font-bold text-white text-center outline-none focus:border-rose-500" 
               />
-              <input 
-                type="date" 
-                value={newExam.target_date} 
-                onChange={e => setNewExam({...newExam, target_date: e.target.value})} 
-                className="w-36 bg-black/40 border border-white/10 rounded-[2px] px-3 py-1.5 text-[13px] font-black text-white outline-none focus:border-rose-500 [color-scheme:dark]" 
-              />
+              <div className="flex flex-col gap-1.5">
+                <input
+                  type="date"
+                  value={newExam.target_date}
+                  onChange={e => setNewExam({ ...newExam, target_date: e.target.value })}
+                  className="w-full bg-[#0a0a0a] border border-white/10 rounded-md px-3 py-2 text-[13px] text-white focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <input
+                  type="date"
+                  value={newExam.end_date}
+                  onChange={e => setNewExam({ ...newExam, end_date: e.target.value })}
+                  className="w-full bg-[#0a0a0a] border border-white/10 rounded-md px-3 py-2 text-[13px] text-white focus:outline-none focus:border-blue-500/50 [color-scheme:dark]"
+                />
+              </div>
               <button 
                 onClick={handleAddExam} 
                 disabled={isSaving} 

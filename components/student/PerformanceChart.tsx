@@ -43,15 +43,13 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
           let todoAchievement = 0;
           try { if (data.test_result?.startsWith('{')) todoAchievement = JSON.parse(data.test_result).todo_achievement || 0; } catch (e) {}
           
-          const hwEvalMatch = data.special_notes ? data.special_notes.match(/\[숙제이행:\s*(\d+)단계\]/) : null;
-          const hwEval = hwEvalMatch ? parseInt(hwEvalMatch[1]) : null;
 
           return (
             <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative z-10">
               <div className="absolute -top-14 left-1/2 -translate-x-1/2 bg-[#1a1a1a] border border-white/10 text-white text-[10px] font-black px-2 py-1.5 rounded-[4px] opacity-0 group-hover:opacity-100 transition-all z-30 whitespace-nowrap shadow-2xl scale-75 group-hover:scale-100 origin-bottom pointer-events-none flex flex-col gap-0.5 items-center">
                 <span>TEST {data.test_score}%</span>
                 {todoAchievement > 0 && <span className="text-emerald-400">TODO {todoAchievement}%</span>}
-                {hwEval !== null && <span className="text-blue-400">HW Lvl {hwEval}</span>}
+
               </div>
               <div className="w-full max-w-[28px] bg-white/5 rounded-t-[2px] relative flex items-end h-[140px] overflow-hidden group-hover:bg-white/10 transition-colors">
                 <motion.div 

@@ -129,26 +129,18 @@ export default function LearningDashboard({
   };
 
   const getScoreTheme = (score: number | null) => {
-    if (score === null || score >= 8) return {
+    return {
       bg: 'bg-blue-600', border: 'border-blue-400', text: 'text-blue-500',
       textLight: 'text-blue-200', textQuote: 'text-blue-400', borderL: 'border-l-blue-500',
       lightBg: 'bg-blue-600/5', shadow: 'shadow-blue-900/10', hoverBorder: 'hover:border-blue-500/50'
     };
-    if (score <= 3) return {
-      bg: 'bg-rose-600', border: 'border-rose-400', text: 'text-rose-500',
-      textLight: 'text-rose-200', textQuote: 'text-rose-400', borderL: 'border-l-rose-500',
-      lightBg: 'bg-rose-600/5', shadow: 'shadow-rose-900/10', hoverBorder: 'hover:border-rose-500/50'
-    };
-    if (score <= 5) return {
-      bg: 'bg-orange-500', border: 'border-orange-400', text: 'text-orange-500',
-      textLight: 'text-orange-200', textQuote: 'text-orange-400', borderL: 'border-l-orange-500',
-      lightBg: 'bg-orange-500/5', shadow: 'shadow-orange-900/10', hoverBorder: 'hover:border-orange-500/50'
-    };
-    return { // 6-7
-      bg: 'bg-emerald-500', border: 'border-emerald-400', text: 'text-emerald-500',
-      textLight: 'text-emerald-200', textQuote: 'text-emerald-400', borderL: 'border-l-emerald-500',
-      lightBg: 'bg-emerald-500/5', shadow: 'shadow-emerald-900/10', hoverBorder: 'hover:border-emerald-500/50'
-    };
+  };
+
+  const getButtonTheme = (score: number | null) => {
+    if (score === null || score >= 8) return { bg: 'bg-blue-600', border: 'border-blue-400', hoverBorder: 'hover:border-blue-500/50' };
+    if (score <= 3) return { bg: 'bg-rose-600', border: 'border-rose-400', hoverBorder: 'hover:border-rose-500/50' };
+    if (score <= 5) return { bg: 'bg-orange-500', border: 'border-orange-400', hoverBorder: 'hover:border-orange-500/50' };
+    return { bg: 'bg-emerald-500', border: 'border-emerald-400', hoverBorder: 'hover:border-emerald-500/50' };
   };
 
   const scoreTheme = getScoreTheme(currentSelfEval);
@@ -251,20 +243,23 @@ export default function LearningDashboard({
                     </div>
                   </div>
                   <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
-                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => (
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => {
+                      const btnTheme = getButtonTheme(currentSelfEval);
+                      return (
                       <button 
                         key={num} 
                         disabled={approvalStatus !== 'none'}
                         onClick={() => approvalStatus === 'none' && handleSelfEval(num)} 
                         className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
                           (currentSelfEval !== null && num <= currentSelfEval) 
-                            ? `${scoreTheme.bg} ${scoreTheme.border} text-white shadow-lg` 
-                            : `bg-white/10 border-white/20 text-white ${scoreTheme.hoverBorder}`
+                            ? `${btnTheme.bg} ${btnTheme.border} text-white shadow-lg` 
+                            : `bg-white/10 border-white/20 text-white ${btnTheme.hoverBorder}`
                         } ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
                         {currentSelfEval === null ? num : (num === currentSelfEval ? num : '')}
                       </button>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
                 <div className="p-3 md:p-6">

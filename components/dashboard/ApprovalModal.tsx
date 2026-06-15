@@ -106,13 +106,6 @@ export default function ApprovalModal({
                         <span className="text-gray-400 font-bold">오늘 달성률</span>
                         <p className="text-white font-black mt-0.5">{s.todaySession?.todo_achievement || 0}%</p>
                       </div>
-                      <div>
-                        <span className="text-gray-400 font-bold">숙제이행 평가</span>
-                        <p className="text-amber-400 font-black mt-0.5">
-                          {s.todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/)?.[1] ? 
-                            `${s.todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/)?.[1]}단계` : '미입력'}
-                        </p>
-                      </div>
                       <div className="flex-1 min-w-[150px]">
                         <span className="text-gray-400 font-bold">테스트 결과</span>
                         {s.todaySession?.test_id ? (

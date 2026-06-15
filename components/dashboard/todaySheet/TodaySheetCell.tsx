@@ -58,7 +58,7 @@ interface TodaySheetCellProps {
   onTestScoreTypeToggle: () => void;
   onFeedbackToggle: () => void;
   isFeedbackOpen: boolean;
-  onSelectFeedback: (status: StudentStatus) => void;
+  onSelectFeedback: (level: 'perfect' | 'good' | 'neutral' | 'poor' | 'bad' | 'none') => void;
   onCloseFeedback: () => void;
   
   // Modal Triggers
@@ -97,13 +97,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   
   const colId = col.id;
 
-  // 💡 42px 높이 고정을 위한 정밀 수학적 계산 (Line-height: 18px 기준)
-  const getDynamicPadding = (text: string) => {
-    const lineCount = (text?.match(/\n/g) || []).length + 1;
-    if (lineCount <= 1) return 'pt-[12px] pb-[12px]'; // 18 + 24 = 42px
-    if (lineCount === 2) return 'pt-[3px] pb-[3px]';  // 36 + 6 = 42px
-    return 'pt-[1px] pb-[1px]';                       // 3줄 이상 확장
-  };
+  // 💡 여백 최소화: 무조건 상하 2px (최대 밀집도)
+  const getDynamicPadding = () => 'pt-[2px] pb-[2px] px-1.5';
 
   const currentText = colId === 'test_id' ? formData.test_id :
                     colId === 'classwork' ? formData.classwork_text :
@@ -213,8 +208,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
-  const textColClass = colId === 'mission' ? 'text-amber-200/90 font-bold' : 'text-white font-black';
-  const commonTextStyle = `w-full text-[12px] leading-[18px] text-left ${textColClass} px-4 ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
+  const textColClass = colId === 'mission' ? 'text-amber-200/90 font-bold' : 'text-white font-extrabold';
+  const commonTextStyle = `w-full text-[12px] leading-[14px] text-left ${textColClass} ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
 
   return (
     <td 
@@ -231,7 +226,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
       onKeyDown={(e) => handleKeyDown(e, colId)}
     >
-      {!isEditing && !['select', 'action', 'attendance', 'name'].includes(colId) && (
+      {!isEditing && !['select', 'action', 'attendance', 'name', 'review'].includes(colId) && (
         <div className="absolute inset-0 z-20 cursor-default" />
       )}
 
@@ -259,10 +254,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           }
         />
       ) : (
-        <div className={`flex items-start min-h-[42px] h-full w-full ${['select', 'action', 'date'].includes(colId) ? 'justify-center' : 'justify-start'}`}>
+        <div className={`flex items-start min-h-[22px] h-full w-full ${['select', 'action', 'date'].includes(colId) ? 'justify-center' : 'justify-start'}`}>
         
         {colId === 'select' && (
-          <div className="flex items-center justify-center w-full h-[42px] relative z-30 group/select select-none">
+          <div className="flex items-center justify-center w-full min-h-[22px] py-1 relative z-30 group/select select-none">
             {isSelected ? (
               <div className="flex items-center justify-center">
                 <input 
@@ -294,14 +289,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'date' && (
-          <div className="flex flex-col gap-0.5 items-center justify-center py-1.5 w-full h-[42px]">
+          <div className="flex flex-col gap-0.5 items-center justify-center py-1 w-full min-h-[22px]">
             <span className="font-black text-gray-500 text-[10px] tabular-nums">{displayDateShort}</span>
             <button onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }} className={`w-6 h-6 rounded-[2px] flex items-center justify-center transition-all ${isHistoryExpanded ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 text-gray-500 hover:bg-white/10'}`}><HistoryIcon size={12} /></button>
           </div>
         )}
 
         {colId === 'name' && (
-          <div className="flex items-center justify-between gap-3 px-4 py-1.5 w-full h-[42px] relative group/namecell">
+          <div className="flex items-center justify-between gap-2 px-1.5 py-1 w-full min-h-[22px] relative group/namecell">
             {isFirstInTimeSection && timeSectionLabel && (
               <div className="absolute -top-[4px] right-4 z-[45] pointer-events-none select-none">
                 <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-black text-white tracking-widest uppercase shadow-[0_2px_8px_rgba(37,99,235,0.4)] border border-blue-400/40">
@@ -392,7 +387,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             </div>
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[13px] font-black text-white truncate group-hover/namecell:text-blue-400 transition-colors">
+                <span className="text-[13px] font-extrabold text-white truncate group-hover/namecell:text-blue-400 transition-colors">
                   {student.name}-{student.teacher_initial || '?'}-{student.class_days 
                     ? [...student.class_days].sort((a, b) => {
                         const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
@@ -400,18 +395,31 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       }).join('')
                     : '무'}
                 </span>
-                {/* 💡 학생 포털 바로가기 아이콘 추가 */}
                 <button 
                   onClick={(e) => {
                     e.stopPropagation();
                     const slug = window.location.pathname.split('/')[1];
                     window.open(`/${slug}/student?id=${student.id}`, '_blank');
                   }}
-                  className="opacity-0 group-hover/namecell:opacity-100 transition-opacity p-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-[2px] shrink-0"
+                  className="p-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-[2px] shrink-0"
                   title="학생 페이지 보기"
                 >
                   <ExternalLink size={10} strokeWidth={3} />
                 </button>
+                {['pending', 'approved'].includes(student.todaySession?.approval_status || '') && (
+                  <button 
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm("이 학생의 제출 상태를 초기화하시겠습니까? (학생이 다시 내용을 수정하고 제출할 수 있습니다.)")) {
+                        onSave({ approval_status: 'none' });
+                      }
+                    }}
+                    className="p-1 bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-[2px] shrink-0"
+                    title="학생 제출 리셋 (다시 수정 가능하게 하기)"
+                  >
+                    <HistoryIcon size={10} strokeWidth={3} />
+                  </button>
+                )}
               </div>
               <div className="flex items-center gap-1 text-[9px] font-bold uppercase tracking-tighter truncate text-gray-500">
                 {student.school} · {student.grade}
@@ -442,8 +450,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'review' && (
-          <div className="relative w-full h-full flex flex-col items-start justify-center bg-blue-600/[0.03] py-2 px-3 gap-1">
-            <div className="flex-1 w-full flex flex-col justify-center text-left">
+          <div className="relative w-full h-full flex items-start justify-between bg-blue-600/[0.03] py-1 px-2 gap-2">
+            <div className="flex-1 text-left min-w-0">
               {student.lastSession?.homework_text ? (
                 <p className="text-[12px] font-bold text-blue-200 leading-tight italic whitespace-pre-wrap">
                   <span className="text-blue-500/80 text-[16px] font-black mr-1">"</span>
@@ -454,55 +462,64 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 <span className="italic opacity-30 text-gray-500 font-medium text-[11px] px-2">기존 숙제 없음</span>
               )}
             </div>
-            {student.lastSession?.homework_text && (() => {
-              const attStatus = student.todaySession?.attendance_status || '';
-              const isPresent = ['출석', '지각'].some(st => attStatus.startsWith(st));
-              const isSupplement = attStatus.startsWith('보강');
-              const hasAttendance = isPresent || isSupplement || attStatus !== '';
-              const isRegularClass = student.todaySession?.isTodayClassDay === true;
+            <div className="flex items-center gap-1 shrink-0">
+              {student.lastSession?.homework_text && (() => {
+                const attStatus = student.todaySession?.attendance_status || '';
+                const isPresent = ['출석', '지각'].some(st => attStatus.startsWith(st));
+                const isSupplement = attStatus.startsWith('보강');
+                const hasAttendance = isPresent || isSupplement || attStatus !== '';
+                if (!hasAttendance) return null;
 
-              if (!hasAttendance) return null;
+                const isRegularClass = student.isTodayClassDay === true;
 
-              if (isPresent && isRegularClass) {
-                // 정규 출석 시 기본적으로 자동 검사(break)되므로, 패스(pass) 버튼 제공
-                const isPassed = student.todaySession?.hw_passed_today === true;
-                return (
-                  <button
-                    type="button"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      onSave({ hw_passed_today: !isPassed });
-                    }}
-                    className={`relative z-30 self-end mt-0.5 px-2 py-0.5 rounded text-[9.5px] font-black tracking-tighter border transition-colors ${
-                      isPassed
-                        ? 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
-                        : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40'
-                    }`}
-                  >
-                    {isPassed ? '⏭️ 패스됨 (취소)' : '✅ 자동검사 (패스)'}
-                  </button>
-                );
-              } else {
-                // 보강 등 그 외 상태일 때 기본적으로 패스(continue)되므로, 강제 검사(check) 버튼 제공
-                const isChecked = student.todaySession?.hw_checked_today === true;
-                return (
-                  <button
-                    type="button"
-                    onClick={(e) => { 
-                      e.stopPropagation(); 
-                      onSave({ hw_checked_today: !isChecked });
-                    }}
-                    className={`relative z-30 self-end mt-0.5 px-2 py-0.5 rounded text-[9.5px] font-black tracking-tighter border transition-colors ${
-                      isChecked
-                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
-                        : 'bg-gray-800 text-gray-400 border-gray-600 hover:bg-gray-700 hover:text-gray-200'
-                    }`}
-                  >
-                    {isChecked ? '✅ 오늘검사 (취소)' : '🔳 오늘검사'}
-                  </button>
-                );
-              }
-            })()}
+                if (isRegularClass && !isSupplement) {
+                  return null;
+                } else {
+                  const isChecked = student.todaySession?.hw_checked_today === true;
+                  return (
+                    <button
+                      type="button"
+                      onClick={(e) => { 
+                        e.stopPropagation(); 
+                        onSave({ hw_checked_today: !isChecked });
+                      }}
+                      className={`relative z-30 shrink-0 px-2 py-0.5 rounded text-[9.5px] font-black tracking-tighter border transition-colors ${
+                        isChecked
+                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
+                          : 'bg-gray-800 text-gray-400 border-gray-600 hover:bg-gray-700 hover:text-gray-200'
+                      }`}
+                    >
+                      {isChecked ? '✅ 오늘검사' : '🔳 검사하기'}
+                    </button>
+                  );
+                }
+              })()}
+
+              <div className="relative z-30">
+                <button 
+                  onClick={(e) => { e.stopPropagation(); onFeedbackToggle(); }} 
+                  className={`w-5 h-5 rounded-[3px] flex items-center justify-center transition-all border ${
+                    isFeedbackOpen 
+                      ? 'bg-indigo-500/30 text-indigo-200 border-indigo-500/50' 
+                      : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/30 hover:text-white hover:border-indigo-500/50'
+                  }`}
+                  title="특이사항에 과제 피드백 추가"
+                >
+                  <MessageSquare size={12} />
+                </button>
+                <AnimatePresence>
+                  {isFeedbackOpen && (
+                    <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }}
+                      className="absolute right-full top-0 mr-2 flex gap-1 bg-[#1a1a1a] p-1 rounded-md border border-white/10 shadow-2xl z-[100]">
+                      {(['perfect', 'good', 'neutral', 'poor', 'bad', 'none'] as const).map((k) => (
+                        <button key={k} onClick={(e) => { e.stopPropagation(); onSelectFeedback(k); }} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-black transition-all hover:scale-110 ${statusMap[k as keyof typeof statusMap].color} shadow-md`}>{statusMap[k as keyof typeof statusMap].label}</button>
+                      ))}
+                      <button onClick={(e) => { e.stopPropagation(); onCloseFeedback(); }} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-white"><X size={14} /></button>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+            </div>
           </div>
         )}
 
@@ -549,7 +566,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             
             {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 */}
             {!isEditing && !isActive && (
-              <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[42px] flex flex-col items-start justify-start`}>
+              <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start`}>
                 <div className="w-full">{currentText || '-'}</div>
                 {colId === 'test_id' && formData.test_cut > 0 && (
                   <div className="mt-1 inline-flex items-center gap-1 px-1.5 py-0.5 bg-emerald-500/10 border border-emerald-500/20 rounded text-[9px] font-black text-emerald-500 uppercase tracking-tighter">

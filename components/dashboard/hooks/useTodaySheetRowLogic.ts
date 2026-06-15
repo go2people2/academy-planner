@@ -248,17 +248,33 @@ export function useTodaySheetRowLogic({
     setIsSupplementTimePickerOpen(false);
   };
 
-  const selectFeedback = (status: StudentStatus) => {
+  const selectFeedback = (level: 'perfect' | 'good' | 'neutral' | 'poor' | 'bad' | 'none') => {
     const presets = currentUser?.homework_presets || { 'perfect': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*', 'good': '숙제를 잘 수행했습니다.', 'neutral': '숙제 수행이 보통입니다.', 'poor': '숙제가 미흡한 부분이 있습니다.', 'bad': '숙제를 거의 해오지 않았습니다.' };
     let currentNotes = formData.special_notes || '';
-    const newComment = presets[status] || '';
+    const newComment = presets[level] || '';
+    
+    if (level === 'none') {
+      let updatedNotes = currentNotes;
+      Object.values(presets).forEach(p => { 
+        if (p && updatedNotes.includes(String(p))) updatedNotes = updatedNotes.replace(String(p), '').trim(); 
+      });
+      setFormData((prev: any) => ({ ...prev, special_notes: updatedNotes }));
+      if (notesRef.current) notesRef.current.value = updatedNotes;
+      handleSave({ special_notes: updatedNotes });
+      setIsFeedbackOpen(false);
+      return;
+    }
+
     let updatedNotes = currentNotes;
-    Object.values(presets).forEach(p => { if (p && currentNotes.includes(String(p))) updatedNotes = currentNotes.replace(String(p), newComment).trim(); });
+    Object.values(presets).forEach(p => { 
+      if (p && updatedNotes.includes(String(p))) updatedNotes = updatedNotes.replace(String(p), newComment).trim(); 
+    });
+    
     if (updatedNotes === currentNotes) updatedNotes = currentNotes ? `${currentNotes}\n${newComment}`.trim() : newComment;
     
-    setFormData((prev: any) => ({ ...prev, status, special_notes: updatedNotes }));
+    setFormData((prev: any) => ({ ...prev, special_notes: updatedNotes }));
     if (notesRef.current) notesRef.current.value = updatedNotes;
-    handleSave({ status, special_notes: updatedNotes });
+    handleSave({ special_notes: updatedNotes });
     setIsFeedbackOpen(false);
   };
 

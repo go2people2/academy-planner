@@ -82,7 +82,6 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     isFeedbackOpen, setIsFeedbackOpen, isSupplementTimePickerOpen, setIsSupplementTimePickerOpen,
     isSaving, saveStatus, formData, rowDate
   } = states;
-
   const {
     handleSave, handleAttendanceToggle, handleSupplementTimeSelect, selectFeedback, syncTextFromData
   } = handlers;
@@ -136,7 +135,14 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               isSaving={isSaving}
               isHistoryExpanded={isHistoryExpanded}
               displayDateShort={rowDate.slice(5).replace('-', '.')}
-              statusMap={{ perfect: '완벽', good: '우수', neutral: '보통', poor: '미흡', bad: '경고', none: '미정' }}
+              statusMap={{
+                'none': { label: '↺', color: 'bg-gray-800 text-gray-300 hover:bg-gray-700' },
+                'perfect': { label: 'S', color: 'bg-emerald-500 text-white' },
+                'good': { label: 'A', color: 'bg-blue-500 text-white' },
+                'neutral': { label: 'B', color: 'bg-white/20 text-gray-400' },
+                'poor': { label: 'C', color: 'bg-amber-500 text-white' },
+                'bad': { label: 'F', color: 'bg-red-500 text-white' }
+              }}
               {...refs}
               tdRef={el => { refs.tdRefs.current[col.id] = el; }}
               onSelectOne={onSelectOne}

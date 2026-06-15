@@ -63,10 +63,11 @@ export default function StudentPortal() {
 
     if (!studentSchool) return null;
 
-    // 1. 현재 학기(period) 필터링
+    // 1. 현재 학기(period) 필터링 및 과거 시험 제외 (다가오는 시험만)
+    const upcomingSchedules = examSchedules.filter(ex => ex.target_date >= selectedDate);
     const currentPeriodSchedules = currentPeriod 
-      ? examSchedules.filter(ex => ex.exam_name === currentPeriod)
-      : examSchedules; // 설정이 없으면 전체에서 검색 (하위 호환성)
+      ? upcomingSchedules.filter(ex => ex.exam_name === currentPeriod)
+      : upcomingSchedules; // 설정이 없으면 전체에서 검색 (하위 호환성)
 
     // 2. 학교명 + 학년 완벽 일치
     const exactMatch = currentPeriodSchedules.find(ex => 
@@ -82,12 +83,22 @@ export default function StudentPortal() {
     );
     
     return schoolMatch || null;
-  }, [student, examSchedules, academy?.operation_settings?.current_exam_period]);
+  }, [student, examSchedules, academy?.operation_settings?.current_exam_period, selectedDate]);
 
   const currentSelfEval = useMemo(() => {
     const match = todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/);
-    return match ? parseInt(match[1]) : null;
-  }, [todaySession?.special_notes]);
+    if (match) return parseInt(match[1]);
+
+    const studentTeacher = teachers?.find(t => t.id === student?.teacher_id);
+    const presets = studentTeacher?.homework_presets || { 'perfect': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*', 'good': '숙제를 잘 수행했습니다.', 'neutral': '숙제 수행이 보통입니다.', 'poor': '숙제가 미흡한 부분이 있습니다.', 'bad': '숙제를 거의 해오지 않았습니다.' };
+    const notes = todaySession?.special_notes || '';
+    if (presets.perfect && notes.includes(presets.perfect)) return 10;
+    if (presets.good && notes.includes(presets.good)) return 8;
+    if (presets.neutral && notes.includes(presets.neutral)) return 6;
+    if (presets.poor && notes.includes(presets.poor)) return 4;
+    if (presets.bad && notes.includes(presets.bad)) return 2;
+    return null;
+  }, [todaySession?.special_notes, teachers, student?.teacher_id]);
 
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;

@@ -55,7 +55,7 @@ export const SimpleTextCell = React.forwardRef<HTMLTextAreaElement, SimpleTextCe
         <div 
           onClick={(e) => handleCellInteraction(e, colId, 'click')}
           onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
-          className={`${commonTextStyle} whitespace-pre-wrap min-h-[56px] flex flex-col items-start justify-start cursor-text`}
+          className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start cursor-text`}
         >
           <div className="w-full">{currentText || '-'}</div>
         </div>

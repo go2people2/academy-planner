@@ -7,9 +7,10 @@ interface LearningHistoryListProps {
   allLogs: any[];
   isHistoryOpen: boolean;
   setIsHistoryOpen: (open: boolean) => void;
+  teacherPresets?: any;
 }
 
-export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHistoryOpen }: LearningHistoryListProps) {
+export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHistoryOpen, teacherPresets }: LearningHistoryListProps) {
   return (
     <div className="space-y-6">
       <button 
@@ -43,8 +44,18 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                   let todoAchievement = 0;
                   try { if (log.test_result?.startsWith('{')) todoAchievement = JSON.parse(log.test_result).todo_achievement || 0; } catch (e) {}
                   
-                  const hwEvalMatch = log.special_notes ? log.special_notes.match(/\[숙제이행:\s*(\d+)단계\]/) : null;
-                  const hwEval = hwEvalMatch ? parseInt(hwEvalMatch[1]) : null;
+                  let hwEval: number | null = null;
+                  const notes = log.special_notes || '';
+                  const match = notes.match(/\[숙제이행: (\d+)단계\]/);
+                  if (match) {
+                    hwEval = parseInt(match[1]);
+                  } else if (teacherPresets) {
+                    if (teacherPresets.perfect && notes.includes(teacherPresets.perfect)) hwEval = 10;
+                    else if (teacherPresets.good && notes.includes(teacherPresets.good)) hwEval = 8;
+                    else if (teacherPresets.neutral && notes.includes(teacherPresets.neutral)) hwEval = 6;
+                    else if (teacherPresets.poor && notes.includes(teacherPresets.poor)) hwEval = 4;
+                    else if (teacherPresets.bad && notes.includes(teacherPresets.bad)) hwEval = 2;
+                  }
 
                   return (
                     <div key={i} className="flex gap-5 items-start">
@@ -71,7 +82,14 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                 <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 tabular-nums">To-Do {todoAchievement}%</span>
                               )}
                               {hwEval !== null && (
-                                <span className="text-[9px] font-black text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded border border-blue-500/20 tabular-nums">HW Lvl {hwEval}</span>
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border tabular-nums ${
+                                  hwEval >= 8 ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' :
+                                  hwEval >= 6 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' :
+                                  hwEval >= 4 ? 'text-orange-400 bg-orange-500/10 border-orange-500/20' :
+                                  'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                                }`}>
+                                  HW Lvl {hwEval}
+                                </span>
                               )}
                               {log.test_score !== null && log.test_score !== undefined && (
                                 <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 tabular-nums">SCORE {log.test_score}%</span>
