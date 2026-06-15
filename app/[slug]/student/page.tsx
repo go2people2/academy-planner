@@ -97,6 +97,12 @@ export default function StudentPortal() {
   }, [student, examSchedules, academy?.operation_settings?.current_exam_period, selectedDate]);
 
   const currentSelfEval = useMemo(() => {
+    try {
+      if (todaySession?.test_result?.startsWith('{')) {
+        const res = JSON.parse(todaySession.test_result);
+        if (res.hw_eval !== undefined && res.hw_eval !== null) return res.hw_eval;
+      }
+    } catch (e) {}
     const match = todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/);
     if (match) return parseInt(match[1]);
 
@@ -109,7 +115,7 @@ export default function StudentPortal() {
     if (presets.poor && notes.includes(presets.poor)) return 4;
     if (presets.bad && notes.includes(presets.bad)) return 2;
     return null;
-  }, [todaySession?.special_notes, teachers, student?.teacher_id]);
+  }, [todaySession?.special_notes, todaySession?.test_result, teachers, student?.teacher_id]);
 
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;
@@ -472,12 +478,44 @@ export default function StudentPortal() {
   };
 
   const handleSelfEval = async (level: number) => {
-    if (!student) return;
+    if (!student || !academy) return;
     const isToggleOff = currentSelfEval === level; 
-    const evalText = `[숙제이행: ${level}단계]`;
-    let currentNotes = todaySession?.special_notes || '';
-    let newNotes = isToggleOff ? currentNotes.replace(/\[숙제이행: \d+단계\]/, '').trim() : currentNotes.includes('[숙제이행:') ? currentNotes.replace(/\[숙제이행: \d+단계\]/, evalText) : (currentNotes ? `${evalText} ${currentNotes}` : evalText);
-    await handleManualSave('special_notes', newNotes);
+    let currentResult: any = {};
+    try { if (todaySession?.test_result?.startsWith('{')) currentResult = JSON.parse(todaySession.test_result); } catch (e) {}
+    
+    if (isToggleOff) {
+      delete currentResult.hw_eval;
+    } else {
+      currentResult.hw_eval = level;
+    }
+    
+    setIsSaving(true);
+    try {
+      const updateData: any = { 
+        student_id: student.id, 
+        session_date: selectedDate, 
+        academy_id: academy.id, 
+        test_result: JSON.stringify(currentResult) 
+      };
+      if (todaySession?.id && todaySession.id !== 'temp') { 
+        await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); 
+      } else { 
+        await supabase.from('ams_session_logs').insert([updateData]); 
+      }
+      setTodaySession((prev: any) => ({ ...prev, test_result: JSON.stringify(currentResult) }));
+      
+      // 특이사항에 남아있는 예전 "[숙제이행: X단계]" 텍스트가 있다면 지워줍니다 (마이그레이션 효과)
+      const currentNotes = todaySession?.special_notes || '';
+      if (currentNotes.includes('[숙제이행:')) {
+        const cleanNotes = currentNotes.replace(/\n?\[숙제이행: \d+단계\]/g, '').trim();
+        await handleManualSave('special_notes', cleanNotes);
+        setTodaySession((prev: any) => ({ ...prev, special_notes: cleanNotes }));
+      }
+    } catch (e) { 
+      console.error(e); 
+    } finally { 
+      setIsSaving(false); 
+    }
   };
 
   const handleTestSubmit = async (result: any) => {

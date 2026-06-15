@@ -48,11 +48,19 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                   try { if (log.homework_to?.startsWith('{')) assignedHomework = JSON.parse(log.homework_to).text || assignedHomework; } catch (e) {}
                   
                   let hwEval: number | null = null;
-                  const notes = log.special_notes || '';
-                  const match = notes.match(/\[숙제이행: (\d+)단계\]/);
-                  if (match) {
-                    hwEval = parseInt(match[1]);
-                  } else if (teacherPresets) {
+                  try { 
+                    if (log.test_result?.startsWith('{')) {
+                      const res = JSON.parse(log.test_result);
+                      if (res.hw_eval !== undefined && res.hw_eval !== null) hwEval = res.hw_eval;
+                    } 
+                  } catch (e) {}
+
+                  if (hwEval === null) {
+                    const notes = log.special_notes || '';
+                    const match = notes.match(/\[숙제이행: (\d+)단계\]/);
+                    if (match) {
+                      hwEval = parseInt(match[1]);
+                    } else if (teacherPresets) {
                     if (teacherPresets.perfect && notes.includes(teacherPresets.perfect)) hwEval = 10;
                     else if (teacherPresets.good && notes.includes(teacherPresets.good)) hwEval = 8;
                     else if (teacherPresets.neutral && notes.includes(teacherPresets.neutral)) hwEval = 6;
