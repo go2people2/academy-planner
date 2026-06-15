@@ -185,7 +185,6 @@ export default function HomeworkEditor({
             </div>
             <div>
               <h4 className="font-black text-[12px] uppercase tracking-[0.2em] text-white">{title}</h4>
-              <p className="text-[9px] text-blue-400/60 font-bold uppercase tracking-wider mt-0.5">단원 자동 매칭 활성화</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
