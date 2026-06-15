@@ -34,7 +34,7 @@ export const ScoreCell = React.memo(function ScoreCell({
 
   if (parsedTests) {
     return (
-      <div className="relative w-full min-h-[22px] flex flex-wrap items-center gap-1 group/score py-1 px-1">
+      <div className="relative w-full min-h-[22px] flex flex-col items-start gap-1 group/score py-1 px-1">
         {parsedTests.map((t, idx) => {
           const isPending = t.numericScore === null;
           const scoreText = isPending 
