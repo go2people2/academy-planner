@@ -20,17 +20,17 @@ export default function AcademyProfile({
       <div className="max-w-2xl bg-white/5 border border-white/5 rounded-[4px] p-8 space-y-6">
         <div className="flex items-center gap-3 mb-4">
           <Shield className="text-blue-500" size={20} />
-          <h3 className="text-sm font-black text-white uppercase tracking-widest">Academy Profile</h3>
+          <h3 className="text-sm font-black text-white uppercase tracking-widest">학원 기본 설정</h3>
         </div>
         
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Academy Name (학원명)</label>
+            <label className="text-[10px] font-black text-blue-200 tracking-widest ml-1">학원명</label>
             <div className="px-4 py-2 bg-black/40 border border-white/10 rounded-[2px] text-sm font-black text-white">{academyInfo?.academy_name}</div>
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Consultation Cycle (상담주기)</label>
+            <label className="text-[10px] font-black text-blue-200 tracking-widest ml-1">상담 주기</label>
             <div className="relative">
               <input type="number" defaultValue={academyInfo?.consultation_cycle || 21}
                 onBlur={async (e) => {
@@ -44,7 +44,7 @@ export default function AcademyProfile({
           </div>
 
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Master Passkey (마스터 패스키)</label>
+            <label className="text-[10px] font-black text-blue-200 tracking-widest ml-1">마스터 패스키</label>
             <div className="relative group">
               <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600 group-focus-within:text-amber-400 transition-colors" />
               <input 
@@ -62,19 +62,19 @@ export default function AcademyProfile({
                 className="w-full bg-black/40 border border-white/10 rounded-[2px] pl-9 pr-3 py-2 text-sm font-black text-amber-400 outline-none focus:border-amber-500 transition-all" 
               />
             </div>
-            <p className="text-[8px] text-gray-600 italic ml-1 mt-1">* 모든 학생 페이지 접속용</p>
+            <p className="text-[9px] text-blue-200/70 italic ml-1 mt-1">* 모든 학생 페이지 접속용</p>
           </div>
         </div>
 
         <div className="pt-6 border-t border-white/5 space-y-6">
           <div className="flex items-center gap-3">
             <Clock className="text-amber-500" size={20} />
-            <h3 className="text-sm font-black text-white uppercase tracking-widest">Live Mode & Policy</h3>
+            <h3 className="text-sm font-black text-white tracking-widest">수업 및 지각 설정</h3>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">1교시 시작 시각</label>
+              <label className="text-[10px] font-black text-blue-200 tracking-widest ml-1">1교시 시작 시각</label>
               <input 
                 type="time"
                 value={opSettings.first_period_time || ""}
@@ -85,7 +85,7 @@ export default function AcademyProfile({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">지각 기준 (분)</label>
+              <label className="text-[10px] font-black text-blue-200 tracking-widest ml-1">지각 기준 (분)</label>
               <div className="relative">
                 <input 
                   type="number" 
@@ -99,7 +99,7 @@ export default function AcademyProfile({
             </div>
 
             <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest ml-1">연락 알림 (분)</label>
+              <label className="text-[10px] font-black text-blue-200 tracking-widest ml-1">연락 알림 (분)</label>
               <div className="relative">
                 <input 
                   type="number" 
@@ -114,13 +114,13 @@ export default function AcademyProfile({
           </div>
 
           <div className="pt-6 border-t border-white/5">
-            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-              <Clock size={12} className="text-indigo-500" /> Timer Presets Configuration
+            <h4 className="text-[11px] font-black text-white tracking-widest mb-4 flex items-center gap-2">
+              <Clock size={12} className="text-indigo-500" /> 타이머 프리셋 설정
             </h4>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {[0, 1, 2].map((idx) => (
                 <div key={idx} className="space-y-1">
-                  <label className="text-[8px] font-black text-gray-600 uppercase tracking-widest ml-1">Preset {idx + 1} (분)</label>
+                  <label className="text-[10px] font-black text-blue-200 tracking-widest ml-1">프리셋 {idx + 1} (분)</label>
                   <input 
                     type="number" 
                     value={opSettings.timer_presets[idx] || 0}
@@ -138,11 +138,11 @@ export default function AcademyProfile({
           </div>
 
           <div className="pt-6 border-t border-white/5">
-            <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] mb-4 flex items-center gap-2">
-              <Shield size={12} className="text-emerald-500" /> Test Presets Configuration (오늘/다음 테스트 양식)
+            <h4 className="text-[11px] font-black text-white tracking-widest mb-4 flex items-center gap-2">
+              <Shield size={12} className="text-emerald-500" /> 테스트 양식 프리셋
             </h4>
             <div className="space-y-3">
-              <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_auto] gap-2 px-2 text-[8px] font-black text-gray-500 uppercase tracking-widest">
+              <div className="hidden md:grid grid-cols-[2fr_1.5fr_1fr_1fr_auto] gap-2 px-2 text-[10px] font-black text-blue-200 tracking-widest">
                 <span>시험 이름</span>
                 <span>평가 타입</span>
                 <span>만점 기준</span>
