@@ -113,6 +113,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               snippetTrigger={snippetTrigger}
               isFirstInTimeSection={isFirstInTimeSection}
               timeSectionLabel={timeSectionLabel}
+              testPresets={academyInfo?.operation_settings?.test_presets || []}
               styles={{
                 width: isLastDataCol ? 'auto' : (colWidths[col.id] || col.minWidth),
                 minWidth: colWidths[col.id] || col.minWidth,
@@ -149,6 +150,27 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               onToggleHistory={onToggleHistory}
               onViewProgress={onViewProgress}
               onViewDetail={onSelectStudent}
+              onApplyTestPreset={(preset: any, cid: 'test_id' | 'next_quiz') => {
+                const updates: any = {};
+                if (cid === 'test_id') {
+                  updates.test_id = preset.name;
+                  updates.test_cut = preset.default_cut || 0;
+                  updates.test_score_type = preset.type;
+                  if (preset.type === 'count') {
+                    updates.test_total_count = preset.max || 0;
+                  }
+                } else if (cid === 'next_quiz') {
+                  updates.next_quiz_text = preset.name;
+                  updates.next_quiz_cut = preset.default_cut || 0;
+                }
+                states.setFormData((prev: any) => ({ ...prev, ...updates }));
+                handleSave(updates);
+                
+                onEditingCellChange?.(student.id, null);
+                if (refs.tdRefs.current[cid]) {
+                  refs.tdRefs.current[cid]?.focus();
+                }
+              }}
               handleCellInteraction={(e, cid, type) => { if (type === 'click') onActiveCellChange?.(student.id, cid); else onEditingCellChange?.(student.id, cid); }}
               handleKeyDown={(e, cid) => { if (e.key === 'Escape') { onEditingCellChange?.(student.id, null); refs.tdRefs.current[cid]?.focus(); } }}
               onCellMouseDown={onCellMouseDown || (() => {})}

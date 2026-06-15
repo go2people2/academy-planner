@@ -31,6 +31,7 @@ interface TodaySheetCellProps {
   snippetTrigger?: string;
   isFirstInTimeSection?: boolean;
   timeSectionLabel?: string;
+  testPresets?: any[];
   
   // Refs
   testRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -76,6 +77,7 @@ interface TodaySheetCellProps {
   onSave: (data?: any, directValue?: any) => void;
   onInputChange?: (field: string, value: string) => void;
   rowIndex?: number;
+  onApplyTestPreset?: (preset: any, colId: 'test_id' | 'next_quiz') => void;
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
@@ -92,7 +94,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   snippets,
   snippetTrigger,
   isFirstInTimeSection,
-  timeSectionLabel
+  timeSectionLabel,
+  testPresets,
+  onApplyTestPreset
 }: TodaySheetCellProps) {
   
   const colId = col.id;
@@ -544,6 +548,25 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {(['test_id', 'classwork', 'completed_classwork', 'assign', 'next_quiz'].includes(colId)) && (
           <div className="relative w-full h-full flex items-start justify-start group/cell">
+            {/* 💡 테스트 템플릿(프리셋) 자동완성 버튼 바 */}
+            {isEditing && (colId === 'test_id' || colId === 'next_quiz') && testPresets && testPresets.length > 0 && (
+              <div className="absolute -top-[28px] left-0 flex gap-1 z-50">
+                {testPresets.map((preset: any, idx: number) => (
+                  <button 
+                    key={idx}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // blur 방지
+                      e.stopPropagation();
+                      onApplyTestPreset?.(preset, colId as 'test_id' | 'next_quiz');
+                    }}
+                    className="px-2 py-1 bg-[#1a1a1e] border border-white/20 rounded-[2px] shadow-lg text-[10px] font-black text-white whitespace-nowrap hover:bg-emerald-600 hover:border-emerald-500 transition-colors"
+                  >
+                    {preset.name} <span className="opacity-50 font-normal ml-0.5">{preset.type === 'count' ? `(개수)` : `(백분율)`}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+            
             {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
             {(isEditing || isActive) && (
               <textarea 

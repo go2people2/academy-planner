@@ -48,10 +48,14 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                   try { if (log.homework_to?.startsWith('{')) assignedHomework = JSON.parse(log.homework_to).text || assignedHomework; } catch (e) {}
                   
                   let hwEval: number | null = null;
+                  let testType = 'score';
+                  let testTotalCount = 0;
                   try { 
                     if (log.test_result?.startsWith('{')) {
                       const res = JSON.parse(log.test_result);
                       if (res.hw_eval !== undefined && res.hw_eval !== null) hwEval = res.hw_eval;
+                      testType = res.type || 'score';
+                      testTotalCount = res.total_count || 0;
                     } 
                   } catch (e) {}
 
@@ -113,11 +117,16 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                               {(log.test_score !== null && log.test_score !== undefined && log.test_score > 0) && (
                                 <div className="flex items-center gap-2">
                                   <div className="flex gap-[1px] w-[60px]">
-                                    {[...Array(10)].map((_, j) => (
-                                      <div key={j} className={`flex-1 h-[6px] ${j < Math.round(log.test_score / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
-                                    ))}
+                                    {[...Array(10)].map((_, j) => {
+                                      const pct = testType === 'count' && testTotalCount > 0 ? (log.test_score / testTotalCount) * 100 : log.test_score;
+                                      return (
+                                        <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
+                                      );
+                                    })}
                                   </div>
-                                  <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none w-[42px] text-right">테스트 {log.test_score}%</span>
+                                  <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap">
+                                    {testType === 'count' && testTotalCount > 0 ? `테스트 ${log.test_score}/${testTotalCount}` : `테스트 ${log.test_score}점`}
+                                  </span>
                                 </div>
                               )}
                             </div>
