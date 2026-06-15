@@ -292,7 +292,9 @@ export default function StudentPortal() {
             next_quiz_trial: nqText ? nqTrial : autoNextTestTrial, 
             next_quiz_json: nqJson, 
             test_cut: todayLog.test_cut || todayCut || autoTodayTestCut, 
-            todo_achievement: todoAchievement 
+            todo_achievement: todoAchievement,
+            onTodoClick: handleTodoAchievement,
+            onTodoToggle: handleTodoToggle
           });
           
           setTodayPlan(translateBookCodes(todayLog.classwork_text || '')); 
@@ -387,11 +389,56 @@ export default function StudentPortal() {
       const currentVal = todaySession?.todo_achievement || 0;
       const nextVal = currentVal === percentage ? 0 : percentage; 
       const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
-      const newResult = { ...currentResult, todo_achievement: nextVal };
+      const newResult = { ...currentResult, todo_achievement: nextVal, checked_todos: null }; // 퍼센트 수동 클릭 시 개별 상태 초기화
       const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, test_result: JSON.stringify(newResult) };
       if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
       else { await supabase.from('ams_session_logs').insert([updateData]); }
       setTodaySession((prev: any) => ({ ...prev, todo_achievement: nextVal, test_result: JSON.stringify(newResult) }));
+    } catch (e) { console.error(e); } finally { setIsSaving(false); }
+  };
+
+  const handleTodoToggle = async (index: number, totalCount: number) => {
+    if (!student || !academy) return;
+    setIsSaving(true);
+    try {
+      const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
+      
+      // 기존에 배열이 없으면 퍼센트 기반으로 채워진 배열 생성 (연속성 유지)
+      let currentChecked: number[] = [];
+      if (Array.isArray(currentResult.checked_todos)) {
+        currentChecked = [...currentResult.checked_todos];
+      } else {
+        const currentPercentage = todaySession?.todo_achievement || 0;
+        let checkedCount = 0;
+        const opts = [0, 20, 40, 60, 80, 100];
+        for (let j = 1; j < opts.length; j++) {
+          if (currentPercentage >= opts[j]) checkedCount = j;
+        }
+        for (let j = 0; j < checkedCount; j++) currentChecked.push(j);
+      }
+      
+      const pos = currentChecked.indexOf(index);
+      if (pos > -1) {
+        currentChecked.splice(pos, 1);
+      } else {
+        currentChecked.push(index);
+      }
+      
+      // 실제 체크박스 항목(totalCount) 중 몇 개가 체크되었는지에 따라 퍼센트 재계산 (최대 100)
+      const validChecked = currentChecked.filter(idx => idx < totalCount);
+      let newPercentage = totalCount > 0 ? Math.round((validChecked.length / totalCount) * 100) : 0;
+      // 20단위 버튼과 호환되게 가장 가까운 20단위로 맞추거나 정확한 퍼센트 유지
+      // 옵션이 [20, 40, 60, 80, 100]이므로, 실제 퍼센트를 그대로 넘기되,
+      // UI에서는 20, 40, 60에 가장 가까운 버튼을 하이라이트 할 수 있음.
+      // 일단 정확한 퍼센트 저장!
+      
+      const newResult = { ...currentResult, todo_achievement: newPercentage, checked_todos: currentChecked };
+      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, test_result: JSON.stringify(newResult) };
+      
+      if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
+      else { await supabase.from('ams_session_logs').insert([updateData]); }
+      
+      setTodaySession((prev: any) => ({ ...prev, todo_achievement: newPercentage, test_result: JSON.stringify(newResult) }));
     } catch (e) { console.error(e); } finally { setIsSaving(false); }
   };
 

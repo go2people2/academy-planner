@@ -12,6 +12,7 @@ interface LearningDashboardProps {
   currentSelfEval: number | null;
   handleSelfEval: (level: number) => void;
   handleTodoAchievement: (percentage: number) => void;
+  onTodoToggle?: (index: number, totalCount: number) => void;
   todayPlan: string;
   isSlim: boolean;
   setIsSlim: (val: boolean) => void;
@@ -81,6 +82,7 @@ export default function LearningDashboard({
   currentSelfEval,
   handleSelfEval,
   handleTodoAchievement,
+  onTodoToggle,
   todayPlan,
   isSlim,
   setIsSlim,
@@ -329,13 +331,21 @@ export default function LearningDashboard({
                     const cleanTask = task.replace(/^[0-9]+[\.\)]\s*|^[-*#]\s*/, '').trim();
                     const isCheckboxStyle = task !== cleanTask;
                     
-                    let checkedCount = 0;
-                    for (let j = 1; j < achievementOptions.length; j++) {
-                      if ((todaySession?.todo_achievement || 0) >= achievementOptions[j]) {
-                        checkedCount = j;
+                    const testResultObj = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
+                    const checkedTodos = Array.isArray(testResultObj.checked_todos) ? testResultObj.checked_todos : null;
+
+                    let isChecked = false;
+                    if (checkedTodos !== null) {
+                      isChecked = checkedTodos.includes(i);
+                    } else {
+                      let checkedCount = 0;
+                      for (let j = 1; j < achievementOptions.length; j++) {
+                        if ((todaySession?.todo_achievement || 0) >= achievementOptions[j]) {
+                          checkedCount = j;
+                        }
                       }
+                      isChecked = i < checkedCount;
                     }
-                    const isChecked = i < checkedCount;
 
                     return (
                       <div 
@@ -343,10 +353,15 @@ export default function LearningDashboard({
                         onClick={() => {
                           if (approvalStatus !== 'none') return;
                           if (isCheckboxStyle) {
-                            // 클릭한 인덱스에 따라 달성률 계산 (토글 로직)
-                            const nextIndex = isChecked ? i : i + 1;
-                            const nextValue = achievementOptions[nextIndex] || 0;
-                            handleTodoClick(nextValue);
+                            if (onTodoToggle) {
+                              // 새로운 개별 체크박스 토글 모드
+                              onTodoToggle(i, planTasks.length);
+                            } else {
+                              // 하위 호환: 기존 순차적 채우기
+                              const nextIndex = isChecked ? i : i + 1;
+                              const nextValue = achievementOptions[nextIndex] || 0;
+                              handleTodoClick(nextValue);
+                            }
                           }
                         }}
                         className={`flex items-start gap-2 md:gap-3 group/task transition-all ${
