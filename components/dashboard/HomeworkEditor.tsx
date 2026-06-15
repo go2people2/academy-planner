@@ -446,9 +446,9 @@ function HomeworkRow({
             onKeyDown={(e) => handleInputKeyDown(e, 'start')}
             onBlur={handleFinalize}
             placeholder={hw.type === 'custom' ? "상세 내용" : "시작"}
-            className={`${hw.type === 'custom' ? 'w-40' : 'w-16'} bg-black/60 border border-white/20 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-500`}
+            className={`${hw.type === 'custom' ? 'w-40' : 'w-16'} bg-black/40 border border-white/40 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-300`}
           />
-          <span className="text-gray-400 text-[12px] font-bold">-</span>
+          <span className="text-gray-200 text-[12px] font-bold">-</span>
           <input 
             ref={endRef}
             type="text" 
@@ -457,45 +457,47 @@ function HomeworkRow({
             onKeyDown={(e) => handleInputKeyDown(e, 'end')}
             onBlur={handleFinalize}
             placeholder="끝"
-            className="w-16 bg-black/60 border border-white/20 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-500"
+            className="w-16 bg-black/40 border border-white/40 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-300"
           />
         </div>
 
         {hw.type === 'book' && (
-          <div className="w-16 shrink-0 flex items-center gap-1 overflow-hidden" onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}>
+          <div className="flex-1 min-w-[60px] flex items-center gap-1 overflow-hidden" onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}>
             <ChevronRight size={10} className="text-blue-500/50 shrink-0" />
-            <p className="text-[10px] font-bold text-gray-500 truncate italic cursor-pointer">
+            <p className="text-[11px] font-bold text-gray-400 truncate italic cursor-pointer">
               {hw.range || '...'}
             </p>
           </div>
         )}
 
-        {hw.type === 'book' && onToggleKeep && (
-          <button 
-            onClick={onToggleKeep}
-            className="w-12 shrink-0 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500 hover:text-white transition-all text-[10px] font-bold rounded-[2px]"
-            title="목록에서 가리고 보류 상태로 변경"
-          >
-            보류
-          </button>
-        )}
+        <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          {hw.type === 'book' && onToggleKeep && (
+            <button 
+              onClick={onToggleKeep}
+              className="w-12 shrink-0 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500 hover:text-white transition-all text-[10px] font-bold rounded-[2px]"
+              title="목록에서 가리고 보류 상태로 변경"
+            >
+              보류
+            </button>
+          )}
 
-        <button 
-          onClick={onReset} 
-          className="w-6 h-6 shrink-0 rounded-lg text-gray-400 hover:text-blue-400 hover:bg-blue-500/20 transition-all flex items-center justify-center bg-white/5"
-          title="이 교재의 입력 내용 초기화"
-        >
-          <RefreshCcw size={14} />
-        </button>
-
-        {hw.type === 'custom' && (
           <button 
-            onClick={onDelete} 
-            className="w-6 h-6 shrink-0 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all flex items-center justify-center bg-white/5"
+            onClick={onReset} 
+            className="w-6 h-6 shrink-0 rounded-lg text-gray-400 hover:text-blue-400 hover:bg-blue-500/20 transition-all flex items-center justify-center bg-white/5 border border-transparent hover:border-blue-500/30"
+            title="이 교재의 입력 내용 초기화"
           >
-            <Trash2 size={14} />
+            <RefreshCcw size={14} />
           </button>
-        )}
+
+          {hw.type === 'custom' && (
+            <button 
+              onClick={onDelete} 
+              className="w-6 h-6 shrink-0 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all flex items-center justify-center bg-white/5 border border-transparent hover:border-red-500/30"
+            >
+              <Trash2 size={14} />
+            </button>
+          )}
+        </div>
       </div>
 
       <AnimatePresence>
@@ -568,9 +570,9 @@ function HomeworkRow({
                       end_page: e,
                       note: hw.note
                     });
-                  }} className={`flex items-center justify-between px-3 py-1.5 rounded-[2px] text-[11px] font-normal transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-400 hover:bg-white/5 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-400/80' : ''}`}>
-                    <div className="flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-400' : isInRange ? 'bg-emerald-400' : 'bg-transparent border border-white/30'}`} /><span className="truncate max-w-[200px]">{u.unit}</span></div>
-                    <span className="text-[12px] opacity-90 tabular-nums text-gray-300">p{u.start_page}~{u.end_page}</span>
+                  }} className={`flex items-center justify-between px-3 py-2.5 rounded-[2px] text-[15px] font-normal transition-all ${isSelected ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40' : 'text-gray-200 hover:bg-white/10 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-300' : ''}`}>
+                    <div className="flex items-center gap-2.5"><div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-blue-400' : isInRange ? 'bg-emerald-400' : 'bg-transparent border-2 border-white/30'}`} /><span className="truncate max-w-[400px]">{u.unit}</span></div>
+                    <span className="text-[15px] text-white opacity-100 tabular-nums tracking-wide font-normal">p{u.start_page}~{u.end_page}</span>
                   </button>
                 );
               })}
