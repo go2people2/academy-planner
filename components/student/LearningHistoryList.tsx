@@ -82,12 +82,7 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                 <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 tabular-nums">To-Do {todoAchievement}%</span>
                               )}
                               {hwEval !== null && (
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border tabular-nums ${
-                                  hwEval >= 8 ? 'text-blue-400 bg-blue-500/10 border-blue-500/20' :
-                                  hwEval >= 6 ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20' :
-                                  hwEval >= 4 ? 'text-orange-400 bg-orange-500/10 border-orange-500/20' :
-                                  'text-rose-400 bg-rose-500/10 border-rose-500/20'
-                                }`}>
+                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border tabular-nums text-blue-400 bg-blue-500/10 border-blue-500/20`}>
                                   HW Lvl {hwEval}
                                 </span>
                               )}
