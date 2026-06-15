@@ -195,7 +195,7 @@ export default function HomeworkEditor({
                   onUpdate(resetHw);
                 }
               }}
-              className="px-3 py-1.5 rounded-[2px] bg-red-500/10 text-red-500/60 hover:text-red-500 hover:bg-red-500/20 transition-all text-[10px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-500/10"
+              className="px-3 py-1.5 rounded-[2px] bg-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/30 transition-all text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-500/30"
             >
               <RefreshCcw size={12} /> 전체 초기화
             </button>
@@ -249,7 +249,7 @@ export default function HomeworkEditor({
             
             <button 
               onClick={() => onUpdate([...homeworkJson, { type: 'custom', book_name: '', range: '' }])}
-              className="w-full py-4 border border-dashed border-white/10 rounded-sm text-[10px] font-normal uppercase tracking-widest text-gray-600 hover:text-blue-400 hover:border-blue-500/40 hover:bg-blue-500/5 transition-all flex items-center justify-center gap-2 group"
+              className="w-full py-4 border border-dashed border-white/30 rounded-sm text-[11px] font-bold uppercase tracking-widest text-gray-300 hover:text-blue-300 hover:border-blue-500/60 hover:bg-blue-500/10 transition-all flex items-center justify-center gap-2 group"
             >
               <Plus size={14} /> 프린트 / 기타 과제 직접 추가
             </button>
@@ -266,7 +266,7 @@ export default function HomeworkEditor({
                 <div className="mt-4 p-3 bg-amber-500/5 border border-amber-500/10 rounded-sm space-y-2">
                   <button 
                     onClick={() => setIsKeepListOpen(!isKeepListOpen)}
-                    className="flex items-center gap-1.5 w-full text-[9px] text-amber-500/80 font-bold uppercase tracking-widest hover:text-amber-400 transition-colors"
+                    className="flex items-center gap-1.5 w-full text-[11px] text-amber-500 font-bold uppercase tracking-widest hover:text-amber-400 transition-colors"
                   >
                     <BookOpen size={10} /> 보류 중인 교재가 있습니다 ({keepBooks.length}권)
                   </button>
@@ -287,7 +287,7 @@ export default function HomeworkEditor({
                           </button>
                           <button
                             onClick={() => onToggleKeepBook && onToggleKeepBook(m.bookcode, false)}
-                            className="ml-1 px-1.5 py-1 bg-black/20 hover:bg-red-500/20 text-gray-400 hover:text-red-400 text-[8px] rounded-[1px] transition-all whitespace-nowrap"
+                            className="ml-1 px-1.5 py-1 bg-black/40 hover:bg-red-500/30 text-gray-300 hover:text-red-300 text-[9px] rounded-[1px] transition-all whitespace-nowrap"
                             title="보류 해제 (활성 교재로 복구)"
                           >
                             보류 해제
@@ -302,12 +302,12 @@ export default function HomeworkEditor({
           </div>
 
           {/* 💡 실시간 셀 미리보기 영역 (원장님 요청사항) */}
-          <div className="bg-blue-500/5 border border-blue-500/20 rounded-sm p-4 space-y-2">
+          <div className="bg-blue-500/10 border border-blue-500/30 rounded-sm p-4 space-y-2">
             <div className="flex items-center justify-between">
-              <span className="text-[9px] font-black text-blue-400/60 uppercase tracking-widest flex items-center gap-1.5"><ClipboardList size={12} /> 실시간 미리보기</span>
-              <span className="text-[8px] font-bold text-gray-600 italic">데일리 시트에 연동될 결과</span>
+              <span className="text-[11px] font-black text-blue-300 uppercase tracking-widest flex items-center gap-1.5"><ClipboardList size={14} /> 실시간 미리보기</span>
+              <span className="text-[10px] font-bold text-gray-400 italic">데일리 시트에 연동될 결과</span>
             </div>
-            <div className="min-h-[40px] max-h-[80px] overflow-y-auto custom-scrollbar-v text-[12px] text-white font-black whitespace-pre-wrap leading-tight opacity-90">
+            <div className="min-h-[40px] max-h-[80px] overflow-y-auto custom-scrollbar-v text-[13px] text-white font-black whitespace-pre-wrap leading-tight">
               {(() => {
                 const lines = homeworkJson
                   .filter(h => h.range)
@@ -424,12 +424,12 @@ function HomeworkRow({
               value={hw.book_name}
               placeholder="기타 과제"
               onChange={(e) => onUpdate({ ...hw, book_name: e.target.value })}
-              className="bg-transparent border-b border-white/10 text-[11px] font-bold text-blue-400 outline-none focus:border-blue-500 w-full"
+              className="bg-transparent border-b border-white/30 text-[12px] font-bold text-blue-300 outline-none focus:border-blue-400 w-full placeholder:text-gray-500"
             />
           ) : (
             <span 
               onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}
-              className="text-[11px] font-black text-white truncate cursor-pointer hover:text-blue-400 transition-colors" 
+              className="text-[12px] font-black text-white truncate cursor-pointer hover:text-blue-300 transition-colors" 
             >
               {masterTextbooks.find(m => m.bookcode === hw.book_name)?.title || hw.book_name}
             </span>
@@ -437,7 +437,7 @@ function HomeworkRow({
         </div>
 
         <div className="flex items-center gap-1 shrink-0 relative group/input">
-          <div className="absolute -top-4 left-0 text-[7px] font-black text-blue-500 opacity-0 group-hover/input:opacity-100 transition-opacity uppercase tracking-tighter">단축키 Alt+{idx+1}</div>
+          <div className="absolute -top-4 left-0 text-[9px] font-black text-blue-400 opacity-50 group-hover/input:opacity-100 transition-opacity uppercase tracking-tighter">단축키 Alt+{idx+1}</div>
           <input 
             ref={startRef}
             type="text" 
@@ -446,9 +446,9 @@ function HomeworkRow({
             onKeyDown={(e) => handleInputKeyDown(e, 'start')}
             onBlur={handleFinalize}
             placeholder={hw.type === 'custom' ? "상세 내용" : "시작"}
-            className={`${hw.type === 'custom' ? 'w-40' : 'w-16'} bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold`}
+            className={`${hw.type === 'custom' ? 'w-40' : 'w-16'} bg-black/60 border border-white/20 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-500`}
           />
-          <span className="text-gray-700 text-[10px]">-</span>
+          <span className="text-gray-400 text-[12px] font-bold">-</span>
           <input 
             ref={endRef}
             type="text" 
@@ -457,7 +457,7 @@ function HomeworkRow({
             onKeyDown={(e) => handleInputKeyDown(e, 'end')}
             onBlur={handleFinalize}
             placeholder="끝"
-            className="w-16 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
+            className="w-16 bg-black/60 border border-white/20 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-500"
           />
         </div>
 
@@ -473,7 +473,7 @@ function HomeworkRow({
         {hw.type === 'book' && onToggleKeep && (
           <button 
             onClick={onToggleKeep}
-            className="w-12 shrink-0 py-1 bg-amber-500/10 text-amber-500/80 border border-amber-500/20 hover:bg-amber-500 hover:text-white transition-all text-[8px] font-bold rounded-[2px]"
+            className="w-12 shrink-0 py-1 bg-amber-500/20 text-amber-400 border border-amber-500/40 hover:bg-amber-500 hover:text-white transition-all text-[10px] font-bold rounded-[2px]"
             title="목록에서 가리고 보류 상태로 변경"
           >
             보류
@@ -482,18 +482,18 @@ function HomeworkRow({
 
         <button 
           onClick={onReset} 
-          className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-blue-500 hover:bg-blue-500/10 transition-all flex items-center justify-center"
+          className="w-6 h-6 shrink-0 rounded-lg text-gray-400 hover:text-blue-400 hover:bg-blue-500/20 transition-all flex items-center justify-center bg-white/5"
           title="이 교재의 입력 내용 초기화"
         >
-          <RefreshCcw size={12} />
+          <RefreshCcw size={14} />
         </button>
 
         {hw.type === 'custom' && (
           <button 
             onClick={onDelete} 
-            className="w-6 h-6 shrink-0 rounded-lg text-gray-700 hover:text-red-500 hover:bg-red-500/10 transition-all flex items-center justify-center"
+            className="w-6 h-6 shrink-0 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all flex items-center justify-center bg-white/5"
           >
-            <Trash2 size={12} />
+            <Trash2 size={14} />
           </button>
         )}
       </div>
