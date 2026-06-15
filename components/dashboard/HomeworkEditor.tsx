@@ -460,22 +460,6 @@ function HomeworkRow({
             placeholder="끝"
             className="w-16 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-white focus:border-blue-500 text-center font-bold"
           />
-          <input 
-            type="text" 
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') {
-                e.preventDefault();
-                commitPageChange(startPage, endPage, e.currentTarget.value);
-                onKeyDown?.('ArrowDown', 'end');
-              }
-            }}
-            onBlur={(e) => commitPageChange(startPage, endPage, e.target.value)}
-            placeholder="메모"
-            className="w-28 bg-black/40 border border-white/5 rounded-md py-1.5 text-[11px] outline-none text-blue-400 focus:border-blue-500 text-center font-bold"
-            title="예: 오답, 처음풀기, 풀기"
-          />
         </div>
 
         {hw.type === 'book' && (
