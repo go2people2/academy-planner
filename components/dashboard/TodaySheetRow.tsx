@@ -31,7 +31,7 @@ interface TodaySheetRowProps {
   onActiveCellChange?: (studentId: string, colId: string) => void;
   onEditingCellChange?: (studentId: string, colId: string | null) => void;
   isSelected?: boolean;
-  onSelectOne?: (studentId: string, checked: boolean) => void;
+  onSelectOne?: (studentId: string, checked: boolean, shiftKey?: boolean) => void;
   selectedRange?: any;
   isCellInRange?: (studentId: string, colId: string) => boolean;
   onCellMouseDown?: (e: React.MouseEvent, studentId: string, colId: string) => void;

@@ -44,7 +44,7 @@ interface TodaySheetCellProps {
   scoreInputRef?: (el: HTMLInputElement | null) => void;
 
   // Handlers
-  onSelectOne?: (studentId: string, checked: boolean) => void;
+  onSelectOne?: (studentId: string, checked: boolean, shiftKey?: boolean) => void;
   onToggleHistory: (id: string) => void;
   onViewProgress: (id: string) => void;
   onViewDetail?: (id: string) => void;
@@ -263,7 +263,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 <input 
                   type="checkbox" 
                   checked={isSelected} 
-                  onChange={(e) => onSelectOne?.(student.id, e.target.checked)} 
+                  onChange={(e) => onSelectOne?.(student.id, e.target.checked, (e.nativeEvent as any).shiftKey)} 
                   className="w-4 h-4 rounded border-white/20 bg-blue-600 checked:bg-blue-600 cursor-pointer" 
                 />
               </div>
@@ -273,7 +273,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   <input 
                     type="checkbox" 
                     checked={isSelected} 
-                    onChange={(e) => onSelectOne?.(student.id, e.target.checked)} 
+                    onChange={(e) => onSelectOne?.(student.id, e.target.checked, (e.nativeEvent as any).shiftKey)} 
                     className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer" 
                   />
                 </div>

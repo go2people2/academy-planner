@@ -165,6 +165,7 @@ export default function TodaySheet({
   // 1. States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [hiddenStudentIds, setHiddenStudentIds] = useState<string[]>([]);
+  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [selectedRange, setSelectedRange] = useState<{
     startStudentId: string, 
     startColId: string, 
@@ -559,7 +560,27 @@ export default function TodaySheet({
   };
 
   const handleSelectAll = useCallback((checked: boolean) => { setSelectedIds(checked ? students.map((s: any) => s.id) : []); }, [students]);
-  const handleSelectOne = useCallback((id: string, checked: boolean) => { setSelectedIds(prev => checked ? [...prev, id] : prev.filter(i => i !== id)); }, []);
+  const handleSelectOne = useCallback((id: string, checked: boolean, shiftKey: boolean = false) => { 
+    if (shiftKey && lastSelectedId) {
+      const lastIdx = filteredStudents.findIndex((s: any) => s.id === lastSelectedId);
+      const currIdx = filteredStudents.findIndex((s: any) => s.id === id);
+      if (lastIdx !== -1 && currIdx !== -1) {
+        const start = Math.min(lastIdx, currIdx);
+        const end = Math.max(lastIdx, currIdx);
+        const idsInRange = filteredStudents.slice(start, end + 1).map((s: any) => s.id);
+        setSelectedIds(prev => {
+          const newSet = new Set(prev);
+          if (checked) { idsInRange.forEach(i => newSet.add(i)); }
+          else { idsInRange.forEach(i => newSet.delete(i)); }
+          return Array.from(newSet);
+        });
+        setLastSelectedId(id);
+        return;
+      }
+    }
+    setSelectedIds(prev => checked ? [...prev, id] : prev.filter(i => i !== id));
+    setLastSelectedId(id);
+  }, [filteredStudents, lastSelectedId]);
 
   const onCellMouseDown = useCallback((e: React.MouseEvent, studentId: string, colId: string) => {
     if (['select', 'action'].includes(colId)) return;
