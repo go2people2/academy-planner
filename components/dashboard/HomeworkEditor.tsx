@@ -568,9 +568,9 @@ function HomeworkRow({
                       end_page: e,
                       note: hw.note
                     });
-                  }} className={`flex items-center justify-between px-3 py-2 rounded-[2px] text-[12px] font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400 border border-blue-500/30' : 'text-gray-300 hover:bg-white/5 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-400/80' : ''}`}>
-                    <div className="flex items-center gap-2"><div className={`w-1.5 h-1.5 rounded-full ${isSelected ? 'bg-blue-500' : isInRange ? 'bg-emerald-500/30' : 'bg-transparent border border-white/10'}`} /><span className="truncate max-w-[200px]">{u.unit}</span></div>
-                    <span className="text-[10px] opacity-60 italic tabular-nums">p{u.start_page}~{u.end_page}</span>
+                  }} className={`flex items-center justify-between px-3 py-2.5 rounded-[2px] text-[15px] font-normal transition-all ${isSelected ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40' : 'text-white hover:bg-white/10 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-300' : ''}`}>
+                    <div className="flex items-center gap-2.5"><div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-blue-400' : isInRange ? 'bg-emerald-400' : 'bg-transparent border-2 border-white/30'}`} /><span className="truncate max-w-[400px]">{u.unit}</span></div>
+                    <span className="text-[13px] opacity-90 italic tabular-nums text-gray-300">p{u.start_page}~{u.end_page}</span>
                   </button>
                 );
               })}
