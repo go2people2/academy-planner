@@ -34,22 +34,22 @@ export const ScoreCell = React.memo(function ScoreCell({
 
   if (parsedTests) {
     return (
-      <div className="relative w-full min-h-[22px] flex flex-col items-start gap-1 group/score py-1 px-1">
+      <div className="relative w-full min-h-[22px] flex flex-col items-start justify-start px-2 py-1.5 group/score">
         {parsedTests.map((t, idx) => {
           const isPending = t.numericScore === null;
           const scoreText = isPending 
             ? (t.maxScore === 100 ? '채점 전' : `- / ${t.maxScore}`)
             : (t.maxScore === 100 ? `${t.numericScore}점` : `${t.numericScore}/${t.maxScore}`);
             
-          let colorClass = 'bg-gray-500/20 text-gray-400 border-gray-500/40';
+          let colorClass = 'text-gray-400';
           if (!isPending) {
-            colorClass = t.isPass ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/40' : 'bg-red-500/20 text-red-400 border-red-500/40';
+            colorClass = t.isPass ? 'text-emerald-400' : 'text-red-400';
           }
 
           return (
             <div 
               key={idx} 
-              className={`px-1.5 py-0.5 text-[9px] font-black border rounded-[2px] shadow-sm tracking-tight ${colorClass}`} 
+              className={`text-[12px] font-bold leading-snug ${colorClass}`} 
               title={t.name}
             >
               {scoreText}
