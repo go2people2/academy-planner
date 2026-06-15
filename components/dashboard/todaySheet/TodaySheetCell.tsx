@@ -228,7 +228,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         const parts = str.split('/');
         return (
           <span className="font-black">
-            <span className="text-emerald-400">{parts[0]}</span>
+            <span className="text-pink-300">{parts[0]}</span>
             {parts.length > 1 && (
               <>
                 <span className="text-gray-600 mx-0.5">/</span>

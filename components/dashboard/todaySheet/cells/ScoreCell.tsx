@@ -39,7 +39,11 @@ export const ScoreCell = React.memo(function ScoreCell({
           const isPending = t.numericScore === null;
           let scoreColor = 'text-gray-400';
           if (!isPending) {
-            scoreColor = t.isPass ? 'text-emerald-400' : 'text-red-400';
+            if (t.maxScore === 100) {
+              scoreColor = t.isPass ? 'text-emerald-400' : 'text-red-400';
+            } else {
+              scoreColor = t.isPass ? 'text-pink-300' : 'text-red-400';
+            }
           }
 
           return (
