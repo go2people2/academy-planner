@@ -135,16 +135,18 @@ const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: a
   if (pastLogs.length === 0) return "";
 
   for (const log of pastLogs) {
+    const dayName = getDayOfWeek(log.date);
+    const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
+
     // 💡 [수정] 출결 상태(결석, 수업전 등)에 의해 루프가 건너뛰어지기 전에, 
     // 선생님이 수동으로 기입해 둔 숙제가 있다면 무조건 먼저 취합(누적)합니다!
     if (log.homework_text) {
       const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
-      const line = `${dateStr}(${getDayOfWeek(log.date)})\n${log.homework_text}`;
+      const makeupLabel = (!isRegularClass || log.attendance_status?.startsWith('보강')) ? ' [보강]' : '';
+      const line = `${dateStr}(${dayName})${makeupLabel}\n${log.homework_text}`;
       aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
     }
 
-    const dayName = getDayOfWeek(log.date);
-    const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
     const isPresent = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].some(st => log.attendance_status?.startsWith(st));
     const hasHomework = !!log.homework_text;
 
