@@ -577,6 +577,7 @@ export default function StudentPortal() {
               student={student} lastSession={lastSession} todaySession={todaySession} 
               selectedDate={selectedDate} currentSelfEval={currentSelfEval} 
               handleSelfEval={handleSelfEval} handleTodoAchievement={handleTodoAchievement} todayPlan={todayPlan}
+              onTodoToggle={handleTodoToggle}
               isSlim={isDashboardSlim} setIsSlim={setIsDashboardSlim}
               approvalStatus={approvalStatus}
               onSyncTasks={handleSyncTasks}
