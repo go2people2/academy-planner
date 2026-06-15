@@ -27,7 +27,7 @@ export const ScoreCell = React.memo(function ScoreCell({
   // 💡 로컬 Ref 신설하여 안전한 element 참조 보장 (prop이 함수일 경우 대응)
   const numeratorInputRef = React.useRef<HTMLInputElement>(null);
   const totalInputRef = React.useRef<HTMLInputElement>(null);
-  const isCountMode = formData.test_score_type === 'count';
+
 
   // 💡 인라인 테스트 모드 감지 (하이픈 문법을 썼다면 점수칸은 요약 뱃지로 변신)
   const parsedTests = parseInlineTests(formData.test_id);
@@ -97,34 +97,8 @@ export const ScoreCell = React.memo(function ScoreCell({
             }} 
             onChange={(e) => handleLocalInput(e, 'test_score')} 
             placeholder="-" 
-            className={`bg-transparent border-0 outline-none text-[14px] text-emerald-400 font-black p-0 m-0 ${isCountMode ? 'w-8 text-right' : 'w-full text-left'}`} 
+            className="bg-transparent border-0 outline-none text-[14px] text-emerald-400 font-black p-0 m-0 w-full text-left" 
           />
-
-          {isCountMode && (
-            <>
-              <span className="text-gray-600 font-bold mx-1.5 shrink-0">/</span>
-              <input 
-                ref={totalInputRef}
-                type="text"
-                defaultValue={formData.test_total_count || ''}
-                placeholder="?"
-                className="w-10 bg-transparent border-0 outline-none text-[14px] text-blue-400 font-black p-0 m-0 text-left"
-                onKeyDown={(e) => {
-                  if ((e.key === 'Tab' && !e.shiftKey) || e.key === 'Enter') {
-                    // 💡 [Tab/Enter 저장] 단일 계약 사용
-                    const scoreVal = numeratorInputRef.current?.value || formData.test_score;
-                    onSave({ test_score: scoreVal, test_total_count: (e.target as HTMLInputElement).value });
-                  }
-                  handleKeyDown(e, colId);
-                }}
-                onBlur={(e) => {
-                  // 💡 분자로 되돌아갈 때는 저장 무시 (TypeError 방지를 위해 로컬 Ref 사용)
-                  if (e.relatedTarget === numeratorInputRef.current) return;
-                  onSave({ test_total_count: e.target.value }, { isBlur: true });
-                }}
-              />
-            </>
-          )}
         </div>
       )}
       
@@ -134,25 +108,9 @@ export const ScoreCell = React.memo(function ScoreCell({
           onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
           className="px-4 text-[14px] text-left text-emerald-400 font-black pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-text group-hover/td:bg-white/[0.02] transition-colors"
         >
-          {formData.test_score ? (
-            formData.test_score_type === 'score' ? (
-              `${formData.test_score}점`
-            ) : (
-              formData.test_total_count ? `${formData.test_score}개 / ${formData.test_total_count}개` : `${formData.test_score}개`
-            )
-          ) : '-'}
+          {formData.test_score ? `${formData.test_score}점` : '-'}
         </div>
       )}
-
-      <div className="absolute right-1.5 top-1/2 -translate-y-1/2 flex flex-col items-center justify-center z-30">
-        <button 
-          onClick={(e) => { e.stopPropagation(); onTestScoreTypeToggle(); }} 
-          className={`w-5 h-5 rounded-full flex items-center justify-center transition-all text-[9px] font-black tracking-tighter ${formData.test_score_type === 'score' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-blue-500/20 text-blue-400'}`}
-          title={formData.test_score_type === 'score' ? '점수 모드 (클릭하여 개수 모드로 변경)' : '개수 모드 (클릭하여 점수 모드로 변경)'}
-        >
-          {formData.test_score_type === 'score' ? '점' : '개'}
-        </button>
-      </div>
     </div>
   );
 });
