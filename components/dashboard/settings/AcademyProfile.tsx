@@ -23,42 +23,47 @@ export default function AcademyProfile({
           <h3 className="text-sm font-black text-white uppercase tracking-widest">Academy Profile</h3>
         </div>
         
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Academy Name</label>
-          <div className="p-4 bg-black/40 border border-white/10 rounded-[2px] text-lg font-black text-white">{academyInfo?.academy_name}</div>
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Consultation Cycle (Days)</label>
-          <input type="number" defaultValue={academyInfo?.consultation_cycle || 21}
-            onBlur={async (e) => {
-              if (!onUpdateAcademyInfo) return;
-              await onUpdateAcademyInfo({ consultation_cycle: parseInt(e.target.value) });
-              alert('상담 주기가 변경되었습니다.');
-            }}
-            className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-blue-400 outline-none focus:border-blue-500 transition-all" />
-        </div>
-
-        <div className="space-y-1">
-          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Student Access Passkey (마스터 패스키)</label>
-          <div className="relative group">
-            <Key className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-400 transition-colors" />
-            <input 
-              type="text" 
-              maxLength={4}
-              defaultValue={academyInfo?.student_passkey || '2324'}
-              placeholder="4자리 숫자 입력"
-              onBlur={async (e) => {
-                if (!onUpdateAcademyInfo) return;
-                const val = e.target.value.replace(/[^0-9]/g, '');
-                if (val.length !== 4) { alert('패스키는 숫자 4자리여야 합니다.'); return; }
-                await onUpdateAcademyInfo({ student_passkey: val });
-                alert('학생 페이지 패스키가 변경되었습니다.');
-              }}
-              className="w-full bg-black/40 border border-white/10 rounded-[2px] pl-12 pr-4 py-3 text-sm font-black text-amber-400 outline-none focus:border-blue-500 transition-all" 
-            />
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Academy Name (학원명)</label>
+            <div className="px-4 py-2 bg-black/40 border border-white/10 rounded-[2px] text-sm font-black text-white">{academyInfo?.academy_name}</div>
           </div>
-          <p className="text-[8px] text-gray-600 italic ml-1">* 이 번호를 입력하면 모든 학생의 페이지에 접속할 수 있습니다. (기본값: 2324)</p>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Consultation Cycle (상담주기)</label>
+            <div className="relative">
+              <input type="number" defaultValue={academyInfo?.consultation_cycle || 21}
+                onBlur={async (e) => {
+                  if (!onUpdateAcademyInfo) return;
+                  await onUpdateAcademyInfo({ consultation_cycle: parseInt(e.target.value) });
+                  alert('상담 주기가 변경되었습니다.');
+                }}
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-2 text-sm font-black text-blue-400 outline-none focus:border-blue-500 transition-all" />
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-[10px] font-bold text-gray-600">일</span>
+            </div>
+          </div>
+
+          <div className="space-y-1">
+            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Master Passkey (마스터 패스키)</label>
+            <div className="relative group">
+              <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600 group-focus-within:text-amber-400 transition-colors" />
+              <input 
+                type="text" 
+                maxLength={4}
+                defaultValue={academyInfo?.student_passkey || '2324'}
+                placeholder="4자리 숫자"
+                onBlur={async (e) => {
+                  if (!onUpdateAcademyInfo) return;
+                  const val = e.target.value.replace(/[^0-9]/g, '');
+                  if (val.length !== 4) { alert('패스키는 숫자 4자리여야 합니다.'); return; }
+                  await onUpdateAcademyInfo({ student_passkey: val });
+                  alert('학생 페이지 패스키가 변경되었습니다.');
+                }}
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] pl-9 pr-3 py-2 text-sm font-black text-amber-400 outline-none focus:border-amber-500 transition-all" 
+              />
+            </div>
+            <p className="text-[8px] text-gray-600 italic ml-1 mt-1">* 모든 학생 페이지 접속용</p>
+          </div>
         </div>
 
         <div className="pt-6 border-t border-white/5 space-y-6">
