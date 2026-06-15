@@ -77,17 +77,30 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                               {/* 💡 Classwork 제목 제거 */}
                               <p className="text-[12px] font-bold text-gray-200 leading-snug whitespace-pre-wrap">{log.classwork_text || '-'}</p>
                             </div>
-                            <div className="shrink-0 flex flex-col items-end gap-1 mt-0.5">
+                            <div className="shrink-0 flex flex-col items-end gap-2 mt-0.5">
                               {todoAchievement > 0 && (
-                                <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20 tabular-nums">진도 {todoAchievement}%</span>
+                                <div className="flex flex-col items-end gap-0.5 w-[50px]">
+                                  <span className="text-[9px] font-black text-emerald-400 tabular-nums leading-none">진도 {todoAchievement}%</span>
+                                  <div className="w-full h-0.5 bg-emerald-900/50 rounded-full overflow-hidden">
+                                    <div className="h-full bg-emerald-400" style={{ width: `${todoAchievement}%` }} />
+                                  </div>
+                                </div>
                               )}
                               {hwEval !== null && (
-                                <span className={`text-[9px] font-black px-1.5 py-0.5 rounded border tabular-nums text-blue-400 bg-blue-500/10 border-blue-500/20`}>
-                                  과제 {hwEval}
-                                </span>
+                                <div className="flex flex-col items-end gap-0.5 w-[50px]">
+                                  <span className="text-[9px] font-black text-blue-400 tabular-nums leading-none">과제 {hwEval}</span>
+                                  <div className="w-full h-0.5 bg-blue-900/50 rounded-full overflow-hidden">
+                                    <div className="h-full bg-blue-400" style={{ width: `${hwEval * 10}%` }} />
+                                  </div>
+                                </div>
                               )}
                               {log.test_score !== null && log.test_score !== undefined && (
-                                <span className="text-[9px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20 tabular-nums">테스트 {log.test_score}%</span>
+                                <div className="flex flex-col items-end gap-0.5 w-[50px]">
+                                  <span className="text-[9px] font-black text-amber-500 tabular-nums leading-none">테스트 {log.test_score}%</span>
+                                  <div className="w-full h-0.5 bg-amber-900/50 rounded-full overflow-hidden">
+                                    <div className="h-full bg-amber-500" style={{ width: `${log.test_score}%` }} />
+                                  </div>
+                                </div>
                               )}
                             </div>
                           </div>
