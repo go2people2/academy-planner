@@ -128,8 +128,50 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
   // 2. 전역 키보드 및 마우스 이벤트 바인딩
   useEffect(() => {
+    let scrollInterval: NodeJS.Timeout | null = null;
+
+    const stopScroll = () => {
+      if (scrollInterval) clearInterval(scrollInterval);
+      scrollInterval = null;
+    };
+
+    const handleMouseMoveGlobal = (e: MouseEvent) => {
+      if (e.buttons === 1) { // 왼쪽 마우스 버튼 누른 상태(드래그)
+        const container = document.querySelector('.today-sheet-container');
+        if (container) {
+          const rect = container.getBoundingClientRect();
+          const margin = 60;
+          let speed = 0;
+          
+          if (e.clientY < rect.top + margin) speed = -20;
+          else if (e.clientY > rect.bottom - margin) speed = 20;
+
+          if (speed !== 0) {
+            if (!scrollInterval) {
+              scrollInterval = setInterval(() => {
+                container.scrollBy(0, speed);
+                // 스크롤되면서 마우스 아래로 새롭게 들어온 셀을 찾아 선택 이벤트 트리거
+                const elem = document.elementFromPoint(e.clientX, e.clientY);
+                if (elem) {
+                  const cell = elem.closest('td');
+                  if (cell) {
+                    const enterEvent = new MouseEvent('mouseenter', { bubbles: true });
+                    cell.dispatchEvent(enterEvent);
+                  }
+                }
+              }, 30);
+            }
+          } else {
+            stopScroll();
+          }
+        }
+      } else {
+        stopScroll();
+      }
+    };
+
     const handleMouseUpGlobal = () => {
-      console.log('Drag End state:', { selectedRange, activeCell });
+      stopScroll();
       setIsDragging(false);
     };
     
@@ -331,6 +373,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
     };
 
+    window.addEventListener('mousemove', handleMouseMoveGlobal);
     window.addEventListener('mouseup', handleMouseUpGlobal);
     window.addEventListener('mousedown', handleClickOutside);
     window.addEventListener('keydown', handleGlobalKeyDown);
@@ -338,6 +381,8 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     window.addEventListener('paste', handlePaste);
 
     return () => {
+      stopScroll();
+      window.removeEventListener('mousemove', handleMouseMoveGlobal);
       window.removeEventListener('mouseup', handleMouseUpGlobal);
       window.removeEventListener('mousedown', handleClickOutside);
       window.removeEventListener('keydown', handleGlobalKeyDown);

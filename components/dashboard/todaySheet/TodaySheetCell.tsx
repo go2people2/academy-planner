@@ -479,7 +479,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         : 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40'
                     }`}
                   >
-                    {isPassed ? '⏭️ 과제 패스됨 (취소)' : '✅ 자동 검사됨 (패스하기)'}
+                    {isPassed ? '⏭️ 패스됨 (취소)' : '✅ 자동검사 (패스)'}
                   </button>
                 );
               } else {
@@ -498,7 +498,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         : 'bg-gray-800 text-gray-400 border-gray-600 hover:bg-gray-700 hover:text-gray-200'
                     }`}
                   >
-                    {isChecked ? '✅ 오늘 검사됨 (패스 취소)' : '🔳 오늘 검사하기'}
+                    {isChecked ? '✅ 오늘검사 (취소)' : '🔳 오늘검사'}
                   </button>
                 );
               }

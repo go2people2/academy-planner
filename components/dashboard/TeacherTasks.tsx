@@ -88,6 +88,7 @@ export default function TeacherTasks({
         .from('ams_tasks')
         .select('*')
         .eq('academy_id', academyInfo.id)
+        .or('type.is.null,type.in.(manual,link)') // 💡 설문(survey) 제외, 업무 및 링크 보드용 데이터만 가져옴
         .order('target_date', { ascending: true });
 
       if (error) throw error;

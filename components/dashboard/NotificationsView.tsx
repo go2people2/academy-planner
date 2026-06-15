@@ -45,6 +45,7 @@ export default function NotificationsView({ academyInfo, students, currentUser }
       .from('ams_tasks')
       .select('*')
       .eq('academy_id', academyInfo.id)
+      .or('type.is.null,type.eq.manual') // 💡 설문(survey) 타입 제외, 일반 업무/건의(manual/null)만 가져옴
       .order('is_completed', { ascending: true })
       .order('target_date', { ascending: true });
     

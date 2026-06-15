@@ -135,16 +135,18 @@ const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: a
   if (pastLogs.length === 0) return "";
 
   for (const log of pastLogs) {
-    const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === log.date);
-    if (isLogHoliday && !log.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT)) continue;
-    if (!log.attendance_status || log.attendance_status === ATTENDANCE_STATUS.BEFORE) continue;
-    if ([ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(log.attendance_status as any)) continue;
-    
+    // 💡 [수정] 출결 상태(결석, 수업전 등)에 의해 루프가 건너뛰어지기 전에, 
+    // 선생님이 수동으로 기입해 둔 숙제가 있다면 무조건 먼저 취합(누적)합니다!
     if (log.homework_text) {
       const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
       const line = `${dateStr}(${getDayOfWeek(log.date)})\n${log.homework_text}`;
       aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
     }
+
+    const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === log.date);
+    if (isLogHoliday && !log.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT)) continue;
+    if (!log.attendance_status || log.attendance_status === ATTENDANCE_STATUS.BEFORE) continue;
+    if ([ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(log.attendance_status as any)) continue;
 
     if (log.hw_passed_today === true) continue;
 
@@ -264,7 +266,8 @@ const getEnrichedStudentData = (
     is_deleted: !!s.is_deleted, class_days: s.class_days || [], assigned_books: s.assigned_books || [],
     suggestions: (tasksData || []).filter(t => t.title === `[건의] ${s.name}`),
     history, isRedLight: history.includes('poor') || history.includes('bad'),
-    lastSession: baseSession ? { ...baseSession, homework_text: aggregatedHw } : undefined, 
+    // 💡 baseSession이 없더라도 취합된 숙제가 있다면 강제로 표시되도록 보장
+    lastSession: baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', homework_text: aggregatedHw } as any : undefined), 
     todaySession, allLogs: logs,
     isTodayClassDay // 💡 필터링용 속성 추가
   };
