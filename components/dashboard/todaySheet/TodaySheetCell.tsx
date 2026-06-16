@@ -358,7 +358,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="flex items-center justify-start gap-2 px-1.5 py-1 w-full min-h-[22px] relative group/namecell">
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[13px] font-normal text-white truncate transition-colors">
+                <span className="text-[13px] font-semibold text-white truncate transition-colors">
                   {student.name}-{student.teacher_initial || '?'}-{student.class_days 
                     ? [...student.class_days].sort((a, b) => {
                         const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
