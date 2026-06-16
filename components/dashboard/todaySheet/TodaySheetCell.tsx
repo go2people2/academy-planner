@@ -430,7 +430,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   onBlur={() => setActiveTooltip(null)}
                   tabIndex={0}
                 >
-                  <div className="w-0 h-0 border-t-[24px] border-t-amber-500 border-l-[24px] border-l-transparent shadow-lg drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
+                  <div className="w-0 h-0 border-t-[16px] border-t-amber-500 border-l-[16px] border-l-transparent shadow-lg drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
                   
                   {activeTooltip === 'note' && createPortal(
                     <AnimatePresence mode="wait">
@@ -467,7 +467,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   onBlur={() => setActiveTooltip(null)}
                   tabIndex={0}
                 >
-                  <div className="w-0 h-0 border-t-[22px] border-t-blue-500 border-l-[22px] border-l-transparent shadow-md" />
+                  <div className="w-0 h-0 border-t-[14px] border-t-blue-500 border-l-[14px] border-l-transparent shadow-md" />
                   
                   {activeTooltip === 'suggestion' && createPortal(
                     <AnimatePresence mode="wait">
