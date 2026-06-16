@@ -147,7 +147,9 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
               </div>
               <div>
                 <h2 className="text-[15px] font-bold text-white tracking-tight">태그별 일괄 입력</h2>
-                <p className="text-[11px] text-gray-400 mt-0.5">현재 화면의 학생 {students.length}명을 태그별로 분류하여 일괄 입력합니다.</p>
+                <p className="text-[11px] text-gray-400 mt-0.5">
+                  <span className="text-amber-400 font-bold">현재 화면</span>의 학생 {students.length}명을 태그별로 분류하여 일괄 입력합니다. 필터링을 먼저하세요.
+                </p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-colors">
