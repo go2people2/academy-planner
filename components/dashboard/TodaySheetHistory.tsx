@@ -49,10 +49,20 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
               return (
                 <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left">
                   {prevHw ? (
-                    <>
+                    <div className="flex flex-col text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left break-all">
                       <span className="text-teal-200 text-[9.5px] font-medium not-italic block mb-0.5 tracking-wider">[{prevDateStr}]</span>
-                      "{prevHw}"
-                    </>
+                      <div className="relative">
+                        <span className="text-teal-500/80 text-[14px] font-normal mr-1">"</span>
+                        <span className="inline-block">
+                          {prevHw.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
+                            <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
+                              {para}
+                            </span>
+                          ))}
+                        </span>
+                        <span className="text-teal-500/80 text-[14px] font-normal ml-1">"</span>
+                      </div>
+                    </div>
                   ) : <span className="text-gray-600">-</span>}
                 </td>
               );
