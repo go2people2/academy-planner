@@ -57,7 +57,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
   // 💡 단축어 및 트리거 기호 추출
   const isMasterAdmin = currentUser?.id === 'admin';
   const currentPresets = isMasterAdmin 
-    ? (academyInfo?.default_homework_presets || {}) 
+    ? (academyInfo?.operation_settings?.default_homework_presets || {}) 
     : (currentUser?.homework_presets || {});
   
   const snippets = React.useMemo(() => {

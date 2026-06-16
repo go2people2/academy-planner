@@ -27,7 +27,7 @@ export default function PrintPreviewModal({
   if (!isOpen) return null;
 
   // Filter columns to exclude interactive ones (checkbox, action buttons) and date column
-  const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action' && c.id !== 'date');
+  const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action' && c.id !== 'date' && c.id !== 'tools');
 
   // 화면상 설정된 너비 비율을 기반으로 각 열의 프린트 너비 비율(%) 계산
   const totalScreenWidth = displayCols.reduce((sum, col) => sum + (columnWidths?.[col.id] || col.minWidth || 100), 0);
@@ -140,7 +140,7 @@ export default function PrintPreviewModal({
   }
 
   return (
-    <div className="fixed inset-0 z-[250] flex flex-col items-center justify-start p-4 md:p-8 bg-black/85 backdrop-blur-md overflow-y-auto print:static print:overflow-visible print:p-0 print:bg-white print-preview-modal-container">
+    <div className="fixed inset-0 z-[250] flex flex-col items-center justify-start p-4 md:p-8 bg-black/85 backdrop-blur-md overflow-y-auto print:static print:block print:overflow-visible print:p-0 print:bg-white print-preview-modal-container">
       {/* Control bar */}
       <div className="w-full max-w-5xl flex items-center justify-between mb-6 bg-gray-900/90 border border-white/10 rounded-xl p-4 shadow-xl shrink-0 no-print">
         <div className="flex items-center gap-3">
@@ -178,8 +178,8 @@ export default function PrintPreviewModal({
           return (
             <div 
               key={pageIdx} 
-              className="print-page-panel w-full bg-white text-gray-900 rounded-2xl shadow-2xl p-8 md:p-12 overflow-x-auto border border-gray-200 flex flex-col justify-between print:break-after-page print:border-none print:shadow-none print:p-0 print:overflow-visible print:mb-0 mb-8"
-              style={{ minHeight: '680px' }} // Proportional A4 landscape height
+              className="print-page-panel w-full bg-white text-gray-900 rounded-2xl shadow-2xl p-8 md:p-12 overflow-x-auto border border-gray-200 flex flex-col justify-between print:block print:break-after-page print:border-none print:shadow-none print:p-0 print:overflow-visible print:mb-0 mb-8"
+              style={{ minHeight: '680px', pageBreakAfter: 'always', pageBreakInside: 'avoid' }} // Proportional A4 landscape height + Explicit page breaks
             >
               <div>
                 {/* Paper Header (Rendered on every single page) */}
@@ -244,7 +244,7 @@ export default function PrintPreviewModal({
                           className={`border-b border-gray-200 transition-colors ${rIdx % 2 === 1 ? 'bg-gray-50/20' : 'bg-white'}`}
                         >
                           {displayCols.map(col => {
-                            let cellContent: React.ReactNode = '-';
+                            let cellContent: React.ReactNode = '';
                             if (col.id === 'date') {
                               cellContent = displayDateShort;
                             } else if (col.id === 'name') {
@@ -257,7 +257,7 @@ export default function PrintPreviewModal({
                               cellContent = (
                                 <div className="flex flex-col gap-0.5 mt-0.5 relative pl-3">
                                   <span className="absolute -left-0.5 top-0 text-[7.5px] text-gray-400 font-bold tracking-tighter">{printIndex}.</span>
-                                  <span className="font-black text-[9.5px] text-gray-900 leading-none tracking-tight">{s.name}-{s.teacher_initial || '?'}-{classDays}</span>
+                                  <span className="font-medium text-[9.5px] text-gray-900 leading-none tracking-tight">{s.name}-{s.teacher_initial || '?'}-{classDays}</span>
                                   <span className="text-[7px] text-gray-500 font-bold uppercase tracking-tighter leading-none">{s.school} · {s.grade}</span>
                                 </div>
                               );
@@ -269,7 +269,7 @@ export default function PrintPreviewModal({
                               else if (stat.startsWith('보강')) cellContent = '보강';
                               else cellContent = '수업전';
                             } else if (col.id === 'test_id') {
-                              cellContent = session?.test_id || '-';
+                              cellContent = session?.test_id || '';
                             } else if (col.id === 'test_score') {
                               if (session?.test_score) {
                                 const isScoreMode = session.test_score_type === 'score';
@@ -281,24 +281,24 @@ export default function PrintPreviewModal({
                                     : `${session.test_score}개`;
                                 }
                               } else {
-                                cellContent = '-';
+                                cellContent = '';
                               }
                             } else if (col.id === 'next_quiz') {
                               if (session?.next_quiz_text) {
                                 cellContent = `${session.next_quiz_text} (목표: 오답 ${session.next_quiz_cut || 0}개 이하)`;
                               }
                             } else if (col.id === 'review') {
-                              cellContent = s.lastSession?.homework_text ? `"${s.lastSession.homework_text}"` : '기존 숙제 없음';
+                              cellContent = s.lastSession?.homework_text ? `"${s.lastSession.homework_text}"` : '';
                             } else if (col.id === 'classwork') {
-                              cellContent = session?.classwork_text || '-';
+                              cellContent = session?.classwork_text || '';
                             } else if (col.id === 'completed_classwork') {
-                              cellContent = session?.completed_classwork_text || '-';
+                              cellContent = session?.completed_classwork_text || '';
                             } else if (col.id === 'assign') {
-                              cellContent = session?.homework_text || '-';
+                              cellContent = session?.homework_text || '';
                             } else if (col.id === 'mission') {
-                              cellContent = session?.mission || s.recent_mission || '-';
+                              cellContent = session?.mission ?? s.recent_mission ?? '';
                             } else if (col.id === 'notes') {
-                              cellContent = session?.special_notes || '-';
+                              cellContent = session?.special_notes || '';
                             }
 
                             return (

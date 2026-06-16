@@ -106,14 +106,24 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
                     ) : (
                       col.label
                     )}
-                    {canFocus && !focusColumn && (
-                      <button 
-                        onClick={(e) => { e.stopPropagation(); onFocusColumn(col.id); }}
-                        className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded transition-all text-blue-400"
-                        title="넓게 보기"
-                      >
-                        <Maximize2 size={10} />
-                      </button>
+                    {canFocus && (
+                      focusColumn === col.id ? (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onFocusColumn(null); }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-amber-500/20 rounded transition-all text-amber-400"
+                          title="원래 크기로 복귀"
+                        >
+                          <Minimize2 size={10} />
+                        </button>
+                      ) : (
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); onFocusColumn(col.id); }}
+                          className="opacity-0 group-hover:opacity-100 p-1 hover:bg-white/10 rounded transition-all text-blue-400"
+                          title="넓게 보기"
+                        >
+                          <Maximize2 size={10} />
+                        </button>
+                      )
                     )}
                   </div>
                   {col.id === 'next_quiz' && onBatchQuizCut && (
@@ -989,7 +999,12 @@ export default function TodaySheet({
                   {isFullScreen ? '원래화면' : '전체화면'}
                 </button>
                 <button 
-                  onClick={() => setIsPrintPreviewOpen(true)} 
+                  onClick={() => {
+                    if (document.activeElement instanceof HTMLElement) {
+                      document.activeElement.blur();
+                    }
+                    setTimeout(() => setIsPrintPreviewOpen(true), 150);
+                  }} 
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg"
                 >
                   <Printer size={12} /> 인쇄하기

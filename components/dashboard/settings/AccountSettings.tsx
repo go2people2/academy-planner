@@ -17,7 +17,7 @@ function PresetItem({ preset, currentUser, onUpdateCurrentUser, academyInfo, onU
   const isTeacherAdmin = !isMasterAdmin && currentUser?.role === 'admin';
   
   const currentPresets = isMasterAdmin 
-    ? (academyInfo?.default_homework_presets || {}) 
+    ? (academyInfo?.operation_settings?.default_homework_presets || {}) 
     : (currentUser?.homework_presets || {});
     
   const [localVal, setLocalVal] = useState(currentPresets[preset.id] || '');
@@ -51,7 +51,12 @@ function PresetItem({ preset, currentUser, onUpdateCurrentUser, academyInfo, onU
           
           if (isMasterAdmin) {
             if (onUpdateAcademyInfo) {
-              await onUpdateAcademyInfo({ default_homework_presets: newPresets });
+              await onUpdateAcademyInfo({ 
+                operation_settings: {
+                  ...(academyInfo?.operation_settings || {}),
+                  default_homework_presets: newPresets
+                }
+              });
             }
           } else {
             const { error } = await supabase
@@ -83,7 +88,7 @@ export default function AccountSettings({ currentUser, onUpdateCurrentUser, acad
 
   const isMasterAdmin = currentUser?.id === 'admin';
   const currentPresets = isMasterAdmin 
-    ? (academyInfo?.default_homework_presets || {}) 
+    ? (academyInfo?.operation_settings?.default_homework_presets || {}) 
     : (currentUser?.homework_presets || {});
 
   // 단축어 10개 가져오기 및 초기화
@@ -115,7 +120,12 @@ export default function AccountSettings({ currentUser, onUpdateCurrentUser, acad
   const savePresets = async (updatedPresets: any) => {
     if (isMasterAdmin) {
       if (onUpdateAcademyInfo) {
-        await onUpdateAcademyInfo({ default_homework_presets: updatedPresets });
+        await onUpdateAcademyInfo({ 
+          operation_settings: { 
+            ...(academyInfo?.operation_settings || {}), 
+            default_homework_presets: updatedPresets 
+          } 
+        });
       }
     } else {
       const { error } = await supabase
@@ -135,10 +145,17 @@ export default function AccountSettings({ currentUser, onUpdateCurrentUser, acad
   };
 
   const handleSnippetBlur = async (index: number, val: string) => {
-    const next = [...snippets];
-    next[index] = val;
-    const nextPresets = { ...currentPresets, snippets: next };
-    await savePresets(nextPresets);
+    if (snippets[index] === val) return; // 변경사항이 없으면 저장 생략
+
+    setLocalSnippets(prev => {
+      const next = [...prev];
+      next[index] = val;
+      
+      // 상태 업데이트와 동시에 DB 저장 실행 (최신 prev 값 기준)
+      const nextPresets = { ...currentPresets, snippets: next };
+      savePresets(nextPresets);
+      return next;
+    });
   };
 
   const handleTriggerChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {

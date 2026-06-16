@@ -314,7 +314,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
       onKeyDown={(e) => handleKeyDown(e, colId)}
     >
-      {!isEditing && !['select', 'action', 'attendance', 'name', 'review'].includes(colId) && (
+      {!isEditing && !['select', 'action', 'attendance', 'name', 'tools', 'review'].includes(colId) && (
         <div className="absolute inset-0 z-20 cursor-default" />
       )}
 
@@ -383,9 +383,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           </div>
         )}
 
-        {colId === 'name' && isFirstInTimeSection && timeSectionLabel && (
-          <div className="absolute top-0 right-4 -translate-y-1/2 z-[60] pointer-events-none select-none">
-            <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-normal text-white tracking-widest uppercase shadow-[0_4px_12px_rgba(37,99,235,0.6)] border border-blue-400/40">
+        {colId === 'tools' && isFirstInTimeSection && timeSectionLabel && (
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[60] pointer-events-none select-none">
+            <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-normal text-white tracking-widest uppercase shadow-[0_4px_12px_rgba(37,99,235,0.6)] border border-blue-400/40 whitespace-nowrap">
               {timeSectionLabel}
             </span>
           </div>
@@ -395,7 +395,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="flex items-center justify-start gap-2 px-1.5 py-1 w-full min-h-[22px] relative group/namecell">
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[13px] font-semibold text-white truncate transition-colors">
+                <span className="text-[13px] font-medium text-white truncate transition-colors">
                   {student.name}-{student.teacher_initial || '?'}-{student.class_days 
                     ? [...student.class_days].sort((a, b) => {
                         const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
