@@ -584,7 +584,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 const hasAttendance = isPresent || isSupplement || attStatus !== '';
                 if (!hasAttendance) return null;
 
-                const isRegularClass = student.isTodayClassDay === true;
+                const isRegularClass = formData.isTodayClassDay === true;
 
                 if (isRegularClass && !isSupplement) {
                   return null;
