@@ -171,6 +171,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               onToggleHistory={onToggleHistory}
               onViewProgress={onViewProgress}
               onViewDetail={onSelectStudent}
+              onUpdateStudentInfo={props.onUpdateStudentInfo}
               onApplyTestPreset={(preset: any, cid: 'test_id' | 'next_quiz') => {
                 states.setFormData((prev: any) => {
                   const updates: any = {};

@@ -78,6 +78,7 @@ interface TodaySheetCellProps {
   onInputChange?: (field: string, value: string) => void;
   rowIndex?: number;
   onApplyTestPreset?: (preset: any, colId: 'test_id' | 'next_quiz') => void;
+  onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
@@ -96,7 +97,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   isFirstInTimeSection,
   timeSectionLabel,
   testPresets,
-  onApplyTestPreset
+  onApplyTestPreset,
+  onUpdateStudentInfo
 }: TodaySheetCellProps) {
   
   const colId = col.id;
@@ -512,7 +514,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 else if (currentTag === 'B') nextTag = 'C';
                 else if (currentTag === 'C') nextTag = 'D';
                 else nextTag = '';
-                onSave({ level_tag: nextTag });
+                
+                if (onUpdateStudentInfo) {
+                  onUpdateStudentInfo(student.id, 'level_tag', nextTag);
+                } else {
+                  onSave({ level_tag: nextTag });
+                }
               }}
               className={`w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[10px] select-none transition-all ${
                 student.level_tag === 'A' ? "bg-red-500/20 text-red-400 border border-red-500/30 font-bold" :
