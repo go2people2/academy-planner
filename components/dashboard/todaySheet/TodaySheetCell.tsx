@@ -580,11 +580,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               {student.lastSession?.homework_text && (() => {
                 const attStatus = student.todaySession?.attendance_status || '';
                 const isPresent = ['출석', '지각'].some(st => attStatus.startsWith(st));
-                const isSupplement = attStatus.startsWith('보강');
+                // 💡 [수정] 정규 수업일 판단: 내부 formData.isTodayClassDay(요일 기반)를 확실히 신뢰
+                const isRegularClass = formData.isTodayClassDay === true;
+                
+                // 💡 [수정] 정규 수업일에 '보강'으로 표시되어도 이는 단순 '시간 이동'이므로 보충(Supplement)이 아님
+                const isSupplement = attStatus.startsWith('보강') && !isRegularClass;
+                
                 const hasAttendance = isPresent || isSupplement || attStatus !== '';
                 if (!hasAttendance) return null;
-
-                const isRegularClass = formData.isTodayClassDay === true;
 
                 if (isRegularClass && !isSupplement) {
                   return null;
