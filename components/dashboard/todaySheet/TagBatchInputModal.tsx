@@ -14,18 +14,17 @@ interface TagBatchInputModalProps {
 }
 
 const TARGET_COLUMNS = [
-  { id: 'classwork_text', label: '수행진도' },
-  { id: 'homework_text', label: '숙제' },
+  { id: 'test_id', label: '오늘TEST' },
+  { id: 'homework_text', label: '오늘숙제' },
   { id: 'mission', label: '학생미션' },
   { id: 'next_quiz_text', label: '다음테스트' },
-  { id: 'test_id', label: '오늘할일' },
 ];
 
 export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
   isOpen, onClose, students, onBatchSave
 }) => {
   const [mounted, setMounted] = useState(false);
-  const [targetCol, setTargetCol] = useState('classwork_text');
+  const [targetCol, setTargetCol] = useState('test_id');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
 
