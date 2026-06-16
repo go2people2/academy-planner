@@ -521,7 +521,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   onSave({ level_tag: nextTag });
                 }
               }}
-              className={`w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[10px] select-none transition-all ${
+              className={`w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[13px] leading-none select-none transition-all ${
                 student.level_tag === '가' ? "bg-rose-200 text-rose-900 font-bold" :
                 student.level_tag === '나' ? "bg-sky-200 text-sky-900 font-bold" :
                 student.level_tag === '다' ? "bg-amber-200 text-amber-900 font-bold" :
