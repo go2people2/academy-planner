@@ -566,28 +566,19 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         {colId === 'review' && (
           <div className="relative w-full h-full flex items-start justify-between bg-blue-600/[0.03] py-1 px-2 gap-2">
             <div className="flex-1 text-left min-w-0">
-              {student.lastSession?.homework_text ? (() => {
-                const rawDate = student.lastSession?.date ? student.lastSession.date.slice(5).replace('-', '.') : '';
-                const rawDay = student.lastSession?.date ? getDayOfWeek(student.lastSession.date) : '';
-                return (
-                  <div className="flex flex-col text-[12px] font-normal text-blue-200 leading-[1.15] italic whitespace-pre-wrap break-all">
-                    {rawDate && (
-                      <span className="text-blue-200 text-[10px] font-medium not-italic block mb-0.5 tracking-wider">
-                        [{rawDate} <span className="text-amber-300">({rawDay})</span>]
-                      </span>
-                    )}
-                    <div className="text-[12px] font-normal text-blue-200 leading-[1.15] italic whitespace-pre-wrap break-all">
-                      {student.lastSession.homework_text.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
-                        <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
-                          {i === 0 && <span className="text-blue-500/80 text-[14px] font-normal mr-1 align-top leading-[1.15]">"</span>}
-                          {para}
-                          {i === arr.length - 1 && <span className="text-blue-500/80 text-[14px] font-normal ml-1 align-bottom leading-[1.15]">"</span>}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                );
-              })() : (
+              {student.lastSession?.homework_text ? (
+                <div className="text-[12px] font-normal text-blue-200 leading-[1.15] italic whitespace-pre-wrap break-all">
+                  {student.lastSession.homework_text.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
+                    <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
+                      {i === 0 && <span className="text-blue-500/80 text-[14px] font-normal mr-1 align-top leading-[1.15]">"</span>}
+                      {para.split(/(\([월화수목금토일]\))/g).map((part, j) => 
+                        part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className="text-amber-300 font-medium">{part}</span> : part
+                      )}
+                      {i === arr.length - 1 && <span className="text-blue-500/80 text-[14px] font-normal ml-1 align-bottom leading-[1.15]">"</span>}
+                    </span>
+                  ))}
+                </div>
+              ) : (
                 <span className="italic opacity-30 text-gray-500 font-medium text-[11px] px-2">기존 숙제 없음</span>
               )}
             </div>
