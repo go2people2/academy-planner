@@ -1,6 +1,7 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Printer, X, FileText } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
@@ -24,7 +25,10 @@ export default function PrintPreviewModal({
   activeColumns,
   columnWidths
 }: PrintPreviewModalProps) {
-  if (!isOpen) return null;
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  if (!isOpen || !mounted) return null;
 
   // Filter columns to exclude interactive ones (checkbox, action buttons) and date column
   const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action' && c.id !== 'date' && c.id !== 'tools');
@@ -139,7 +143,7 @@ export default function PrintPreviewModal({
     pages.push([]);
   }
 
-  return (
+  return createPortal(
     <div className="fixed inset-0 z-[250] flex flex-col items-center justify-start p-4 md:p-8 bg-black/85 backdrop-blur-md overflow-y-auto print:static print:block print:overflow-visible print:p-0 print:bg-white print-preview-modal-container">
       {/* Control bar */}
       <div className="w-full max-w-5xl flex items-center justify-between mb-6 bg-gray-900/90 border border-white/10 rounded-xl p-4 shadow-xl shrink-0 no-print">
@@ -342,6 +346,7 @@ export default function PrintPreviewModal({
           );
         })}
       </div>
-    </div>
+    </div>,
+    document.body
   );
 }
