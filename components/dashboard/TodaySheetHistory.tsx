@@ -39,7 +39,15 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             }
             if (col.id === 'test_id') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-300 font-bold text-[11px] truncate text-left">{log.test_id}</td>;
             if (col.id === 'test_score') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-left text-blue-400 font-black text-[12px]">{log.test_score ? `${log.test_score}%` : '-'}</td>;
-            if (col.id === 'review') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-500 italic truncate text-[11px]">Prev: {log.status}</td>;
+            if (col.id === 'review') {
+              const prevLog = student.allLogs[idx + 2];
+              const prevHw = prevLog?.homework_text;
+              return (
+                <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-blue-200/50 italic text-[11px] whitespace-pre-wrap leading-relaxed text-left">
+                  {prevHw ? `"${prevHw}"` : <span className="text-gray-600">-</span>}
+                </td>
+              );
+            }
             if (col.id === 'classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.classwork_text || '-'}</td>;
             if (col.id === 'completed_classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-blue-300 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.completed_classwork_text || '-'}</td>;
             if (col.id === 'assign') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.homework_text || '-'}</td>;
