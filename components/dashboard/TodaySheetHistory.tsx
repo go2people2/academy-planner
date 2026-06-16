@@ -45,12 +45,17 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             if (col.id === 'review') {
               const prevLog = pastLogs[idx + 1];
               const prevHw = prevLog?.homework_text;
-              const prevDateStr = prevLog?.date ? `${prevLog.date.slice(5).replace('-', '.')} (${getDayOfWeek(prevLog.date)})` : '';
+              const rawDate = prevLog?.date ? prevLog.date.slice(5).replace('-', '.') : '';
+              const rawDay = prevLog?.date ? getDayOfWeek(prevLog.date) : '';
               return (
                 <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left">
                   {prevHw ? (
                     <div className="flex flex-col text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left break-all">
-                      <span className="text-teal-200 text-[9.5px] font-medium not-italic block mb-0.5 tracking-wider">[{prevDateStr}]</span>
+                      {rawDate && (
+                        <span className="text-teal-200 text-[9.5px] font-medium not-italic block mb-0.5 tracking-wider">
+                          [{rawDate} <span className="text-amber-300">({rawDay})</span>]
+                        </span>
+                      )}
                       <div className="text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left break-all">
                         {prevHw.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
                           <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
