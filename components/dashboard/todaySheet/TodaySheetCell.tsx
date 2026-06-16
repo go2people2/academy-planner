@@ -522,10 +522,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 }
               }}
               className={`w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[10px] select-none transition-all ${
-                student.level_tag === '가' ? "bg-rose-200 text-rose-950 font-black border border-rose-400" :
-                student.level_tag === '나' ? "bg-sky-200 text-sky-950 font-black border border-sky-400" :
-                student.level_tag === '다' ? "bg-amber-200 text-amber-950 font-black border border-amber-400" :
-                student.level_tag === '라' ? "bg-teal-200 text-teal-950 font-black border border-teal-400" :
+                student.level_tag === '가' ? "bg-red-500/20 text-red-300 font-black border border-red-400/80" :
+                student.level_tag === '나' ? "bg-blue-500/20 text-blue-300 font-black border border-blue-400/80" :
+                student.level_tag === '다' ? "bg-amber-500/20 text-amber-300 font-black border border-amber-400/80" :
+                student.level_tag === '라' ? "bg-emerald-500/20 text-emerald-300 font-black border border-emerald-400/80" :
                 "bg-white/[0.03] text-gray-500 hover:bg-white/10 hover:text-gray-300 border border-white/10"
               }`}
               title="클릭하여 태그(가/나/다/라) 변경"
