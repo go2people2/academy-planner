@@ -27,6 +27,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
   const [targetCol, setTargetCol] = useState('test_id');
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [showStudents, setShowStudents] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
     setMounted(true);
@@ -170,12 +171,24 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                     <div className={`px-2 py-1 rounded-md border text-[12px] font-bold inline-flex items-center justify-center max-w-full ${getTagColor(group.tag)}`}>
                       {group.tag}
                     </div>
-                    <div className="text-[10px] text-gray-500 pl-0.5 font-medium">
-                      학생 {group.students.length}명
+                    <div className="flex items-center justify-between pl-0.5 mt-0.5">
+                      <div className="text-[10px] text-gray-400 font-medium">
+                        {group.students.length}명
+                      </div>
+                      {group.students.length > 0 && (
+                        <button 
+                          onClick={() => setShowStudents(prev => ({ ...prev, [group.tag]: !prev[group.tag] }))}
+                          className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2"
+                        >
+                          {showStudents[group.tag] ? '숨기기' : '명단보기'}
+                        </button>
+                      )}
                     </div>
-                    <div className="text-[9px] text-gray-600 pl-0.5 leading-tight line-clamp-2" title={group.students.map(s => s.name).join(', ')}>
-                      {group.students.map(s => s.name).join(', ')}
-                    </div>
+                    {showStudents[group.tag] && (
+                      <div className="text-[10px] text-gray-500 pl-0.5 leading-relaxed bg-black/40 p-1.5 rounded border border-white/5 mt-1 max-h-24 overflow-y-auto custom-scrollbar-h">
+                        {group.students.map(s => s.name).join(', ')}
+                      </div>
+                    )}
                   </div>
                   
                   {/* Textarea */}
