@@ -18,7 +18,6 @@ const TARGET_COLUMNS = [
   { id: 'homework_text', label: '오늘숙제' },
   { id: 'mission', label: '학생미션' },
   { id: 'next_quiz_text', label: '다음테스트' },
-  { id: 'level_tag', label: '태그' },
 ];
 
 export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
@@ -36,17 +35,33 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
 
   // 화면에 띄울 태그 그룹들 계산
   const tagGroups = useMemo(() => {
-    const groups: Record<string, Student[]> = {};
+    // 가, 나, 다, 라 그룹은 무조건 화면에 나오도록 기본 할당 (학생 0명이어도 표시)
+    const groups: Record<string, Student[]> = {
+      '가': [],
+      '나': [],
+      '다': [],
+      '라': [],
+    };
+    
     students.forEach(s => {
       const tag = s.level_tag || '미지정';
       if (!groups[tag]) groups[tag] = [];
       groups[tag].push(s);
     });
 
-    // 가, 나, 다, 라 순 정렬 후, '미지정'은 맨 끝으로
+    // 가, 나, 다, 라 순 정렬 후, 그 외 태그, '미지정'은 맨 끝으로
     const sortedTags = Object.keys(groups).sort((a, b) => {
       if (a === '미지정') return 1;
       if (b === '미지정') return -1;
+      
+      const predefined = ['가', '나', '다', '라'];
+      const aIndex = predefined.indexOf(a);
+      const bIndex = predefined.indexOf(b);
+      
+      if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
+      if (aIndex !== -1) return -1;
+      if (bIndex !== -1) return 1;
+      
       return a.localeCompare(b);
     });
 
