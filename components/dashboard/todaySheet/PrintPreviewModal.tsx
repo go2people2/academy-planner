@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Printer, X, FileText } from 'lucide-react';
+import { Printer, X, FileText, Download } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
 
 interface PrintPreviewModalProps {
@@ -36,8 +36,35 @@ export default function PrintPreviewModal({
   // 화면상 설정된 너비 비율을 기반으로 각 열의 프린트 너비 비율(%) 계산
   const totalScreenWidth = displayCols.reduce((sum, col) => sum + (columnWidths?.[col.id] || col.minWidth || 100), 0);
 
+  const [isGenerating, setIsGenerating] = useState(false);
+
   const handlePrint = () => {
     window.print();
+  };
+
+  const handleDownloadPdf = async () => {
+    setIsGenerating(true);
+    try {
+      const html2pdf = (await import('html2pdf.js')).default;
+      const element = document.getElementById('pdf-content-container');
+      if (!element) return;
+      
+      const opt = {
+        margin: 0,
+        filename: `${selectedDate.replace(/-/g, '')}_수업일지.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+        pagebreak: { mode: ['css', 'legacy'] }
+      };
+      
+      await html2pdf().set(opt).from(element).save();
+    } catch (error) {
+      console.error('PDF Download Error:', error);
+      alert('PDF 생성 중 오류가 발생했습니다.');
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const dayKey = getDayOfWeek(selectedDate);
@@ -161,6 +188,13 @@ export default function PrintPreviewModal({
 
         <div className="flex items-center gap-2">
           <button
+            onClick={handleDownloadPdf}
+            disabled={isGenerating}
+            className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-500 border border-rose-500 text-white rounded-lg text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-rose-600/10 active:scale-95 disabled:opacity-50"
+          >
+            {isGenerating ? <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : <Download size={14} />} PDF 다운로드
+          </button>
+          <button
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 text-white rounded-lg text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/10 active:scale-95"
           >
@@ -177,7 +211,7 @@ export default function PrintPreviewModal({
       </div>
 
       {/* Pages Container */}
-      <div className="w-full max-w-5xl flex flex-col gap-8 print:block print:gap-0">
+      <div id="pdf-content-container" className="w-full max-w-5xl flex flex-col gap-8 print:block print:gap-0">
         {pages.map((pageRows, pageIdx) => {
           return (
             <div 
