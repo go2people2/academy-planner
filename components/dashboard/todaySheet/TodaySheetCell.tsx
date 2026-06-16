@@ -422,8 +422,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'tools' && (
           <div className="flex items-center justify-center gap-1.5 px-1 py-1 w-full min-h-[22px] relative group/tools">
-            <div className="absolute top-0 right-0 flex flex-row-reverse items-start gap-1">
-              {student.management_notes && (
+            {/* 우측 상단: 학생 주의사항 (노란색) */}
+            {student.management_notes && (
+              <div className="absolute top-0 right-0">
                 <div 
                   className="group/note relative cursor-pointer z-[60]"
                   onClick={(e) => { e.stopPropagation(); onViewDetail?.(student.id); }}
@@ -460,8 +461,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     document.body
                   )}
                 </div>
-              )}
-              {student.suggestions && student.suggestions.length > 0 && (
+              </div>
+            )}
+
+            {/* 좌측 상단: 건의사항 (파란색) */}
+            {student.suggestions && student.suggestions.length > 0 && (
+              <div className="absolute top-0 left-0">
                 <div 
                   className="group/suggestion relative cursor-pointer z-[60]"
                   onMouseEnter={(e) => handleOpenTooltip(e, 'suggestion')}
@@ -470,7 +475,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   onBlur={() => setActiveTooltip(null)}
                   tabIndex={0}
                 >
-                  <div className="w-0 h-0 border-t-[14px] border-t-blue-500 border-l-[14px] border-l-transparent shadow-md" />
+                  <div className="w-0 h-0 border-t-[14px] border-t-blue-500 border-r-[14px] border-r-transparent shadow-md" />
                   
                   {activeTooltip === 'suggestion' && createPortal(
                     <AnimatePresence mode="wait">
