@@ -53,8 +53,10 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
 
   return (
     <>
-      {history.map((log: any, idx: number) => (
-        <tr key={`${student.id}-hist-${idx}`} className="bg-white/[0.01] border-b border-white/10 transition-colors hover:bg-white/[0.03] align-middle text-[11px]">
+      {history.map((log: any, idx: number) => {
+        const rowBg = idx % 2 === 0 ? "bg-white/[0.04]" : "bg-black/20";
+        return (
+          <tr key={`${student.id}-hist-${idx}`} className={`${rowBg} border-b border-white/10 transition-colors hover:bg-white/[0.08] align-middle text-[11px]`}>
           {activeColumns.map((col: any) => {
             const styles = { 
               width: colWidths[col.id] || col.minWidth, 
@@ -117,7 +119,8 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             return <td key={col.id} style={styles}></td>;
           })}
         </tr>
-      ))}
+        );
+      })}
     </>
   );
 });
