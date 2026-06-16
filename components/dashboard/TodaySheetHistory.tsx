@@ -48,7 +48,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                 <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-teal-200 italic text-[11px] whitespace-pre-wrap leading-relaxed text-left">
                   {prevHw ? (
                     <>
-                      <span className="text-teal-500/70 text-[9.5px] font-medium not-italic block mb-1 tracking-wider">[{prevDateStr}]</span>
+                      <span className="text-teal-200 text-[9.5px] font-medium not-italic block mb-1 tracking-wider">[{prevDateStr}]</span>
                       "{prevHw}"
                     </>
                   ) : <span className="text-gray-600">-</span>}
