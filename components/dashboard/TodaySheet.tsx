@@ -15,6 +15,7 @@ import { TodaySheetRow } from './TodaySheetRow';
 import { HistoryRows } from './TodaySheetHistory';
 import ReportPreview from './ReportPreview';
 import PrintPreviewModal from './todaySheet/PrintPreviewModal';
+import { TagBatchInputModal } from './todaySheet/TagBatchInputModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
@@ -1125,6 +1126,14 @@ export default function TodaySheet({
         academyInfo={academyInfo}
         activeColumns={activeColumns}
         columnWidths={colWidths}
+      />
+
+      {/* 태그별 일괄입력 모달 */}
+      <TagBatchInputModal
+        isOpen={isTagBatchMode}
+        onClose={() => setIsTagBatchMode(false)}
+        students={filteredStudents}
+        onBatchSave={handleBatchSave}
       />
     </div>
   );
