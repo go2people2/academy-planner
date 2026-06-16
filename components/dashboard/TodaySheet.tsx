@@ -31,6 +31,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'select', label: '', minWidth: 40, isSticky: true, canHide: false },
   { id: 'date', label: '날짜', minWidth: 50, canHide: true },
   { id: 'name', label: '이름', minWidth: 120, isSticky: true, canHide: false },
+  { id: 'tools', label: '🛠️', minWidth: 80, isSticky: true, canHide: false },
   { id: 'attendance', label: '출결', minWidth: 80, canHide: true },
   { id: 'test_id', label: '오늘TEST', minWidth: 140, canHide: true },
   { id: 'test_score', label: '점수', minWidth: 60, canHide: true },
@@ -56,18 +57,23 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
   return (
     <tr className="bg-black border-b border-white/20 select-none">
       {activeColumns.map((col: any) => {
-        const isStickyHorizontally = col.id === 'name' || col.id === 'action' || col.id === 'select';
+        const isStickyHorizontally = col.id === 'name' || col.id === 'tools' || col.id === 'action' || col.id === 'select';
         const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes'].includes(col.id);
         const isAction = col.id === 'action';
         const isSelect = col.id === 'select';
         const isLastDataCol = col.id === lastDataColumnId;
         
+        let leftOffset: string | number = 'auto';
+        if (col.id === 'select') leftOffset = 0;
+        else if (col.id === 'name') leftOffset = (colWidths['select'] || 40) - 1;
+        else if (col.id === 'tools') leftOffset = (colWidths['select'] || 40) + (colWidths['name'] || 120) - 2;
+
         const styles: React.CSSProperties = {
           width: isLastDataCol ? 'auto' : (colWidths[col.id] || col.minWidth),
           minWidth: colWidths[col.id] || col.minWidth,
           position: 'sticky',
           top: 0,
-          left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) - 1 : 'auto'),
+          left: leftOffset,
           right: col.id === 'action' ? 0 : 'auto',
           zIndex: isStickyHorizontally ? 50 : 40,
           backgroundColor: '#000000',

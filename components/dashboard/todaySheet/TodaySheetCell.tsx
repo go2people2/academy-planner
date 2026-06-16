@@ -355,7 +355,27 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'name' && (
-          <div className="flex items-center justify-between gap-2 px-1.5 py-1 w-full min-h-[22px] relative group/namecell">
+          <div className="flex items-center justify-start gap-2 px-1.5 py-1 w-full min-h-[22px] relative group/namecell">
+            <div className="flex flex-col min-w-0 flex-1">
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className="text-[13px] font-normal text-white truncate transition-colors">
+                  {student.name}-{student.teacher_initial || '?'}-{student.class_days 
+                    ? [...student.class_days].sort((a, b) => {
+                        const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                        return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+                      }).join('')
+                    : '무'}
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[9px] font-normal uppercase tracking-tighter truncate text-gray-500">
+                {student.school} · {student.grade}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {colId === 'tools' && (
+          <div className="flex items-center justify-center gap-1.5 px-1 py-1 w-full min-h-[22px] relative group/tools">
             <div className="absolute top-0 right-0 flex flex-row-reverse items-start gap-1">
               {student.management_notes && (
                 <div 
@@ -397,7 +417,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               )}
               {student.suggestions && student.suggestions.length > 0 && (
                 <div 
-                  className="group/suggestion relative cursor-pointer"
+                  className="group/suggestion relative cursor-pointer z-[60]"
                   onMouseEnter={(e) => handleOpenTooltip(e, 'suggestion')}
                   onMouseLeave={() => setActiveTooltip(null)}
                   onFocus={(e) => handleOpenTooltip(e, 'suggestion')}
@@ -437,48 +457,40 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 </div>
               )}
             </div>
-            <div className="flex flex-col min-w-0 flex-1">
-              <div className="flex items-center gap-1.5 min-w-0">
-                <span className="text-[13px] font-normal text-white truncate group-hover/namecell:text-blue-400 transition-colors">
-                  {student.name}-{student.teacher_initial || '?'}-{student.class_days 
-                    ? [...student.class_days].sort((a, b) => {
-                        const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-                        return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
-                      }).join('')
-                    : '무'}
-                </span>
-                <button 
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    const slug = window.location.pathname.split('/')[1];
-                    window.open(`/${slug}/student?id=${student.id}`, '_blank');
-                  }}
-                  className="p-1 bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-[2px] shrink-0"
-                  title="학생 페이지 보기"
-                >
-                  <ExternalLink size={10} strokeWidth={3} />
-                </button>
-                {['pending', 'approved'].includes(student.todaySession?.approval_status || '') && (
-                  <button 
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      if (confirm("이 학생의 제출 상태를 초기화하시겠습니까? (학생이 다시 내용을 수정하고 제출할 수 있습니다.)")) {
-                        onSave({ approval_status: 'none' });
-                      }
-                    }}
-                    className="p-1 bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-[2px] shrink-0"
-                    title="학생 제출 리셋 (다시 수정 가능하게 하기)"
-                  >
-                    <HistoryIcon size={10} strokeWidth={3} />
-                  </button>
-                )}
-              </div>
-              <div className="flex items-center gap-1 text-[9px] font-normal uppercase tracking-tighter truncate text-gray-500">
-                {student.school} · {student.grade}
-              </div>
-            </div>
+
+            <button 
+              onClick={(e) => {
+                e.stopPropagation();
+                const slug = window.location.pathname.split('/')[1];
+                window.open(`/${slug}/student?id=${student.id}`, '_blank');
+              }}
+              className="p-1.5 bg-blue-600/20 text-blue-400 hover:bg-blue-600 hover:text-white rounded-[4px] shrink-0 transition-colors"
+              title="학생 페이지 보기"
+            >
+              <ExternalLink size={12} strokeWidth={2.5} />
+            </button>
             {onViewProgress && (
-              <button onClick={(e) => { e.stopPropagation(); onViewProgress(student.id); }} className="p-2 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-all shadow-sm shrink-0" title="진도표 바로가기"><TrendingUp size={12} /></button>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onViewProgress(student.id); }} 
+                className="p-1.5 bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-[4px] transition-colors shrink-0" 
+                title="진도표 바로가기"
+              >
+                <TrendingUp size={12} strokeWidth={2.5} />
+              </button>
+            )}
+            {['pending', 'approved'].includes(student.todaySession?.approval_status || '') && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (confirm("이 학생의 제출 상태를 초기화하시겠습니까? (학생이 다시 내용을 수정하고 제출할 수 있습니다.)")) {
+                    onSave({ approval_status: 'none' });
+                  }
+                }}
+                className="p-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-[4px] shrink-0 transition-colors"
+                title="학생 제출 리셋 (다시 수정 가능하게 하기)"
+              >
+                <HistoryIcon size={12} strokeWidth={2.5} />
+              </button>
             )}
           </div>
         )}

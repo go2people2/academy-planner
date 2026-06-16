@@ -118,8 +118,13 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
             : 'bg-black hover:bg-[#111111]' // 짝수 행
       }`}>
         {activeColumns.map((col) => {
-          const isSticky = col.id === 'name' || col.id === 'action' || col.id === 'select';
+          const isSticky = col.id === 'name' || col.id === 'tools' || col.id === 'action' || col.id === 'select';
           const isLastDataCol = col.id === lastDataColumnId;
+
+          let leftOffset: string | number = 'auto';
+          if (col.id === 'select') leftOffset = 0;
+          else if (col.id === 'name') leftOffset = (colWidths['select'] || 40) - 1;
+          else if (col.id === 'tools') leftOffset = (colWidths['select'] || 40) + (colWidths['name'] || 120) - 2;
 
           return (
             <TodaySheetCell
@@ -134,9 +139,9 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
                 width: isLastDataCol ? 'auto' : (colWidths[col.id] || col.minWidth),
                 minWidth: colWidths[col.id] || col.minWidth,
                 position: isSticky ? 'sticky' : 'relative',
-                left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) - 1 : 'auto'),
+                left: leftOffset,
                 right: col.id === 'action' ? 0 : 'auto',
-                zIndex: isSticky ? (rowIndex === 0 && !props.isScrolled && col.id === 'name' ? 60 : 30) : (col.id === 'notes' ? 25 : 10),
+                zIndex: isSticky ? (rowIndex === 0 && !props.isScrolled && (col.id === 'name' || col.id === 'tools') ? 60 : 30) : (col.id === 'notes' ? 25 : 10),
                 backgroundColor: isSticky ? 'inherit' : 'transparent',
                 padding: 0,
                 verticalAlign: 'middle'
