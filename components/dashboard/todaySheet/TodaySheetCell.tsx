@@ -349,7 +349,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         {colId === 'name' && (
           <div className="flex items-center justify-between gap-2 px-1.5 py-1 w-full min-h-[22px] relative group/namecell">
             {isFirstInTimeSection && timeSectionLabel && (
-              <div className="absolute top-[0px] -translate-y-[60%] right-4 z-[60] pointer-events-none select-none">
+              <div className="absolute -top-[14px] right-4 z-[60] pointer-events-none select-none">
                 <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-normal text-white tracking-widest uppercase shadow-[0_4px_12px_rgba(37,99,235,0.6)] border border-blue-400/40">
                   {timeSectionLabel}
                 </span>
