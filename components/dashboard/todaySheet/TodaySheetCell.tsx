@@ -367,8 +367,15 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     : '무'}
                 </span>
               </div>
-              <div className="flex items-center gap-1 text-[9px] font-normal uppercase tracking-tighter truncate text-gray-500">
-                {student.school} · {student.grade}
+              <div className="flex items-center gap-1 text-[9px] font-normal uppercase tracking-tighter truncate">
+                <span className="text-pink-300">{student.school}</span>
+                <span className="text-gray-600">·</span>
+                <span className={
+                  (student.grade || '').includes('초') ? 'text-emerald-400' :
+                  (student.grade || '').includes('중') ? 'text-blue-400' :
+                  (student.grade || '').includes('고') ? 'text-amber-400' :
+                  'text-gray-500'
+                }>{student.grade}</span>
               </div>
             </div>
           </div>
