@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, Zap, StickyNote, Target, ExternalLink, Search, X } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
