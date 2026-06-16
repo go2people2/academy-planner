@@ -18,6 +18,7 @@ const TARGET_COLUMNS = [
   { id: 'homework_text', label: '오늘숙제' },
   { id: 'mission', label: '학생미션' },
   { id: 'next_quiz_text', label: '다음테스트' },
+  { id: 'level_tag', label: '태그' },
 ];
 
 export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
