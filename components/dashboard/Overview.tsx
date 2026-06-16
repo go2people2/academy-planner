@@ -61,6 +61,17 @@ export default function Overview({
     type: 'add' | 'remove';
     studentIds: string[];
   }>({ isOpen: false, type: 'add', studentIds: [] });
+
+  // 모달 ESC 키 닫기 이벤트
+  useEffect(() => {
+    if (reasonModal.isOpen) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setReasonModal(prev => ({ ...prev, isOpen: false }));
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [reasonModal.isOpen]);
   
   const [reasons, setReasons] = useState<Record<string, string>>({});
 

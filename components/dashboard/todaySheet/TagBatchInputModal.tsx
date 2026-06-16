@@ -54,12 +54,20 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
     }));
   }, [students]);
 
-  // 모달 열릴 때마다 입력창 초기화
+  // 모달 열릴 때마다 입력창 초기화 및 ESC 이벤트 등록
   useEffect(() => {
     if (isOpen) {
       setInputs({});
+      
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') {
+          onClose();
+        }
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
     }
-  }, [isOpen, targetCol]);
+  }, [isOpen, targetCol, onClose]);
 
   const handleSave = async () => {
     if (isSaving) return;
