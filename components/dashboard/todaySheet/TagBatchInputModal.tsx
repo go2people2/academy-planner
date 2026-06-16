@@ -187,7 +187,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                       )}
                     </div>
                     {showStudents[group.tag] && (
-                      <div className="text-[10px] text-gray-500 pl-0.5 leading-relaxed bg-black/40 p-1.5 rounded border border-white/5 mt-1 max-h-24 overflow-y-auto custom-scrollbar-h">
+                      <div className="text-[12px] text-gray-200 font-medium leading-relaxed bg-black/60 p-2 rounded border border-white/10 mt-1.5 max-h-32 overflow-y-auto custom-scrollbar-h">
                         {group.students.map(s => s.name).join(', ')}
                       </div>
                     )}
