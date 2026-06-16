@@ -43,7 +43,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
               const prevLog = student.allLogs[idx + 2];
               const prevHw = prevLog?.homework_text;
               return (
-                <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-blue-200/50 italic text-[11px] whitespace-pre-wrap leading-relaxed text-left">
+                <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-blue-200 italic text-[11px] whitespace-pre-wrap leading-relaxed text-left">
                   {prevHw ? `"${prevHw}"` : <span className="text-gray-600">-</span>}
                 </td>
               );
