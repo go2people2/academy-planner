@@ -45,10 +45,10 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
               const prevHw = prevLog?.homework_text;
               const prevDateStr = prevLog?.date ? `${prevLog.date.slice(5).replace('-', '.')} (${getDayOfWeek(prevLog.date)})` : '';
               return (
-                <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-teal-200 italic text-[11px] whitespace-pre-wrap leading-relaxed text-left">
+                <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left">
                   {prevHw ? (
                     <>
-                      <span className="text-teal-200 text-[9.5px] font-medium not-italic block mb-1 tracking-wider">[{prevDateStr}]</span>
+                      <span className="text-teal-200 text-[9.5px] font-medium not-italic block mb-0.5 tracking-wider">[{prevDateStr}]</span>
                       "{prevHw}"
                     </>
                   ) : <span className="text-gray-600">-</span>}
