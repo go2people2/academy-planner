@@ -508,7 +508,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 </div>
               </div>
             )}
-            </div>
 
             <div 
               onClick={(e) => {
