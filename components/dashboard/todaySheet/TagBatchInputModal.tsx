@@ -104,12 +104,12 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
   };
 
   const getTagColor = (tag: string) => {
-    if (tag === '가') return "bg-rose-200 text-rose-900 border-rose-300";
-    if (tag === '나') return "bg-sky-200 text-sky-900 border-sky-300";
-    if (tag === '다') return "bg-amber-200 text-amber-900 border-amber-300";
-    if (tag === '라') return "bg-teal-200 text-teal-900 border-teal-300";
+    if (tag === '가') return "bg-rose-200 text-rose-950 font-black border-rose-400";
+    if (tag === '나') return "bg-sky-200 text-sky-950 font-black border-sky-400";
+    if (tag === '다') return "bg-amber-200 text-amber-950 font-black border-amber-400";
+    if (tag === '라') return "bg-teal-200 text-teal-950 font-black border-teal-400";
     if (tag === '미지정') return "bg-white/5 text-gray-500 border-white/10";
-    return "bg-indigo-200 text-indigo-900 border-indigo-300"; // 기본 자유 태그 색상
+    return "bg-indigo-200 text-indigo-950 font-black border-indigo-400"; // 기본 자유 태그 색상
   };
 
   if (!mounted || !isOpen) return null;
