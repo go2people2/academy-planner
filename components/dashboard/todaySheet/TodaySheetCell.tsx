@@ -505,17 +505,23 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div 
               onClick={(e) => {
                 e.stopPropagation();
-                const newTag = window.prompt("학생에게 부여할 태그를 자유롭게 입력하세요.\n(예: 삼산중, 토요보충, 심화 등)\n*비워두고 확인을 누르면 태그가 삭제됩니다.", student.level_tag || "");
-                if (newTag !== null) {
-                  onSave({ level_tag: newTag.trim() });
-                }
+                const currentTag = student.level_tag || '';
+                let nextTag = '';
+                if (currentTag === '') nextTag = 'A';
+                else if (currentTag === 'A') nextTag = 'B';
+                else if (currentTag === 'B') nextTag = 'C';
+                else if (currentTag === 'C') nextTag = 'D';
+                else nextTag = '';
+                onSave({ level_tag: nextTag });
               }}
-              className={`h-[18px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[10px] select-none transition-all ${
-                student.level_tag 
-                  ? "px-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold max-w-[60px] truncate" 
-                  : "w-[18px] bg-white/[0.03] text-gray-500 hover:bg-white/10 hover:text-gray-300 border border-white/10"
+              className={`w-[18px] h-[18px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[10px] select-none transition-all ${
+                student.level_tag === 'A' ? "bg-red-500/20 text-red-400 border border-red-500/30 font-bold" :
+                student.level_tag === 'B' ? "bg-blue-500/20 text-blue-400 border border-blue-500/30 font-bold" :
+                student.level_tag === 'C' ? "bg-amber-500/20 text-amber-400 border border-amber-500/30 font-bold" :
+                student.level_tag === 'D' ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 font-bold" :
+                "bg-white/[0.03] text-gray-500 hover:bg-white/10 hover:text-gray-300 border border-white/10"
               }`}
-              title={student.level_tag ? `${student.level_tag} (클릭하여 수정)` : "태그 추가"}
+              title="클릭하여 태그(A/B/C/D) 변경"
             >
               {student.level_tag || '+'}
             </div>
