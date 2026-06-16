@@ -120,17 +120,17 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
           initial={{ opacity: 0, scale: 0.95, y: 20 }}
           animate={{ opacity: 1, scale: 1, y: 0 }}
           exit={{ opacity: 0, scale: 0.95, y: 20 }}
-          className="w-full max-w-4xl bg-[#0a0a0a] rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden flex flex-col max-h-[90vh]"
+          className="w-full max-w-2xl bg-[#0a0a0a] rounded-xl shadow-[0_0_50px_rgba(0,0,0,0.5)] border border-white/10 overflow-hidden flex flex-col max-h-[90vh]"
         >
           {/* Header */}
-          <div className="flex items-center justify-between px-6 py-5 border-b border-white/10 bg-white/[0.02]">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/[0.02]">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
-                <Tags className="text-indigo-400" size={20} />
+              <div className="w-8 h-8 rounded-lg bg-indigo-500/20 flex items-center justify-center border border-indigo-500/30">
+                <Tags className="text-indigo-400" size={16} />
               </div>
               <div>
-                <h2 className="text-lg font-bold text-white tracking-tight">태그별 일괄 입력</h2>
-                <p className="text-[12px] text-gray-400 mt-0.5">현재 화면의 학생 {students.length}명을 태그별로 분류하여 동시에 일괄 입력합니다.</p>
+                <h2 className="text-[15px] font-bold text-white tracking-tight">태그별 일괄 입력</h2>
+                <p className="text-[11px] text-gray-400 mt-0.5">현재 화면의 학생 {students.length}명을 태그별로 분류하여 일괄 입력합니다.</p>
               </div>
             </div>
             <button onClick={onClose} className="p-2 text-gray-400 hover:text-white rounded-md hover:bg-white/10 transition-colors">
@@ -139,17 +139,17 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
           </div>
 
           {/* Body */}
-          <div className="flex-1 overflow-y-auto p-6 space-y-6 custom-scrollbar-h">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar-h">
             
             {/* Target Column Selector */}
-            <div className="bg-[#111] border border-white/5 rounded-lg p-4">
-              <label className="block text-[13px] font-bold text-gray-300 mb-3 ml-1">입력할 칸 선택</label>
-              <div className="flex flex-wrap gap-2">
+            <div className="bg-[#111] border border-white/5 rounded-lg p-3">
+              <label className="block text-[12px] font-bold text-gray-300 mb-2 ml-1">입력할 칸 선택</label>
+              <div className="flex flex-wrap gap-1.5">
                 {TARGET_COLUMNS.map(col => (
                   <button
                     key={col.id}
                     onClick={() => setTargetCol(col.id)}
-                    className={`px-4 py-2 rounded-md text-[13px] font-medium transition-all ${
+                    className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-all ${
                       targetCol === col.id 
                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30 border border-blue-500' 
                         : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200 border border-white/10'
@@ -162,18 +162,18 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
             </div>
 
             {/* Tag Input Rows */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               {tagGroups.map((group) => (
-                <div key={group.tag} className="flex gap-4 items-start bg-white/[0.02] border border-white/5 p-4 rounded-lg">
+                <div key={group.tag} className="flex gap-3 items-center bg-white/[0.02] border border-white/5 p-3 rounded-lg">
                   {/* Tag Label Info */}
-                  <div className="w-32 shrink-0 flex flex-col gap-2">
-                    <div className={`px-2.5 py-1.5 rounded-md border text-[13px] font-bold inline-flex items-center justify-center max-w-full ${getTagColor(group.tag)}`}>
+                  <div className="w-24 shrink-0 flex flex-col gap-1.5">
+                    <div className={`px-2 py-1 rounded-md border text-[12px] font-bold inline-flex items-center justify-center max-w-full ${getTagColor(group.tag)}`}>
                       {group.tag}
                     </div>
-                    <div className="text-[11px] text-gray-500 pl-1 font-medium">
+                    <div className="text-[10px] text-gray-500 pl-0.5 font-medium">
                       학생 {group.students.length}명
                     </div>
-                    <div className="text-[10px] text-gray-600 pl-1 leading-tight line-clamp-3">
+                    <div className="text-[9px] text-gray-600 pl-0.5 leading-tight line-clamp-2" title={group.students.map(s => s.name).join(', ')}>
                       {group.students.map(s => s.name).join(', ')}
                     </div>
                   </div>
@@ -181,10 +181,10 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                   {/* Textarea */}
                   <div className="flex-1 min-w-0">
                     <textarea
-                      placeholder={`${group.tag} 태그를 가진 학생 ${group.students.length}명에게 일괄 적용할 내용을 입력하세요.`}
+                      placeholder={`${group.tag} 태그 학생들에게 일괄 적용할 내용을 입력하세요.`}
                       value={inputs[group.tag] || ''}
                       onChange={(e) => setInputs(prev => ({ ...prev, [group.tag]: e.target.value }))}
-                      className="w-full h-24 bg-black border border-white/10 rounded-md p-3 text-[13px] text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none transition-all custom-scrollbar-h"
+                      className="w-full h-14 bg-black border border-white/10 rounded-md p-2.5 text-[12px] text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none transition-all custom-scrollbar-h"
                     />
                   </div>
                 </div>
@@ -199,24 +199,24 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-end gap-3 px-6 py-4 border-t border-white/10 bg-white/[0.02]">
+          <div className="flex items-center justify-end gap-2.5 px-5 py-3 border-t border-white/10 bg-white/[0.02]">
             <button
               onClick={onClose}
-              className="px-5 py-2.5 text-[13px] font-bold text-gray-400 hover:text-white transition-colors"
+              className="px-4 py-2 text-[12px] font-bold text-gray-400 hover:text-white transition-colors"
             >
-              취소
+              취소 (ESC)
             </button>
             <button
               onClick={handleSave}
               disabled={isSaving || tagGroups.length === 0 || Object.values(inputs).every(v => !v.trim())}
-              className="flex items-center gap-2 px-6 py-2.5 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[13px] font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/30"
+              className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[12px] font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/30"
             >
               {isSaving ? (
                 <span className="animate-pulse">저장 중...</span>
               ) : (
                 <>
-                  <Save size={16} />
-                  선택 그룹 일괄 저장
+                  <Save size={14} />
+                  일괄 저장하기
                 </>
               )}
             </button>
