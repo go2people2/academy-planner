@@ -26,6 +26,8 @@ export default function PrintPreviewModal({
   columnWidths
 }: PrintPreviewModalProps) {
   const [mounted, setMounted] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
+
   useEffect(() => setMounted(true), []);
 
   if (!isOpen || !mounted) return null;
@@ -35,8 +37,6 @@ export default function PrintPreviewModal({
 
   // 화면상 설정된 너비 비율을 기반으로 각 열의 프린트 너비 비율(%) 계산
   const totalScreenWidth = displayCols.reduce((sum, col) => sum + (columnWidths?.[col.id] || col.minWidth || 100), 0);
-
-  const [isGenerating, setIsGenerating] = useState(false);
 
   const handlePrint = () => {
     window.print();
