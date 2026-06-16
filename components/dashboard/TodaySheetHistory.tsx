@@ -45,16 +45,23 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             if (col.id === 'review') {
               const prevLog = pastLogs[idx + 1];
               const prevHw = prevLog?.homework_text;
+              const rawDate = prevLog?.date ? prevLog.date.slice(5).replace('-', '.') : '';
+              const rawDay = prevLog?.date ? getDayOfWeek(prevLog.date) : '';
               return (
                 <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left">
                   {prevHw ? (
                     <div className="flex flex-col text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left break-all">
+                      {rawDate && (
+                        <div className="mb-0.5">
+                          [{rawDate} <span className="text-amber-300">({rawDay})</span>]
+                        </div>
+                      )}
                       <div className="text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left break-all">
                         {prevHw.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
                           <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
                             {i === 0 && <span className="text-teal-500/80 text-[14px] font-normal mr-1 align-top leading-[1.15]">"</span>}
                             {para.split(/(\([월화수목금토일]\))/g).map((part, j) => 
-                              part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className="text-amber-300 font-medium">{part}</span> : part
+                              part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className="text-amber-300">{part}</span> : part
                             )}
                             {i === arr.length - 1 && <span className="text-teal-500/80 text-[14px] font-normal ml-1 align-bottom leading-[1.15]">"</span>}
                           </span>
