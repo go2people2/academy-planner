@@ -167,9 +167,11 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
               {tagGroups.map((group) => (
                 <div key={group.tag} className="flex gap-3 items-center bg-white/[0.02] border border-white/5 p-3 rounded-lg">
                   {/* Tag Label Info */}
-                  <div className="w-24 shrink-0 flex flex-col gap-1.5">
-                    <div className={`px-2 py-1 rounded-md border text-[12px] font-bold inline-flex items-center justify-center max-w-full ${getTagColor(group.tag)}`}>
-                      {group.tag}
+                  <div className="w-24 shrink-0 flex flex-col gap-2">
+                    <div>
+                      <div className={`min-w-[26px] h-[26px] px-1 rounded-[4px] border text-[13px] font-black inline-flex items-center justify-center ${getTagColor(group.tag)}`}>
+                        {group.tag}
+                      </div>
                     </div>
                     <div className="flex items-center justify-between pl-0.5 mt-0.5">
                       <div className="text-[10px] text-gray-400 font-medium">
