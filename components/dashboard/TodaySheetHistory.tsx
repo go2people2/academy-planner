@@ -2,6 +2,7 @@
 
 import React from 'react';
 import { Student } from '@/types/dashboard';
+import { getDayOfWeek } from '@/lib/utils';
 
 interface HistoryRowsProps {
   student: Student;
@@ -42,9 +43,15 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             if (col.id === 'review') {
               const prevLog = student.allLogs[idx + 2];
               const prevHw = prevLog?.homework_text;
+              const prevDateStr = prevLog?.date ? `${prevLog.date.slice(5).replace('-', '.')} (${getDayOfWeek(prevLog.date)})` : '';
               return (
                 <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-teal-200 italic text-[11px] whitespace-pre-wrap leading-relaxed text-left">
-                  {prevHw ? `"${prevHw}"` : <span className="text-gray-600">-</span>}
+                  {prevHw ? (
+                    <>
+                      <span className="text-teal-500/70 text-[9.5px] font-medium not-italic block mb-1 tracking-wider">[{prevDateStr}]</span>
+                      "{prevHw}"
+                    </>
+                  ) : <span className="text-gray-600">-</span>}
                 </td>
               );
             }
