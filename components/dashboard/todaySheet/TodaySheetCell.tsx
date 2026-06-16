@@ -517,7 +517,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="relative w-full h-full flex items-start justify-between bg-blue-600/[0.03] py-1 px-2 gap-2">
             <div className="flex-1 text-left min-w-0">
               {student.lastSession?.homework_text ? (
-                <div className="text-[11px] font-normal text-blue-200 leading-[1.15] italic whitespace-pre-wrap break-all">
+                <div className="text-[12px] font-normal text-blue-200 leading-[1.15] italic whitespace-pre-wrap break-all">
                   <span className="text-blue-500/80 text-[14px] font-normal mr-1">"</span>
                   <span className="inline-block">
                     {student.lastSession.homework_text.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
