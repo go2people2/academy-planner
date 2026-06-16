@@ -506,7 +506,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     document.body
                   )}
                 </div>
-              )}
+              </div>
+            )}
             </div>
 
             <div 
