@@ -174,9 +174,9 @@ const determineTodaySession = (
   student: any, todayLog: SessionLog | undefined, baseSession: SessionLog | undefined, 
   isTodayClassDay: boolean, selectedDate: string, academy: any
 ) => {
-  const activePlanText = baseSession?.next_quiz_text || (baseSession?.test_completed === false ? (baseSession.test_id || "") : "");
-  const activePlanCut = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_cut) || 0) : (baseSession?.test_completed === false ? (Number(baseSession.test_cut) || 0) : 0);
-  const activePlanTrial = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_trial) || 1) : (baseSession?.test_completed === false ? 1 : 1);
+  const activePlanText = baseSession?.next_quiz_text || "";
+  const activePlanCut = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_cut) || 0) : 0;
+  const activePlanTrial = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_trial) || 1) : 1;
   const baseMission = baseSession?.mission || student.recent_mission || "";
   
   // 💡 [개선] 이전 수업의 점수 입력 타입(score/count)을 기본값으로 상속
