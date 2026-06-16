@@ -138,9 +138,7 @@ body {
   /* 💡 인쇄 미리보기 모달 전용 인쇄 스타일 */
   .print-preview-modal-container {
     display: block !important;
-    position: absolute !important;
-    left: 0 !important;
-    top: 0 !important;
+    position: static !important;
     width: 100% !important;
     height: auto !important;
     background: white !important;
