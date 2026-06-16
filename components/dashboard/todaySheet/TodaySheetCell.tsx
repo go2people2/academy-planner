@@ -379,7 +379,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         {colId === 'date' && (
           <div className="flex flex-col gap-0.5 items-center justify-center py-1 w-full min-h-[22px]">
             <span className="font-normal text-gray-500 text-[10px] tabular-nums">{displayDateShort}</span>
-            <button onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }} className={`w-6 h-6 rounded-[2px] flex items-center justify-center transition-all ${isHistoryExpanded ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30' : 'bg-white/5 text-gray-500 hover:bg-white/10'}`}><HistoryIcon size={12} /></button>
           </div>
         )}
 
@@ -512,6 +511,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               title="학생 페이지 보기"
             >
               <ExternalLink size={12} strokeWidth={2.5} />
+            </button>
+            <button 
+              onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }} 
+              className={`p-1.5 rounded-[4px] transition-colors shrink-0 ${isHistoryExpanded ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200'}`} 
+              title="이전 기록 보기"
+            >
+              <HistoryIcon size={12} strokeWidth={2.5} />
             </button>
             {onViewProgress && (
               <button 
