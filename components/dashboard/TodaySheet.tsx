@@ -218,6 +218,18 @@ export default function TodaySheet({
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  
+  // 모달 ESC 닫기 공통 처리 (Column Settings)
+  useEffect(() => {
+    if (isSettingsOpen) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') setIsSettingsOpen(false);
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isSettingsOpen]);
+
   const [isScrolled, setIsScrolled] = useState(false);
 
   // 스크롤 감지 (z-index 동적 조절용)
