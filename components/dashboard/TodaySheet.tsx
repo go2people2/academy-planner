@@ -232,6 +232,7 @@ export default function TodaySheet({
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false); // 💡 인쇄 미리보기 모달 상태 추가
+  const [isTagBatchMode, setIsTagBatchMode] = useState(false); // 💡 태그별 일괄입력 모달 상태 추가
 
   const [showSecondRow, setShowSecondRow] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -852,6 +853,15 @@ export default function TodaySheet({
                   );
                 })}
               </div>
+
+              <button 
+                onClick={() => setIsTagBatchMode(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500 hover:text-white rounded-[4px] text-[10px] font-black transition-all ml-2"
+                title="태그별 일괄입력 모드 열기"
+              >
+                <Wand2 size={12} />
+                태그 일괄입력
+              </button>
 
               {isFullScreen && (
                 <>
