@@ -185,7 +185,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                   {/* Tag Label Info */}
                   <div className="w-24 shrink-0 flex flex-col gap-2">
                     <div>
-                      <div className={`min-w-[26px] h-[26px] px-1 rounded-[4px] border text-[13px] font-black inline-flex items-center justify-center ${getTagColor(group.tag)}`}>
+                      <div className={`min-w-[32px] h-[32px] px-1 rounded-[6px] border text-[15px] font-black inline-flex items-center justify-center shadow-sm ${getTagColor(group.tag)}`}>
                         {group.tag}
                       </div>
                     </div>
