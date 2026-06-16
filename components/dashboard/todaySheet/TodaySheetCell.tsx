@@ -512,8 +512,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               }}
               className={`h-[18px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[10px] select-none transition-all ${
                 student.level_tag 
-                  ? "px-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold opacity-100 max-w-[60px] truncate" 
-                  : "w-[18px] bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200 border border-transparent opacity-0 group-hover/tools:opacity-100"
+                  ? "px-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 font-bold max-w-[60px] truncate" 
+                  : "w-[18px] bg-white/[0.03] text-gray-500 hover:bg-white/10 hover:text-gray-300 border border-white/10"
               }`}
               title={student.level_tag ? `${student.level_tag} (클릭하여 수정)` : "태그 추가"}
             >
