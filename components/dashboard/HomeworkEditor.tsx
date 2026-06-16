@@ -178,22 +178,24 @@ export default function HomeworkEditor({
         onClick={(e) => e.stopPropagation()} 
         className="pointer-events-auto relative w-full max-w-[680px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-blue-500/30 rounded-sm shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] p-0 flex flex-col overflow-hidden"
       >
-        <div className="cursor-move bg-gradient-to-r from-blue-600/20 to-indigo-600/10 px-4 py-3 flex items-center justify-between border-b border-white/5 active:from-blue-600/30 transition-all">
-          <div className="flex items-center gap-3">
+        <div className="relative cursor-move bg-gradient-to-r from-blue-600/20 to-indigo-600/10 px-4 py-3 flex items-center justify-between border-b border-white/5 active:from-blue-600/30 transition-all">
+          <div className="flex items-center gap-3 relative z-10">
             <div className="w-7 h-7 rounded-[2px] bg-blue-600/30 flex items-center justify-center shadow-inner shadow-blue-400/20">
               <ClipboardList size={14} className="text-blue-400" />
             </div>
             <div>
-              <h4 className="font-black text-[12px] uppercase tracking-[0.2em] text-white">{title}</h4>
-              {student && (
-                <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[12px] font-bold text-blue-300">{student.name} 학생</span>
-                  <span className="text-[10px] text-blue-300/60 font-normal">{student.school} {student.grade}</span>
-                </div>
-              )}
+              <h4 className="font-black text-[12px] uppercase tracking-[0.2em] text-white/80">{title}</h4>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+
+          {student && (
+            <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-baseline gap-2 pointer-events-none z-10">
+              <span className="text-[17px] font-black text-white tracking-wide">{student.name}</span>
+              <span className="text-[11px] text-blue-200/80 font-medium px-1.5 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-sm shadow-sm">{student.school} {student.grade}</span>
+            </div>
+          )}
+
+          <div className="flex items-center gap-2 relative z-10">
             <button 
               onClick={() => {
                 if (window.confirm('입력된 모든 페이지와 단원 정보를 초기화하시겠습니까? (교재 목록은 유지됩니다)')) {
