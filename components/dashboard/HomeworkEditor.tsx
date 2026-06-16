@@ -185,6 +185,12 @@ export default function HomeworkEditor({
             </div>
             <div>
               <h4 className="font-black text-[12px] uppercase tracking-[0.2em] text-white">{title}</h4>
+              {student && (
+                <div className="flex items-center gap-1.5 mt-0.5">
+                  <span className="text-[12px] font-bold text-blue-300">{student.name} 학생</span>
+                  <span className="text-[10px] text-blue-300/60 font-normal">{student.school} {student.grade}</span>
+                </div>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
