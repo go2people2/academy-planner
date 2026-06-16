@@ -39,6 +39,7 @@ interface TodaySheetRowProps {
   rowIndex?: number;
   isFirstInTimeSection?: boolean;
   timeSectionLabel?: string;
+  isScrolled?: boolean;
 }
 
 /**
@@ -135,7 +136,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
                 position: isSticky ? 'sticky' : 'relative',
                 left: col.id === 'select' ? 0 : (col.id === 'name' ? (colWidths['select'] || 40) - 1 : 'auto'),
                 right: col.id === 'action' ? 0 : 'auto',
-                zIndex: isSticky ? 30 : (col.id === 'notes' ? 25 : 10),
+                zIndex: isSticky ? (rowIndex === 0 && !props.isScrolled && col.id === 'name' ? 60 : 30) : (col.id === 'notes' ? 25 : 10),
                 backgroundColor: isSticky ? 'inherit' : 'transparent',
                 padding: 0,
                 verticalAlign: 'middle'

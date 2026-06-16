@@ -347,7 +347,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'name' && isFirstInTimeSection && timeSectionLabel && (
-          <div className={`absolute right-4 z-[60] pointer-events-none select-none ${rowIndex === 0 ? 'top-0' : 'top-0 -translate-y-1/2'}`}>
+          <div className="absolute top-0 right-4 -translate-y-1/2 z-[60] pointer-events-none select-none">
             <span className="px-1.5 py-0.5 rounded bg-blue-600/95 backdrop-blur-sm text-[8.5px] font-normal text-white tracking-widest uppercase shadow-[0_4px_12px_rgba(37,99,235,0.6)] border border-blue-400/40">
               {timeSectionLabel}
             </span>

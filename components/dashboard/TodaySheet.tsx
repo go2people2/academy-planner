@@ -201,6 +201,13 @@ export default function TodaySheet({
   });
 
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  // 스크롤 감지 (z-index 동적 조절용)
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setIsScrolled(e.currentTarget.scrollTop > 5);
+  }, []);
+
   const [expandedHistory, setExpandedHistory] = useState<Record<string, number>>({});
   const [isSendingReport, setIsSendingReport] = useState<string | null>(null);
   const [isReportVisible, setIsReportVisible] = useState(false);
@@ -987,7 +994,10 @@ export default function TodaySheet({
         )}
       </AnimatePresence>
 
-      <div className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}>
+      <div 
+        className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}
+        onScroll={handleScroll}
+      >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
           <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} /></thead>
           <tbody className="divide-y divide-white/10">
@@ -1049,6 +1059,7 @@ export default function TodaySheet({
                       onCellMouseEnter={onCellMouseEnter} 
                       isFirstInTimeSection={isNewSection}
                       timeSectionLabel={timeSectionLabel}
+                      isScrolled={isScrolled}
                     />
                   </React.Fragment>
                 );
