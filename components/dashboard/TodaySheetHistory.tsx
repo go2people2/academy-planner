@@ -9,11 +9,13 @@ interface HistoryRowsProps {
   activeColumns: any[];
   colWidths: Record<string, number>;
   isExpanded: boolean;
+  selectedDate: string;
 }
 
-export const HistoryRows = React.memo(function HistoryRows({ student, activeColumns, colWidths, isExpanded }: HistoryRowsProps) {
+export const HistoryRows = React.memo(function HistoryRows({ student, activeColumns, colWidths, isExpanded, selectedDate }: HistoryRowsProps) {
   if (!isExpanded || !student.allLogs) return null;
-  const history = student.allLogs.slice(1, 4); 
+  const pastLogs = student.allLogs.filter((l: any) => l.date < selectedDate).sort((a: any, b: any) => b.date.localeCompare(a.date));
+  const history = pastLogs.slice(0, 3); 
 
   return (
     <>
@@ -41,7 +43,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             if (col.id === 'test_id') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-300 font-bold text-[11px] truncate text-left">{log.test_id}</td>;
             if (col.id === 'test_score') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-left text-blue-400 font-black text-[12px]">{log.test_score ? `${log.test_score}%` : '-'}</td>;
             if (col.id === 'review') {
-              const prevLog = student.allLogs[idx + 2];
+              const prevLog = pastLogs[idx + 1];
               const prevHw = prevLog?.homework_text;
               const prevDateStr = prevLog?.date ? `${prevLog.date.slice(5).replace('-', '.')} (${getDayOfWeek(prevLog.date)})` : '';
               return (

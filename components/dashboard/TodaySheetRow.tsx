@@ -241,7 +241,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
         })}
       </tr>
 
-      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} />
+      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} />
 
       {/* Editors Container (Invisible row) */}
       <tr style={{ display: 'none' }}>
