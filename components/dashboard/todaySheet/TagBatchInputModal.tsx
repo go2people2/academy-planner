@@ -199,7 +199,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                       placeholder={`${group.tag} 태그 학생들에게 일괄 적용할 내용을 입력하세요.`}
                       value={inputs[group.tag] || ''}
                       onChange={(e) => setInputs(prev => ({ ...prev, [group.tag]: e.target.value }))}
-                      className="w-full h-14 bg-black border border-white/10 rounded-md p-2.5 text-[12px] text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none transition-all custom-scrollbar-h"
+                      className="w-full h-10 bg-black border border-white/10 rounded-md p-2 text-[12px] text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none transition-all custom-scrollbar-h"
                     />
                   </div>
                 </div>
