@@ -12,6 +12,40 @@ interface HistoryRowsProps {
   selectedDate: string;
 }
 
+const renderHighlightedHistoryText = (text: string) => {
+  if (!text) return '-';
+  return text.split('\n').map((line, i) => {
+    const isLast = i === text.split('\n').length - 1;
+    const match = line.match(/^(\s*[-*+•]\s*)(.*)$/);
+    if (!match) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
+    
+    const bulletStr = match[1];
+    const rest = match[2];
+    const commaIdx = rest.indexOf(',');
+    
+    if (commaIdx === -1) {
+      return (
+        <React.Fragment key={i}>
+          <span className="text-blue-400 font-bold">{bulletStr}</span>
+          <span>{rest}</span>
+          {!isLast && '\n'}
+        </React.Fragment>
+      );
+    } else {
+      const contentStr = rest.substring(0, commaIdx);
+      const memoStr = rest.substring(commaIdx);
+      return (
+        <React.Fragment key={i}>
+          <span className="text-blue-400 font-bold">{bulletStr}</span>
+          <span className="font-medium text-white/90">{contentStr}</span>
+          <span className="text-gray-500 italic ml-0.5">{memoStr}</span>
+          {!isLast && '\n'}
+        </React.Fragment>
+      );
+    }
+  });
+};
+
 export const HistoryRows = React.memo(function HistoryRows({ student, activeColumns, colWidths, isExpanded, selectedDate }: HistoryRowsProps) {
   if (!isExpanded || !student.allLogs) return null;
   const pastLogs = student.allLogs.filter((l: any) => l.date < selectedDate).sort((a: any, b: any) => b.date.localeCompare(a.date));
@@ -73,10 +107,10 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                 </td>
               );
             }
-            if (col.id === 'classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.classwork_text || '-'}</td>;
-            if (col.id === 'completed_classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-blue-300 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.completed_classwork_text || '-'}</td>;
-            if (col.id === 'assign') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.homework_text || '-'}</td>;
-            if (col.id === 'mission') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-fuchsia-300 font-medium text-[11px] whitespace-pre-wrap leading-relaxed text-left">{log.mission || '-'}</td>;
+            if (col.id === 'classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left">{renderHighlightedHistoryText(log.classwork_text)}</td>;
+            if (col.id === 'completed_classwork') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-blue-300 font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left">{renderHighlightedHistoryText(log.completed_classwork_text)}</td>;
+            if (col.id === 'assign') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-gray-200 font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left">{renderHighlightedHistoryText(log.homework_text)}</td>;
+            if (col.id === 'mission') return <td key={col.id} style={styles} className="py-3 px-4 border-r border-white/12 text-amber-200/90 font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left">{renderHighlightedHistoryText(log.mission)}</td>;
             if (col.id === 'next_quiz') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-gray-400 italic text-[11px] whitespace-pre-wrap leading-tight text-left">{log.next_quiz_text} {log.next_quiz_cut !== undefined ? `(Cut: ${log.next_quiz_cut})` : ''}</td>;
             if (col.id === 'notes') return <td key={col.id} style={styles} className="py-3 px-3 border-r border-white/12 text-amber-200/50 italic text-[10px] truncate text-left">{log.special_notes}</td>;
             if (col.id === 'action') return <td key={col.id} style={styles} className="py-3 sticky right-0 bg-[#050505] z-20 border-l border-white/10" />;
