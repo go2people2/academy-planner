@@ -161,12 +161,12 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
             {/* Target Column Selector */}
             <div className="bg-[#111] border border-white/5 rounded-lg p-3">
               <label className="block text-[12px] font-bold text-gray-300 mb-2 ml-1">입력할 칸 선택</label>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="grid grid-cols-4 gap-2">
                 {TARGET_COLUMNS.map(col => (
                   <button
                     key={col.id}
                     onClick={() => setTargetCol(col.id)}
-                    className={`px-3 py-1.5 rounded-md text-[12px] font-bold transition-all ${
+                    className={`w-full py-2 rounded-md text-[12px] font-bold transition-all ${
                       targetCol === col.id 
                         ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30 border border-blue-500' 
                         : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200 border border-white/10'
