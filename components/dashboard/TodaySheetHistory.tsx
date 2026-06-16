@@ -87,7 +87,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                     <div className="flex flex-col text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left break-all">
                       <div className="text-teal-200 italic text-[11px] whitespace-pre-wrap leading-[1.15] text-left break-all">
                         {rawDate && (
-                          <div className="mb-1.5">
+                          <div>
                             <span className="text-teal-500/80 text-[14px] font-normal mr-1 align-top leading-[1.15]">"</span>
                             [{rawDate} <span className="text-amber-300">({rawDay})</span>]
                           </div>
