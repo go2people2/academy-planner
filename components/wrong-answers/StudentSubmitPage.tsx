@@ -235,7 +235,7 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
   };
 
   return (
-    <div className="min-h-[calc(100vh-140px)] p-4 pb-28 text-slate-800 transition-colors duration-500 rounded-3xl" style={themeStyle.bg}>
+    <div className="min-h-[calc(100vh-140px)] p-4 pb-44 lg:pb-28 text-slate-800 transition-colors duration-500 rounded-3xl" style={themeStyle.bg}>
       
       {/* 헤더 */}
       <div className="max-w-md mx-auto flex justify-between items-center mb-6 bg-white p-5 rounded-3xl shadow-sm border border-slate-100">
@@ -381,7 +381,7 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
       </div>
 
       {/* 제출 버튼 */}
-      <div className="fixed bottom-6 left-4 right-4 max-w-md mx-auto font-black z-40">
+      <div className="fixed bottom-[76px] lg:bottom-6 left-4 right-4 max-w-md mx-auto font-black z-40">
         <button 
           onClick={handleSubmit} 
           disabled={submitting || selectedNumbers.length === 0} 
