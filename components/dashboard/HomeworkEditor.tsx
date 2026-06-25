@@ -13,7 +13,7 @@ interface HomeworkEditorProps {
   masterTextbooks: TextbookOption[];
   onUpdate: (newHw: HomeworkItem[]) => void;
   onToggleKeepBook?: (bookCode: string, isKeep: boolean) => void;
-  onClose: () => void;
+  onClose: (finalJson?: HomeworkItem[]) => void;
 }
 
 export default function HomeworkEditor({ 
@@ -26,6 +26,12 @@ export default function HomeworkEditor({
   
   const startRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const endRefs = useRef<Record<number, HTMLInputElement | null>>({});
+
+  // 💡 클로저 이슈 방지를 위해 최신 homeworkJson 값을 담아두는 Ref 설정
+  const homeworkJsonRef = useRef(homeworkJson);
+  useEffect(() => {
+    homeworkJsonRef.current = homeworkJson;
+  }, [homeworkJson]);
 
   useEffect(() => {
     setMounted(true);
@@ -48,10 +54,10 @@ export default function HomeworkEditor({
           }
         } else if (isEscape) {
           e.preventDefault();
-          onClose();
+          onClose(homeworkJsonRef.current);
         } else if (isCtrlEnter) {
           e.preventDefault();
-          onClose();
+          onClose(homeworkJsonRef.current);
         }
         return;
       }
@@ -207,7 +213,7 @@ export default function HomeworkEditor({
             >
               <RefreshCcw size={12} /> 전체 초기화
             </button>
-            <button onClick={(e) => { e.stopPropagation(); onClose(); }} className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-white transition-all hover:rotate-90 duration-300">
+            <button onClick={(e) => { e.stopPropagation(); onClose(homeworkJson); }} className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-white transition-all hover:rotate-90 duration-300">
               <X size={18} />
             </button>
           </div>
@@ -336,7 +342,7 @@ export default function HomeworkEditor({
 
           <div className="pt-1">
             <button 
-              onClick={(e) => { e.stopPropagation(); onClose(); }} 
+              onClick={(e) => { e.stopPropagation(); onClose(homeworkJson); }} 
               className="w-full bg-blue-600 py-4 rounded-sm font-black text-[13px] uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/40 hover:bg-blue-500 active:scale-[0.98] transition-all text-white border border-blue-400/20"
             >
               확인 및 저장 (Ctrl+Enter)

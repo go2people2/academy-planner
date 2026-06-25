@@ -303,7 +303,7 @@ export function useTodaySheetRowLogic({
     const textKey = `${field}_text` as keyof typeof formData;
     const existingText: string = formData[textKey] || '';
 
-    // JSON 항목에서 새로 생성된 라인들
+    // 💡 JSON 항목에서 새로 생성된 최신 라인들
     const newLines = newJson
       .filter(item => item.range)
       .map(item => {
@@ -312,13 +312,24 @@ export function useTodaySheetRowLogic({
         return `${book?.title || item.book_name} ${cleanRange}`;
       });
 
-    // 기존 텍스트에 없는 라인만 아래에 추가 (중복 방지)
-    const existingLines = existingText ? existingText.split('\n') : [];
-    const toAppend = newLines.filter(line => !existingLines.some(el => el.trim() === line.trim()));
+    // 💡 현재 에디터가 관리 대상인 교재 제목 목록 (빈 교재명에 의한 오동작 방지 가드 포함)
+    const managedBookTitles = newJson
+      .map(item => {
+        const book = masterTextbooks.find(m => m.bookcode === item.book_name);
+        return (book?.title || item.book_name || '').trim();
+      })
+      .filter(title => title.length > 0);
 
-    const mergedText = toAppend.length > 0
-      ? (existingText ? `${existingText}\n${toAppend.join('\n')}` : toAppend.join('\n'))
-      : existingText;
+    // 💡 기존 텍스트 중 현재 편집 대상인 교재명으로 시작하는 오래된 행은 삭제
+    const existingLines = existingText ? existingText.split('\n') : [];
+    const nonManagedLines = existingLines.filter(line => {
+      const trimmedLine = line.trim();
+      if (!trimmedLine) return false;
+      return !managedBookTitles.some(title => trimmedLine.startsWith(title));
+    });
+
+    // 💡 남은 수동 입력 라인들과 최신 교재 정보를 일괄 병합
+    const mergedText = [...nonManagedLines, ...newLines].join('\n');
 
     const update = { [`${field}_json`]: newJson, [`${field}_text`]: mergedText };
     setFormData((prev: any) => ({ ...prev, ...update }));
