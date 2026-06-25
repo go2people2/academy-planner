@@ -9,6 +9,7 @@ interface AddProblemErrorModalProps {
   isOpen: boolean;
   onClose: () => void;
   teacherName: string;
+  academyId: string;
   onSuccess: () => void;
 }
 
@@ -16,6 +17,7 @@ export default function AddProblemErrorModal({
   isOpen,
   onClose,
   teacherName,
+  academyId,
   onSuccess
 }: AddProblemErrorModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -64,6 +66,7 @@ export default function AddProblemErrorModal({
     try {
       const { error } = await supabase.from('ams_problem_errors').insert([
         {
+          academy_id: academyId,
           book_name: bookName.trim(),
           page_number: pageNumber.trim() || null,
           problem_id: problemId.trim(),

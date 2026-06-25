@@ -62,7 +62,7 @@ export default function Sidebar({
   const [isMultiMode, setIsMultiMode] = useState(false);
   const [tempNotices, setTempNotices] = useState<any>({});
 
-  const isAdmin = user?.role === 'admin';
+  const isAdmin = user?.role === 'admin' || user?.role === 'master';
   const announcements = academyInfo?.announcements || {};
 
   useEffect(() => {

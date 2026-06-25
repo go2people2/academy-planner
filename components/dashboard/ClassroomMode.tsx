@@ -1,17 +1,17 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  X, Check, Clock, AlertCircle, MessageSquare, 
-  User, UserCheck, UserPlus, Zap, Bell, Copy,
+  X, Check, Clock, AlertCircle, 
+  User, UserCheck, UserPlus, Zap, Copy,
   ArrowLeft, LogOut, MoreHorizontal, CalendarClock, RotateCcw,
-  StickyNote, Target, Plus
+  Plus
 } from 'lucide-react';
-import { Student, TextbookOption, StudentStatus, SessionLog } from '@/types/dashboard';
+import { Student } from '@/types/dashboard';
 import { getTodayStr, getDayOfWeek } from '@/lib/utils';
-import { supabase } from '@/lib/supabase';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
+import { useClassroomTimers } from './useClassroomTimers';
 
 interface ClassroomModeProps {
   students: Student[];
@@ -22,15 +22,27 @@ interface ClassroomModeProps {
   selectedTeacherId?: string;
 }
 
+const TIMER_THEMES = [
+  { text: 'text-indigo-400', bg: 'bg-indigo-600', border: 'border-indigo-500', ring: 'ring-indigo-500/30', glow: 'shadow-indigo-500/20' },
+  { text: 'text-emerald-400', bg: 'bg-emerald-600', border: 'border-emerald-500', ring: 'ring-emerald-500/30', glow: 'shadow-emerald-500/20' },
+  { text: 'text-rose-400', bg: 'bg-rose-600', border: 'border-rose-500', ring: 'ring-rose-500/30', glow: 'shadow-rose-500/20' },
+  { text: 'text-cyan-400', bg: 'bg-cyan-600', border: 'border-cyan-500', ring: 'ring-cyan-500/30', glow: 'shadow-cyan-500/20' },
+  { text: 'text-amber-400', bg: 'bg-amber-600', border: 'border-amber-500', ring: 'ring-amber-500/30', glow: 'shadow-amber-500/20' },
+  { text: 'text-purple-400', bg: 'bg-purple-600', border: 'border-purple-500', ring: 'ring-purple-500/30', glow: 'shadow-purple-500/20' },
+];
+
+const getTimerTheme = (index: number) => TIMER_THEMES[index % TIMER_THEMES.length];
+
 export default function ClassroomMode({ students, onSave, onClose, selectedDate, academyInfo, selectedTeacherId }: ClassroomModeProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState<'attendance' | 'timer'>('attendance');
   const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
   const [isTimeShiftOpen, setIsTimeShiftOpen] = useState(false);
+  const [collapsedHours, setCollapsedHours] = useState<Record<number, boolean>>({}); // 💡 접힌 교시 상태
 
   const settings = useMemo(() => academyInfo?.operation_settings || {}, [academyInfo]);
   
-  // 💡 설정된 3가지 시험 시간 추출 (배열 구조로 변경)
+  // 💡 설정된 3가지 시험 시간 추출 (배열 구조)
   const timerPresets = useMemo(() => {
     const presets = settings.timer_presets || [];
     const p1 = parseInt(presets[0]) || 15;
@@ -40,70 +52,25 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   }, [settings]);
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [collapsedHours, setCollapsedHours] = useState<Record<number, boolean>>({}); // 💡 접힌 교시 상태 추가
-  const [globalTimers, setGlobalTimers] = useState<Record<number, { startTime: number | null, duration: number }>>({
-    1: { startTime: null, duration: 15 },
-    2: { startTime: null, duration: 30 },
-    3: { startTime: null, duration: 60 }
-  });
 
-  // 💡 설정값이 변경되었을 때 실행되지 않은 타이머의 기본값 동기화
-  useEffect(() => {
-    setGlobalTimers(prev => {
-      const next = { ...prev };
-      [1, 2, 3].forEach((slot, idx) => {
-        if (!next[slot].startTime) next[slot].duration = timerPresets[idx];
-      });
-      return next;
-    });
-  }, [timerPresets]);
-
-  const [studentTimerMap, setStudentTimerMap] = useState<Record<string, number>>({});
-
-  // 💡 [수정] 컴포넌트 마운트 시 기존 타이머 상태 복구 로직 (일의 자리에 인코딩된 슬롯 번호 기반 복구로 독립화)
-  useEffect(() => {
-    const recoveredTimers: Record<number, { startTime: number, duration: number }> = {};
-    const newMapping: Record<string, number> = {};
-    
-    students.forEach(s => {
-      const startTime = s.todaySession?.timer_started_at;
-      const duration = s.todaySession?.timer_duration;
-      if (startTime && duration) {
-        const slot = startTime % 10;
-        if (slot === 1 || slot === 2 || slot === 3) {
-          if (!recoveredTimers[slot] || recoveredTimers[slot].startTime > startTime) {
-            recoveredTimers[slot] = { startTime, duration };
-          }
-          newMapping[s.id] = slot;
-        }
-      }
-    });
-
-    setGlobalTimers(prev => {
-      const next = { ...prev };
-      [1, 2, 3].forEach(slot => {
-        if (recoveredTimers[slot]) {
-          next[slot] = recoveredTimers[slot];
-        } else {
-          next[slot] = { startTime: null, duration: next[slot].duration };
-        }
-      });
-      return next;
-    });
-    setStudentTimerMap(newMapping);
-  }, [students]);
+  // 💡 분리된 동적 타이머 전용 커스텀 훅 연동
+  const {
+    activeTimers,
+    studentTimerMap,
+    selectedDuration,
+    setSelectedDuration,
+    customDurationInput,
+    setCustomDurationInput,
+    handleStartTimer,
+    handleAssignToTimer,
+    handleStopTimer,
+  } = useClassroomTimers(students, onSave, timerPresets);
 
   // 💡 실시간 시계 업데이트 (1초마다)
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
   }, []);
-
-  const timerColors: Record<number, { text: string, bg: string, border: string, ring: string, glow: string }> = {
-    1: { text: 'text-indigo-400', bg: 'bg-indigo-600', border: 'border-indigo-500', ring: 'ring-indigo-500/30', glow: 'shadow-indigo-500/20' },
-    2: { text: 'text-emerald-400', bg: 'bg-emerald-600', border: 'border-emerald-500', ring: 'ring-emerald-500/30', glow: 'shadow-emerald-500/20' },
-    3: { text: 'text-rose-400', bg: 'bg-rose-600', border: 'border-rose-500', ring: 'ring-rose-500/30', glow: 'shadow-rose-500/20' }
-  };
 
   const baseTime = settings.first_period_time || "";
   const [baseH, baseM] = baseTime ? baseTime.split(':').map(Number) : [null, null];
@@ -114,14 +81,12 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  // 💡 학생의 수업 시간(시) 추출 함수 (정밀화)
+  // 💡 학생의 수업 시간(시) 추출 함수
   const getStudentHour = (student: Student) => {
-    // 1. 시간 이동 필드(moved_to_hour) 우선 사용
     if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
       return student.todaySession.moved_to_hour;
     }
 
-    // 2. [호환성] attendance_status에 인코딩된 시간 정보 파싱
     const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
     if (status.includes(':')) {
       const parts = status.split(':');
@@ -129,7 +94,6 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       if (!isNaN(val) && val < 24) return val;
     }
 
-    // 3. 기본 스케줄 사용
     const day = getDayOfWeek(selectedDate);
     const hours = student.day_schedules?.[day] || [];
     if (hours.length > 0) return Math.min(...hours.map(h => h >= 100 ? h - 100 : h));
@@ -145,42 +109,6 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     return Math.floor(diff / (1000 * 60));
   };
 
-  const handleStartGlobalTimer = async (slot: number) => {
-    // 💡 일의 자리를 slot 번호로 인코딩하여 슬롯 정체성을 DB에 박제
-    const now = Math.floor(Date.now() / 10) * 10 + slot;
-    const duration = globalTimers[slot].duration;
-    setGlobalTimers(prev => ({ ...prev, [slot]: { ...prev[slot], startTime: now } }));
-    if (selectedIds.length > 0) {
-      const newMapping = { ...studentTimerMap };
-      selectedIds.forEach(id => { newMapping[id] = slot; });
-      setStudentTimerMap(newMapping);
-      await Promise.all(selectedIds.map(id => onSave(id, { timer_started_at: now, timer_duration: duration })));
-      setSelectedIds([]);
-    }
-  };
-
-  const handleAssignToRunningTimer = async (slot: number) => {
-    if (selectedIds.length === 0) return;
-    const timer = globalTimers[slot];
-    if (!timer.startTime) return;
-    // 💡 기존 타이머 시간에 슬롯 정보를 재인코딩하여 세션 연동
-    const startTimeForSlot = Math.floor(timer.startTime / 10) * 10 + slot;
-    const newMapping = { ...studentTimerMap };
-    selectedIds.forEach(id => { newMapping[id] = slot; });
-    setStudentTimerMap(newMapping);
-    await Promise.all(selectedIds.map(id => onSave(id, { timer_started_at: startTimeForSlot, timer_duration: timer.duration })));
-    setSelectedIds([]);
-  };
-
-  const handleStopGlobalTimer = async (slot: number) => {
-    setGlobalTimers(prev => ({ ...prev, [slot]: { ...prev[slot], startTime: null } }));
-    const newMapping = { ...studentTimerMap };
-    const studentsToClear = Object.keys(newMapping).filter(id => newMapping[id] === slot);
-    await Promise.all(studentsToClear.map(id => onSave(id, { timer_started_at: null, timer_duration: null })));
-    studentsToClear.forEach(id => delete newMapping[id]);
-    setStudentTimerMap(newMapping);
-  };
-
   const handleFinishHour = async (hour: number) => {
     const studentsToMark = allTodayStudents.filter(s => {
       const sHour = getStudentHour(s);
@@ -191,7 +119,6 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     const confirmMsg = `${hour === 999 ? '보강/기타' : (hour >= 12 ? (hour === 12 ? '오후 12' : `오후 ${hour-12}`) : `오전 ${hour}`)}시 수업 미출석 학생 ${studentsToMark.length}명을 결석 처리하시겠습니까?`;
     if (confirm(confirmMsg)) {
       for (const s of studentsToMark) {
-        // 💡 [수정] attendance_status는 순수 '결석'만 저장
         await onSave(s.id, { attendance_status: ATTENDANCE_STATUS.ABSENT });
       }
       setCollapsedHours(prev => ({ ...prev, [hour]: true }));
@@ -219,14 +146,10 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       const hours = s.day_schedules?.[day] || [];
       const hasRegularSession = hours.length > 0;
       
-      // 💡 [개선] 오늘 수업 대상인지 판단 (정규 수업일 + 보강)
       const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null);
-      const isAttended = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE, ATTENDANCE_STATUS.ABSENT].some(st => status.startsWith(st));
       
-      // 수업 제외 상태면 표시 안함
       if (status.startsWith(ATTENDANCE_STATUS.EXCLUDED)) return false;
 
-      // 💡 [수정] 대상 판별: 오직 정규 수업일이거나 보강이 잡혀있는 경우만 (출결 여부는 대상 판별에서 제외)
       const isTarget = hasRegularSession || isMakeup;
       if (!isTarget) return false;
 
@@ -236,8 +159,8 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       return true;
     }).sort((a, b) => {
       if (activeTab === 'timer') {
-        const timerA = studentTimerMap[a.id] || 999;
-        const timerB = studentTimerMap[b.id] || 999;
+        const timerA = studentTimerMap[a.id] || 9999999999999;
+        const timerB = studentTimerMap[b.id] || 9999999999999;
         if (timerA !== timerB) return timerA - timerB;
       }
       const timeA = getStudentHour(a);
@@ -258,7 +181,6 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
         const h = getStudentHour(s);
         const studentElapsed = getElapsedMinutesForHour(h);
         const isDetermined = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE, ATTENDANCE_STATUS.ABSENT].some(st => stat.startsWith(st));
-        // 💡 [수정] 출결 미정이고 시간이 되었으며, 보강 시간이 아직 지정되지 않은 경우
         const hasMovedHour = s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null;
         const isSupplementWait = stat === ATTENDANCE_STATUS.SUPPLEMENT && !hasMovedHour;
         return !isDetermined && !isSupplementWait && studentElapsed >= (settings.alert_threshold || 15);
@@ -275,15 +197,12 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   const handleCardClick = async (student: Student) => {
     const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
     
-    // 💡 [수정] 1클릭: 출석 처리 / 2클릭: 상세 메뉴 오픈
-    // 출결 정보가 아예 없는 상태(수업전)이거나 보강 대기 상태인 경우 즉시 '출석'으로 저장
     const isPendingMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
     if (status === ATTENDANCE_STATUS.BEFORE || isPendingMakeup) {
       await onSave(student.id, { attendance_status: ATTENDANCE_STATUS.PRESENT });
       return;
     }
  
-    // 이미 상태가 있는 경우 (출석, 지각, 결석 등) 클릭 시 메뉴 오픈
     if (activeStudentId === student.id) { 
       setActiveStudentId(null); 
       return; 
@@ -299,7 +218,6 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   const handleQuickAction = async (studentId: string, status: string | null) => {
     let finalStatus = status || ATTENDANCE_STATUS.BEFORE;
     
-    // 💡 [개선] 초기화(BEFORE) 시, 보강 학생(moved_to_hour 존재)은 보강 대기 상태로 복원
     if (finalStatus === ATTENDANCE_STATUS.BEFORE) {
       const sObj = students.find(s => s.id === studentId);
       const mHour = sObj?.todaySession?.moved_to_hour;
@@ -314,7 +232,6 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   };
 
   const handleTimeShift = async (studentId: string, hour: number) => {
-    // 💡 [수정] attendance_status를 건드리지 않고 moved_to_hour만 저장
     await onSave(studentId, { moved_to_hour: hour });
     setActiveStudentId(null);
     setIsTimeShiftOpen(false);
@@ -357,68 +274,133 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
       <AnimatePresence>
         {activeTab === 'timer' && (
-          <motion.div initial={{ y: -20, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: -20, opacity: 0 }} className="mb-8 flex items-center justify-center gap-4 shrink-0">
-            <div className="flex bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-2 shadow-2xl items-center gap-4">
-              {[1, 2, 3].map((slot) => {
-                const timer = globalTimers[slot];
-                const isRunning = !!timer.startTime;
-                const colors = timerColors[slot];
-                return (
-                  <div key={slot} className={`flex items-center gap-3 px-4 py-2 rounded-xl border transition-all ${isRunning ? `${colors.bg}/20 ${colors.border}/50 shadow-lg ${colors.glow}` : 'bg-white/5 border-white/5'}`}>
-                    <div className="flex flex-col text-left">
-                      <span className={`text-[8px] font-black uppercase tracking-widest ${isRunning ? colors.text : 'text-gray-600'}`}>Slot {slot}</span>
-                      <div className="flex items-center gap-2">
-                        {isRunning ? (
-                          <div className="text-lg font-black text-white tabular-nums leading-none">
-                            {(() => {
-                              const elapsed = Math.floor((currentTime.getTime() - (timer.startTime || 0)) / 1000);
-                              const remaining = Math.max(0, timer.duration * 60 - elapsed);
-                              return `${Math.floor(remaining / 60)}:${(remaining % 60).toString().padStart(2, '0')}`;
-                            })()}
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-1.5 p-0.5 bg-white/5 rounded-lg border border-white/10">
-                            {timerPresets.map((preset) => (
-                              <button
-                                key={preset}
-                                onClick={() => setGlobalTimers(prev => ({ ...prev, [slot]: { ...prev[slot], duration: preset } }))}
-                                className={`px-2 py-1 rounded text-[11px] font-black transition-all ${
-                                  timer.duration === preset 
-                                    ? 'bg-blue-600 text-white shadow-lg' 
-                                    : 'text-gray-500 hover:text-gray-300'
-                                }`}
-                              >
-                                {preset}
-                              </button>
-                            ))}
-                            <span className="text-[9px] font-black text-gray-600 uppercase tracking-tighter pr-1">m</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1.5 ml-2">
-                      {!isRunning ? (
-                        <button onClick={() => handleStartGlobalTimer(slot)} className={`px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${selectedIds.length > 0 ? 'bg-indigo-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:text-white'}`}>
-                          {selectedIds.length > 0 ? `START (${selectedIds.length}명)` : 'START'}
-                        </button>
-                      ) : (
-                        <div className="flex gap-1">
-                          {selectedIds.length > 0 && <button onClick={() => handleAssignToRunningTimer(slot)} className="p-2 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all shadow-lg"><UserPlus size={14} /></button>}
-                          <button onClick={() => handleStopGlobalTimer(slot)} className="p-2 bg-red-600 text-white rounded-lg hover:bg-red-500 transition-all shadow-lg"><RotateCcw size={14} /></button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
+          <motion.div 
+            initial={{ y: -20, opacity: 0 }} 
+            animate={{ y: 0, opacity: 1 }} 
+            exit={{ y: -20, opacity: 0 }} 
+            className="mb-8 flex flex-col items-center gap-4 shrink-0"
+          >
+            {/* ⏱️ 단일 타이머 컨트롤러 제어기 */}
+            <div className="flex bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl items-center gap-4 max-w-full overflow-x-auto">
+              <div className="flex items-center gap-2 pr-3 border-r border-white/10">
+                <Clock className="text-blue-500" size={18} />
+                <span className="text-[10px] font-black text-white uppercase tracking-wider">시간 설정</span>
+              </div>
+              
+              {/* 프리셋 시간 선택 */}
+              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+                {timerPresets.map((preset) => (
+                  <button
+                    key={preset}
+                    onClick={() => {
+                      setSelectedDuration(preset);
+                      setCustomDurationInput('');
+                    }}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                      selectedDuration === preset && customDurationInput === ''
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
+                        : 'text-gray-400 hover:text-gray-200'
+                    }`}
+                  >
+                    {preset}분
+                  </button>
+                ))}
+              </div>
+
+              {/* 자유 시간 직접 입력 */}
+              <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
+                <input
+                  type="number"
+                  min="1"
+                  placeholder="자유 입력"
+                  value={customDurationInput}
+                  onChange={(e) => {
+                    setCustomDurationInput(e.target.value);
+                  }}
+                  className="w-16 bg-transparent text-white text-xs font-bold focus:outline-none border-b border-transparent focus:border-blue-500 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
+                <span className="text-[10px] font-black text-gray-500 uppercase">분</span>
+              </div>
+
+              {/* 스타트 버튼 */}
+              <button
+                onClick={() => handleStartTimer(selectedIds, () => setSelectedIds([]))}
+                disabled={selectedIds.length === 0}
+                className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                  selectedIds.length > 0
+                    ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/30 active:scale-95'
+                    : 'bg-white/5 text-gray-600 cursor-not-allowed'
+                }`}
+              >
+                {selectedIds.length > 0 ? `START (${selectedIds.length}명)` : 'START (학생 선택)'}
+              </button>
+
               {selectedIds.length > 0 && (
-                <div className="px-4 border-l border-white/10 flex items-center gap-2">
-                  <div className="w-8 h-8 rounded-full bg-blue-600 flex items-center justify-center text-white text-xs font-black">{selectedIds.length}</div>
-                  <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Selected</span>
-                  <button onClick={() => setSelectedIds([])} className="text-gray-600 hover:text-white ml-2 transition-colors"><X size={14} /></button>
+                <div className="pl-3 border-l border-white/10 flex items-center gap-2">
+                  <button onClick={() => setSelectedIds([])} className="text-gray-500 hover:text-white transition-colors" title="선택 해제">
+                    <X size={16} />
+                  </button>
                 </div>
               )}
             </div>
+
+            {/* 💡 복사되어 동적으로 생성된 타이머 목록 */}
+            {activeTimers.length > 0 && (
+              <div className="flex flex-wrap justify-center gap-3 max-w-7xl px-4 py-2 bg-white/[0.02] border border-white/5 rounded-2xl">
+                {activeTimers.map((timer, idx) => {
+                  const elapsed = Math.floor((currentTime.getTime() - timer.startTime) / 1000);
+                  const remaining = Math.max(0, timer.duration * 60 - elapsed);
+                  const isTimerExpired = remaining <= 0;
+                  const theme = getTimerTheme(idx);
+                  
+                  const minutes = Math.floor(remaining / 60);
+                  const seconds = remaining % 60;
+                  
+                  return (
+                    <div 
+                      key={timer.id} 
+                      className={`flex items-center gap-4 px-4 py-2.5 rounded-xl border transition-all ${
+                        isTimerExpired 
+                          ? 'bg-red-500/10 border-red-500 shadow-lg shadow-red-500/20 animate-pulse' 
+                          : `${theme.bg}/10 ${theme.border}/40 shadow-md ${theme.glow}`
+                      }`}
+                    >
+                      <div className="flex flex-col text-left">
+                        <span className={`text-[8px] font-black uppercase tracking-widest ${isTimerExpired ? 'text-red-400' : theme.text}`}>
+                          TIMER #{idx + 1} ({timer.duration}m)
+                        </span>
+                        <div className="text-base font-black text-white tabular-nums leading-none mt-1">
+                          {isTimerExpired ? 'EXPIRED' : `${minutes}:${seconds.toString().padStart(2, '0')}`}
+                        </div>
+                      </div>
+                      
+                      <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
+                        <span className="text-[10px] font-black text-gray-300">{timer.studentIds.length}명</span>
+                      </div>
+
+                      <div className="flex items-center gap-1">
+                        {selectedIds.length > 0 && (
+                          <button
+                            onClick={() => handleAssignToTimer(timer.id, selectedIds, () => setSelectedIds([]))}
+                            className="p-1.5 bg-blue-600 text-white rounded-lg hover:bg-blue-500 transition-all shadow-md"
+                            title="선택된 학생을 이 타이머에 배정"
+                          >
+                            <UserPlus size={12} />
+                          </button>
+                        )}
+                        <button
+                          onClick={() => handleStopTimer(timer.id)}
+                          className="p-1.5 bg-white/5 border border-white/10 hover:border-red-500 hover:bg-red-600/20 text-gray-400 hover:text-red-400 rounded-lg transition-all"
+                          title="타이머 종료 및 삭제"
+                        >
+                          <RotateCcw size={12} />
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </motion.div>
         )}
       </AnimatePresence>
@@ -430,32 +412,32 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
             const currentHour = currentTime.getHours();
             const studentHour = getStudentHour(s);
             const studentElapsed = getElapsedMinutesForHour(studentHour);
-            const assignedSlot = studentTimerMap[s.id];
+            
+            const assignedTimerId = studentTimerMap[s.id];
             const prevStudent = idx > 0 ? allTodayStudents[idx - 1] : null;
             const prevStudentHour = prevStudent ? getStudentHour(prevStudent) : null;
             
             let showHourDivider = studentHour !== prevStudentHour;
             let showTimerDivider = false;
             if (activeTab === 'timer') {
-              const prevAssignedSlot = prevStudent ? studentTimerMap[prevStudent.id] : null;
-              showTimerDivider = !!(assignedSlot && assignedSlot !== prevAssignedSlot);
-              showHourDivider = !!(!assignedSlot && (prevAssignedSlot || studentHour !== prevStudentHour));
+              const prevAssignedTimerId = prevStudent ? studentTimerMap[prevStudent.id] : null;
+              showTimerDivider = !!(assignedTimerId && assignedTimerId !== prevAssignedTimerId);
+              showHourDivider = !!(!assignedTimerId && (prevAssignedTimerId || studentHour !== prevStudentHour));
             }
 
             const isPureAttend = status.startsWith(ATTENDANCE_STATUS.PRESENT), isLate = status.startsWith(ATTENDANCE_STATUS.LATE), isAbsent = status.startsWith(ATTENDANCE_STATUS.ABSENT);
             const isAnyMarked = isPureAttend || isLate || isAbsent;
-            // 💡 [수정] 보강/시간이동 판단 로직 정규화
-            const isSupplementStatus = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
-            const hasMovedHour = s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null;
-            const isMakeupActive = (isSupplementStatus || hasMovedHour) && !isAnyMarked;
+            const isMakeupActive = (status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null)) && !isAnyMarked;
             const isBeforeClass = status === ATTENDANCE_STATUS.BEFORE;
-            const isSupplementPending = status === ATTENDANCE_STATUS.SUPPLEMENT && !hasMovedHour; // 💡 다시 정의
+            const isSupplementPending = status === ATTENDANCE_STATUS.SUPPLEMENT && !(s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null);
             const isTimePassed = studentHour !== 999 && studentHour <= currentHour;
             const isLateWarning = isTimePassed && !isAnyMarked && !isSupplementPending && studentElapsed >= (settings.late_threshold || 10);
             const isCriticalWarning = isTimePassed && !isAnyMarked && !isSupplementPending && studentElapsed >= (settings.alert_threshold || 15);
-            const sharedTimer = assignedSlot ? globalTimers[assignedSlot] : null;
+            
+            const activeTimerIdx = activeTimers.findIndex(t => t.id === assignedTimerId);
+            const sharedTimer = activeTimerIdx !== -1 ? activeTimers[activeTimerIdx] : null;
             let remainingSec = 0, progress = 0, isTimerExpired = false;
-            if (sharedTimer && sharedTimer.startTime) {
+            if (sharedTimer) {
               const elapsed = Math.floor((currentTime.getTime() - sharedTimer.startTime) / 1000);
               const total = sharedTimer.duration * 60;
               remainingSec = Math.max(0, total - elapsed);
@@ -467,14 +449,26 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
             return (
               <React.Fragment key={s.id || idx}>
-                {showTimerDivider && assignedSlot && (
-                  <div className="col-span-full mt-8 mb-4 flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                      <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center gap-2 ${timerColors[assignedSlot].bg} ${timerColors[assignedSlot].border} text-white`}><Clock size={12} /> Timer Slot #{assignedSlot} Group</div>
-                      <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">{globalTimers[assignedSlot].duration} min session</div>
-                    </div>
-                    <div className={`flex-1 h-px bg-gradient-to-r ${timerColors[assignedSlot].bg}/30 to-transparent`} />
-                  </div>
+                {showTimerDivider && assignedTimerId && (
+                  (() => {
+                    const timerIdx = activeTimers.findIndex(t => t.id === assignedTimerId);
+                    const timerObj = activeTimers[timerIdx];
+                    if (!timerObj) return null;
+                    const theme = getTimerTheme(timerIdx);
+                    return (
+                      <div className="col-span-full mt-8 mb-4 flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-4">
+                          <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center gap-2 ${theme.bg} ${theme.border} text-white`}>
+                            <Clock size={12} /> Timer #{timerIdx + 1} Group
+                          </div>
+                          <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">
+                            {timerObj.duration}분 설정 세션
+                          </div>
+                        </div>
+                        <div className={`flex-1 h-px bg-gradient-to-r ${theme.bg}/30 to-transparent`} />
+                      </div>
+                    );
+                  })()
                 )}
                 {showHourDivider && (
                   <div className="col-span-full mt-8 mb-4 flex items-center justify-between gap-4">
@@ -510,14 +504,89 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                       exit={{ opacity: 0, scale: 0.95, height: 0, overflow: 'hidden' }}
                       transition={{ duration: 0.2 }}
                       onClick={() => activeTab === 'attendance' ? handleCardClick(s) : handleToggleSelect(s.id)}
-                      className={`relative aspect-square rounded-lg border flex flex-col items-center justify-center gap-2 transition-all duration-300 cursor-pointer overflow-hidden ${activeTab === 'timer' ? (selectedIds.includes(s.id) ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-600/5' : isTimerExpired ? 'border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' : sharedTimer ? `${timerColors[assignedSlot].border} ${timerColors[assignedSlot].bg}/5` : 'border-white/10 bg-white/5') : (isPureAttend ? 'opacity-60 grayscale-[0.2] scale-[0.98] border-white/10 bg-white/5' : isMakeupActive ? 'bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-900/20' : isAbsent ? 'bg-red-500/20 border-red-500 shadow-lg shadow-red-900/20' : isLate ? 'bg-amber-500/20 border-amber-500 shadow-lg shadow-amber-900/20' : isCriticalWarning ? 'bg-red-500/20 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse' : isLateWarning ? 'bg-amber-500/10 border-amber-500' : isSupplementPending ? 'bg-indigo-500/5 border-indigo-500/30 border-dashed' : 'bg-blue-600/5 border-blue-500/50 hover:border-blue-500 hover:bg-blue-500/10')}`}
+                      className={`relative aspect-square rounded-lg border flex flex-col items-center justify-center gap-2 transition-all duration-300 cursor-pointer overflow-hidden ${
+                        activeTab === 'timer' 
+                          ? (selectedIds.includes(s.id) 
+                            ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-600/5' 
+                            : isTimerExpired 
+                            ? 'border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' 
+                            : sharedTimer 
+                            ? (() => {
+                                const theme = getTimerTheme(activeTimerIdx);
+                                return `${theme.border} ${theme.bg}/5`;
+                              })()
+                            : 'border-white/10 bg-white/5') 
+                          : (isPureAttend 
+                            ? 'opacity-60 grayscale-[0.2] scale-[0.98] border-white/10 bg-white/5' 
+                            : isMakeupActive 
+                            ? 'bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-900/20' 
+                            : isAbsent 
+                            ? 'bg-red-500/20 border-red-500 shadow-lg shadow-red-900/20' 
+                            : isLate 
+                            ? 'bg-amber-500/20 border-amber-500 shadow-lg shadow-amber-900/20' 
+                            : isCriticalWarning 
+                            ? 'bg-red-500/20 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse' 
+                            : isLateWarning 
+                            ? 'bg-amber-500/10 border-amber-500' 
+                            : isSupplementPending 
+                            ? 'bg-indigo-500/5 border-indigo-500/30 border-dashed' 
+                            : 'bg-blue-600/5 border-blue-500/50 hover:border-blue-500 hover:bg-blue-500/10')
+                      }`}
                     >
                       {activeTab === 'timer' ? (
                         <>
-                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20"><svg className="w-24 h-24 rotate-[-90deg]"><circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="2" fill="transparent" className="text-white/10" />{sharedTimer && <motion.circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="4" fill="transparent" strokeDasharray="251.2" initial={{ strokeDashoffset: 251.2 }} animate={{ strokeDashoffset: 251.2 * (progress / 100) }} className={`${isTimerExpired ? 'text-red-500' : timerColors[assignedSlot].text}`} />}</svg></div>
-                          {sharedTimer && !isTimerExpired && <div className={`absolute bottom-0 left-0 h-1 z-0 transition-all duration-1000 ${timerColors[assignedSlot].bg}`} style={{ width: `${100 - progress}%` }} />}
-                          <div className="absolute top-1.5 left-1.5 flex items-center gap-1.5 z-10"><input type="checkbox" checked={selectedIds.includes(s.id)} onChange={() => {}} className="w-3 h-3 rounded-sm border-white/20 bg-black/40 checked:bg-blue-500 cursor-pointer" /></div>
-                          <div className="text-center px-1 relative z-10"><h3 className="text-2xl font-black tracking-tighter leading-none text-white drop-shadow-lg">{s.name}</h3><p className={`mt-2 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${sharedTimer ? `${timerColors[assignedSlot].border} ${timerColors[assignedSlot].text}` : s.grade.includes('초') ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : s.grade.includes('고') ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'}`}>{sharedTimer ? `Timer ${assignedSlot}` : s.grade}</p></div>
+                          <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
+                            <svg className="w-24 h-24 rotate-[-90deg]">
+                              <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="2" fill="transparent" className="text-white/10" />
+                              {sharedTimer && (
+                                <motion.circle 
+                                  cx="48" 
+                                  cy="48" 
+                                  r="40" 
+                                  stroke="currentColor" 
+                                  strokeWidth="4" 
+                                  fill="transparent" 
+                                  strokeDasharray="251.2" 
+                                  initial={{ strokeDashoffset: 251.2 }} 
+                                  animate={{ strokeDashoffset: 251.2 * (progress / 100) }} 
+                                  className={`${isTimerExpired ? 'text-red-500' : getTimerTheme(activeTimerIdx).text}`} 
+                                />
+                              )}
+                            </svg>
+                          </div>
+                          {sharedTimer && !isTimerExpired && (
+                            <div 
+                              className={`absolute bottom-0 left-0 h-1 z-0 transition-all duration-1000 ${getTimerTheme(activeTimerIdx).bg}`} 
+                              style={{ width: `${100 - progress}%` }} 
+                            />
+                          )}
+                          <div className="absolute top-1.5 left-1.5 flex items-center gap-1.5 z-10">
+                            <input 
+                              type="checkbox" 
+                              checked={selectedIds.includes(s.id)} 
+                              onChange={() => {}} 
+                              className="w-3 h-3 rounded-sm border-white/20 bg-black/40 checked:bg-blue-500 cursor-pointer" 
+                            />
+                          </div>
+                          <div className="text-center px-1 relative z-10">
+                            <h3 className="text-2xl font-black tracking-tighter leading-none text-white drop-shadow-lg">{s.name}</h3>
+                            <p 
+                              className={`mt-2 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                sharedTimer 
+                                  ? (() => {
+                                      const theme = getTimerTheme(activeTimerIdx);
+                                      return `${theme.border} ${theme.text}`;
+                                    })()
+                                  : s.grade.includes('초') 
+                                  ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' 
+                                  : s.grade.includes('고') 
+                                  ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' 
+                                  : 'text-blue-400 border-blue-500/30 bg-blue-500/10'
+                              }`}
+                            >
+                              {sharedTimer ? `Timer #${activeTimerIdx + 1}` : s.grade}
+                            </p>
+                          </div>
                         </>
                       ) : (
                         <>
@@ -527,7 +596,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                             {(() => { const isES = s.grade.includes('초'); const isHS = s.grade.includes('고'); const colorClass = isES ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : isHS ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'; return <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${isPureAttend ? 'text-gray-600 border-white/5 bg-white/5 opacity-50' : colorClass}`}>{s.grade}</p>; })()}
 
                           </div></div>
-                          {isAnyMarked && <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isMakeupActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-gray-400'}`}>{isMakeupActive ? (hasMovedHour ? `${s.todaySession?.moved_to_hour}시` : '보강') : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status)}</div>}
+                          {isAnyMarked && <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isMakeupActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-gray-400'}`}>{isMakeupActive ? (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null ? `${s.todaySession?.moved_to_hour}시` : '보강') : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status)}</div>}
                           {isBeforeClass && <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">수업전</div>}
                           {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isCriticalWarning ? 'bg-red-500 text-white' : 'bg-amber-500 text-black'}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
                         </>

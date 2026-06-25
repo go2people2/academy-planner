@@ -444,58 +444,7 @@ export default function TextbookSystem({
           </div>
         </div>
 
-        {/* 완료된 교재 이력 섹션 (학생 뷰) */}
-        {student.assigned_books?.some((code: string) => String(student.book_courses?.[code] || '').includes('-done')) && (
-          <div className="border-t border-white/5 bg-black/40 p-4 md:p-6 space-y-3 text-left">
-            <div className="flex items-center gap-2 px-1">
-              <span className="text-[12px] md:text-[14px] font-black text-emerald-500/80 tracking-tight">📚 완료한 교재 이력 (History)</span>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              {student.assigned_books
-                .filter((code: string) => String(student.book_courses?.[code] || '').includes('-done'))
-                .map((code: string, idx: number) => {
-                  const book = availableTextbooks.find(b => b.bookcode === code);
-                  const rawCourseValue = student.book_courses?.[code] || student.course || 'C';
-                  
-                  let currentCourse = 'C';
-                  let periodText = '';
-                  
-                  if (rawCourseValue.startsWith('E') || rawCourseValue.startsWith('D') || rawCourseValue.startsWith('C') || rawCourseValue.startsWith('B') || rawCourseValue.startsWith('A')) {
-                    currentCourse = rawCourseValue.charAt(0);
-                  }
-                  
-                  if (rawCourseValue.includes('-done-')) {
-                    const info = rawCourseValue.split('-done-')[1]; // "중2_2월-중2_5월"
-                    if (info.includes('-')) {
-                      const [start, end] = info.split('-'); // ["중2_2월", "중2_5월"]
-                      const [startG, startM] = start.split('_');
-                      const [endG, endM] = end.split('_');
-                      if (startG === endG) {
-                        periodText = `${startG} ${startM} ~ ${endM}`;
-                      } else {
-                        periodText = `${startG} ${startM} ~ ${endG} ${endM}`;
-                      }
-                    } else if (info.includes('_')) {
-                      const parts = info.split('_');
-                      if (parts.length >= 3) {
-                        periodText = `${parts[0]} ${parts[1]} ~ ${parts[2]}`;
-                      }
-                    }
-                  }
 
-                  return (
-                    <div key={`done-${code}-${idx}`} className="flex items-center gap-2 px-3 py-1.5 rounded-[4px] bg-emerald-500/5 border border-emerald-500/10 text-emerald-400 text-xs font-bold">
-                      <span>{book ? book.title : code}</span>
-                      {periodText && <span className="text-[10px] text-gray-500">({periodText} 사용)</span>}
-                      <span className="bg-emerald-500/20 text-emerald-500 text-[10px] font-black rounded-sm px-1.5 py-0.5">
-                        {currentCourse}
-                      </span>
-                    </div>
-                  );
-                })}
-            </div>
-          </div>
-        )}
 
         {/* 오버레이: 단원 및 페이지 선택 */}
         <AnimatePresence>

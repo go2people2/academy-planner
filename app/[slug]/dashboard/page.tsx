@@ -423,6 +423,7 @@ export default function DashboardPage() {
   const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
   const [navHistory, setNavHistory] = useState<string[]>(['board']);
   const [historyIdx, setHistoryIdx] = useState(0);
+  const [isWarpMode, setIsWarpMode] = useState(false); // 💡 임시 원격 지원 모드 플래그 추가
 
   useEffect(() => {
     if (!slug) return;
@@ -430,36 +431,58 @@ export default function DashboardPage() {
     if (!userJson) { router.push(`/${slug}/login`); return; }
     
     const localUser = JSON.parse(userJson);
-    setCurrentUser(localUser);
+    const warpFlag = localStorage.getItem('ams_is_warp') === 'true';
 
-    // 💡 마지막으로 보던 화면(탭) 복구 (새로고침 대응)
-    const savedViewMode = localStorage.getItem('ams_viewMode');
-    if (savedViewMode) {
-      if (savedViewMode === 'settings' && localUser?.role !== 'admin' && localUser?.role !== 'master') {
-        setViewMode('board');
-      } else {
-        setViewMode(savedViewMode);
-        setNavHistory([savedViewMode]);
-        setHistoryIdx(0);
+    const setupMasterSession = async () => {
+      // 💡 [개선] 마스터 권한의 경우, URL 슬러그를 기반으로 academy_id 실시간 임시 업데이트 및 세션 고정 지원
+      if (localUser?.role === 'master') {
+        const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
+        const { data: targetAc } = await supabase
+          .from('ams_academies')
+          .select('id')
+          .eq('slug', normalizedSlug)
+          .maybeSingle();
+
+        if (targetAc && localUser.academy_id !== targetAc.id) {
+          localUser.academy_id = targetAc.id;
+          localStorage.setItem('ams_user', JSON.stringify(localUser));
+        }
       }
-    }
 
-    // 💡 [개선] 다른 컴퓨터에서 변경된 최신 프리셋 정보를 DB로부터 동기화
-    const syncCurrentUser = async () => {
-      if (!localUser?.id) return;
-      const { data: latestUser, error } = await supabase
-        .from('ams_teachers')
-        .select('*')
-        .eq('id', localUser.id)
-        .maybeSingle();
-      
-      if (!error && latestUser) {
-        const merged = { ...localUser, ...latestUser };
-        setCurrentUser(merged);
-        localStorage.setItem('ams_user', JSON.stringify(merged));
+      setIsWarpMode(localUser?.role === 'master' && warpFlag);
+      setCurrentUser(localUser);
+
+      // 💡 마지막으로 보던 화면(탭) 복구 (새로고침 대응)
+      const savedViewMode = localStorage.getItem('ams_viewMode');
+      if (savedViewMode) {
+        if (savedViewMode === 'settings' && localUser?.role !== 'admin' && localUser?.role !== 'master') {
+          setViewMode('board');
+        } else {
+          setViewMode(savedViewMode);
+          setNavHistory([savedViewMode]);
+          setHistoryIdx(0);
+        }
+      }
+
+      // 💡 [개선] 다른 컴퓨터에서 변경된 최신 프리셋 정보를 DB로부터 동기화
+      if (localUser?.id) {
+        const { data: latestUser, error } = await supabase
+          .from('ams_teachers')
+          .select('*')
+          .eq('id', localUser.id)
+          .maybeSingle();
+        
+        if (!error && latestUser) {
+          // 마스터 권한인 경우 DB의 academy_id(시스템 관리국)로 덮어쓰지 않고 현재 원격 임시 접속 중인 학원 ID를 보존
+          const preservedAcademyId = localUser.role === 'master' ? localUser.academy_id : latestUser.academy_id;
+          const merged = { ...localUser, ...latestUser, academy_id: preservedAcademyId };
+          setCurrentUser(merged);
+          localStorage.setItem('ams_user', JSON.stringify(merged));
+        }
       }
     };
-    syncCurrentUser();
+
+    setupMasterSession();
   }, [slug, router]);
 
   const [academy, setAcademy] = useState<any>(null);
@@ -513,6 +536,13 @@ export default function DashboardPage() {
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
+  const handleSelectStudent = (studentId: string | null) => {
+    if (studentId && isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 개인정보 보호를 위해 학생 상세 프로필 조회가 제한됩니다.');
+      return;
+    }
+    setSelectedStudentId(studentId);
+  };
   const [isBatchMode, setIsBatchMode] = useState(false);
   const [isClassroomModeOpen, setIsClassroomModeOpen] = useState(false);
   
@@ -576,11 +606,23 @@ export default function DashboardPage() {
     setCurrentUser(updated); localStorage.setItem('ams_user', JSON.stringify(updated));
   };
 
-  const handleViewProgress = (id: string) => { setActiveProgressStudentId(id); setViewMode('progress'); };
+  const handleViewProgress = (id: string) => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 개인정보 보호를 위해 학생 개별 리포트 조회가 제한됩니다.');
+      return;
+    }
+    setActiveProgressStudentId(id); 
+    setViewMode('progress'); 
+  };
 
   const fetchTeachers = useCallback(async (academyId: string) => {
     try {
-      const { data, error } = await supabase.from('ams_teachers').select('*').eq('academy_id', academyId).order('name', { ascending: true });
+      const { data, error } = await supabase
+        .from('ams_teachers')
+        .select('*')
+        .eq('academy_id', academyId)
+        .neq('role', 'master')
+        .order('name', { ascending: true });
       if (!error) {
         setTeachers(data || []);
         return data || []; // 💡 데이터 반환 추가
@@ -657,13 +699,31 @@ export default function DashboardPage() {
         );
       }));
 
-      setStudents(enriched);
+      const processed = enriched.map(s => {
+        if (isWarpMode) {
+          const name = s.name || '';
+          const maskedName = name.length <= 2
+            ? (name[0] || '') + '*'
+            : name[0] + '*'.repeat(name.length - 2) + name[name.length - 1];
+          return {
+            ...s,
+            name: maskedName,
+            phone: s.phone ? '010-****-****' : '',
+            school: s.school ? '***' : '',
+            management_notes: '🔒 원격 지원 모드에서는 열람이 제한됩니다.',
+            recent_mission: '🔒 원격 지원 모드에서는 열람이 제한됩니다.'
+          };
+        }
+        return s;
+      });
+
+      setStudents(processed);
     } catch (e) { 
       console.error('Fetch All Data Error:', e); 
     } finally { 
       setIsLoading(false); 
     }
-  }, [selectedDate, slug, academy, teachers, fetchTeachers, currentUser]);
+  }, [selectedDate, slug, academy, teachers, fetchTeachers, currentUser, isWarpMode]);
 
   useEffect(() => {
     const checkDate = () => {
@@ -771,6 +831,10 @@ const buildMergedTestResult = (existingJsonRaw: any, sessionData: any, fallbacks
 };
 
 const saveTodaySession = useCallback(async (studentId: string, sessionData: Partial<SessionLog>) => {
+  if (isWarpMode) {
+    alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+    return false;
+  }
   const student = students.find(s => s.id === studentId);
   if (!student || !academy) return false;
   let sessionId = student.todaySession?.id;
@@ -940,6 +1004,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
    * 💡 화면에 표시된 필터링된 학생들의 제출 상태를 한 번에 일괄 해제
    */
   const saveBatchTodaySession = useCallback(async (studentIds: string[], sessionData: Partial<SessionLog>) => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+      return false;
+    }
     if (!academy) return false;
 
     // 💡 출결이 결석인 경우 수행진도(completed_classwork_text)를 '결석'으로 자동 입력
@@ -1149,6 +1217,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   }, [academy, fetchAllData]);
 
   const handleAddNewStudent = async (data: any) => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+      return;
+    }
     if (!academy) return;
     try {
       await supabase.from('ams_students').insert([{ academy_id: academy.id, name: data.name, school: data.school, grade: data.grade, course: data.course, book_courses: data.book_courses || {}, class_name: data.class_name, phone: data.phone, teacher_id: data.teacher_id || null, class_days: data.class_days, day_schedules: data.day_schedules, assigned_books: data.assigned_books, is_deleted: false }]);
@@ -1157,6 +1229,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   };
 
   const addStudentToToday = async (studentId: string) => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+      return;
+    }
     const student = students.find(s => s.id === studentId);
     if (!student || (student.todaySession?.id && student.todaySession.id !== 'temp')) return;
 
@@ -1173,6 +1249,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   };
 
   const batchAddStudents = async (studentIds: string[], reasons: Record<string, string> = {}, makeupHours: Record<string, number> = {}) => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+      return;
+    }
     if (!academy) return;
     setIsLoading(true);
     try {
@@ -1218,6 +1298,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   };
 
   const removeStudentFromToday = async (studentId: string, reason: string = '') => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+      return;
+    }
     const student = students.find(s => s.id === studentId); if (!student || !academy) return;
     try {
       const payload: any = { 
@@ -1243,6 +1327,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   };
 
   const updateStudentInfo = async (studentId: string, fieldOrUpdates: string | any, value?: any) => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+      return;
+    }
     try {
       if (fieldOrUpdates === 'PERMANENT_DELETE') {
         await supabase.from('ams_session_logs').update({ student_id: null }).eq('student_id', studentId);
@@ -1437,44 +1525,44 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
         {isLoading ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><Loader2 className="animate-spin mb-4" size={32} /><p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Academy Data...</p></div>) : (
           <div className="h-full">
-            {viewMode === 'board' && <Overview todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} />}
-            {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={setSelectedStudentId} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} />}
-            {viewMode === 'todayTable' && (
-              <TodaySheet 
-                students={todayStudents} 
-                setStudents={setStudents} 
-                selectedDate={selectedDate} 
-                onDateChange={setSelectedDate} 
-                onViewProgress={handleViewProgress} 
-                onSelectStudent={setSelectedStudentId} 
-                masterTextbooks={availableTextbooks} 
-                onSave={saveTodaySession} 
-                onBatchSave={saveBatchTodaySession}
-                onUpdateStudentInfo={updateStudentInfo} 
-                academyInfo={academy} 
-                currentUser={currentUser} 
-                sortMode={sortMode} 
-                onSortModeChange={setSortMode} 
-                sortDirection={sortDirection}
-                onSortDirectionChange={setSortDirection}
-                onOpenBriefing={() => setShowMorningBriefing(true)} 
-                selectedFilter={selectedFilter}
-                setSelectedFilter={setSelectedFilter}
-                selectedTeacherId={selectedTeacherId}
-                setSelectedTeacherId={setSelectedTeacherId}
-                selectedDays={selectedDays}
-                setSelectedDays={setSelectedDays}
-                isAndFilter={isAndFilter}
-                setIsAndFilter={setIsAndFilter}
-                teachers={teachers}
-                isFullScreen={isFullScreen}
-                onToggleFullScreen={() => setIsFullScreen(!isFullScreen)}
-              />
-            )}
-
-            {viewMode === 'progress' && <ProgressSequencer students={progressFilteredStudents.filter(s => !s.is_deleted)} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
-            {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} onSelectStudent={setSelectedStudentId} />}
-            {viewMode === 'notifications' && <NotificationsView academyInfo={academy} students={students} currentUser={currentUser} />}
+             {viewMode === 'board' && <Overview todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} />}
+             {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} />}
+             {viewMode === 'todayTable' && (
+               <TodaySheet 
+                 students={todayStudents} 
+                 setStudents={setStudents} 
+                 selectedDate={selectedDate} 
+                 onDateChange={setSelectedDate} 
+                 onViewProgress={handleViewProgress} 
+                 onSelectStudent={handleSelectStudent} 
+                 masterTextbooks={availableTextbooks} 
+                 onSave={saveTodaySession} 
+                 onBatchSave={saveBatchTodaySession}
+                 onUpdateStudentInfo={updateStudentInfo} 
+                 academyInfo={academy} 
+                 currentUser={currentUser} 
+                 sortMode={sortMode} 
+                 onSortModeChange={setSortMode} 
+                 sortDirection={sortDirection}
+                 onSortDirectionChange={setSortDirection}
+                 onOpenBriefing={() => setShowMorningBriefing(true)} 
+                 selectedFilter={selectedFilter}
+                 setSelectedFilter={setSelectedFilter}
+                 selectedTeacherId={selectedTeacherId}
+                 setSelectedTeacherId={setSelectedTeacherId}
+                 selectedDays={selectedDays}
+                 setSelectedDays={setSelectedDays}
+                 isAndFilter={isAndFilter}
+                 setIsAndFilter={setIsAndFilter}
+                 teachers={teachers}
+                 isFullScreen={isFullScreen}
+                 onToggleFullScreen={() => setIsFullScreen(!isFullScreen)}
+               />
+             )}
+ 
+             {viewMode === 'progress' && <ProgressSequencer students={progressFilteredStudents.filter(s => !s.is_deleted)} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
+             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} onSelectStudent={handleSelectStudent} />}
+             {viewMode === 'notifications' && <NotificationsView academyInfo={academy} students={students} currentUser={currentUser} />}
             {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} noticeDrafts={noticeDrafts} onNoticeDraftChange={handleNoticeDraftChange} />}
             {viewMode === 'teacherTask' && <TeacherTasks academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} onRefreshStudents={fetchAllData} />}
             {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}

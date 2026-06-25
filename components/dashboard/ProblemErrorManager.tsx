@@ -54,6 +54,7 @@ export default function ProblemErrorManager({
       const { data, error } = await supabase
         .from('ams_problem_errors')
         .select('*')
+        .eq('academy_id', academyInfo.id)
         .order('created_at', { ascending: false });
 
       if (error) throw error;
@@ -663,6 +664,7 @@ export default function ProblemErrorManager({
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
         teacherName={currentUser?.name || ''}
+        academyId={academyInfo.id}
         onSuccess={() => fetchErrors(true)}
       />
     </div>

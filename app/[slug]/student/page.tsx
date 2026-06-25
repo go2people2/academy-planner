@@ -198,7 +198,11 @@ export default function StudentPortal() {
       let currentTeachers: any[] = [];
       if (acData) {
         setAcademy(acData);
-        const { data: tData } = await supabase.from('ams_teachers').select('*').eq('academy_id', acData.id);
+        const { data: tData } = await supabase
+          .from('ams_teachers')
+          .select('*')
+          .eq('academy_id', acData.id)
+          .neq('role', 'master');
         if (tData) {
           setTeachers(tData);
           currentTeachers = tData;

@@ -146,6 +146,22 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
                       </div>
                     </div>
                   ))}
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Role (권한)</label>
+                    <div className="relative">
+                      <select 
+                        value={formData.role} 
+                        onChange={e => setFormData({ ...formData, role: e.target.value as any })}
+                        className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
+                      >
+                        <option value="teacher" className="bg-[#121212]">TEACHER (일반 교사)</option>
+                        <option value="admin" className="bg-[#121212]">ADMIN (원장님 / 관리자)</option>
+                      </select>
+                      <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-600">
+                        <UserCircle size={16} />
+                      </div>
+                    </div>
+                  </div>
                 </div>
                 <button type="submit" disabled={isSaving} className="w-full bg-blue-600 py-4 rounded-[2px] text-[10px] font-black uppercase tracking-widest text-white hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20 flex items-center justify-center gap-2">
                   {isSaving ? <Loader2 className="animate-spin" size={16} /> : <><Save size={16} /> Complete Registration</>}
