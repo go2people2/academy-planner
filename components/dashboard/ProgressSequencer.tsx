@@ -31,7 +31,26 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
 
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
 
-  if (!selectedStudentId || students.length === 0) {
+  // 💡 필터링 결과(filteredStudents) 또는 외부 주입 ID가 변경될 때 선택 상태 자동 보정
+  useEffect(() => {
+    // 1. 외부에서 지정한 initialStudentId가 있고, 그 학생이 현재 필터링된 목록에 있다면 우선 선택
+    if (initialStudentId && filteredStudents.some(s => s.id === initialStudentId)) {
+      setSelectedStudentId(initialStudentId);
+      return;
+    }
+    
+    // 2. 현재 선택된 학생이 필터링된 목록에 존재하지 않는다면 첫 번째 학생 선택
+    if (filteredStudents.length > 0) {
+      const exists = filteredStudents.some(s => s.id === selectedStudentId);
+      if (!exists) {
+        setSelectedStudentId(filteredStudents[0].id);
+      }
+    } else {
+      setSelectedStudentId(null);
+    }
+  }, [filteredStudents, initialStudentId]);
+
+  if (students.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-4">
         <AlertCircle size={48} className="opacity-20" />
@@ -60,19 +79,25 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
           </div>
         </div>
         <div className="flex-1 overflow-y-auto custom-scrollbar-v p-2 space-y-1">
-          {filteredStudents.map((s, idx) => (
-            <button
-              key={s.id || idx}
-              onClick={() => setSelectedStudentId(s.id)}
-              className={`w-full flex items-center justify-between p-3 rounded-[2px] transition-all group ${selectedStudentId === s.id ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
-            >
-              <div className="flex flex-col items-start min-w-0">
-                <span className="text-[13px] font-black truncate w-full text-left">{s.name}</span>
-                <span className={`text-[8px] font-bold uppercase tracking-tighter ${selectedStudentId === s.id ? 'text-blue-100' : 'text-gray-600'}`}>{s.grade} · {s.course}</span>
-              </div>
-              <ChevronRight size={14} className={`transition-transform ${selectedStudentId === s.id ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100'}`} />
-            </button>
-          ))}
+          {filteredStudents.length > 0 ? (
+            filteredStudents.map((s, idx) => (
+              <button
+                key={s.id || idx}
+                onClick={() => setSelectedStudentId(s.id)}
+                className={`w-full flex items-center justify-between p-3 rounded-[2px] transition-all group ${selectedStudentId === s.id ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}
+              >
+                <div className="flex flex-col items-start min-w-0">
+                  <span className="text-[13px] font-black truncate w-full text-left">{s.name}</span>
+                  <span className={`text-[8px] font-bold uppercase tracking-tighter ${selectedStudentId === s.id ? 'text-blue-100' : 'text-gray-600'}`}>{s.grade} · {s.course}</span>
+                </div>
+                <ChevronRight size={14} className={`transition-transform ${selectedStudentId === s.id ? 'translate-x-0 opacity-100' : '-translate-x-2 opacity-0 group-hover:translate-x-0 group-hover:opacity-100'}`} />
+              </button>
+            ))
+          ) : (
+            <div className="text-center py-8 text-gray-600 text-[10px] font-bold uppercase tracking-widest">
+              검색 결과 없음
+            </div>
+          )}
         </div>
       </div>
 
@@ -130,7 +155,9 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
             )}
           </div>
         ) : (
-          <div className="flex-1 flex items-center justify-center text-gray-600">학생을 선택해주세요</div>
+          <div className="flex-1 flex items-center justify-center text-gray-600 font-bold text-[11px] uppercase tracking-wider">
+            {filteredStudents.length === 0 ? "검색 결과에 맞는 학생이 없습니다" : "학생을 선택해주세요"}
+          </div>
         )}
       </div>
     </div>

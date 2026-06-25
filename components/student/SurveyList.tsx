@@ -103,10 +103,9 @@ export default function SurveyList({ academyId, student }: SurveyListProps) {
   };
 
   if (surveys.length === 0) return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-6 text-center">
-      <ClipboardList size={28} className="text-gray-600 mx-auto mb-3" />
-      <p className="text-sm font-bold text-gray-400">진행 중인 설문이 없습니다</p>
-      <p className="text-xs text-gray-600 mt-1">새로운 설문이 등록되면 여기에 표시됩니다</p>
+    <div className="bg-white/3 border border-white/5 rounded-lg p-3 text-center flex items-center justify-center gap-2">
+      <ClipboardList size={14} className="text-gray-500" />
+      <span className="text-[11px] font-bold text-gray-500">진행 중인 설문이 없습니다</span>
     </div>
   );
 

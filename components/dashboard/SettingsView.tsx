@@ -35,7 +35,7 @@ interface SettingsViewProps {
 // --- Main SettingsView Component ---
 
 export default function SettingsView({ teachers, students, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'tests' | 'holidays' | 'exams'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'tests' | 'holidays' | 'exams' | 'manual'>('teachers');
 
   // 💡 휴일 관리 함수
   const handleAddHoliday = async (date: string, note: string) => {
@@ -64,11 +64,14 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
     homepage_url: "", // 💡 학원 홈페이지
     homepage_title: "", // 💡 학원 홈페이지 버튼 라벨
     naver_cafe_url: "", // 💡 네이버 카페
-    naver_cafe_title: "" // 💡 네이버 카페 버튼 라벨
+    naver_cafe_title: "", // 💡 네이버 카페 버튼 라벨
+    textbook_categories: [] as string[] // 💡 교재 카테고리 대분류 추가
   });
 
   // 데이터 로드 여부 추적
   const [isDataInitialized, setIsDataInitialized] = useState(false);
+
+  const DEFAULT_CATEGORIES = useMemo(() => ['초5', '초6', '중1', '중2', '중3', '공수1', '공수2', '대수', '미적분1', '미적분2', '확통', '기하'], []);
 
   // academyInfo 변경 시 로컬 상태 동기화 (최초 1회 및 편집 전까지만 업데이트)
   useEffect(() => {
@@ -87,13 +90,14 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
           homepage_url: dbSettings.homepage_url || "",
           homepage_title: dbSettings.homepage_title || "홈페이지",
           naver_cafe_url: dbSettings.naver_cafe_url || "",
-          naver_cafe_title: dbSettings.naver_cafe_title || "네이버 카페"
+          naver_cafe_title: dbSettings.naver_cafe_title || "네이버 카페",
+          textbook_categories: dbSettings.textbook_categories || DEFAULT_CATEGORIES
         });
       }
     }
 
     setIsDataInitialized(true);
-  }, [academyInfo, isDataInitialized]);
+  }, [academyInfo, isDataInitialized, DEFAULT_CATEGORIES]);
 
   const updateOpSetting = async (key: string, value: any) => {
     if (!onUpdateAcademyInfo || !academyInfo) return;

@@ -443,12 +443,11 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
             }
 
             const isPureAttend = status.startsWith(ATTENDANCE_STATUS.PRESENT), isLate = status.startsWith(ATTENDANCE_STATUS.LATE), isAbsent = status.startsWith(ATTENDANCE_STATUS.ABSENT);
+            const isAnyMarked = isPureAttend || isLate || isAbsent;
             // 💡 [수정] 보강/시간이동 판단 로직 정규화
             const isSupplementStatus = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
             const hasMovedHour = s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null;
-            const isMakeupActive = isSupplementStatus || hasMovedHour;
-            
-            const isAnyMarked = isPureAttend || isLate || isAbsent;
+            const isMakeupActive = (isSupplementStatus || hasMovedHour) && !isAnyMarked;
             const isBeforeClass = status === ATTENDANCE_STATUS.BEFORE;
             const isSupplementPending = status === ATTENDANCE_STATUS.SUPPLEMENT && !hasMovedHour; // 💡 다시 정의
             const isTimePassed = studentHour !== 999 && studentHour <= currentHour;

@@ -2,7 +2,15 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import { Clock, Plus } from 'lucide-react';
-import { parseInlineTests } from '@/lib/utils';
+import { getCombinedTestText, RenderTestText } from './TestStatusSection';
+
+const cleanNextQuiz = (text: string) => {
+  if (!text) return '';
+  return text.split('\n')
+    .map(line => line.trim().startsWith('-') ? line.trim().substring(1).trim() : line.trim())
+    .filter(Boolean)
+    .join('\n');
+};
 
 interface LearningHistoryListProps {
   allLogs: any[];
@@ -46,8 +54,22 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                   let todoAchievement = 0;
                   try { if (log.test_result?.startsWith('{')) todoAchievement = JSON.parse(log.test_result).todo_achievement || 0; } catch (e) {}
                   
-                  let assignedHomework = log.homework_text || '';
-                  try { if (log.homework_to?.startsWith('{')) assignedHomework = JSON.parse(log.homework_to).text || assignedHomework; } catch (e) {}
+                  // 💡 집에서 할 공부는 오직 homework_text만 참조 (과제와 다음 테스트의 분리)
+                  const assignedHomework = log.homework_text || '';
+                  
+                  // 💡 다음 테스트 명칭 추출 (next_quiz_text 우선, homework_to는 폴백으로 처리)
+                  let nextQuizText = log.next_quiz_text || '';
+                  if (!nextQuizText && log.homework_to) {
+                    try {
+                      if (log.homework_to.startsWith('{')) {
+                        nextQuizText = JSON.parse(log.homework_to).text || '';
+                      } else {
+                        nextQuizText = log.homework_to;
+                      }
+                    } catch (e) {
+                      nextQuizText = log.homework_to;
+                    }
+                  }
                   
                   let hwEval: number | null = null;
                   let testType = 'score';
@@ -77,7 +99,7 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
 
                   return (
                     <div key={i} className="flex gap-5 items-start">
-                      {/* 💡 날짜를 완전한 흰색으로 강조 */}
+                      {/* 💡 날짜 */}
                       <div className="w-[42px] shrink-0 text-right pt-2">
                         <p className="text-[11px] font-black text-white tabular-nums tracking-tighter">
                           {displayDate}
@@ -85,16 +107,66 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                       </div>
 
                       <div className="relative flex-1">
-                        {/* 💡 타임라인 불렛 포인트 (최대 밝기) */}
+                        {/* 💡 타임라인 불렛 포인트 */}
                         <div className={`absolute left-[-15px] top-[14px] w-2 h-2 rounded-full border border-[#0a0a0a] z-10 ${i === 0 ? 'bg-blue-300 shadow-[0_0_12px_rgba(59,130,246,0.8)]' : 'bg-gray-400'}`} />
                         
-                        {/* 💡 제목이 제거된 컴팩트한 내용 박스 (테두리 최대 밝기) */}
-                        <div className="bg-[#121212]/80 border border-white/30 p-3 rounded-[4px] hover:border-blue-500/50 transition-colors space-y-1 shadow-2xl">
+                        {/* 💡 정돈된 다단 레이아웃 내용 박스 */}
+                        <div className="bg-[#121212]/80 border border-white/20 p-3 rounded-[4px] hover:border-blue-500/50 transition-colors shadow-2xl">
                           <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1 min-w-0">
-                              {/* 💡 Classwork 제목 제거 */}
-                              <p className="text-[12px] font-bold text-gray-200 leading-snug whitespace-pre-wrap">{log.classwork_text || '-'}</p>
+                            
+                            {/* 왼쪽: 컨텐츠 영역 */}
+                            <div className="flex-1 min-w-0 space-y-2.5">
+                              {/* 1. 학원에서 한 공부 */}
+                              {log.completed_classwork_text && (
+                                <div className="space-y-0.5">
+                                  <span className="text-[9px] font-black text-emerald-400 bg-emerald-500/10 px-1 py-0.5 rounded uppercase tracking-wider">학원 공부</span>
+                                  <p className="text-[12px] font-bold text-gray-200 leading-snug whitespace-pre-wrap pl-0.5">{log.completed_classwork_text}</p>
+                                </div>
+                              )}
+
+                              {/* 2. 집에서 할 공부 */}
+                              {assignedHomework && (
+                                <div className="space-y-0.5 pt-1.5 border-t border-white/5">
+                                  <span className="text-[9px] font-black text-blue-400 bg-blue-500/10 px-1 py-0.5 rounded uppercase tracking-wider">집에서 할 공부 (과제)</span>
+                                  <p className="text-[12px] font-medium text-blue-200 leading-snug italic whitespace-pre-wrap pl-0.5">
+                                    <span className="text-blue-500/50 text-[12px] font-black mr-1">"</span>
+                                    {assignedHomework}
+                                    <span className="text-blue-500/50 text-[12px] font-black ml-1">"</span>
+                                  </p>
+                                </div>
+                              )}
+
+                              {/* 3. 오늘 테스트 & 다음 테스트 */}
+                              {((log.test_score !== null && log.test_score !== undefined) || log.test_status || nextQuizText) && (
+                                <div className="space-y-1.5 pt-1.5 border-t border-white/5 text-[11px]">
+                                  {/* 오늘 테스트 */}
+                                  {(() => {
+                                    const combinedText = getCombinedTestText(log.test_status, log.test_score);
+                                    if (!combinedText) return null;
+                                    return (
+                                      <div className="flex items-start gap-1.5 pl-0.5">
+                                        <span className="text-rose-500/80 font-bold shrink-0">📝 오늘TEST:</span>
+                                        <div className="flex-1 min-w-0">
+                                          <RenderTestText text={combinedText} className="text-[11px] leading-tight" />
+                                        </div>
+                                      </div>
+                                    );
+                                  })()}
+
+                                  {/* 다음 테스트 */}
+                                  {nextQuizText && (
+                                    <div className="flex items-start gap-1.5 pl-0.5">
+                                      <span className="text-indigo-400 font-bold shrink-0">🔮 다음TEST:</span>
+                                      <div className="flex-1 min-w-0">
+                                        <RenderTestText text={nextQuizText} className="text-[11px] leading-tight" />
+                                      </div>
+                                    </div>
+                                  )}
+                                </div>
+                              )}
                             </div>
+
+                            {/* 오른쪽: 진도확인 & 과제확인 2개의 Bar (이전의 심플한 스타일 복구) */}
                             <div className="shrink-0 flex flex-col items-end gap-2 mt-0.5">
                               {todoAchievement > 0 && (
                                 <div className="flex items-center gap-2">
@@ -106,7 +178,7 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                   <span className="text-[10px] font-black text-emerald-400 tabular-nums leading-none w-[42px] text-right">진도 {todoAchievement}%</span>
                                 </div>
                               )}
-                              {(hwEval !== null && hwEval > 0) && (
+                              {hwEval !== null && hwEval > 0 && (
                                 <div className="flex items-center gap-2">
                                   <div className="flex gap-[1px] w-[60px]">
                                     {[...Array(10)].map((_, j) => (
@@ -116,77 +188,9 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                                   <span className="text-[10px] font-black text-blue-400 tabular-nums leading-none w-[42px] text-right">과제 {hwEval}</span>
                                 </div>
                               )}
-                              {(() => {
-                                const parsedTests = parseInlineTests(
-                                  log.test_id, 
-                                  opSettings?.default_score_cut, 
-                                  opSettings?.default_count_cut
-                                );
-                                if (parsedTests) {
-                                  return parsedTests.map((t, idx) => {
-                                    const isPending = t.numericScore === null;
-                                    const pct = (!isPending && t.maxScore > 0) ? (t.numericScore! / t.maxScore) * 100 : 0;
-                                    
-                                    let activeColor = 'bg-gray-500';
-                                    let inactiveColor = 'bg-gray-800/40';
-                                    let textColor = 'text-gray-400';
-                                    
-                                    if (!isPending) {
-                                      activeColor = t.isPass ? 'bg-emerald-400' : 'bg-red-400';
-                                      inactiveColor = t.isPass ? 'bg-emerald-900/40' : 'bg-red-900/40';
-                                      textColor = t.isPass ? 'text-emerald-400' : 'text-red-400';
-                                    }
-                                    
-                                    const scoreDisplay = isPending 
-                                      ? (t.maxScore === 100 ? '채점 전' : `- / ${t.maxScore}`)
-                                      : (t.maxScore === 100 ? `${t.numericScore}점` : `${t.numericScore}/${t.maxScore}`);
-
-                                    return (
-                                      <div key={`test-${idx}`} className="flex items-center justify-end gap-2 text-right mt-1.5 first:mt-0">
-                                        <span className={`text-[10px] font-bold ${textColor} max-w-[100px] truncate`} title={t.name}>{t.name}</span>
-                                        <div className="flex gap-[1px] w-[60px]">
-                                          {[...Array(10)].map((_, j) => (
-                                            <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? activeColor : inactiveColor}`} />
-                                          ))}
-                                        </div>
-                                        <span className={`text-[10px] font-black ${textColor} tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap`}>
-                                          {scoreDisplay}
-                                        </span>
-                                      </div>
-                                    );
-                                  });
-                                } else if (log.test_score !== null && log.test_score !== undefined && log.test_score > 0) {
-                                  return (
-                                    <div className="flex items-center gap-2">
-                                      <div className="flex gap-[1px] w-[60px]">
-                                        {[...Array(10)].map((_, j) => {
-                                          const pct = testType === 'count' && testTotalCount > 0 ? (Number(log.test_score) / testTotalCount) * 100 : Number(log.test_score);
-                                          return (
-                                            <div key={j} className={`flex-1 h-[6px] ${j < Math.round(pct / 10) ? 'bg-amber-500' : 'bg-amber-900/50'}`} />
-                                          );
-                                        })}
-                                      </div>
-                                      <span className="text-[10px] font-black text-amber-500 tabular-nums leading-none min-w-[42px] text-right whitespace-nowrap">
-                                        {testType === 'count' && testTotalCount > 0 ? `테스트 ${log.test_score}/${testTotalCount}` : `테스트 ${log.test_score}점`}
-                                      </span>
-                                    </div>
-                                  );
-                                }
-                                return null;
-                              })()}
                             </div>
+
                           </div>
-
-                          {/* 💡 Homework 제목 제거 및 따옴표/기울임꼴 적용 (줄간격 극소화) */}
-                          {assignedHomework && (
-                            <div className="pt-1 border-t border-white/5">
-                              <p className="text-[12px] font-medium text-blue-200 leading-tight italic whitespace-pre-wrap">
-                                <span className="text-blue-500/80 text-[12px] font-black mr-1">"</span>
-                                {assignedHomework}
-                                <span className="text-blue-500/80 text-[12px] font-black ml-1">"</span>
-                              </p>
-                            </div>
-                          )}
                         </div>
                       </div>
                     </div>

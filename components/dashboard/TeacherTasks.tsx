@@ -4,7 +4,8 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, Calendar, Plus, Check, Trash2, Clock, 
-  User, CheckCircle, AlertCircle, Search, Sparkles, Loader2, CalendarRange, X, EyeOff, ExternalLink
+  User, CheckCircle, AlertCircle, Search, Sparkles, Loader2, CalendarRange, X, EyeOff, ExternalLink,
+  Edit
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
@@ -71,8 +72,11 @@ export default function TeacherTasks({
 
   // --- Makeup Form States ---
   const [isMakeupModalOpen, setIsMakeupModalOpen] = useState(false);
+  const [editMakeupGroup, setEditMakeupGroup] = useState<any | null>(null); // 카드(그룹) 단위 수정용 state로 변경
   const [makeupDate, setMakeupDate] = useState(getTodayStr());
   const [makeupTime, setMakeupTime] = useState<string>('19:00'); // 디폴트 19:00
+  const [makeupEndTime, setMakeupEndTime] = useState<string>('21:00'); // 보강 종료 시간
+  const [makeupType, setMakeupType] = useState<string>('진도 보강'); // 보강 유형
   const [makeupSearch, setMakeupSearch] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [makeupGradeFilter, setMakeupGradeFilter] = useState<string>('all');
@@ -206,47 +210,148 @@ export default function TeacherTasks({
     });
   };
 
-  // 6. Add Makeup Sessions
+  // 6. Add or Edit Makeup Sessions
   const handleAddMakeups = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (selectedStudentIds.length === 0 || !academyInfo?.id) return;
+    if (!academyInfo?.id) return;
 
-    try {
-      const payloads = selectedStudentIds.map(studentId => {
-        const student = students.find(s => s.id === studentId);
+    if (editMakeupGroup) {
+      // 💡 [수정 모드 - 그룹 카드 단위 일괄 수정]
+      try {
         const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
-        return {
-          student_id: studentId,
-          student_name: student?.name || '학생',
-          academy_id: academyInfo.id,
-          session_date: makeupDate,
-          attendance_status: `보강:${makeupTime}`,
-          moved_to_hour: hour,
-          status: 'none'
-        };
-      });
+        
+        // 1. 그룹에 포함된 기존 학생의 세션 로그를 일괄 업데이트합니다.
+        const updatePromises = editMakeupGroup.items.map((item: any) => {
+          const currentNotes = item.special_notes || '';
+          const pureNotes = currentNotes.startsWith('[') && currentNotes.includes(']')
+            ? currentNotes.slice(currentNotes.indexOf(']') + 1).trim()
+            : currentNotes;
+          const newNotes = `[${makeupType}] ${pureNotes}`.trim();
 
-      const { error } = await supabase
-        .from('ams_session_logs')
-        .upsert(payloads, { onConflict: 'student_id,session_date' });
+          return supabase
+            .from('ams_session_logs')
+            .update({
+              session_date: makeupDate,
+              attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
+              moved_to_hour: hour,
+              special_notes: newNotes
+            })
+            .eq('id', item.id);
+        });
 
-      if (error) throw error;
+        // 2. 추가 선택된 새로운 학생이 있을 경우 신규 예약 추가 쿼리
+        let insertPromise: Promise<void> = Promise.resolve();
+        if (selectedStudentIds.length > 0) {
+          const payloads = selectedStudentIds.map(studentId => {
+            const student = students.find(s => s.id === studentId);
+            return {
+              student_id: studentId,
+              student_name: student?.name || '학생',
+              academy_id: academyInfo.id,
+              session_date: makeupDate,
+              attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
+              moved_to_hour: hour,
+              status: 'none',
+              special_notes: `[${makeupType}]`
+            };
+          });
 
-      setSelectedStudentIds([]);
-      setMakeupSearch('');
-      setMakeupGradeFilter('all');
-      setMakeupDayFilter('all');
-      setShowOnlyMyStudentsInMakeup(true);
-      setIsMakeupModalOpen(false);
-      
-      // 스케줄 목록 및 상위 학생 정보 리프레시
-      await fetchMakeups();
-      await onRefreshStudents(false);
-      alert('보강 예약이 추가되었습니다. 당일 Overview에 자동으로 반영됩니다.');
-    } catch (err) {
-      console.error('Error adding makeup sessions:', err);
-      alert('보강 추가에 실패했습니다.');
+          insertPromise = (async () => {
+            const { error } = await supabase
+              .from('ams_session_logs')
+              .upsert(payloads, { onConflict: 'student_id,session_date' });
+            if (error) throw error;
+          })();
+        }
+
+        await Promise.all([...updatePromises, insertPromise]);
+
+        setIsMakeupModalOpen(false);
+        setEditMakeupGroup(null);
+        setSelectedStudentIds([]);
+        setMakeupSearch('');
+        setMakeupType('진도 보강');
+        setMakeupEndTime('21:00');
+        
+        await fetchMakeups();
+        await onRefreshStudents(false);
+        alert('보강 정보가 일괄 수정되었습니다.');
+      } catch (err) {
+        console.error('Error updating group makeup sessions:', err);
+        alert('보강 수정에 실패했습니다.');
+      }
+    } else {
+      // 💡 [신규 등록 모드]
+      if (selectedStudentIds.length === 0) return;
+      try {
+        const payloads = selectedStudentIds.map(studentId => {
+          const student = students.find(s => s.id === studentId);
+          const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
+          return {
+            student_id: studentId,
+            student_name: student?.name || '학생',
+            academy_id: academyInfo.id,
+            session_date: makeupDate,
+            attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
+            moved_to_hour: hour,
+            status: 'none',
+            special_notes: `[${makeupType}]`
+          };
+        });
+
+        const { error } = await supabase
+          .from('ams_session_logs')
+          .upsert(payloads, { onConflict: 'student_id,session_date' });
+
+        if (error) throw error;
+
+        setSelectedStudentIds([]);
+        setMakeupSearch('');
+        setMakeupGradeFilter('all');
+        setMakeupDayFilter('all');
+        setMakeupType('진도 보강');
+        setMakeupEndTime('21:00');
+        setShowOnlyMyStudentsInMakeup(true);
+        setIsMakeupModalOpen(false);
+        
+        await fetchMakeups();
+        await onRefreshStudents(false);
+        alert('보강 예약이 추가되었습니다. 당일 Overview에 자동으로 반영됩니다.');
+      } catch (err) {
+        console.error('Error adding makeup sessions:', err);
+        alert('보강 추가에 실패했습니다.');
+      }
     }
+  };
+
+  // 6.5 보강 그룹 수정 모달 트리거
+  const handleOpenEditGroupMakeup = (group: any) => {
+    setEditMakeupGroup(group);
+    setMakeupDate(group.date);
+    
+    // 시간 정보 파싱 ("19:00~21:00" -> 시작 19:00, 종료 21:00)
+    const timeRange = group.time;
+    let startTime = '19:00';
+    let endTime = '21:00';
+    if (timeRange.includes('~')) {
+      const parts = timeRange.split('~');
+      startTime = parts[0];
+      endTime = parts[1];
+    } else {
+      startTime = timeRange;
+      endTime = '';
+    }
+    setMakeupTime(startTime);
+    setMakeupEndTime(endTime || `${String(parseInt(startTime.split(':')[0]) + 2).padStart(2, '0')}:00`);
+
+    // 보강 유형 파싱 (첫 번째 아이템의 특이사항 기준)
+    const firstItem = group.items[0];
+    const notes = firstItem?.special_notes || '';
+    const typeMatch = notes.match(/^\[(.*?)\]/);
+    const type = typeMatch ? typeMatch[1] : '진도 보강';
+    setMakeupType(type);
+
+    setIsMakeupModalOpen(true);
   };
 
   // 7. Change Makeup Attendance Status (완료 처리)
@@ -383,15 +488,14 @@ export default function TeacherTasks({
   }, [students, makeupSearch, makeupGradeFilter, makeupDayFilter, showOnlyMyStudentsInMakeup, currentUser]);
 
   const getMakeupTimeKey = useCallback((makeup: any) => {
-    // 1. 시간이동 정보(moved_to_hour) 최우선 적용
+    // 1. 예약 상태(attendance_status)에서 보강 시간 영역 전체 파싱 (시작~종료 포함)
+    const status = makeup.attendance_status || '';
+    if (status.startsWith('보강:')) {
+      return status.replace('보강:', '');
+    }
+    // 2. 시간이동 정보(moved_to_hour) 최우선 적용
     if (makeup.moved_to_hour !== undefined && makeup.moved_to_hour !== null) {
       return `${String(makeup.moved_to_hour).padStart(2, '0')}:00`;
-    }
-    // 2. 예약 상태(attendance_status) 파싱
-    const status = makeup.attendance_status || '';
-    if (status.includes(':')) {
-      const parts = status.split(':');
-      return `${parts[1]}:${parts[2] || '00'}`;
     }
     return '시간 미지정';
   }, []);
@@ -670,6 +774,13 @@ export default function TeacherTasks({
                               </div>
                               <button 
                                 type="button"
+                                onClick={() => handleOpenEditGroupMakeup(group)}
+                                className="text-[8.5px] font-black px-1.5 py-0.5 border border-blue-500/30 bg-blue-500/5 hover:bg-blue-500 text-blue-400 hover:text-white rounded transition-all"
+                              >
+                                수정
+                              </button>
+                              <button 
+                                type="button"
                                 onClick={() => handleDeleteGroupMakeups(group.items)}
                                 className="text-[8.5px] font-black px-1.5 py-0.5 border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500 text-rose-400 hover:text-white rounded transition-all"
                               >
@@ -772,7 +883,7 @@ export default function TeacherTasks({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#0c0c0c] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
+              className="bg-[#1e1e24] border-2 border-white/20 rounded-2xl w-full max-w-md p-6 shadow-[0_0_30px_rgba(0,0,0,0.6)] space-y-4"
             >
               <div className="flex items-center justify-between pb-3 border-b border-white/5">
                 <h3 className="text-sm font-black text-white uppercase tracking-wider">새 업무 등록</h3>
@@ -891,22 +1002,33 @@ export default function TeacherTasks({
           </div>
         )}
 
-        {/* MODAL 2: Makeup Session Add Modal */}
+        {/* MODAL 2: Makeup Session Add / Edit Modal */}
         {isMakeupModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
             <motion.div 
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#0c0c0c] border border-white/10 rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4"
+              className="bg-[#1e1e24] border-2 border-white/20 rounded-2xl w-full max-w-md p-6 shadow-[0_0_30px_rgba(0,0,0,0.6)] space-y-4"
             >
               <div className="flex items-center justify-between pb-3 border-b border-white/5">
-                <h3 className="text-sm font-black text-white uppercase tracking-wider">보강 일정 예약</h3>
-                <button onClick={() => setIsMakeupModalOpen(false)} className="text-gray-500 hover:text-white transition-all"><X size={16} /></button>
+                <h3 className="text-sm font-black text-white uppercase tracking-wider">
+                  {editMakeupGroup ? `보강 일정 수정` : '보강 일정 예약'}
+                </h3>
+                <button 
+                  onClick={() => {
+                    setIsMakeupModalOpen(false);
+                    setEditMakeupGroup(null);
+                    setSelectedStudentIds([]);
+                  }} 
+                  className="text-gray-500 hover:text-white transition-all"
+                >
+                  <X size={16} />
+                </button>
               </div>
 
               <form onSubmit={handleAddMakeups} className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">보강 날짜</label>
                     <input 
@@ -914,24 +1036,67 @@ export default function TeacherTasks({
                       value={makeupDate}
                       onChange={(e) => setMakeupDate(e.target.value)}
                       required
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">보강 시간</label>
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">시작 시간</label>
                     <input 
                       type="time"
                       value={makeupTime}
                       onChange={(e) => setMakeupTime(e.target.value)}
                       required
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">종료 시간</label>
+                    <input 
+                      type="time"
+                      value={makeupEndTime}
+                      onChange={(e) => setMakeupEndTime(e.target.value)}
+                      required
+                      className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
                     />
                   </div>
                 </div>
 
+                {/* 보강 구분 셀렉트 박스 */}
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">보강 구분</label>
+                  <select 
+                    value={makeupType}
+                    onChange={(e) => setMakeupType(e.target.value)}
+                    className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+                  >
+                    <option value="진도 보강">진도 보강</option>
+                    <option value="시험 보강">시험 보강</option>
+                    <option value="결석 보강">결석 보강</option>
+                    <option value="기타 보강">기타 보강</option>
+                  </select>
+                </div>
+
+                {/* 수정 모드일 때 기존 학생 목록 표시 */}
+                {editMakeupGroup && (
+                  <div className="space-y-1 bg-white/5 border border-white/5 p-4 rounded-xl">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">기존 참여 학생 ({editMakeupGroup.items.length}명)</label>
+                    <div className="max-h-24 overflow-y-auto pr-1 custom-scrollbar-v flex flex-wrap gap-1.5 mt-1.5">
+                      {editMakeupGroup.items.map((item: any) => (
+                        <span key={item.id} className="bg-white/5 border border-white/10 px-2.5 py-0.5 rounded text-[10px] font-bold text-gray-300">
+                          {item.student_name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* 학생 검색 및 필터 영역 (수정 모드와 신규 모드 공통 제공) */}
                 <div className="space-y-2.5">
-                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">보강 대상 학생 검색 및 필터</label>
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">
+                    {editMakeupGroup ? '추가할 보강 대상 학생 검색 및 필터' : '보강 대상 학생 검색 및 필터'}
+                  </label>
                   
                   {/* 학년/요일 필터 셀렉트 박스 */}
                   <div className="grid grid-cols-2 gap-3">
@@ -1060,8 +1225,6 @@ export default function TeacherTasks({
                       })}
                     </div>
                   )}
-
-
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2">
@@ -1069,6 +1232,7 @@ export default function TeacherTasks({
                     type="button" 
                     onClick={() => {
                       setIsMakeupModalOpen(false);
+                      setEditMakeupGroup(null);
                       setSelectedStudentIds([]);
                       setMakeupSearch('');
                       setMakeupGradeFilter('all');
@@ -1081,10 +1245,10 @@ export default function TeacherTasks({
                   </button>
                   <button 
                     type="submit" 
-                    disabled={selectedStudentIds.length === 0}
+                    disabled={!editMakeupGroup && selectedStudentIds.length === 0}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-black transition-all"
                   >
-                    보강 추가
+                    {editMakeupGroup ? '수정 완료' : '보강 추가'}
                   </button>
                 </div>
               </form>

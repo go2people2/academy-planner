@@ -264,11 +264,11 @@ export default function LearningDashboard({
                     })}
                   </div>
                 </div>
-                <div className="p-3 md:p-6">
-                  <p className={`text-[14px] md:text-[18px] font-bold ${scoreTheme.textLight} leading-tight italic whitespace-pre-wrap`}>
-                    <span className={`${scoreTheme.textQuote} text-xl md:text-2xl font-black mr-1 opacity-80`}>"</span>
+                <div className="py-2.5 px-4 md:py-3.5 md:px-6">
+                  <p className={`text-[13px] md:text-[15px] font-bold ${scoreTheme.textLight} leading-tight italic whitespace-pre-wrap`}>
+                    <span className={`${scoreTheme.textQuote} text-[14px] md:text-[17px] font-black mr-1 opacity-80`}>"</span>
                     {lastSession.homework_text || '기록된 숙제가 없습니다.'}
-                    <span className={`${scoreTheme.textQuote} text-xl md:text-2xl font-black ml-1 opacity-80`}>"</span>
+                    <span className={`${scoreTheme.textQuote} text-[14px] md:text-[17px] font-black ml-1 opacity-80`}>"</span>
                   </p>
                 </div>
               </>
@@ -314,12 +314,12 @@ export default function LearningDashboard({
                         disabled={approvalStatus !== 'none'}
                         onClick={() => approvalStatus === 'none' && handleTodoClick(num)} 
                         className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
-                          (todaySession?.todo_achievement !== undefined && num <= todaySession.todo_achievement) 
+                          (todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null && num <= todaySession.todo_achievement) 
                             ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
                             : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50'
                         } ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
                       >
-                      {(!todaySession?.todo_achievement) ? num : (num === todaySession?.todo_achievement ? num : '')}
+                      {(todaySession?.todo_achievement === undefined || todaySession?.todo_achievement === null) ? num : (num === todaySession?.todo_achievement ? num : '')}
                     </button>
                   ))}
                   <span className="text-[11px] font-black text-emerald-500/60 ml-1">%</span>

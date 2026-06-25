@@ -20,6 +20,7 @@ export interface SessionLog {
   classwork_text: string;
   classwork_json: HomeworkItem[];
   completed_classwork_text?: string; // 💡 실제 수행 진도 텍스트
+  completed_classwork_json?: HomeworkItem[]; // 💡 실제 수행 진도 JSON
   homework_text: string;
   homework_json: HomeworkItem[];
   hw_checked_today?: boolean; // 💡 추가 (보강 시 오늘 숙제 검사 완료 여부)
@@ -44,6 +45,8 @@ export interface SessionLog {
   todo_achievement?: number; // 💡 추가 (투두 달성률)
   hasHwTo?: boolean; // 💡 추가 (숙제 이월 여부)
   hasTestResult?: boolean; // 💡 추가 (테스트 결과 여부)
+  test_answers?: any; // 💡 추가 (테스트 제출 상세 답안)
+  attendance_reason?: string | null; // 💡 추가 (출결 사유 전용)
 }
 
 export interface Student {
@@ -76,6 +79,7 @@ export interface Student {
   isTodayClassDay?: boolean; // 💡 추가 (오늘 수업 여부)
   teacher_initial?: string; // 💡 추가
   teacher_name?: string; // 💡 추가
+  level_tag?: string; // 💡 추가 (반/레벨 태그 정보)
 }
 
 export interface Teacher {
@@ -117,6 +121,30 @@ export interface Task {
   display_period_type: 'custom' | 'weekly' | 'monthly'; // 💡 기간 유형 추가
   is_completed: boolean;
   created_by: string;
-  type: 'manual' | 'auto';
+  type: 'manual' | 'auto' | 'survey' | 'survey_response' | 'link';
   created_at: string;
 }
+
+export interface TodoItem {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
+export interface ProblemError {
+  id: string;
+  bookcode?: string | null;
+  book_name: string;
+  page_number?: string | null;
+  problem_id: string;
+  reporter_name: string;
+  error_type: string;
+  description: string;
+  status: '제보됨' | '검토중' | '수정완료' | '보류';
+  corrected_content?: string | null;
+  todo_list: TodoItem[];
+  created_at: string;
+  resolved_at?: string | null;
+  resolver_name?: string | null;
+}
+

@@ -59,13 +59,13 @@ interface TodaySheetCellProps {
   onTestScoreTypeToggle: () => void;
   onFeedbackToggle: () => void;
   isFeedbackOpen: boolean;
-  onSelectFeedback: (level: 'perfect' | 'good' | 'neutral' | 'poor' | 'bad' | 'none') => void;
+  onSelectFeedback: (level: 'gradeA' | 'gradeB' | 'gradeC' | 'gradeD' | 'gradeE' | 'gradeF' | 'none') => void;
   onCloseFeedback: () => void;
   
   // Modal Triggers
-  onOpenCwEditor: (e: React.MouseEvent) => void;
-  onOpenCcwEditor: (e: React.MouseEvent) => void; // 💡 추가
-  onOpenHwEditor: (e: React.MouseEvent) => void;
+  onOpenCwEditor: (e?: React.MouseEvent) => void;
+  onOpenCcwEditor: (e?: React.MouseEvent) => void; // 💡 추가
+  onOpenHwEditor: (e?: React.MouseEvent) => void;
   onOpenNqEditor: (e: React.MouseEvent) => void;
   onOpenTestEditor: (e: React.MouseEvent) => void;
   onOpenTestModal: (e: React.MouseEvent) => void;
@@ -104,7 +104,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const colId = col.id;
 
   // 💡 여백 최소화: 무조건 상하 2px (최대 밀집도)
-  const getDynamicPadding = () => 'pt-[2px] pb-[2px] px-1.5';
+  const getDynamicPadding = (text?: string) => 'pt-[2px] pb-[2px] px-1.5';
 
   const currentText = colId === 'test_id' ? formData.test_id :
                     colId === 'classwork' ? formData.classwork_text :
@@ -582,23 +582,38 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           </div>
         )}
 
-        {colId === 'attendance' && (
-          <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-normal cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
-            formData.attendance_status === ATTENDANCE_STATUS.BEFORE ? 'text-gray-600' :
-            formData.attendance_status.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400' : 
-            formData.attendance_status.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-red-400' : 
-            'text-amber-400'
-          }`}>
-            <div className="flex items-center gap-1">
-              <span>{formData.attendance_status}</span>
-              {formData.moved_to_hour && (
-                <span className="text-[9px] opacity-60 bg-white/10 px-1 rounded">
-                  {formData.moved_to_hour}시
-                </span>
-              )}
+        {colId === 'attendance' && (() => {
+          const hasExplicitStatus = formData.attendance_status && [
+            ATTENDANCE_STATUS.PRESENT, 
+            ATTENDANCE_STATUS.ABSENT, 
+            ATTENDANCE_STATUS.LATE, 
+            ATTENDANCE_STATUS.EXCLUDED, 
+            ATTENDANCE_STATUS.CANCELED
+          ].includes(formData.attendance_status as any);
+          
+          const isSupplement = (formData.attendance_status === '보강') || 
+            (!hasExplicitStatus && formData.moved_to_hour !== null && formData.moved_to_hour !== undefined);
+          const statusText = isSupplement ? '보강' : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
+          
+          return (
+            <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-normal cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
+              isSupplement ? 'text-blue-400' :
+              statusText === ATTENDANCE_STATUS.BEFORE ? 'text-gray-600' :
+              statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400' : 
+              statusText.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-red-400' : 
+              'text-amber-400'
+            }`}>
+              <div className="flex items-center gap-1.5">
+                <span>{statusText}</span>
+                {formData.moved_to_hour && (
+                  <span className="text-[9.5px] font-bold bg-blue-500/10 text-blue-400 px-1 rounded border border-blue-500/20">
+                    {formData.moved_to_hour}시
+                  </span>
+                )}
+              </div>
             </div>
-          </div>
-        )}
+          );
+        })()}
 
         {colId === 'review' && (
           <div className="relative w-full h-full flex items-start justify-between bg-blue-600/[0.03] py-1 px-2 gap-2">
@@ -671,8 +686,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   {isFeedbackOpen && (
                     <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }}
                       className="absolute right-full top-0 mr-2 flex gap-1 bg-[#1a1a1a] p-1 rounded-md border border-white/10 shadow-2xl z-[100]">
-                      {(['perfect', 'good', 'neutral', 'poor', 'bad', 'none'] as const).map((k) => (
-                        <button key={k} onClick={(e) => { e.stopPropagation(); onSelectFeedback(k); }} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-normal transition-all hover:scale-110 ${statusMap[k as keyof typeof statusMap].color} shadow-md`}>{statusMap[k as keyof typeof statusMap].label}</button>
+                      {(['gradeA', 'gradeB', 'gradeC', 'gradeD', 'gradeE', 'gradeF'] as const).map((k) => (
+                        <button key={k} onClick={(e) => { e.stopPropagation(); onSelectFeedback(k); }} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-normal transition-all hover:scale-110 ${statusMap[k].color} shadow-md`}>{statusMap[k].label}</button>
                       ))}
                       <button onClick={(e) => { e.stopPropagation(); onCloseFeedback(); }} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-white"><X size={14} /></button>
                     </motion.div>

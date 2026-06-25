@@ -181,6 +181,16 @@ export default function TodaySheet({
 
   // 1. States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [historyLimit, setHistoryLimit] = useState(3);
+  
+  useEffect(() => {
+    const saved = localStorage.getItem('ams_history_limit');
+    if (saved) {
+      const parsed = parseInt(saved, 10);
+      if (!isNaN(parsed)) setHistoryLimit(parsed);
+    }
+  }, []);
+
   const [hiddenStudentIds, setHiddenStudentIds] = useState<string[]>([]);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [selectedRange, setSelectedRange] = useState<{
@@ -247,6 +257,21 @@ export default function TodaySheet({
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false); // 💡 인쇄 미리보기 모달 상태 추가
   const [isTagBatchMode, setIsTagBatchMode] = useState(false); // 💡 태그별 일괄입력 모달 상태 추가
 
+  const [hideAbsent, setHideAbsent] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem(`todaySheetHideAbsent_${currentUser?.id || 'default'}`) === 'true';
+    }
+    return false;
+  });
+
+  const toggleHideAbsent = useCallback(() => {
+    setHideAbsent(prev => {
+      const next = !prev;
+      localStorage.setItem(`todaySheetHideAbsent_${currentUser?.id || 'default'}`, String(next));
+      return next;
+    });
+  }, [currentUser?.id]);
+
   const [showSecondRow, setShowSecondRow] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem(`todaySheetShowSecondRow_${currentUser?.id || 'default'}`);
@@ -305,6 +330,14 @@ export default function TodaySheet({
     // 숨김 처리된 학생 필터링
     if (hiddenStudentIds.length > 0) {
       result = result.filter((s: any) => !hiddenStudentIds.includes(s.id));
+    }
+
+    // 결석 접기: 결석 상태인 학생 숨김
+    if (hideAbsent) {
+      result = result.filter((s: any) => {
+        const status = normalizeAttendanceStatus(s.todaySession?.attendance_status);
+        return status !== ATTENDANCE_STATUS.ABSENT;
+      });
     }
     
     if (focusColumn === 'test_id') {
@@ -371,7 +404,7 @@ export default function TodaySheet({
       comparison = a.name.localeCompare(b.name, 'ko');
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [students, focusColumn, sortMode, sortDirection, selectedDate, hiddenStudentIds]);
+  }, [students, focusColumn, sortMode, sortDirection, selectedDate, hiddenStudentIds, hideAbsent]);
 
   // 3. Callbacks
   const isCellInRange = useCallback((studentId: string, colId: string) => {
@@ -637,10 +670,16 @@ export default function TodaySheet({
   }, [isDragging, selectedRange]);
 
   const handleActiveCellChange = useCallback((studentId: string, colId: string) => { 
-    setActiveCell({ studentId, columnId: colId }); 
-    setEditingCell(null);
+    requestAnimationFrame(() => {
+      setActiveCell({ studentId, columnId: colId }); 
+      setEditingCell(null);
+    });
   }, []);
-  const handleEditingCellChange = useCallback((studentId: string, colId: string | null) => { setEditingCell(colId ? { studentId, columnId: colId } : null); }, []);
+  const handleEditingCellChange = useCallback((studentId: string, colId: string | null) => { 
+    requestAnimationFrame(() => {
+      setEditingCell(colId ? { studentId, columnId: colId } : null); 
+    });
+  }, []);
   const toggleHistory = useCallback((studentId: string) => { setExpandedHistory(prev => ({ ...prev, [studentId]: prev[studentId] ? 0 : 3 })); }, []);
 
   const handleSetSwitch = useCallback((setId: string) => { 
@@ -876,6 +915,19 @@ export default function TodaySheet({
                 태그 일괄입력
               </button>
 
+              <button
+                onClick={toggleHideAbsent}
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-[4px] text-[10px] font-black transition-all ml-1 ${
+                  hideAbsent
+                    ? 'bg-rose-500/30 text-rose-300 border-rose-500/50 hover:bg-rose-500/50'
+                    : 'bg-white/5 text-gray-500 border-white/10 hover:bg-white/10 hover:text-gray-300'
+                }`}
+                title={hideAbsent ? '결석 학생 다시 표시' : '결석 학생 숨기기'}
+              >
+                <EyeOff size={12} />
+                결석 접기
+              </button>
+
               {isFullScreen && (
                 <>
                   <div className="h-4 w-px bg-white/10" />
@@ -948,6 +1000,29 @@ export default function TodaySheet({
 
             {/* 2행 오른쪽: 정렬, 선택 숨김 제어, 화면 컨트롤 */}
             <div className="flex flex-wrap items-center gap-4 ml-auto justify-end">
+              {/* 이전 기록 개수 설정 */}
+              <div className="flex items-center gap-1.5 bg-white/5 rounded-[4px] px-2 py-0.5 border border-white/5">
+                <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-1">이력</span>
+                <select
+                  value={historyLimit}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value, 10);
+                    setHistoryLimit(val);
+                    localStorage.setItem('ams_history_limit', String(val));
+                  }}
+                  className="bg-transparent border-0 text-[10px] font-black text-white outline-none cursor-pointer focus:ring-0 py-0.5"
+                >
+                  <option value={1} className="bg-[#050505] text-white">1개</option>
+                  <option value={2} className="bg-[#050505] text-white">2개</option>
+                  <option value={3} className="bg-[#050505] text-white">3개</option>
+                  <option value={5} className="bg-[#050505] text-white">5개</option>
+                  <option value={10} className="bg-[#050505] text-white">10개</option>
+                  <option value={20} className="bg-[#050505] text-white">20개</option>
+                </select>
+              </div>
+
+              <div className="h-4 w-px bg-white/10" />
+
               {/* 정렬 방식 및 방향 필터 */}
               <div className="flex items-center gap-2">
                 <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Sort</span>
@@ -1103,6 +1178,7 @@ export default function TodaySheet({
                       onCellMouseEnter={onCellMouseEnter} 
                       isFirstInTimeSection={isNewSection}
                       timeSectionLabel={timeSectionLabel}
+                      historyLimit={historyLimit}
                       isScrolled={isScrolled}
                     />
                   </React.Fragment>

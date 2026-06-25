@@ -2,7 +2,7 @@
 
 import { useCallback } from 'react';
 import { parseClipboardText } from '@/lib/clipboardParser';
-import { mapColumnToProp, mapFieldToColumn, mapColumnToField } from '@/lib/sessionFieldMap';
+import { mapColumnToProp, mapFieldToColumn, mapColumnToField, COLUMN_TO_FIELD_MAP } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 
 interface UseTodaySheetClipboardProps {
@@ -29,9 +29,11 @@ export function useTodaySheetClipboard({
   const handleCopy = useCallback((e: ClipboardEvent) => {
     const target = e.target as HTMLElement;
     const isInput = ['INPUT', 'TEXTAREA'].includes(target.tagName);
-    let hasSelection = isInput 
+    // INPUT/TEXTAREA 내부에서 텍스트가 선택된 경우에만 브라우저 기본 복사에 위임
+    // td/div 드래그 시 브라우저가 텍스트를 자동 선택해도 selectedRange가 있으면 항상 인터셉트
+    const hasSelection = isInput
       ? (target as HTMLInputElement | HTMLTextAreaElement).selectionStart !== (target as HTMLInputElement | HTMLTextAreaElement).selectionEnd
-      : !!(window.getSelection()?.toString().length);
+      : false;
 
     if (hasSelection || !selectedRange) return;
     
@@ -142,5 +144,82 @@ export function useTodaySheetClipboard({
     } catch (err) { console.error('Paste error:', err); }
   }, [activeCell, editingCell, activeColumns, selectedIds, filteredStudents, handleBatchSave, setStudents, setEditingCell]);
 
-  return { handleCopy, handlePaste };
+  // 3. 잘라내기 핸들러 (선택 범위 복사 → 셀 비우기)
+  const handleCut = useCallback((e: ClipboardEvent) => {
+    const target = e.target as HTMLElement;
+    const isInput = ['INPUT', 'TEXTAREA'].includes(target.tagName);
+    const hasSelection = isInput
+      ? (target as HTMLInputElement | HTMLTextAreaElement).selectionStart !== (target as HTMLInputElement | HTMLTextAreaElement).selectionEnd
+      : !!(window.getSelection()?.toString().length);
+
+    if (hasSelection || !selectedRange) return;
+
+    e.preventDefault();
+
+    const sIdx = filteredStudents.findIndex(s => s.id === selectedRange.startStudentId);
+    const eIdx = filteredStudents.findIndex(s => s.id === selectedRange.endStudentId);
+    const sColIdx = activeColumns.findIndex(c => c.id === selectedRange.startColId);
+    const eColIdx = activeColumns.findIndex(c => c.id === selectedRange.endColId);
+
+    if (sIdx === -1 || eIdx === -1 || sColIdx === -1 || eColIdx === -1) return;
+
+    const rStart = Math.min(sIdx, eIdx), rEnd = Math.max(sIdx, eIdx);
+    const cStart = Math.min(sColIdx, eColIdx), cEnd = Math.max(sColIdx, eColIdx);
+
+    // 1) 클립보드에 복사
+    const rows: string[] = [];
+    for (let r = rStart; r <= rEnd; r++) {
+      const st = filteredStudents[r];
+      if (!st) continue;
+      const session = st.todaySession || {};
+      const rowData: string[] = [];
+      for (let c = cStart; c <= cEnd; c++) {
+        const col = activeColumns[c];
+        let val = '';
+        if (col.id === 'name') val = st.name;
+        else if (col.id === 'date') val = '';
+        else if (col.id === 'review') val = st.lastSession?.homework_text || '';
+        else if (col.id === 'mission') val = st.recent_mission || '';
+        else val = session[mapColumnToField(col.id)] || '';
+        const sVal = String(val || '');
+        rowData.push((sVal.includes('\n') || sVal.includes('\t') || sVal.includes('"')) ? `"${sVal.replace(/"/g, '""')}"` : sVal);
+      }
+      rows.push(rowData.join('\t'));
+    }
+    const finalData = rows.join('\n');
+    if (e.clipboardData) e.clipboardData.setData('text/plain', finalData);
+    else navigator.clipboard.writeText(finalData);
+
+    // 2) 선택 범위 셀 비우기 (읽기전용 컬럼 제외)
+    const targetColIds: string[] = [];
+    for (let c = cStart; c <= cEnd; c++) {
+      const colId = activeColumns[c].id;
+      if (COLUMN_TO_FIELD_MAP[colId]) targetColIds.push(colId);
+    }
+    if (targetColIds.length === 0) return;
+
+    const updates: any[] = [];
+    for (let r = rStart; r <= rEnd; r++) {
+      const st = filteredStudents[r];
+      if (!st) continue;
+      const sess = st.todaySession || {};
+      const newData: any = {};
+      targetColIds.forEach(colId => {
+        const prop = mapColumnToProp(colId);
+        newData[prop] = '';
+      });
+      updates.push({ studentId: st.id, newData, prevData: { ...sess } });
+    }
+
+    if (updates.length > 0) {
+      setStudents((prev: any[]) => prev.map(s => {
+        const update = updates.find(u => u.studentId === s.id);
+        return update ? { ...s, todaySession: { ...(s.todaySession || {}), ...update.newData } } : s;
+      }));
+      syncTodaySheetDom(updates, targetColIds, true);
+      handleBatchSave(updates);
+    }
+  }, [selectedRange, filteredStudents, activeColumns, setStudents, handleBatchSave]);
+
+  return { handleCopy, handlePaste, handleCut };
 }

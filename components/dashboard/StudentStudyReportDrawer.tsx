@@ -5,20 +5,23 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, BookOpen, BarChart3, Calendar, MessageSquare, 
   TrendingUp, CheckCircle2, AlertCircle, Clock, 
-  ChevronRight, BookMarked, Target, GraduationCap
+  ChevronRight, BookMarked, Target, GraduationCap,
+  Check, Square, CheckSquare
 } from 'lucide-react';
 import { Student, SessionLog, TextbookOption } from '@/types/dashboard';
+import { supabase } from '@/lib/supabase';
 
 interface StudentStudyReportDrawerProps {
   student: Student;
   availableTextbooks: TextbookOption[];
   onClose: () => void;
   onEditMode: () => void;
+  onRefreshStudents?: () => Promise<void>;
 }
 
 type TabType = 'summary' | 'history' | 'stats' | 'roadmap' | 'journal';
 
-export default function StudentStudyReportDrawer({ student, availableTextbooks, onClose, onEditMode }: StudentStudyReportDrawerProps) {
+export default function StudentStudyReportDrawer({ student, availableTextbooks, onClose, onEditMode, onRefreshStudents }: StudentStudyReportDrawerProps) {
   const [activeTab, setActiveTab] = useState<TabType>('summary');
 
   // 💡 실데이터 기반 통계 계산
@@ -117,8 +120,8 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
       <div className="flex-1 overflow-y-auto custom-scrollbar-v p-8">
         <AnimatePresence mode="wait">
           {activeTab === 'summary' && <SummaryTab key="summary" student={student} stats={stats} availableTextbooks={availableTextbooks} />}
-          {activeTab === 'history' && <HistoryTab key="history" student={student} availableTextbooks={availableTextbooks} />}
-          {activeTab === 'stats' && <StatsTab key="stats" student={student} />}
+          {activeTab === 'history' && <HistoryTab key="history" student={student} availableTextbooks={availableTextbooks} onRefreshStudents={onRefreshStudents} />}
+          {activeTab === 'stats' && <StatsTab key="stats" student={student} onRefreshStudents={onRefreshStudents} />}
           {activeTab === 'roadmap' && <RoadmapTab key="roadmap" student={student} />}
           {activeTab === 'journal' && <JournalTab key="journal" student={student} />}
         </AnimatePresence>
@@ -256,56 +259,262 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
   );
 }
 
-function HistoryTab({ student, availableTextbooks }: any) {
-  const bookHistory = useMemo(() => {
-    const historyMap: Record<string, { title: string, firstDate: string, lastDate: string, count: number }> = {};
-    (student.allLogs || []).forEach((log: any) => {
-      student.assigned_books.forEach((bookCode: string) => {
-        const bookInfo = availableTextbooks?.find((b: any) => b.bookcode === bookCode);
-        const title = bookInfo?.title || bookCode;
-        if (log.classwork_text?.includes(title) || log.homework_text?.includes(title)) {
-          if (!historyMap[bookCode]) { historyMap[bookCode] = { title, firstDate: log.date, lastDate: log.date, count: 1 }; }
-          else {
-            if (log.date > historyMap[bookCode].lastDate) historyMap[bookCode].lastDate = log.date;
-            if (log.date < historyMap[bookCode].firstDate) historyMap[bookCode].firstDate = log.date;
-            historyMap[bookCode].count++;
+function HistoryTab({ student, availableTextbooks, onRefreshStudents }: any) {
+  const { activeBooks, completedBooks } = useMemo(() => {
+    const active: any[] = [];
+    const completed: any[] = [];
+    
+    const assigned = student.assigned_books || [];
+    const courses = student.book_courses || {};
+    const defaultCourse = student.course || 'C';
+    
+    assigned.forEach((code: string) => {
+      if (!code) return;
+      const bookInfo = availableTextbooks?.find((b: any) => b.bookcode === code);
+      const title = bookInfo?.title || code;
+      const rawVal = courses[code] || defaultCourse;
+      
+      let course = 'C';
+      if (rawVal.startsWith('E') || rawVal.startsWith('D') || rawVal.startsWith('C') || rawVal.startsWith('B') || rawVal.startsWith('A')) {
+        course = rawVal.charAt(0);
+      }
+      
+      const isDone = rawVal.includes('-done');
+      const isKeep = rawVal.includes('-keep');
+      
+      const bookLogs = (student.allLogs || []).filter((l: any) => 
+        l.classwork_text?.includes(title) || l.homework_text?.includes(title)
+      );
+      const count = bookLogs.length;
+      
+      if (isDone) {
+        let periodText = '완료됨';
+        if (rawVal.includes('-done-')) {
+          const info = rawVal.split('-done-')[1]; // "중2_2월-중2_5월"
+          if (info.includes('-')) {
+            const [start, end] = info.split('-');
+            const [startG, startM] = start.split('_');
+            const [endG, endM] = end.split('_');
+            if (startG === endG) {
+              periodText = `${startG} ${startM} ~ ${endM}`;
+            } else {
+              periodText = `${startG} ${startM} ~ ${endG} ${endM}`;
+            }
+          } else if (info.includes('_')) {
+            const parts = info.split('_');
+            if (parts.length >= 3) {
+              periodText = `${parts[0]} ${parts[1]} ~ ${parts[2]}`;
+            }
           }
         }
-      });
+        completed.push({ code, title, course, count, periodText });
+      } else {
+        let startInfo = '';
+        if (rawVal.includes('-start-')) {
+          const part = rawVal.split('-start-')[1];
+          if (part.includes('_')) {
+            const [g, m] = part.split('_');
+            startInfo = `${g} ${m} 시작`;
+          }
+        }
+        active.push({ code, title, course, count, isKeep, startInfo });
+      }
     });
-    return Object.values(historyMap).sort((a, b) => b.lastDate.localeCompare(a.lastDate));
-  }, [student.allLogs, student.assigned_books, availableTextbooks]);
+    
+    return { activeBooks: active, completedBooks: completed };
+  }, [student.assigned_books, student.book_courses, student.course, student.allLogs, availableTextbooks]);
+
+  // 💡 완료 교재 진행 중으로 복구 처리
+  const handleRestoreBook = async (code: string, currentCourse: string) => {
+    if (!confirm(`[${code}] 교재를 다시 진행 중으로 복구하시겠습니까?`)) return;
+    try {
+      const newCourses = { ...(student.book_courses || {}), [code]: currentCourse };
+      const { error } = await supabase
+        .from('ams_students')
+        .update({ book_courses: newCourses })
+        .eq('id', student.id);
+      
+      if (!error) {
+        alert('진행 중 교재로 복구되었습니다.');
+        if (onRefreshStudents) await onRefreshStudents();
+      } else {
+        throw error;
+      }
+    } catch (e) {
+      console.error(e);
+      alert('복구에 실패했습니다.');
+    }
+  };
+
+  // 💡 교재 완전 삭제 처리
+  const handleRemoveBook = async (code: string) => {
+    if (!confirm(`[${code}] 교재 배정을 완전히 해제하시겠습니까?`)) return;
+    try {
+      const newBooks = (student.assigned_books || []).filter((b: string) => b !== code);
+      const newCourses = { ...(student.book_courses || {}) };
+      delete newCourses[code];
+      
+      const { error } = await supabase
+        .from('ams_students')
+        .update({ assigned_books: newBooks, book_courses: newCourses })
+        .eq('id', student.id);
+        
+      if (!error) {
+        alert('교재 배정이 완전히 해제되었습니다.');
+        if (onRefreshStudents) await onRefreshStudents();
+      } else {
+        throw error;
+      }
+    } catch (e) {
+      console.error(e);
+      alert('해제에 실패했습니다.');
+    }
+  };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <SectionTitle title="학습 교재 타임라인" />
-      {bookHistory.length > 0 ? (
-        <div className="relative pl-8 space-y-8 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-white/5">
-          {bookHistory.map((item, i) => (
-            <div key={i} className="relative">
-              <div className="absolute -left-[30px] top-1 w-6 h-6 rounded-full bg-[#080808] border-2 border-blue-500 flex items-center justify-center z-10 shadow-lg shadow-blue-500/20">
-                {i === 0 ? <Clock size={12} className="text-blue-500 animate-pulse" /> : <CheckCircle2 size={12} className="text-blue-500" />}
-              </div>
-              <div className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2 group hover:bg-white/[0.08] transition-all">
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] font-black text-blue-500 uppercase tracking-tighter">{item.firstDate.replace(/-/g, '.')} ~ {item.lastDate.replace(/-/g, '.')}</span>
-                  <span className={`text-[9px] font-black px-1.5 py-0.5 rounded-[2px] uppercase ${i === 0 ? 'bg-blue-500/10 text-blue-400' : 'bg-emerald-500/10 text-emerald-500'}`}>{i === 0 ? 'In Progress' : 'Completed'}</span>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8 text-left">
+      {/* 1. 진행 중인 교재 */}
+      <section className="space-y-4">
+        <SectionTitle title="현재 진행 중인 교재 (Active)" />
+        {activeBooks.length > 0 ? (
+          <div className="space-y-3">
+            {activeBooks.map((item, idx) => (
+              <div key={`active-${item.code}-${idx}`} className={`border p-4 rounded-[4px] flex items-center justify-between group transition-all ${item.isKeep ? 'bg-amber-500/5 border-amber-500/10 opacity-60' : 'bg-white/5 border-white/5 hover:border-blue-500/30'}`}>
+                <div className="flex items-center gap-3">
+                  <div className={`w-10 h-10 rounded-[2px] flex items-center justify-center ${item.isKeep ? 'bg-amber-500/20 text-amber-500' : 'bg-blue-600/20 text-blue-500'}`}>
+                    <BookOpen size={20} />
+                  </div>
+                  <div>
+                    <h4 className="text-[13px] font-black text-white flex items-center gap-2">
+                      {item.title}
+                      {item.isKeep && <span className="text-[8px] bg-amber-500 text-black px-1.5 py-0.5 rounded-sm font-black uppercase tracking-tighter">Keep</span>}
+                    </h4>
+                    <p className="text-[10px] text-gray-500 font-bold uppercase tracking-widest flex items-center gap-2 mt-1">
+                      <span>코스: {item.course}</span>
+                      <span>•</span>
+                      <span>{item.count > 0 ? `누적 ${item.count}회 학습` : '기록 없음'}</span>
+                      {item.startInfo && (
+                        <>
+                          <span>•</span>
+                          <span className="text-blue-400/80">{item.startInfo}</span>
+                        </>
+                      )}
+                    </p>
+                  </div>
                 </div>
-                <h4 className="text-[13px] font-black text-white tracking-tight">{item.title}</h4>
-                <p className="text-[11px] font-bold text-gray-500 italic">총 {item.count}회 세션 학습됨</p>
               </div>
-            </div>
-          ))}
-        </div>
-      ) : <p className="text-[10px] text-gray-700 font-bold uppercase text-center py-20 tracking-widest">학습 이력이 없습니다.</p>}
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] text-gray-700 font-bold uppercase text-center py-10 tracking-widest bg-white/[0.01] border border-white/5 rounded-[4px]">진행 중인 교재가 없습니다.</p>
+        )}
+      </section>
+
+      {/* 2. 완료한 교재 히스토리 */}
+      <section className="space-y-4">
+        <SectionTitle title="완료한 교재 히스토리 (Completed History)" />
+        {completedBooks.length > 0 ? (
+          <div className="relative pl-8 space-y-6 before:content-[''] before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-emerald-500/10">
+            {completedBooks.map((item, idx) => (
+              <div key={`completed-${item.code}-${idx}`} className="relative">
+                <div className="absolute -left-[30px] top-1.5 w-6 h-6 rounded-full bg-[#080808] border-2 border-emerald-500 flex items-center justify-center z-10 shadow-lg shadow-emerald-500/20">
+                  <CheckCircle2 size={12} className="text-emerald-500" />
+                </div>
+                <div className="bg-emerald-500/5 border border-emerald-500/10 p-4 rounded-[4px] space-y-2 group hover:bg-emerald-500/[0.08] transition-all flex items-center justify-between">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-emerald-400/80 uppercase tracking-tighter font-mono">{item.periodText} 사용</span>
+                      <span className="text-[9px] font-black px-1.5 py-0.5 rounded-[2px] bg-emerald-500/10 text-emerald-400 uppercase">Completed</span>
+                    </div>
+                    <h4 className="text-[13px] font-black text-white tracking-tight">{item.title}</h4>
+                    <p className="text-[10px] font-bold text-gray-500 uppercase tracking-wider flex items-center gap-2">
+                      <span>코스: {item.course}</span>
+                      <span>•</span>
+                      <span>총 {item.count}회 세션 학습됨</span>
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => handleRestoreBook(item.code, item.course)}
+                      className="px-2 py-1 bg-blue-500/10 text-blue-400 border border-blue-500/20 rounded-[2px] text-[8px] font-black uppercase hover:bg-blue-500 hover:text-white transition-all"
+                      title="진행 중으로 복구"
+                    >
+                      복구
+                    </button>
+                    <button 
+                      onClick={() => handleRemoveBook(item.code)}
+                      className="px-2 py-1 bg-red-500/10 text-red-500 border border-red-500/20 rounded-[2px] text-[8px] font-black uppercase hover:bg-red-500 hover:text-white transition-all"
+                      title="교재 배정 해제"
+                    >
+                      해제
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-[10px] text-gray-700 font-bold uppercase text-center py-20 tracking-widest bg-white/[0.01] border border-white/5 rounded-[4px]">완료한 교재가 없습니다.</p>
+        )}
+      </section>
     </motion.div>
   );
 }
 
-function StatsTab({ student }: any) {
+function StatsTab({ student, onRefreshStudents }: { student: Student; onRefreshStudents?: () => Promise<void> }) {
   const testData = useMemo(() => (student.allLogs || []).filter((l: any) => l.test_score !== null).slice(0, 10).reverse(), [student.allLogs]);
+  const [updatingLogId, setUpdatingLogId] = useState<string | null>(null);
+
+  // 1. 결석/지각 내역 필터링 (최신순)
+  const attendanceLogs = useMemo(() => {
+    return (student.allLogs || [])
+      .filter((l: any) => l.attendance_status === '결석' || l.attendance_status === '지각')
+      .sort((a: any, b: any) => b.date.localeCompare(a.date));
+  }, [student.allLogs]);
+
+  // 2. 보강 토글 핸들러
+  const handleToggleMakeup = async (log: any) => {
+    if (updatingLogId) return;
+    setUpdatingLogId(log.id);
+
+    try {
+      const currentNotes = log.special_notes || '';
+      let newNotes = '';
+      
+      if (currentNotes.includes('[보강완료]')) {
+        newNotes = currentNotes.replace('[보강완료]', '').trim();
+      } else {
+        newNotes = currentNotes ? `${currentNotes} [보강완료]` : '[보강완료]';
+      }
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .update({ special_notes: newNotes })
+        .eq('id', log.id);
+
+      if (error) throw error;
+
+      if (onRefreshStudents) {
+        await onRefreshStudents();
+      }
+    } catch (err) {
+      console.error('Error toggling makeup status:', err);
+      alert('보강 상태 변경에 실패했습니다.');
+    } finally {
+      setUpdatingLogId(null);
+    }
+  };
+
+  // 3. 보강완료 텍스트 제거하고 순수 사유만 추출하는 헬퍼
+  const getPureReason = (notes: string) => {
+    if (!notes) return '사유 미기재';
+    const clean = notes.replace('[보강완료]', '').trim();
+    return clean || '사유 미기재';
+  };
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-10">
+      {/* 테스트 점수 추이 */}
       <section className="space-y-6">
         <SectionTitle title="최근 테스트 점수 추이" />
         {testData.length > 0 ? (
@@ -323,6 +532,73 @@ function StatsTab({ student }: any) {
             </div>
           </div>
         ) : <p className="text-[10px] text-gray-700 font-bold uppercase text-center py-20 tracking-widest">기록된 점수가 없습니다.</p>}
+      </section>
+
+      {/* 출결 현황 및 결석 보강 관리 섹션 */}
+      <section className="space-y-6">
+        <SectionTitle title="결석 및 지각 내역 (보강 관리)" />
+        {attendanceLogs.length > 0 ? (
+          <div className="bg-white/[0.02] border border-white/5 rounded-lg overflow-hidden">
+            <div className="max-h-80 overflow-y-auto pr-0.5 custom-scrollbar-v divide-y divide-white/5">
+              {attendanceLogs.map((log: any) => {
+                const isAbsent = log.attendance_status === '결석';
+                const isLate = log.attendance_status === '지각';
+                const isMakeupCompleted = log.special_notes?.includes('[보강완료]');
+                const pureReason = getPureReason(log.special_notes || '');
+                const isUpdating = updatingLogId === log.id;
+
+                return (
+                  <div key={log.id} className="flex items-center justify-between p-4 hover:bg-white/[0.02] transition-colors">
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-black text-gray-500 tabular-nums">{log.date.replace(/-/g, '.')}</span>
+                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
+                          isAbsent ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
+                        }`}>
+                          {log.attendance_status}
+                        </span>
+                      </div>
+                      <p className="text-[11px] font-medium text-gray-400">
+                        사유: <span className={pureReason === '사유 미기재' ? 'text-gray-600 italic' : 'text-gray-300 font-bold'}>{pureReason}</span>
+                      </p>
+                    </div>
+
+                    {/* 결석일 경우에만 보강 상태 관리 UI 제공 */}
+                    {isAbsent && (
+                      <button
+                        type="button"
+                        onClick={() => handleToggleMakeup(log)}
+                        disabled={isUpdating}
+                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-black border transition-all ${
+                          isMakeupCompleted
+                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
+                            : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
+                        } ${isUpdating ? 'opacity-40 cursor-wait' : ''}`}
+                      >
+                        {isMakeupCompleted ? (
+                          <>
+                            <CheckSquare size={12} className="text-emerald-400" />
+                            <span>보강 완료 (⭕)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Square size={12} className="text-rose-400" />
+                            <span>보강 미완료 (❌)</span>
+                          </>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className="border border-dashed border-white/10 rounded-lg py-12 flex flex-col items-center justify-center text-gray-500 gap-1.5">
+            <CheckCircle2 size={20} className="text-gray-600" />
+            <span className="text-[10px] font-bold uppercase tracking-wider">결석 및 지각 기록이 없습니다.</span>
+          </div>
+        )}
       </section>
     </motion.div>
   );

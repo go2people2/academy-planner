@@ -325,8 +325,8 @@ export default function HomeworkEditor({
                                     masterTextbooks.find(m => m.bookcode.toLowerCase().startsWith(h.book_name.toLowerCase())) ||
                                     masterTextbooks.find(m => h.book_name.toLowerCase().startsWith(m.bookcode.toLowerCase()));
                     const fullTitle = textbook?.title || h.book_name;
-                    // 💡 대괄호 앞의 대분류 제거 (예: [중2-1] 일품 -> 일품)
-                    const displayTitle = fullTitle.replace(/^\[.*?\]\s*/, '');
+                    // 💡 전체 교재 이름을 그대로 사용 (예: [중2-1] 일품)
+                    const displayTitle = fullTitle;
                     return `${displayTitle} ${h.range}`;
                   });
                 return lines.length > 0 ? lines.join('\n') : '입력된 내용이 없습니다. 페이지 범위를 기입해 주세요.';

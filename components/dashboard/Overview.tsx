@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, Zap, StickyNote, Target, ExternalLink, Search, X } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, StickyNote, Target, ExternalLink, Search, X } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import AddStudentModal from './AddStudentModal';
@@ -20,7 +20,7 @@ interface OverviewProps {
   selectedFilter: string;
   isBatchMode: boolean;
   setIsBatchMode: (val: boolean) => void;
-  onBatchAdd: (ids: string[], reasons: Record<string, string>) => Promise<void>;
+  onBatchAdd: (ids: string[], reasons: Record<string, string>, makeupHours: Record<string, number>) => Promise<void>;
   onRemoveFromToday: (id: string, reason: string) => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
   masterTextbooks: TextbookOption[];
@@ -74,6 +74,7 @@ export default function Overview({
   }, [reasonModal.isOpen]);
   
   const [reasons, setReasons] = useState<Record<string, string>>({});
+  const [makeupHours, setMakeupHours] = useState<Record<string, number>>({});
 
   const isArchiveMode = useMemo(() => selectedFilter?.toLowerCase() === 'discharged', [selectedFilter]);
 
@@ -100,9 +101,26 @@ export default function Overview({
   const handleApplyBatch = () => {
     if (selectedForBatch.length > 0) {
       const initialReasons: Record<string, string> = {};
-      selectedForBatch.forEach(id => { initialReasons[id] = '보강 수업'; });
+      const initialHours: Record<string, number> = {};
+      
+      const settings = academyInfo?.operation_settings || {};
+      const baseTime = settings.first_period_time || "";
+      const baseHour = baseTime ? parseInt(baseTime.split(':')[0]) : 15;
+
+      selectedForBatch.forEach(id => { 
+        initialReasons[id] = '보강 수업'; 
+        
+        const s = studentsToDisplay.find(student => student.id === id);
+        const activeHours = s?.day_schedules?.[todayKey] || [];
+        let defaultHour = baseHour;
+        if (activeHours.length > 0) {
+          defaultHour = Math.min(...activeHours.map((h: number) => h % 100));
+        }
+        initialHours[id] = defaultHour;
+      });
       
       setReasons(initialReasons);
+      setMakeupHours(initialHours);
       setReasonModal({
         isOpen: true,
         type: 'add',
@@ -126,7 +144,7 @@ export default function Overview({
 
   const confirmReason = async () => {
     if (reasonModal.type === 'add') {
-      await onBatchAdd(reasonModal.studentIds, reasons);
+      await onBatchAdd(reasonModal.studentIds, reasons, makeupHours);
       setSelectedForBatch([]);
     } else {
       await Promise.all(reasonModal.studentIds.map(id => onRemoveFromToday(id, reasons[id] || '수업 취소')));
@@ -135,11 +153,16 @@ export default function Overview({
     
     setReasonModal({ ...reasonModal, isOpen: false });
     setReasons({});
+    setMakeupHours({});
     setIsBatchMode(false);
   };
 
   const updateIndividualReason = (id: string, text: string) => {
     setReasons(prev => ({ ...prev, [id]: text }));
+  };
+
+  const updateIndividualHour = (id: string, hour: number) => {
+    setMakeupHours(prev => ({ ...prev, [id]: hour }));
   };
 
   const getStudentName = (id: string) => {
@@ -193,14 +216,6 @@ export default function Overview({
               </div>
 
               <div className="flex items-center gap-2">
-                {!isBatchMode && onStartClass && (
-                  <button 
-                    onClick={onStartClass}
-                    className="flex items-center gap-2 px-4 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-blue-600 text-white shadow-lg shadow-blue-900/40 hover:bg-blue-500 transition-all border border-blue-400/20"
-                  >
-                    <Zap size={10} className="fill-current" /> 수업 시작 (LIVE)
-                  </button>
-                )}
                 <div 
                   onClick={(e) => {
                     const input = e.currentTarget.querySelector('input');
@@ -309,10 +324,10 @@ export default function Overview({
                 <div className="flex gap-2">
                   <button 
                     onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
-                    className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all ${
+                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-[2px] text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${
                       isBatchMode 
-                        ? 'bg-blue-600 text-white shadow-lg' 
-                        : 'bg-white/5 text-gray-500 hover:text-white hover:bg-white/10'
+                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20 border border-blue-400 animate-pulse' 
+                        : 'bg-blue-600 text-white hover:bg-blue-500 hover:scale-[1.02] active:scale-[0.98] border border-blue-500/30 shadow-md shadow-blue-900/40'
                     }`}
                   >
                     {isBatchMode ? (
@@ -387,60 +402,123 @@ export default function Overview({
       </section>
 
       <AnimatePresence>
-        {reasonModal.isOpen && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
-            <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
-              className="bg-[#1a1a1a] border border-white/10 p-6 rounded-sm max-w-md w-full shadow-2xl space-y-4">
-              <div className="flex items-center gap-2">
-                <div className={`w-10 h-10 rounded-full flex items-center justify-center ${reasonModal.type === 'add' ? 'bg-blue-500/20 text-blue-500' : 'bg-red-500/20 text-red-500'}`}>
-                  {reasonModal.type === 'add' ? <Users size={20} /> : <MinusCircle size={20} />}
-                </div>
-                <div>
-                  <h4 className="text-white font-black text-sm uppercase">{reasonModal.type === 'add' ? '오늘 수업 변경' : '오늘 수업 제외'}</h4>
-                  <p className="text-[10px] text-gray-500 font-bold">{reasonModal.studentIds.length} 명의 학생 선택됨</p>
-                </div>
-              </div>
+        {reasonModal.isOpen && (() => {
+          const configM = (academyInfo?.operation_settings?.first_period_time || "00:00").split(':')[1] || "00";
+          const displayMinute = configM.toString().padStart(2, '0');
+          const hourOptions = Array.from({ length: 13 }, (_, i) => i + 10); // 10시 ~ 22시
+          
+          const handleBatchHourChange = (hour: number) => {
+            const updated = { ...makeupHours };
+            reasonModal.studentIds.forEach(id => {
+              updated[id] = hour;
+            });
+            setMakeupHours(updated);
+          };
 
-              <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar-v">
-                <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest px-1 block mb-1">학생별 사유 입력</label>
-                {reasonModal.studentIds.map((id) => (
-                  <div key={id} className="space-y-1 bg-white/[0.02] p-2 rounded-[2px] border border-white/5">
-                    <div className="flex justify-between items-center px-1">
-                      <span className="text-[11px] font-black text-gray-300">{getStudentName(id)}</span>
-                    </div>
-                    <input 
-                      type="text" 
-                      value={reasons[id] || ''} 
-                      onChange={(e) => updateIndividualReason(id, e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && confirmReason()}
-                      placeholder="사유를 입력하세요"
-                      className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all"
-                    />
+          return (
+            <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/60 backdrop-blur-sm">
+              <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }}
+                className="bg-[#1a1a1a] border border-white/10 p-6 rounded-sm max-w-md w-full shadow-2xl space-y-4">
+                <div className="flex items-center gap-2">
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${reasonModal.type === 'add' ? 'bg-blue-500/20 text-blue-500' : 'bg-red-500/20 text-red-500'}`}>
+                    {reasonModal.type === 'add' ? <Users size={20} /> : <MinusCircle size={20} />}
                   </div>
-                ))}
-              </div>
+                  <div>
+                    <h4 className="text-white font-black text-sm uppercase">{reasonModal.type === 'add' ? '오늘 수업 변경' : '오늘 수업 제외'}</h4>
+                    <p className="text-[10px] text-gray-500 font-bold">{reasonModal.studentIds.length} 명의 학생 선택됨</p>
+                  </div>
+                </div>
 
-              <div className="flex gap-2 pt-2">
-                <button 
-                  onClick={() => setReasonModal({ ...reasonModal, isOpen: false })} 
-                  className="flex-1 py-3 bg-white/5 text-gray-500 rounded-[2px] text-[10px] font-black uppercase hover:bg-white/10 transition-all"
-                >
-                  취소
-                </button>
-                <button 
-                  onClick={confirmReason}
-                  className={`flex-1 py-3 rounded-[2px] text-[10px] font-black uppercase shadow-lg transition-all ${
-                    reasonModal.type === 'add' 
-                      ? 'bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-500' 
-                      : 'bg-red-600 text-white shadow-red-600/20 hover:bg-red-500'
-                  }`}
-                >
-                  확인
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
+                {reasonModal.type === 'add' && (
+                  <div className="bg-blue-600/10 border border-blue-500/20 p-3 rounded-[2px] space-y-1.5">
+                    <label className="text-[9px] font-black uppercase text-blue-400 tracking-widest block">보강 시간 일괄 지정</label>
+                    <select 
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        if (val) handleBatchHourChange(parseInt(val));
+                      }}
+                      className="w-full bg-black/60 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-black text-amber-500 outline-none focus:border-blue-500 transition-all cursor-pointer"
+                    >
+                      <option value="">교시를 선택하세요 (일괄 적용)</option>
+                      {hourOptions.map(h => (
+                        <option key={h} value={h} className="bg-[#121212]">
+                          {h >= 12 
+                            ? (h === 12 ? `오후 12시 ${displayMinute}분` : `오후 ${h - 12}시 ${displayMinute}분`)
+                            : `오전 ${h}시 ${displayMinute}분`
+                          }
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+
+                <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar-v">
+                  <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest px-1 block mb-1">학생별 사유 및 시간 입력</label>
+                  {reasonModal.studentIds.map((id) => (
+                    <div key={id} className="space-y-2 bg-white/[0.02] p-3 rounded-[2px] border border-white/5">
+                      <div className="flex justify-between items-center px-1">
+                        <span className="text-[11px] font-black text-gray-300">{getStudentName(id)}</span>
+                      </div>
+                      
+                      <div className={reasonModal.type === 'add' ? "grid grid-cols-2 gap-2" : "w-full"}>
+                        <div className="space-y-1">
+                          {reasonModal.type === 'add' && <label className="text-[8px] font-bold uppercase text-gray-600 tracking-widest px-0.5 block">보강 사유</label>}
+                          <input 
+                            type="text" 
+                            value={reasons[id] || ''} 
+                            onChange={(e) => updateIndividualReason(id, e.target.value)}
+                            onKeyDown={(e) => e.key === 'Enter' && confirmReason()}
+                            placeholder="사유를 입력하세요"
+                            className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all"
+                          />
+                        </div>
+                        
+                        {reasonModal.type === 'add' && (
+                          <div className="space-y-1">
+                            <label className="text-[8px] font-bold uppercase text-gray-600 tracking-widest px-0.5 block">보강 시간</label>
+                            <select 
+                              value={makeupHours[id] || 15}
+                              onChange={(e) => updateIndividualHour(id, parseInt(e.target.value))}
+                              className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-amber-500 outline-none focus:border-blue-500 transition-all cursor-pointer"
+                            >
+                              {hourOptions.map(h => (
+                                <option key={h} value={h} className="bg-[#121212]">
+                                  {h >= 12 
+                                    ? (h === 12 ? `오후 12:${displayMinute}` : `오후 ${h - 12}:${displayMinute}`)
+                                    : `오전 ${h}:${displayMinute}`
+                                  }
+                                </option>
+                              ))}
+                            </select>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex gap-2 pt-2">
+                  <button 
+                    onClick={() => setReasonModal({ ...reasonModal, isOpen: false })} 
+                    className="flex-1 py-3 bg-white/5 text-gray-500 rounded-[2px] text-[10px] font-black uppercase hover:bg-white/10 transition-all"
+                  >
+                    취소
+                  </button>
+                  <button 
+                    onClick={confirmReason}
+                    className={`flex-1 py-3 rounded-[2px] text-[10px] font-black uppercase shadow-lg transition-all ${
+                      reasonModal.type === 'add' 
+                        ? 'bg-blue-600 text-white shadow-blue-600/20 hover:bg-blue-500' 
+                        : 'bg-red-600 text-white shadow-red-600/20 hover:bg-red-500'
+                    }`}
+                  >
+                    확인
+                  </button>
+                </div>
+              </motion.div>
+            </div>
+          );
+        })()}
       </AnimatePresence>
 
       <AnimatePresence>

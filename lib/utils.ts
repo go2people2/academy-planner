@@ -46,6 +46,7 @@ export interface ParsedTest {
   maxScore: number;
   isPass: boolean | null;
   memo: string;
+  explicitCut?: number | null;
 }
 
 export function parseInlineTests(
@@ -79,16 +80,16 @@ export function parseInlineTests(
         let explicitCut: number | null = null;
         let isPass: boolean | null = null;
         
-        const cleanScore = scoreStr.replace(/[^0-9/]/g, ''); // 숫자와 슬래시만 추출
+        const cleanScore = scoreStr.replace(/[^0-9/.]/g, ''); // 숫자, 슬래시, 소수점(.)만 추출
         if (cleanScore.includes('/')) {
           const parts = cleanScore.split('/');
-          numericScore = parts[0] === '' ? null : (parseInt(parts[0]) || 0);
+          numericScore = parts[0] === '' ? null : (parseFloat(parts[0]) || 0);
           maxScore = parseInt(parts[1]) || 10;
           if (parts.length >= 3 && parts[2] !== '') {
             explicitCut = parseInt(parts[2]); // 3번째 값은 커트라인(오답허용개수 혹은 100점만점시 목표점수)
           }
         } else {
-          numericScore = cleanScore === '' ? null : (parseInt(cleanScore) || 0);
+          numericScore = cleanScore === '' ? null : (parseFloat(cleanScore) || 0);
         }
         
         // 💡 통과(Pass) 여부 계산 로직 (채점 전이면 isPass는 null 유지)
@@ -104,10 +105,10 @@ export function parseInlineTests(
           }
         }
         
-        currentTest = { name, score: scoreStr, numericScore, maxScore, isPass, memo };
+        currentTest = { name, score: scoreStr, numericScore, maxScore, isPass, memo, explicitCut };
       } else {
         // 콜론(:)이 없는 경우 전부 이름으로 간주
-        currentTest = { name: content, score: '', numericScore: null, maxScore: 100, isPass: null, memo: '' };
+        currentTest = { name: content, score: '', numericScore: null, maxScore: 100, isPass: null, memo: '', explicitCut: null };
       }
     } else {
       // 💡 하이픈으로 시작하지 않는 줄은 이전 테스트의 메모에 줄바꿈과 함께 이어붙임!

@@ -3,7 +3,8 @@
 import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
-  ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck
+  ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck, Zap, AlertTriangle,
+  BookOpen
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
@@ -27,16 +28,30 @@ interface SidebarProps {
   teachers: any[];
   selectedTeacherId: string;
   setSelectedTeacherId: (id: string) => void;
+  isClassroomModeOpen: boolean;
+  onStartClass: () => void;
+  selectedHour: string;
+  setSelectedHour: (hour: string) => void;
+  availableHours: number[];
 }
 
 const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
+
+const formatHour = (hour: number) => {
+  if (hour === 999) return '보강/기타';
+  const ampm = hour >= 12 ? '오후' : '오전';
+  const displayHour = hour > 12 ? hour - 12 : (hour === 0 ? 12 : hour);
+  return `${ampm} ${displayHour}:00`;
+};
 
 export default function Sidebar({ 
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
   selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, 
   filterTarget, setFilterTarget,
   academyInfo, onUpdateAcademyInfo,
-  teachers, selectedTeacherId, setSelectedTeacherId 
+  teachers, selectedTeacherId, setSelectedTeacherId,
+  isClassroomModeOpen, onStartClass,
+  selectedHour, setSelectedHour, availableHours
 }: SidebarProps) {
   const router = useRouter();
   const { slug } = useParams();
@@ -149,11 +164,14 @@ export default function Sidebar({
       <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar-v">
         <nav className="space-y-1">
           <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2 px-2">Menu</h3>
+          <SidebarLink icon={<Zap size={14} className={isClassroomModeOpen ? "text-amber-500 fill-current animate-pulse" : "text-blue-400"} />} label="수업 시작 (LIVE)" active={isClassroomModeOpen} onClick={() => { onStartClass(); }} variant="blue" />
           <SidebarLink icon={<Bell size={14} />} label="Notifications" active={viewMode === 'notifications'} onClick={() => { setViewMode('notifications'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<LayoutDashboard size={14} />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<TableIcon size={14} />} label="Daily Sheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} />
           <SidebarLink icon={<ClipboardCheck size={14} />} label="업무 및 보강 관리" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
+          <SidebarLink icon={<AlertTriangle size={14} />} label="교재 오류 관리" active={viewMode === 'problemErrors'} onClick={() => { setViewMode('problemErrors'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Activity size={14} />} label="Progress" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} />
+          <SidebarLink icon={<BookOpen size={14} className="text-emerald-400" />} label="오답노트 관리" active={viewMode === 'wrongAnswersAdmin'} onClick={() => { setViewMode('wrongAnswersAdmin'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<UserCog size={14} />} label="학생정보수정" active={viewMode === 'studentEdit'} onClick={() => { setViewMode('studentEdit'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<ArrowLeftRight size={14} />} label="이번 달 변동 사항" active={viewMode === 'monthlyChanges'} onClick={() => { setViewMode('monthlyChanges'); setSelectedFilter('All'); }} />
         </nav>
@@ -295,13 +313,30 @@ export default function Sidebar({
               )}
             </div>
 
+            {isAdmin && (
+              <div className="pt-1">
+                <div className="relative group">
+                  <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-400 outline-none appearance-none cursor-pointer hover:bg-white/10 hover:text-white hover:border-white/20 transition-all">
+                    <option value="All" className="bg-[#121212]">All Teachers (전체 교사)</option>
+                    {(teachers || []).map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                  </select>
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors"><UserCircle size={12} /></div>
+                </div>
+              </div>
+            )}
+
+            {/* 💡 시작 시간대 필터 추가 */}
             <div className="pt-1">
               <div className="relative group">
-                <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-400 outline-none appearance-none cursor-pointer hover:bg-white/10 hover:text-white hover:border-white/20 transition-all">
-                  <option value="All" className="bg-[#121212]">All Teachers (전체)</option>
-                  {(teachers || []).map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                <select value={selectedHour} onChange={(e) => setSelectedHour(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-400 outline-none appearance-none cursor-pointer hover:bg-white/10 hover:text-white hover:border-white/20 transition-all">
+                  <option value="All" className="bg-[#121212]">All Times (전체 시간)</option>
+                  {availableHours.map((h, idx) => <option key={h || idx} value={String(h)} className="bg-[#121212]">{formatHour(h)}</option>)}
                 </select>
-                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors"><UserCircle size={12} /></div>
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors">
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
               </div>
             </div>
           </div>
@@ -328,12 +363,22 @@ export default function Sidebar({
   );
 }
 
-function SidebarLink({ icon, label, active = false, onClick, badge }: any) {
+function SidebarLink({ icon, label, active = false, onClick, badge, variant }: any) {
+  const isBlueVariant = variant === 'blue';
   return (
-    <div onClick={onClick} className={`flex items-center gap-2 px-3 py-2 rounded-[2px] cursor-pointer transition-all group ${active ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'}`}>
-      <span className={active ? 'text-white' : 'group-hover:text-blue-500 transition-colors'}>{icon}</span>
+    <div 
+      onClick={onClick} 
+      className={`flex items-center gap-2 px-3 py-2 rounded-[2px] cursor-pointer transition-all group ${
+        active 
+          ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
+          : isBlueVariant
+            ? 'bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white shadow-inner'
+            : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+      }`}
+    >
+      <span className={(active || isBlueVariant) ? 'text-white' : 'group-hover:text-blue-500 transition-colors'}>{icon}</span>
       <span className="font-bold text-[11px] tracking-tight">{label}</span>
-      {badge && <span className="ml-auto bg-red-600 text-white text-[8px] font-black px-1 py-0.5 rounded ring-2 ring-[#0a0a0a]">{badge}</span>}
+      {badge && <span className="ml-auto bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded ring-2 ring-[#0a0a0a]">{badge}</span>}
     </div>
   );
 }

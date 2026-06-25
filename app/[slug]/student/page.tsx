@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History } from 'lucide-react';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
@@ -18,6 +18,29 @@ import TestStatusSection from '@/components/student/TestStatusSection';
 import LearningHistoryList from '@/components/student/LearningHistoryList';
 import StudentSuggestion from '@/components/student/StudentSuggestion';
 import PerformanceChart from '@/components/student/PerformanceChart';
+import StudentSubmitPage from '@/components/wrong-answers/StudentSubmitPage';
+
+const WRONG_ANSWER_THEMES: Record<string, { primary: string; bg: string; ring: string; buttonText?: string }> = {
+  navy: { primary: '#1e3a8a', bg: '#f8faff', ring: 'focus:ring-blue-900' },
+  default: { primary: '#1e3a8a', bg: '#f8faff', ring: 'focus:ring-blue-900' },
+  green: { primary: '#10b981', bg: '#ecfdf5', ring: 'focus:ring-emerald-500' },
+  orange: { primary: '#f97316', bg: '#fff7ed', ring: 'focus:ring-orange-500' },
+  purple: { primary: '#8b5cf6', bg: '#f5f3ff', ring: 'focus:ring-purple-500' },
+  skyblue: { primary: '#0ea5e9', bg: '#f0f9ff', ring: 'focus:ring-sky-500' },
+  pink: { primary: '#db2777', bg: '#fdf2f8', ring: 'focus:ring-pink-600' },
+  indigo: { primary: '#4f46e5', bg: '#eef2ff', ring: 'focus:ring-indigo-600' },
+  rose: { primary: '#e11d48', bg: '#fff1f2', ring: 'focus:ring-rose-600' },
+  teal: { primary: '#0d9488', bg: '#f0fdfa', ring: 'focus:ring-teal-600' },
+  slate: { primary: '#64748b', bg: '#f1f5f9', ring: 'focus:ring-slate-500' },
+  black: { primary: '#000000', bg: '#ffffff', ring: 'focus:ring-black' },
+  yellow: { primary: '#451a03', bg: '#fbbf24', ring: 'focus:ring-amber-950' },
+  mint: { primary: '#064e3b', bg: '#34d399', ring: 'focus:ring-emerald-950' },
+  lime: { primary: '#1a2e05', bg: '#a3e635', ring: 'focus:ring-lime-950' },
+  gold: { primary: '#431407', bg: '#f97316', ring: 'focus:ring-orange-950' },
+  charcoal: { primary: '#a3e635', bg: '#0f172a', ring: 'focus:ring-lime-400', buttonText: '#0f172a' },
+  'coral-navy': { primary: '#fb7185', bg: '#020617', ring: 'focus:ring-rose-400' },
+  chalkboard: { primary: '#ffffff', bg: '#064e3b', ring: 'focus:ring-white', buttonText: '#064e3b' }
+};
 
 export default function StudentPortal() {
   const router = useRouter();
@@ -32,7 +55,12 @@ export default function StudentPortal() {
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDashboardSlim, setIsDashboardSlim] = useState(false); // 💡 대시보드 접기 상태를 전역으로 관리
-  const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion'>('study'); // 💡 모바일 탭 상태 추가
+  const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion' | 'wrong-answer'>('study'); // 💡 모바일 탭 상태 추가 및 오답 제출 지원
+  
+  // 💡 오답노트 연동 상태
+  const [wrongAnswerStudent, setWrongAnswerStudent] = useState<any>(null);
+  const [wrongAnswerAcademy, setWrongAnswerAcademy] = useState<any>(null);
+  const [wrongAnswerTheme, setWrongAnswerTheme] = useState<any>(WRONG_ANSWER_THEMES.default);
   
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [examSchedules, setExamSchedules] = useState<ExamSchedule[]>([]);
@@ -67,7 +95,7 @@ export default function StudentPortal() {
     const upcomingSchedules = examSchedules.filter(ex => ex.target_date >= selectedDate);
     const currentPeriodSchedules = currentPeriod 
       ? upcomingSchedules.filter(ex => {
-          if (ex.exam_name.startsWith(currentPeriod)) return true;
+          if (ex.exam_name && ex.exam_name.startsWith(currentPeriod)) return true;
           const periodType = currentPeriod.split('-').slice(1).join('-');
           const legacyNames: any = {
             '1-MID': ['1학기 중간', '1학기 중간고사'],
@@ -75,7 +103,7 @@ export default function StudentPortal() {
             '2-MID': ['2학기 중간', '2학기 중간고사'],
             '2-FINAL': ['2학기 기말', '2학기 기말고사']
           };
-          if ((legacyNames[periodType] || []).includes(ex.exam_name)) return true;
+          if (ex.exam_name && (legacyNames[periodType] || []).includes(ex.exam_name)) return true;
           return false;
         })
       : upcomingSchedules; // 설정이 없으면 전체에서 검색 (하위 호환성)
@@ -103,19 +131,8 @@ export default function StudentPortal() {
         if (res.hw_eval !== undefined && res.hw_eval !== null) return res.hw_eval;
       }
     } catch (e) {}
-    const match = todaySession?.special_notes?.match(/\[숙제이행: (\d+)단계\]/);
-    if (match) return parseInt(match[1]);
-
-    const studentTeacher = teachers?.find(t => t.id === student?.teacher_id);
-    const presets = studentTeacher?.homework_presets || { 'perfect': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*', 'good': '숙제를 잘 수행했습니다.', 'neutral': '숙제 수행이 보통입니다.', 'poor': '숙제가 미흡한 부분이 있습니다.', 'bad': '숙제를 거의 해오지 않았습니다.' };
-    const notes = todaySession?.special_notes || '';
-    if (presets.perfect && notes.includes(presets.perfect)) return 10;
-    if (presets.good && notes.includes(presets.good)) return 8;
-    if (presets.neutral && notes.includes(presets.neutral)) return 6;
-    if (presets.poor && notes.includes(presets.poor)) return 4;
-    if (presets.bad && notes.includes(presets.bad)) return 2;
     return null;
-  }, [todaySession?.special_notes, todaySession?.test_result, teachers, student?.teacher_id]);
+  }, [todaySession?.test_result]);
 
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;
@@ -123,11 +140,11 @@ export default function StudentPortal() {
     
     let aggregatedHw = "";
     for (const log of pastLogs) {
-      if (log.homework_text) {
+      if (log.homework_text && log.homework_text.trim() !== '결석') {
         const dateStr = log.session_date ? log.session_date.slice(5).replace('-', '.') : '';
         const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(log.session_date).getDay()];
         let hText = log.homework_text;
-        availableTextbooks.forEach(tb => { hText = hText.split(`[${tb.id}]`).join(tb.title); });
+        availableTextbooks.forEach(tb => { hText = hText.split(`[${tb.bookcode}]`).join(tb.title); });
         const line = `${dateStr}(${dayName})\n${hText}`;
         aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
       }
@@ -178,10 +195,14 @@ export default function StudentPortal() {
     try {
       const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
       const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
+      let currentTeachers: any[] = [];
       if (acData) {
         setAcademy(acData);
         const { data: tData } = await supabase.from('ams_teachers').select('*').eq('academy_id', acData.id);
-        if (tData) setTeachers(tData);
+        if (tData) {
+          setTeachers(tData);
+          currentTeachers = tData;
+        }
       }
       const { data: stData } = await supabase.from('ams_students').select('*').eq('id', studentId).single();
       if (stData) setStudent(stData);
@@ -201,6 +222,55 @@ export default function StudentPortal() {
           .order('created_at', { ascending: false })
           .limit(5);
         if (suggData) setMySuggestions(suggData);
+
+        // 💡 [추가] 오답노트용 지점 및 학생 정보 조회 (이름 및 슬러그 기준 백그라운드 매핑)
+        try {
+          const { data: waAcData } = await supabase
+            .from('academies')
+            .select('*')
+            .eq('slug', normalizedSlug)
+            .maybeSingle();
+
+          if (waAcData) {
+            setWrongAnswerAcademy(waAcData);
+            const themeObj = WRONG_ANSWER_THEMES[waAcData.theme] || WRONG_ANSWER_THEMES.default;
+            setWrongAnswerTheme(themeObj);
+
+            // 💡 [동명이인 방지] 플래너 교사 이름 검색 -> 오답노트 교사 ID 조회 -> 3중 매핑
+            let waTeacherId = null;
+            const amsTeacher = currentTeachers?.find((t: any) => t.id === stData.teacher_id);
+            if (amsTeacher?.name) {
+              const { data: waTeacher } = await supabase
+                .from('teachers')
+                .select('id')
+                .eq('name', amsTeacher.name)
+                .eq('academy_id', waAcData.id)
+                .maybeSingle();
+              if (waTeacher) {
+                waTeacherId = waTeacher.id;
+              }
+            }
+
+            let query = supabase
+              .from('student_users')
+              .select('*')
+              .eq('name', stData.name)
+              .eq('academy_id', waAcData.id);
+
+            // 오답노트 교사 ID를 찾은 경우 필터 추가 (동명이인 혼선 방지)
+            if (waTeacherId) {
+              query = query.eq('teacher_id', waTeacherId);
+            }
+
+            const { data: waStData } = await query.maybeSingle();
+
+            if (waStData) {
+              setWrongAnswerStudent(waStData);
+            }
+          }
+        } catch (err) {
+          console.error('Failed to load wrong answer student mapping:', err);
+        }
       }
       const tbRes = await fetch('/api/textbooks');
       const textbooks: TextbookOption[] = tbRes.ok ? await tbRes.json() : [];
@@ -281,12 +351,12 @@ export default function StudentPortal() {
           } catch (e) {}
           
           let todayCut = 0;
-          let todoAchievement = 0;
+          let todoAchievement = null;
           try { 
             if (todayLog.test_result?.startsWith('{')) { 
               const res = JSON.parse(todayLog.test_result); 
               todayCut = res.cut || 0; 
-              todoAchievement = res.todo_achievement || 0;
+              todoAchievement = res.todo_achievement !== undefined ? res.todo_achievement : null;
             } 
           } catch (e) {}
 
@@ -299,6 +369,7 @@ export default function StudentPortal() {
             next_quiz_json: nqJson, 
             test_cut: todayLog.test_cut || todayCut || autoTodayTestCut, 
             todo_achievement: todoAchievement,
+            test_answers: todayLog.test_answers || null,
             onTodoClick: handleTodoAchievement,
             onTodoToggle: handleTodoToggle
           });
@@ -315,7 +386,7 @@ export default function StudentPortal() {
             next_quiz_trial: autoNextTestTrial, 
             next_quiz_json: [], 
             test_cut: autoTodayTestCut, 
-            todo_achievement: 0 
+            todo_achievement: null 
           } as any);
           setLocalCompletedClasswork(''); setTodayPlan(''); setLocalHomework('');
         }
@@ -376,15 +447,35 @@ export default function StudentPortal() {
 
   const handleManualSave = async (field: 'classwork' | 'completed_classwork' | 'homework' | 'special_notes', value: string) => {
     if (!student || !academy) return;
+    
+    // 💡 기존 값과 입력값이 완전히 같은 경우 불필요한 저장 스킵
+    const dbField = field === 'special_notes' ? field : `${field}_text`;
+    const currentValue = todaySession?.[dbField] || '';
+    if ((currentValue || '').trim() === (value || '').trim()) {
+      return;
+    }
+
     setIsSaving(true);
     try {
-      const dbField = field === 'special_notes' ? field : `${field}_text`;
       let finalValue = value;
-      // 💡 분리된 컬럼 사용으로 인해 병합 로직 제거
       const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, [dbField]: finalValue };
-      if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
-      else { await supabase.from('ams_session_logs').insert([updateData]); }
-      if (field === 'special_notes') setTodaySession((prev: any) => ({ ...prev, special_notes: finalValue }));
+      
+      let savedLog: any = null;
+      if (todaySession?.id && todaySession.id !== 'temp') { 
+        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
+      } else { 
+        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
+      }
+      
+      if (savedLog) {
+        setTodaySession((prev: any) => ({ ...prev, ...savedLog }));
+      } else if (field === 'special_notes') {
+        setTodaySession((prev: any) => ({ ...prev, special_notes: finalValue }));
+      }
     } catch (e) { console.error(e); } finally { setIsSaving(false); }
   };
 
@@ -392,14 +483,44 @@ export default function StudentPortal() {
     if (!student || !academy) return;
     setIsSaving(true);
     try {
-      const currentVal = todaySession?.todo_achievement || 0;
-      const nextVal = currentVal === percentage ? 0 : percentage; 
+      const currentVal = todaySession?.todo_achievement !== undefined ? todaySession.todo_achievement : null;
+      const nextVal = currentVal === percentage ? null : percentage; 
       const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
       const newResult = { ...currentResult, todo_achievement: nextVal, checked_todos: null }; // 퍼센트 수동 클릭 시 개별 상태 초기화
-      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, test_result: JSON.stringify(newResult) };
-      if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
-      else { await supabase.from('ams_session_logs').insert([updateData]); }
-      setTodaySession((prev: any) => ({ ...prev, todo_achievement: nextVal, test_result: JSON.stringify(newResult) }));
+      const updateData: any = { 
+        student_id: student.id, 
+        session_date: selectedDate, 
+        academy_id: academy.id, 
+        test_result: JSON.stringify(newResult)
+      };
+      
+      let savedLog: any = null;
+      if (todaySession?.id && todaySession.id !== 'temp') { 
+        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
+      } else { 
+        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
+      }
+
+      if (savedLog) {
+        let savedAchievement = null;
+        try {
+          if (savedLog.test_result?.startsWith('{')) {
+            const parsedRes = JSON.parse(savedLog.test_result);
+            savedAchievement = parsedRes.todo_achievement !== undefined ? parsedRes.todo_achievement : null;
+          }
+        } catch (e) {}
+        setTodaySession((prev: any) => ({ 
+          ...prev, 
+          ...savedLog, 
+          todo_achievement: savedAchievement 
+        }));
+      } else {
+        setTodaySession((prev: any) => ({ ...prev, todo_achievement: nextVal, test_result: JSON.stringify(newResult) }));
+      }
     } catch (e) { console.error(e); } finally { setIsSaving(false); }
   };
 
@@ -424,7 +545,9 @@ export default function StudentPortal() {
       }
       
       const pos = currentChecked.indexOf(index);
-      if (pos > -1) {
+      const isChecking = pos === -1;
+      
+      if (!isChecking) {
         currentChecked.splice(pos, 1);
       } else {
         currentChecked.push(index);
@@ -433,23 +556,70 @@ export default function StudentPortal() {
       // 실제 체크박스 항목(totalCount) 중 몇 개가 체크되었는지에 따라 퍼센트 재계산 (최대 100)
       const validChecked = currentChecked.filter(idx => idx < totalCount);
       let rawPercentage = totalCount > 0 ? (validChecked.length / totalCount) * 100 : 0;
-      // UI 상단의 10단위 버튼과 맞추기 위해 10 단위로 내림 (예: 33.3 -> 30, 66.6 -> 60)
-      // 만약 체크가 1개라도 있다면 최소 10, 모두 체크라면 100을 보장
       let newPercentage = Math.floor(rawPercentage / 10) * 10;
       if (validChecked.length > 0 && newPercentage === 0) newPercentage = 10;
       if (validChecked.length === totalCount) newPercentage = 100;
-      // 20단위 버튼과 호환되게 가장 가까운 20단위로 맞추거나 정확한 퍼센트 유지
-      // 옵션이 [20, 40, 60, 80, 100]이므로, 실제 퍼센트를 그대로 넘기되,
-      // UI에서는 20, 40, 60에 가장 가까운 버튼을 하이라이트 할 수 있음.
-      // 일단 정확한 퍼센트 저장!
       
       const newResult = { ...currentResult, todo_achievement: newPercentage, checked_todos: currentChecked };
-      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, test_result: JSON.stringify(newResult) };
       
-      if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
-      else { await supabase.from('ams_session_logs').insert([updateData]); }
+      // 💡 [추가] 오늘 할일 개별 체크박스 토글 시 '학원에서 한 공부(completed_classwork_text)'에 텍스트 동기화 (빈 줄 제거)
+      let currentClasswork = localCompletedClasswork || '';
+      const planTasks = todayPlan ? todayPlan.split('\n').filter((l: string) => l.trim()) : [];
+      const task = planTasks[index];
       
-      setTodaySession((prev: any) => ({ ...prev, todo_achievement: newPercentage, test_result: JSON.stringify(newResult) }));
+      if (task) {
+        const cleanTask = task.replace(/^[0-9]+[\.\)]\s*|^[-*#]\s*/, '').trim();
+        if (cleanTask) {
+          let currentLines = currentClasswork.split('\n').map(l => l.trim()).filter(Boolean);
+          if (isChecking) {
+            // 체크 시: '학원 공부'에 추가 (중복 방지)
+            if (!currentLines.includes(cleanTask)) {
+              currentLines.push(cleanTask);
+            }
+          } else {
+            // 해제 시: '학원 공부'에서 해당 라인 제거
+            currentLines = currentLines.filter(line => line !== cleanTask);
+          }
+          currentClasswork = currentLines.join('\n');
+        }
+      }
+      
+      const updateData: any = { 
+        student_id: student.id, 
+        session_date: selectedDate, 
+        academy_id: academy.id, 
+        test_result: JSON.stringify(newResult),
+        completed_classwork_text: currentClasswork
+      };
+      
+      let savedLog: any = null;
+      if (todaySession?.id && todaySession.id !== 'temp') { 
+        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
+      } else { 
+        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
+      }
+      
+      setLocalCompletedClasswork(currentClasswork);
+      if (savedLog) {
+        let savedAchievement = null;
+        try {
+          if (savedLog.test_result?.startsWith('{')) {
+            const parsedRes = JSON.parse(savedLog.test_result);
+            savedAchievement = parsedRes.todo_achievement !== undefined ? parsedRes.todo_achievement : null;
+          }
+        } catch (e) {}
+        setTodaySession((prev: any) => ({ 
+          ...prev, 
+          ...savedLog, 
+          todo_achievement: savedAchievement 
+        }));
+      } else {
+        setTodaySession((prev: any) => ({ ...prev, todo_achievement: newPercentage, test_result: JSON.stringify(newResult), completed_classwork_text: currentClasswork }));
+      }
     } catch (e) { console.error(e); } finally { setIsSaving(false); }
   };
 
@@ -460,14 +630,21 @@ export default function StudentPortal() {
     setIsSaving(true);
     try {
       const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, approval_status: status };
+      let savedLog: any = null;
       if (todaySession?.id && todaySession.id !== 'temp') { 
-        const { error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); 
+        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
         if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
       } else { 
-        const { error } = await supabase.from('ams_session_logs').insert([updateData]); 
+        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
         if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
       }
-      setTodaySession((prev: any) => ({ ...prev, approval_status: status }));
+      if (savedLog) {
+        setTodaySession((prev: any) => ({ ...prev, ...savedLog }));
+      } else {
+        setTodaySession((prev: any) => ({ ...prev, approval_status: status }));
+      }
     } catch (e: any) { 
       console.error(e); 
       alert("제출 처리 중 오류가 발생했습니다: " + (e.message || "알 수 없는 오류"));
@@ -497,12 +674,21 @@ export default function StudentPortal() {
         academy_id: academy.id, 
         test_result: JSON.stringify(currentResult) 
       };
+      let savedLog: any = null;
       if (todaySession?.id && todaySession.id !== 'temp') { 
-        await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); 
+        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
       } else { 
-        await supabase.from('ams_session_logs').insert([updateData]); 
+        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
+        if (error) throw error;
+        if (data && data[0]) savedLog = data[0];
       }
-      setTodaySession((prev: any) => ({ ...prev, test_result: JSON.stringify(currentResult) }));
+      if (savedLog) {
+        setTodaySession((prev: any) => ({ ...prev, ...savedLog }));
+      } else {
+        setTodaySession((prev: any) => ({ ...prev, test_result: JSON.stringify(currentResult) }));
+      }
       
       // 특이사항에 남아있는 예전 "[숙제이행: X단계]" 텍스트가 있다면 지워줍니다 (마이그레이션 효과)
       const currentNotes = todaySession?.special_notes || '';
@@ -556,23 +742,42 @@ export default function StudentPortal() {
   const handleSyncTasks = async (checkedTasks: string[], uncheckedTasks: string[]) => {
     if (!student || !academy) return;
     
-    let currentClasswork = localCompletedClasswork;
+    let currentLines = localCompletedClasswork.split('\n').map(l => l.trim()).filter(Boolean);
     
     // 제거할 태스크 삭제
     uncheckedTasks.forEach(task => {
-      currentClasswork = currentClasswork.split('\n').filter(line => line.trim() !== task).join('\n');
+      currentLines = currentLines.filter(line => line !== task);
     });
     
     // 추가할 태스크 넣기 (중복 방지)
     checkedTasks.forEach(task => {
-      if (!currentClasswork.split('\n').map(l => l.trim()).includes(task)) {
-        currentClasswork = currentClasswork ? `${currentClasswork}\n${task}` : task;
+      if (!currentLines.includes(task)) {
+        currentLines.push(task);
       }
     });
 
+    const currentClasswork = currentLines.join('\n');
     if (currentClasswork !== localCompletedClasswork) {
       setLocalCompletedClasswork(currentClasswork);
       await handleManualSave('completed_classwork', currentClasswork);
+    }
+  };
+
+  const handleUpdateAssignedBooks = async (newBooks: string[]) => {
+    if (!student) return;
+    setIsSaving(true);
+    try {
+      const { error } = await supabase
+        .from('ams_students')
+        .update({ assigned_books: newBooks })
+        .eq('id', student.id);
+      if (error) throw error;
+      setStudent((prev: any) => prev ? { ...prev, assigned_books: newBooks } : null);
+    } catch (e) {
+      console.error('Failed to update assigned books:', e);
+      alert('교재 업데이트 중 오류가 발생했습니다.');
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -612,9 +817,55 @@ export default function StudentPortal() {
         academy={academy}
       />
 
+      {/* 💡 데스크톱/공용 상단 탭 바 (오답노트 전환용) */}
+      <div className="bg-[#0a0a0a] border-b border-white/5 flex px-4 md:px-8 shrink-0">
+        <button
+          onClick={() => setActiveTab('study')}
+          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
+            activeTab !== 'wrong-answer'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          📝 내 학습 플래너
+        </button>
+        <button
+          onClick={() => setActiveTab('wrong-answer')}
+          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
+            activeTab === 'wrong-answer'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          ❌ 틀린 문제 제출
+        </button>
+      </div>
+
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden pb-[64px] lg:pb-0">
-        {/* 왼쪽 섹션: 대시보드 및 교재 시스템 */}
-        <div className={`w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 relative lg:block ${activeTab === 'study' || activeTab === 'history' ? 'block' : 'hidden lg:block'}`}>
+        {activeTab === 'wrong-answer' ? (
+          <div className="flex-1 overflow-y-auto custom-scrollbar-v bg-[#080808] p-4">
+            {wrongAnswerStudent ? (
+              <StudentSubmitPage
+                studentData={wrongAnswerStudent}
+                handleLogout={handleLogout}
+                theme={wrongAnswerTheme}
+                academyId={wrongAnswerAcademy?.id}
+              />
+            ) : (
+              <div className="min-h-[calc(100vh-200px)] flex flex-col items-center justify-center text-gray-400 p-8">
+                <AlertTriangle className="text-amber-500 mb-4" size={48} />
+                <h3 className="text-lg font-black text-white mb-2">오답노트 미등록 학생</h3>
+                <p className="text-sm text-gray-500 text-center max-w-md">
+                  오답노트 시스템({wrongAnswerAcademy?.academy_name || '호크마 수학'})에 등록되지 않은 이름입니다.<br />
+                  선생님께 이름 등록을 요청해 주세요. (출석부 이름: <b>{student?.name}</b>)
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <>
+            {/* ① 왼쪽 섹션: 대시보드 및 교재 시스템 */}
+            <div className={`w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 relative lg:block ${activeTab === 'study' || activeTab === 'history' ? 'block' : 'hidden lg:block'}`}>
           <div className={activeTab === 'study' ? 'block space-y-4 md:space-y-8' : 'hidden lg:block lg:space-y-8'}>
             <LearningDashboard 
               student={student} lastSession={lastSession} todaySession={todaySession} 
@@ -633,6 +884,9 @@ export default function StudentPortal() {
               todayPlan={todayPlan} handleManualSave={handleManualSave} isSaving={isSaving}
               onBookSelect={(isActive) => { if (isActive) setIsDashboardSlim(true); }}
               approvalStatus={approvalStatus}
+              selectedDate={selectedDate}
+              onUpdateAssignedBooks={handleUpdateAssignedBooks}
+              academy={academy}
             />
             {(() => {
               return (
@@ -778,12 +1032,15 @@ export default function StudentPortal() {
             />
           </div>
         </div>
+          </>
+        )}
       </main>
 
       {/* 모바일 하단 플로팅 탭 네비게이션 (lg 미만에서만 노출) */}
       <div className="lg:hidden fixed bottom-0 left-0 right-0 h-[60px] bg-[#0c0c0c]/90 backdrop-blur-md border-t border-white/5 flex items-center justify-around z-30 px-2 shadow-2xl">
         {[
           { id: 'study', label: '오늘 학습', icon: <BookOpen size={16} /> },
+          { id: 'wrong-answer', label: '오답 제출', icon: <AlertTriangle size={16} /> },
           { id: 'history', label: '히스토리', icon: <History size={16} /> },
           { id: 'suggestion', label: '알림장 & 설문', icon: <MessageSquare size={16} /> },
         ].map(tab => {
@@ -809,8 +1066,11 @@ export default function StudentPortal() {
       <AnimatePresence>
         {isTestModalOpen && (
           <TestAnswerModal 
-            testId={todaySession?.test_status || ''} studentName={student.name} 
-            onClose={() => setIsTestModalOpen(false)} onSave={handleTestSubmit} 
+            testId={todaySession?.test_status || ''} 
+            studentName={student.name} 
+            onClose={() => setIsTestModalOpen(false)} 
+            onSave={handleTestSubmit} 
+            reviewData={todaySession?.test_answers || undefined}
           />
         )}
       </AnimatePresence>
@@ -819,7 +1079,7 @@ export default function StudentPortal() {
         {confirmSubmitOpen && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSaving && setConfirmSubmitOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
-            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-[#111] border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full">
+            <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-[#111] border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-left">
               <h3 className="text-lg font-black text-white mb-4">제출할 내용을 확인해주세요</h3>
               
               <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4 text-[13px] space-y-4">
@@ -834,12 +1094,12 @@ export default function StudentPortal() {
                 <div className="flex gap-4 pt-2 border-t border-white/10">
                   <div className="flex-1">
                     <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><TrendingUp size={14} /> 오늘 달성률</p>
-                    <p className="text-white font-black">{todaySession?.todo_achievement ? `${todaySession.todo_achievement}%` : '입력 안함'}</p>
+                    <p className="text-white font-black">{todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null ? `${todaySession.todo_achievement}%` : '입력 안함'}</p>
                   </div>
                   <div className="flex-1">
-                    <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><Check size={14} /> 숙제이행 평가</p>
+                    <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><Check size={14} /> 과제 자가평가</p>
                     <p className="text-amber-400 font-black">
-                      {currentSelfEval === 1 ? '1단계 (미흡)' : currentSelfEval === 2 ? '2단계 (보통)' : currentSelfEval === 3 ? '3단계 (우수)' : '입력 안함'}
+                      {currentSelfEval !== null && currentSelfEval !== undefined ? `${currentSelfEval}점` : '입력 안함'}
                     </p>
                   </div>
                 </div>

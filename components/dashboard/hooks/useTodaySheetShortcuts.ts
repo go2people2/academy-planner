@@ -23,6 +23,8 @@ interface UseTodaySheetShortcutsProps {
   selectedIds: string[];
   onSave: (studentId: string, data: any) => Promise<any>;
   toggleSecondRow?: () => void;
+  handleUndo?: () => void;
+  handleRedo?: () => void;
 }
 
 /**
@@ -34,11 +36,11 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     students, setStudents,
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
     handleBatchSave, handleSetSwitch, setIsDragging, selectedIds,
-    toggleSecondRow
+    toggleSecondRow, handleUndo, handleRedo
   } = props;
 
-  // 1. 클립보드 로직 분리 (handleCopy, handlePaste)
-  const { handleCopy, handlePaste } = useTodaySheetClipboard(props);
+  // 1. 클립보드 로직 분리 (handleCopy, handlePaste, handleCut)
+  const { handleCopy, handlePaste, handleCut } = useTodaySheetClipboard(props);
 
   // 아래 방향 자동 채우기 (Fill Down)
   const handleFillDown = useCallback(() => {
@@ -184,6 +186,30 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       const target = document.activeElement as HTMLElement;
       const isInput = ['INPUT', 'TEXTAREA'].includes(target.tagName);
       
+      // Ctrl+Z / Cmd+Z (Undo)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key?.toLowerCase() === 'z') {
+        if (!isInput) {
+          e.preventDefault();
+          if (e.repeat) return; // 💡 키를 꾹 누르고 있어 반복 발생하는 중복 이벤트 차단
+          if (e.shiftKey) {
+            handleRedo?.();
+          } else {
+            handleUndo?.();
+          }
+          return;
+        }
+      }
+
+      // Ctrl+Y / Cmd+Y (Redo)
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key?.toLowerCase() === 'y') {
+        if (!isInput) {
+          e.preventDefault();
+          if (e.repeat) return; // 💡 키를 꾹 누르고 있어 반복 발생하는 중복 이벤트 차단
+          handleRedo?.();
+          return;
+        }
+      }
+
       // Alt + Q, W, E, R (Set Switch)
       if (e.altKey && ['q','w','e','r','Q','W','E','R'].includes(e.key)) {
         e.preventDefault();
@@ -275,6 +301,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             const nCol = activeColumns[targetC];
             if (nS && nCol) {
               setActiveCell({ studentId: nS.id, columnId: nCol.id });
+              setSelectedRange({ startStudentId: nS.id, startColId: nCol.id, endStudentId: nS.id, endColId: nCol.id });
               setTimeout(() => setEditingCell({ studentId: nS.id, columnId: nCol.id }), 50);
             }
           } else {
@@ -324,6 +351,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         const nS = filteredStudents[nR], nCol = activeColumns[nC];
         if (nS && nCol) {
           setActiveCell({ studentId: nS.id, columnId: nCol.id });
+          setSelectedRange({ startStudentId: nS.id, startColId: nCol.id, endStudentId: nS.id, endColId: nCol.id });
           if (e.key === 'Enter' || e.key === 'Tab') {
             setTimeout(() => setEditingCell({ studentId: nS.id, columnId: nCol.id }), 50);
           } else if (e.key.startsWith('Arrow')) {
@@ -379,6 +407,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     window.addEventListener('keydown', handleGlobalKeyDown);
     window.addEventListener('copy', handleCopy);
     window.addEventListener('paste', handlePaste);
+    window.addEventListener('cut', handleCut);
 
     return () => {
       stopScroll();
@@ -388,10 +417,12 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       window.removeEventListener('keydown', handleGlobalKeyDown);
       window.removeEventListener('copy', handleCopy);
       window.removeEventListener('paste', handlePaste);
+      window.removeEventListener('cut', handleCut);
     };
   }, [
     activeCell, setActiveCell, editingCell, setEditingCell, filteredStudents, activeColumns, 
     selectedRange, setSelectedRange, handleBatchSave, handleSetSwitch, 
-    handleCopy, handlePaste, setIsDragging, selectedIds, handleFillDown, toggleSecondRow
+    handleCopy, handlePaste, handleCut, setIsDragging, selectedIds, handleFillDown, toggleSecondRow,
+    handleUndo, handleRedo
   ]);
 }

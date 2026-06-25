@@ -29,7 +29,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     class_days: [] as string[],
     day_schedules: {} as { [key: string]: number[] },
     assigned_books: [] as string[],
-    book_courses: {} as Record<string, 'E' | 'D' | 'C' | 'B' | 'A'>
+    book_courses: {} as Record<string, string>
   });
 
   const filteredBooks = useMemo(() => {
@@ -94,7 +94,8 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
       
       const newBookCourses = { ...prev.book_courses };
       if (!isSelected) {
-        newBookCourses[bookcode] = prev.course;
+        const currentMonth = new Date().getMonth() + 1;
+        newBookCourses[bookcode] = `${prev.course}-start-${prev.grade || '미지정'}_${currentMonth}월`;
       } else {
         delete newBookCourses[bookcode];
       }
@@ -108,10 +109,17 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
   };
 
   const updateBookCourse = (bookcode: string, course: 'E' | 'D' | 'C' | 'B' | 'A') => {
-    setFormData(prev => ({
-      ...prev,
-      book_courses: { ...prev.book_courses, [bookcode]: course }
-    }));
+    setFormData(prev => {
+      const oldVal = prev.book_courses[bookcode];
+      let newVal = course as string;
+      if (oldVal && String(oldVal).includes('-start-')) {
+        newVal = `${course}-start-${String(oldVal).split('-start-')[1]}`;
+      }
+      return {
+        ...prev,
+        book_courses: { ...prev.book_courses, [bookcode]: newVal }
+      };
+    });
   };
 
   return (

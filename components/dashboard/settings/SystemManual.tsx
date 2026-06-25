@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Bell, Table, ClipboardCheck, Activity, UserCog, ArrowLeftRight, Settings, Info } from 'lucide-react';
+import { LayoutDashboard, Bell, Table, ClipboardCheck, Activity, UserCog, ArrowLeftRight, Settings, Info, Keyboard } from 'lucide-react';
 
 export default function SystemManual() {
   const manuals = [
@@ -92,6 +92,47 @@ export default function SystemManual() {
             </div>
           </motion.div>
         ))}
+      </div>
+
+      {/* 💡 [추가] 단축키 가이드 섹션 */}
+      <div className="mt-8 pt-6 border-t border-white/10 space-y-4">
+        <div className="flex items-center gap-3">
+          <Keyboard size={22} className="text-blue-400" />
+          <div>
+            <h4 className="text-lg font-black text-white">시스템 단축키 가이드</h4>
+            <p className="text-xs text-gray-400">마우스 동작 없이 빠르게 작업할 수 있는 효율적인 단축키 일람입니다.</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-2">
+            <h5 className="text-[12px] font-black text-blue-400 uppercase tracking-wider">TodaySheet 일지 편집</h5>
+            <ul className="space-y-2 text-[11px] text-gray-300">
+              <li className="flex items-center justify-between"><span className="text-gray-400">아래 방향 일괄 채우기</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Ctrl + D</kbd> 또는 <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + D</kbd></span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">단축어 보관함 세트 전환 (1~4번)</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + Q / W / E / R</kbd></span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">하단 2행 상세 설정 바 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + T</kbd></span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">엑셀식 즉시 덮어쓰기 입력</span> <span className="text-gray-500 italic">셀 선택 후 즉시 타이핑</span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">다중 셀 데이터 일괄 삭제</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Backspace</kbd> 또는 <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Delete</kbd></span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">셀 복사 / 붙여넣기</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Ctrl + C / V</kbd></span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">셀 이동 (이동 / 저장 이동)</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">방향키</kbd> / <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Enter</kbd> / <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Tab</kbd></span></li>
+            </ul>
+          </div>
+          <div className="p-4 bg-white/[0.02] border border-white/5 rounded-xl space-y-4">
+            <div className="space-y-2">
+              <h5 className="text-[12px] font-black text-emerald-400 uppercase tracking-wider">전역 단축키</h5>
+              <ul className="space-y-2 text-[11px] text-gray-300">
+                <li className="flex items-center justify-between"><span className="text-gray-400">LIVE 실시간 수업 현황판 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-emerald-300">Shift + Alt + L</kbd></span></li>
+              </ul>
+            </div>
+            <div className="space-y-2 pt-2 border-t border-white/5">
+              <h5 className="text-[12px] font-black text-indigo-400 uppercase tracking-wider">숙제 입력 모달 내 단축키</h5>
+              <ul className="space-y-2 text-[11px] text-gray-300">
+                <li className="flex items-center justify-between"><span className="text-gray-400">시작 페이지 입력란 포커스 (1~9행)</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + 1 ~ 9</kbd></span></li>
+                <li className="flex items-center justify-between"><span className="text-gray-400">확인 및 즉시 저장</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Ctrl + Enter</kbd></span></li>
+                <li className="flex items-center justify-between"><span className="text-gray-400">창 닫기 (취소)</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Escape</kbd></span></li>
+              </ul>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );

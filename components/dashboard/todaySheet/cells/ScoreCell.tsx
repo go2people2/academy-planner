@@ -28,6 +28,7 @@ export const ScoreCell = React.memo(function ScoreCell({
   const numeratorInputRef = React.useRef<HTMLInputElement>(null);
   const totalInputRef = React.useRef<HTMLInputElement>(null);
 
+  const isCountMode = formData.test_score_type === 'count';
 
   // 💡 인라인 테스트 모드 감지 (하이픈 문법을 썼다면 점수칸은 요약 뱃지로 변신)
   const parsedTests = parseInlineTests(formData.test_id);

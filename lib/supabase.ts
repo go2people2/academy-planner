@@ -9,5 +9,13 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(
   supabaseUrl || '',
-  supabaseAnonKey || ''
+  supabaseAnonKey || '',
+  {
+    auth: {
+      // Persist session across page reloads
+      persistSession: true,
+      // Auto‑refresh JWT when it expires
+      autoRefreshToken: true,
+    },
+  }
 );

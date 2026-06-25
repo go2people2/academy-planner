@@ -60,7 +60,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
               grade: s.grade || '미지정',
               date: logDate,
               dateStr: log.date,
-              notes: log.special_notes || '보강 수업 진행',
+              notes: log.attendance_reason || log.special_notes || '보강 수업 진행',
               teacher: s.teacher_name || '미지정'
             });
           }
@@ -86,7 +86,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
               date: logDate,
               dateStr: log.date,
               type: log.attendance_status,
-              notes: log.special_notes || '사유 미기재',
+              notes: log.attendance_reason || log.special_notes || '사유 미기재',
               teacher: s.teacher_name || '미지정'
             });
           }
@@ -100,20 +100,22 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
   const dischargedMonth = useMemo(() => {
     return students.filter(s => {
       if (!s.is_deleted) return false;
+      // status_changed_at 우선, 없으면 updated_at 사용
       const changeTime = s.status_changed_at || (s as any).updated_at;
       if (!changeTime) return false;
-      const deleteDate = new Date(changeTime);
-      return deleteDate.getMonth() === currentMonth && deleteDate.getFullYear() === currentYear;
+      // UTC ISO 문자열 파싱 후 로컬 기준 연·월 비교
+      const d = new Date(changeTime);
+      return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
     }).map(s => {
       const changeTime = s.status_changed_at || (s as any).updated_at;
       const deleteDate = new Date(changeTime);
-      const lastLog = (s.allLogs || []).find(l => l.attendance_status === '수업제외' || l.special_notes.toLowerCase().includes('퇴원'));
+      const lastLog = (s.allLogs || []).find((l: any) => l.attendance_status === '수업제외' || (l.special_notes && l.special_notes.toLowerCase().includes('퇴원')));
       return {
         id: s.id,
         name: s.name,
         grade: s.grade || '미지정',
         date: deleteDate,
-        notes: lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
+        notes: lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
         teacher: s.teacher_name || '미지정'
       };
     }).sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -121,16 +123,16 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
 
   // 6. 누적 전체 퇴원생 명단 (아카이브)
   const dischargedAll = useMemo(() => {
-    return students.filter(s => s.is_deleted === true).map(s => {
+    return students.filter(s => !!s.is_deleted).map(s => {
       const changeTime = s.status_changed_at || (s as any).updated_at;
       const deleteDate = changeTime ? new Date(changeTime) : null;
-      const lastLog = (s.allLogs || []).find(l => l.attendance_status === '수업제외' || l.special_notes.toLowerCase().includes('퇴원'));
+      const lastLog = (s.allLogs || []).find((l: any) => l.attendance_status === '수업제외' || (l.special_notes && l.special_notes.toLowerCase().includes('퇴원')));
       return {
         id: s.id,
         name: s.name,
         grade: s.grade || '미지정',
         date: deleteDate,
-        notes: lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
+        notes: lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
         teacher: s.teacher_name || '미지정'
       };
     }).sort((a, b) => {

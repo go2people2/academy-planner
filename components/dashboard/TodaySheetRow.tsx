@@ -1,6 +1,6 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { X, Clock } from 'lucide-react';
@@ -40,6 +40,7 @@ interface TodaySheetRowProps {
   isFirstInTimeSection?: boolean;
   timeSectionLabel?: string;
   isScrolled?: boolean;
+  historyLimit?: number;
 }
 
 /**
@@ -60,16 +61,23 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     ? (academyInfo?.operation_settings?.default_homework_presets || {}) 
     : (currentUser?.homework_presets || {});
   
-  const snippets = React.useMemo(() => {
-    const arr = currentPresets.snippets || [];
-    const result = [...arr];
-    while (result.length < 10) {
-      result.push('');
-    }
-    return result.slice(0, 10);
-  }, [currentPresets.snippets]);
+// snippets와 trigger를 새 컬럼에서 직접 가져옵니다.
+const initSnippets = (currentUser.snippets ?? []).slice(0, 10);
+while (initSnippets.length < 10) initSnippets.push('');
+const [localSnippets, setLocalSnippets] = useState<string[]>(initSnippets);
+const [snippetTrigger, setSnippetTrigger] = useState<string>(currentUser.snippet_trigger ?? ';');
 
-  const snippetTrigger = currentPresets.snippet_trigger || ';';
+// Sync when profile updates
+useEffect(() => {
+  const arr = currentUser.snippets ?? [];
+  const result = [...arr];
+  while (result.length < 10) result.push('');
+  setLocalSnippets(result.slice(0, 10));
+}, [currentUser.snippets]);
+
+useEffect(() => {
+  setSnippetTrigger(currentUser.snippet_trigger ?? ';');
+}, [currentUser.snippet_trigger]);
 
   // 1. 커스텀 훅 호출 (모든 상태와 핸들러 포함)
   const { states, refs, handlers } = useTodaySheetRowLogic({
@@ -108,6 +116,24 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     await props.onUpdateStudentInfo(student.id, 'book_courses', newBookCourses);
   };
 
+  // 💡 [추가] 과제 피드백 팝업이 열려있을 때 Escape 키로 닫기
+  React.useEffect(() => {
+    if (!isFeedbackOpen) return;
+
+    const handleGlobalEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsFeedbackOpen(false);
+      }
+    };
+
+    window.addEventListener('keydown', handleGlobalEscape, true);
+    return () => {
+      window.removeEventListener('keydown', handleGlobalEscape, true);
+    };
+  }, [isFeedbackOpen, setIsFeedbackOpen]);
+
   return (
     <>
       <tr className={`group/row transition-all duration-300 border-b border-white/10 ${
@@ -126,11 +152,13 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
           else if (col.id === 'name') leftOffset = (colWidths['select'] || 40) - 1;
           else if (col.id === 'tools') leftOffset = (colWidths['select'] || 40) + (colWidths['name'] || 120) - 2;
 
+           // snippets and trigger are handled at component level
+
           return (
             <TodaySheetCell
               key={col.id}
               col={col}
-              snippets={snippets}
+              snippets={localSnippets}
               snippetTrigger={snippetTrigger}
               isFirstInTimeSection={isFirstInTimeSection}
               timeSectionLabel={timeSectionLabel}
@@ -158,12 +186,12 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
               isHistoryExpanded={isHistoryExpanded}
               displayDateShort={rowDate.slice(5).replace('-', '.')}
               statusMap={{
-                'none': { label: '↺', color: 'bg-gray-800 text-gray-300 hover:bg-gray-700' },
-                'perfect': { label: 'S', color: 'bg-emerald-500 text-white' },
-                'good': { label: 'A', color: 'bg-blue-500 text-white' },
-                'neutral': { label: 'B', color: 'bg-white/20 text-gray-400' },
-                'poor': { label: 'C', color: 'bg-amber-500 text-white' },
-                'bad': { label: 'F', color: 'bg-red-500 text-white' }
+                'gradeA': { label: 'A', color: 'bg-emerald-500 text-white' },
+                'gradeB': { label: 'B', color: 'bg-blue-500 text-white' },
+                'gradeC': { label: 'C', color: 'bg-white/20 text-gray-400 font-bold' },
+                'gradeD': { label: 'D', color: 'bg-amber-500 text-white' },
+                'gradeE': { label: 'E', color: 'bg-red-500 text-white' },
+                'gradeF': { label: 'F', color: 'bg-purple-500 text-white' }
               }}
               {...refs}
               tdRef={el => { refs.tdRefs.current[col.id] = el; }}
@@ -242,7 +270,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
         })}
       </tr>
 
-      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} />
+      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} limit={props.historyLimit || 3} masterTextbooks={masterTextbooks} />
 
       {/* Editors Container (Invisible row) */}
       <tr style={{ display: 'none' }}>
@@ -253,7 +281,29 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
             {isHwEditorOpen && <HomeworkEditor title="오늘 숙제 교재 입력" student={student} homeworkJson={formData.homework_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'homework')} onToggleKeepBook={handleToggleKeepBook} onClose={() => setIsHwEditorOpen(false)} />}
             {isNqEditorOpen && <HomeworkEditor title="다음 테스트 교재 입력" student={student} homeworkJson={formData.next_quiz_json || []} masterTextbooks={masterTextbooks} onUpdate={(newJson) => syncTextFromData(newJson, 'next_quiz')} onToggleKeepBook={handleToggleKeepBook} onClose={() => setIsNqEditorOpen(false)} />}
             {isTestEditorOpen && <TestEditor testData={formData.test_id} onUpdate={(formattedText, averageScore) => { const newData = { ...formData, test_id: formattedText, test_score: averageScore !== null ? String(averageScore) : formData.test_score }; states.setFormData((prev: any) => ({ ...prev, ...newData })); handleSave(newData); }} onClose={() => setIsTestEditorOpen(false)} />}
-            {isTestModalOpen && <TestAnswerModal testId={formData.test_id} studentName={student.name} onClose={() => setIsTestModalOpen(false)} onSave={(res) => { const newData = { ...formData, test_score: String(res.score || ''), test_completed: res.completed }; states.setFormData((prev: any) => ({ ...prev, ...newData })); handleSave({ test_score: newData.test_score, test_completed: res.completed }); setIsTestModalOpen(false); }} />}
+            {isTestModalOpen && (
+              <TestAnswerModal 
+                testId={formData.test_id} 
+                studentName={student.name} 
+                onClose={() => setIsTestModalOpen(false)} 
+                reviewData={formData.test_answers || undefined}
+                onSave={(res) => { 
+                  const newData = { 
+                    ...formData, 
+                    test_score: String(res.calculatedScore !== undefined ? res.calculatedScore : (res.score || '')), 
+                    test_completed: res.completed, 
+                    test_answers: res.answers 
+                  }; 
+                  states.setFormData((prev: any) => ({ ...prev, ...newData })); 
+                  handleSave({ 
+                    test_score: newData.test_score, 
+                    test_completed: res.completed, 
+                    test_answers: res.answers 
+                  }); 
+                  setIsTestModalOpen(false); 
+                }} 
+              />
+            )}
           </AnimatePresence>
         </td>
       </tr>

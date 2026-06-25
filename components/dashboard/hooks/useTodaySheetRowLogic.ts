@@ -69,7 +69,7 @@ export function useTodaySheetRowLogic({
       const merged = [...current];
       assigned.forEach(bookName => {
         const courseVal = String(student.book_courses?.[bookName] || '');
-        if (courseVal.endsWith('-keep') || courseVal.endsWith('-done')) return;
+        if (courseVal.includes('-keep') || courseVal.includes('-done')) return;
         
         if (!current.some(b => b.book_name === bookName)) {
           merged.push({ type: 'book', book_name: bookName, range: '', units: [] });
@@ -225,20 +225,31 @@ export function useTodaySheetRowLogic({
 
   const handleAttendanceToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    const statuses = [
-      ATTENDANCE_STATUS.BEFORE, 
-      ATTENDANCE_STATUS.PRESENT, 
-      ATTENDANCE_STATUS.ABSENT, 
-      ATTENDANCE_STATUS.LATE, 
-      ATTENDANCE_STATUS.SUPPLEMENT, 
-      ATTENDANCE_STATUS.CANCELED, 
-      ATTENDANCE_STATUS.EXCLUDED
-    ];
-    const currentBase = formData.attendance_status || ATTENDANCE_STATUS.BEFORE;
-    if (currentBase === ATTENDANCE_STATUS.SUPPLEMENT && !isSupplementTimePickerOpen) { setIsSupplementTimePickerOpen(true); return; }
-    const nextStatus = statuses[(statuses.indexOf(currentBase as any) + 1) % statuses.length];
-    if (nextStatus === ATTENDANCE_STATUS.SUPPLEMENT) { setIsSupplementTimePickerOpen(true); return; }
-    const extraUpdate = { attendance_status: nextStatus };
+    
+    const currentStatus = formData.attendance_status;
+    let nextStatus: string;
+    
+    // 직관적이고 확실한 상태 분기 조건
+    if (currentStatus === ATTENDANCE_STATUS.PRESENT) {
+      nextStatus = ATTENDANCE_STATUS.ABSENT; // 출석 ➡️ 결석
+    } else if (currentStatus === ATTENDANCE_STATUS.ABSENT) {
+      nextStatus = ATTENDANCE_STATUS.LATE;   // 결석 ➡️ 지각
+    } else if (currentStatus === ATTENDANCE_STATUS.LATE) {
+      nextStatus = ATTENDANCE_STATUS.BEFORE; // 지각 ➡️ 수업전
+    } else {
+      nextStatus = ATTENDANCE_STATUS.PRESENT; // 보강, 수업전, 기타 빈 상태 ➡️ 출석으로 첫 순환 개시
+    }
+    
+    console.log(`[ATTENDANCE_TOGGLE] Student: ${student.name}, current: ${currentStatus}, next: ${nextStatus}`);
+    
+    const extraUpdate: any = { 
+      attendance_status: nextStatus
+    };
+
+    if (nextStatus === ATTENDANCE_STATUS.ABSENT) {
+      extraUpdate.completed_classwork_text = '결석';
+    }
+
     setFormData((prev: any) => ({ ...prev, ...extraUpdate }));
     handleSave(extraUpdate);
   };
@@ -251,8 +262,15 @@ export function useTodaySheetRowLogic({
     setIsSupplementTimePickerOpen(false);
   };
 
-  const selectFeedback = (level: 'perfect' | 'good' | 'neutral' | 'poor' | 'bad' | 'none') => {
-    const presets = currentUser?.homework_presets || { 'perfect': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*', 'good': '숙제를 잘 수행했습니다.', 'neutral': '숙제 수행이 보통입니다.', 'poor': '숙제가 미흡한 부분이 있습니다.', 'bad': '숙제를 거의 해오지 않았습니다.' };
+  const selectFeedback = (level: 'gradeA' | 'gradeB' | 'gradeC' | 'gradeD' | 'gradeE' | 'gradeF' | 'none') => {
+    const presets = currentUser?.homework_presets || { 
+      'gradeA': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*', 
+      'gradeB': '숙제를 잘 수행했습니다.', 
+      'gradeC': '숙제 수행이 보통입니다.', 
+      'gradeD': '숙제가 미흡한 부분이 있습니다.', 
+      'gradeE': '숙제를 거의 해오지 않았습니다.',
+      'gradeF': ''
+    };
     let currentNotes = formData.special_notes || '';
     const newComment = presets[level] || '';
     
@@ -282,19 +300,33 @@ export function useTodaySheetRowLogic({
   };
 
   const syncTextFromData = (newJson: HomeworkItem[], field: 'classwork' | 'homework' | 'next_quiz' | 'completed_classwork') => {
-    const text = newJson
-      .filter(item => item.range) // 💡 range가 존재하는 항목만 텍스트 일지에 반영
+    const textKey = `${field}_text` as keyof typeof formData;
+    const existingText: string = formData[textKey] || '';
+
+    // JSON 항목에서 새로 생성된 라인들
+    const newLines = newJson
+      .filter(item => item.range)
       .map(item => {
         const book = masterTextbooks.find(m => m.bookcode === item.book_name);
         const cleanRange = (item.range.startsWith('p') || item.range.includes(' p')) ? item.range : `p${item.range}`;
         return `${book?.title || item.book_name} ${cleanRange}`;
-      }).join('\n');
-    const update = { [`${field}_json`]: newJson, [`${field}_text`]: text };
+      });
+
+    // 기존 텍스트에 없는 라인만 아래에 추가 (중복 방지)
+    const existingLines = existingText ? existingText.split('\n') : [];
+    const toAppend = newLines.filter(line => !existingLines.some(el => el.trim() === line.trim()));
+
+    const mergedText = toAppend.length > 0
+      ? (existingText ? `${existingText}\n${toAppend.join('\n')}` : toAppend.join('\n'))
+      : existingText;
+
+    const update = { [`${field}_json`]: newJson, [`${field}_text`]: mergedText };
     setFormData((prev: any) => ({ ...prev, ...update }));
     const refs: any = { classwork: cwRef, homework: hwRef, next_quiz: nqRef, completed_classwork: ccwRef };
-    if (refs[field]?.current) refs[field].current.value = text;
+    if (refs[field]?.current) refs[field].current.value = mergedText;
     handleSave(update);
   };
+
 
   return {
     states: {

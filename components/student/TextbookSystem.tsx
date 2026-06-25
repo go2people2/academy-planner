@@ -20,6 +20,9 @@ interface TextbookSystemProps {
   isSaving: boolean;
   onBookSelect?: (isActive: boolean) => void;
   approvalStatus?: 'none' | 'submitted' | 'approved';
+  selectedDate: string;
+  onUpdateAssignedBooks?: (newBooks: string[]) => Promise<void>;
+  academy?: any;
 }
 
 export default function TextbookSystem({
@@ -34,7 +37,10 @@ export default function TextbookSystem({
   handleManualSave,
   isSaving,
   onBookSelect,
-  approvalStatus = 'none'
+  approvalStatus = 'none',
+  selectedDate,
+  onUpdateAssignedBooks,
+  academy
 }: TextbookSystemProps) {
   const [activeBook, setActiveBook] = useState<any>(null);
   const [activeUnit, setActiveUnit] = useState<any>(null);
@@ -46,6 +52,8 @@ export default function TextbookSystem({
   const [selectionRange, setSelectionRange] = useState<{ start: number | null, end: number | null }>({ start: null, end: null });
   const [lastClickedUnitIdx, setLastClickedUnitIdx] = useState<number | null>(null);
   const [isTeacher, setIsTeacher] = useState(false);
+  const [showAddBookModal, setShowAddBookModal] = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState('전체');
 
   // 💡 모바일 스와이프 제스처를 위한 상태
   const [touchStart, setTouchStart] = useState<number | null>(null);
@@ -54,6 +62,31 @@ export default function TextbookSystem({
   // 💡 장수 계산 팝업 애니메이션을 위한 상태
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState({ sheets: 0, pages: 0 });
+
+  // 💡 미배정 교재 리스트 필터링
+  const unassignedBooks = useMemo(() => {
+    const assigned = student?.assigned_books || [];
+    return (availableTextbooks || []).filter(b => !assigned.includes(b.bookcode) && b.status !== '비활성');
+  }, [availableTextbooks, student?.assigned_books]);
+
+  // 💡 학원 설정의 대분류 목록 가져오기 (없으면 기본값)
+  const bookCategories = useMemo(() => {
+    const customCats = academy?.operation_settings?.textbook_categories;
+    if (Array.isArray(customCats) && customCats.length > 0) {
+      return ['전체', ...customCats];
+    }
+    return ['전체', '초5', '초6', '중1', '중2', '중3', '공수1', '공수2', '대수', '미적분1', '미적분2', '확통', '기하'];
+  }, [academy]);
+
+  // 💡 선택된 대분류 칩 필터에 맞게 필터링된 미배정 교재 리스트
+  const filteredUnassignedBooks = useMemo(() => {
+    if (!selectedCategory || selectedCategory === '전체') return unassignedBooks;
+    const query = selectedCategory.toLowerCase();
+    return unassignedBooks.filter(b => 
+      b.title.toLowerCase().includes(query) || 
+      (b.grade || '').toLowerCase().includes(query)
+    );
+  }, [unassignedBooks, selectedCategory]);
 
   // 💡 activeBook 상태 변경 시 외부 콜백 호출 (대시보드 접기용)
   useEffect(() => {
@@ -145,7 +178,7 @@ export default function TextbookSystem({
 
     const processText = (t: string | undefined | null, baseType: 'classwork' | 'homework') => {
       if (!t) return;
-      const displayTitle = activeBook.title.replace(/^\[.*?\]\s*/, '');
+      const displayTitle = activeBook.title;
       const cleanTitle = displayTitle.replace(/\s+/g, '').toLowerCase();
       const cleanBookCode = activeBook.bookcode.replace(/\s+/g, '').toLowerCase();
       t.split('\n').forEach(line => {
@@ -179,6 +212,7 @@ export default function TextbookSystem({
 
     if (allLogs) {
       allLogs.forEach(log => {
+        if (log.session_date === selectedDate) return;
         processJson(log.classwork_json || [], 'classwork');
         processJson(log.homework_json || [], 'homework');
         processText(log.classwork_text, 'classwork');
@@ -298,7 +332,7 @@ export default function TextbookSystem({
       } 
     }
     const rangeText = ranges.join(', ');
-    const displayTitle = activeBook.title.replace(/^\[.*?\]\s*/, '');
+    const displayTitle = activeBook.title;
     const targetUnits = units.filter(u => { 
       const uStart = parseInt(u.start_page); const uEnd = parseInt(u.end_page); 
       return pagesToUse.some(p => p >= uStart && p <= uEnd); 
@@ -333,11 +367,17 @@ export default function TextbookSystem({
     const fullText = `${type === 'wrong' ? '[오답] ' : ''}${displayTitle} ${unitText ? `${unitText} ` : ''}${rangeText}`;
     const targetField = type === 'homework' ? 'homework' : 'classwork';
     const currentText = targetField === 'homework' ? localHomework : localCompletedClasswork;
-    const newText = currentText ? `${currentText}\n${fullText}` : fullText;
+    const trimmedCurrent = currentText ? currentText.trim() : "";
+    const newText = trimmedCurrent ? `${trimmedCurrent}\n${fullText}` : fullText;
     
     if (targetField === 'homework') setLocalHomework(newText); else setLocalCompletedClasswork(newText);
     await handleManualSave(targetField === 'classwork' ? 'completed_classwork' : 'homework', newText); 
     setSelectedPages([]);
+    setSelectedUnits([]); 
+    setLastClickedUnitIdx(null); 
+    setIsMergedViewActive(false); 
+    setActiveUnit(null); 
+    setActiveBook(null);
   };
 
   const handleQuickAddUnits = async (type: 'classwork' | 'homework' | 'wrong' | 'cancel') => {
@@ -356,7 +396,7 @@ export default function TextbookSystem({
     <div className="bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden">
       {/* 상단 교재 선택 바 */}
       <div className="flex items-center justify-center gap-2 overflow-x-auto no-scrollbar py-3 px-6 bg-white/[0.03] border-b border-white/5 shrink-0">
-        {(student.assigned_books || []).filter((code: string) => !String(student.book_courses?.[code]).endsWith('-keep')).map((code: string) => {
+        {(student.assigned_books || []).filter((code: string) => !String(student.book_courses?.[code]).includes('-keep') && !String(student.book_courses?.[code]).includes('-done')).map((code: string) => {
           const book = availableTextbooks.find(b => b.bookcode === code); if (!book) return null;
           const isActive = activeBook?.bookcode === code;
           return (
@@ -376,6 +416,17 @@ export default function TextbookSystem({
             </motion.button>
           );
         })}
+
+        {/* ➕ 교재 추가 버튼 */}
+        {onUpdateAssignedBooks && (
+          <motion.button 
+            whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} 
+            onClick={() => { setShowAddBookModal(true); setSelectedCategory('전체'); }} 
+            className="flex items-center gap-1.5 border border-dashed rounded-[4px] px-3 py-1.5 transition-all shrink-0 bg-emerald-500/5 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/10 hover:border-emerald-400/40 text-[11px] font-black"
+          >
+            + 교재 추가
+          </motion.button>
+        )}
       </div>
 
       <div className="relative flex-1 overflow-hidden">
@@ -383,24 +434,91 @@ export default function TextbookSystem({
         <div className="grid grid-cols-1 md:grid-cols-2 h-full divide-y md:divide-y-0 md:divide-x divide-white/5 bg-black/20">
           <div className="p-4 md:p-6 space-y-3 flex flex-col">
             <div className="flex items-center gap-2 px-1"><TrendingUp className="text-emerald-500" size={18} /><span className="text-[14px] md:text-[16px] font-black text-emerald-500 tracking-tight">학원에서 한 공부</span></div>
-            <textarea value={localCompletedClasswork || ''} onChange={(e) => setLocalCompletedClasswork(e.target.value)} onBlur={() => handleManualSave('completed_classwork', localCompletedClasswork)} readOnly={approvalStatus !== 'none'} placeholder="오늘 학원에서 공부한 내용을 적어주세요." rows={Math.max(3, (localCompletedClasswork || '').split('\n').length)} className={`w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10 ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`} />
+            <textarea value={localCompletedClasswork || ''} onChange={(e) => setLocalCompletedClasswork(e.target.value)} onBlur={() => handleManualSave('completed_classwork', localCompletedClasswork)} readOnly={approvalStatus !== 'none'} placeholder="오늘 학원에서 공부한 내용을 적어주세요." rows={Math.max(1, (localCompletedClasswork || '').split('\n').length)} className={`w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10 ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`} />
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Auto-sync Active</span>{isSaving && <Loader2 size={10} className="animate-spin text-emerald-500" />}</div>
           </div>
           <div className="p-4 md:p-6 space-y-3 flex flex-col">
             <div className="flex items-center gap-2 px-1"><ClipboardList className="text-blue-500" size={18} /><span className="text-[14px] md:text-[16px] font-black text-blue-500 tracking-tight">집에서 할 공부 (숙제)</span></div>
-            <textarea value={localHomework} onChange={(e) => setLocalHomework(e.target.value)} onBlur={() => handleManualSave('homework', localHomework)} readOnly={approvalStatus !== 'none'} placeholder="다음 수업까지 집에서 해올 숙제를 적어주세요." rows={Math.max(3, localHomework.split('\n').length)} className={`w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10 ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`} />
+            <textarea value={localHomework} onChange={(e) => setLocalHomework(e.target.value)} onBlur={() => handleManualSave('homework', localHomework)} readOnly={approvalStatus !== 'none'} placeholder="다음 수업까지 집에서 해올 숙제를 적어주세요." rows={Math.max(1, localHomework.split('\n').length)} className={`w-full bg-transparent border-0 outline-none text-sm text-white font-bold leading-relaxed resize-none scrollbar-hide placeholder:text-white/10 ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`} />
             <div className="flex justify-between items-center pt-2 border-t border-white/[0.03] mt-auto"><span className="text-[9px] font-bold text-white/20 uppercase tracking-tighter">Real-time Cloud Sync</span>{isSaving && <Loader2 size={10} className="animate-spin text-blue-500" />}</div>
           </div>
         </div>
 
+        {/* 완료된 교재 이력 섹션 (학생 뷰) */}
+        {student.assigned_books?.some((code: string) => String(student.book_courses?.[code] || '').includes('-done')) && (
+          <div className="border-t border-white/5 bg-black/40 p-4 md:p-6 space-y-3 text-left">
+            <div className="flex items-center gap-2 px-1">
+              <span className="text-[12px] md:text-[14px] font-black text-emerald-500/80 tracking-tight">📚 완료한 교재 이력 (History)</span>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {student.assigned_books
+                .filter((code: string) => String(student.book_courses?.[code] || '').includes('-done'))
+                .map((code: string, idx: number) => {
+                  const book = availableTextbooks.find(b => b.bookcode === code);
+                  const rawCourseValue = student.book_courses?.[code] || student.course || 'C';
+                  
+                  let currentCourse = 'C';
+                  let periodText = '';
+                  
+                  if (rawCourseValue.startsWith('E') || rawCourseValue.startsWith('D') || rawCourseValue.startsWith('C') || rawCourseValue.startsWith('B') || rawCourseValue.startsWith('A')) {
+                    currentCourse = rawCourseValue.charAt(0);
+                  }
+                  
+                  if (rawCourseValue.includes('-done-')) {
+                    const info = rawCourseValue.split('-done-')[1]; // "중2_2월-중2_5월"
+                    if (info.includes('-')) {
+                      const [start, end] = info.split('-'); // ["중2_2월", "중2_5월"]
+                      const [startG, startM] = start.split('_');
+                      const [endG, endM] = end.split('_');
+                      if (startG === endG) {
+                        periodText = `${startG} ${startM} ~ ${endM}`;
+                      } else {
+                        periodText = `${startG} ${startM} ~ ${endG} ${endM}`;
+                      }
+                    } else if (info.includes('_')) {
+                      const parts = info.split('_');
+                      if (parts.length >= 3) {
+                        periodText = `${parts[0]} ${parts[1]} ~ ${parts[2]}`;
+                      }
+                    }
+                  }
+
+                  return (
+                    <div key={`done-${code}-${idx}`} className="flex items-center gap-2 px-3 py-1.5 rounded-[4px] bg-emerald-500/5 border border-emerald-500/10 text-emerald-400 text-xs font-bold">
+                      <span>{book ? book.title : code}</span>
+                      {periodText && <span className="text-[10px] text-gray-500">({periodText} 사용)</span>}
+                      <span className="bg-emerald-500/20 text-emerald-500 text-[10px] font-black rounded-sm px-1.5 py-0.5">
+                        {currentCourse}
+                      </span>
+                    </div>
+                  );
+                })}
+            </div>
+          </div>
+        )}
+
         {/* 오버레이: 단원 및 페이지 선택 */}
         <AnimatePresence>
           {activeBook && (
-            <motion.div 
-              initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 25, stiffness: 200 }} 
-              className="absolute inset-0 z-40 bg-[#0a0a0a] border-l border-emerald-500/20 shadow-[-20px_0_50px_rgba(0,0,0,0.5)] flex flex-col overflow-hidden"
-              onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEndAction}
-            >
+            <>
+              {/* 💡 뒷배경을 그대로 보면서 실시간 입력을 확인하도록 투명하게 처리된 오버레이 */}
+              <motion.div 
+                initial={{ opacity: 0 }} 
+                animate={{ opacity: 1 }} 
+                exit={{ opacity: 0 }} 
+                onClick={() => { setActiveBook(null); setSelectedUnits([]); setLastClickedUnitIdx(null); }}
+                className="fixed inset-0 z-50 bg-transparent"
+              />
+              
+              {/* 💡 우측 전체화면에서 튀어나오는 슬라이드 드로어 */}
+              <motion.div 
+                initial={{ x: '100%' }} 
+                animate={{ x: 0 }} 
+                exit={{ x: '100%' }} 
+                transition={{ type: 'spring', damping: 25, stiffness: 200 }} 
+                className="fixed top-0 right-0 bottom-0 z-[60] w-full sm:w-[500px] md:w-[600px] bg-[#0a0a0a] border-l border-emerald-500/20 shadow-[-20px_0_50px_rgba(0,0,0,0.8)] flex flex-col overflow-hidden"
+                onTouchStart={onTouchStart} onTouchMove={onTouchMove} onTouchEnd={onTouchEndAction}
+              >
               {/* 💡 장수 계산 팝업 애니메이션 (스크롤과 독립적으로 최상단 고정) */}
               <AnimatePresence mode="wait">
                 {showToast && (
@@ -424,48 +542,54 @@ export default function TextbookSystem({
                 )}
               </AnimatePresence>
 
-              <div className="p-3 md:p-4 space-y-3 flex-1 flex flex-col overflow-y-auto custom-scrollbar-v">
+              <div className="p-3 md:p-4 space-y-3 flex-1 flex flex-col overflow-hidden">
                 {!activeUnit && !isMergedViewActive ? (
-                  <div className="space-y-2">
-                    <div className="flex flex-col gap-2 px-1">
-                      <div className="flex items-center justify-between pb-1 border-b border-white/5">
+                  <div className="space-y-2 flex-1 flex flex-col overflow-hidden">
+                    <div className="flex flex-col gap-2 px-1 shrink-0">
+                      <div className="flex items-center justify-between pb-1.5 border-b border-white/5">
                         <div className="flex items-center gap-3">
                           {selectedUnits.length > 0 ? (
                             <span className="text-[12px] font-black text-blue-400">옵션을 선택해주세요 👇</span>
                           ) : (
-                            <span className="text-[11px] font-black text-gray-500">단원을 선택해주세요</span>
+                            <span className="text-[12px] font-black text-blue-400">▶ 단원을 선택해주세요</span>
                           )}
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => { setIsMergedViewActive(true); setSelectedPages([]); }} 
-                            disabled={selectedUnits.length === 0}
-                            className="text-[11px] font-black text-emerald-400 hover:text-white disabled:opacity-30 disabled:grayscale px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/30 border border-emerald-500/20 transition-colors rounded-md flex items-center gap-1.5"
-                          >
-                            <BookOpen size={12} /> 쪽수고르기
-                          </button>
-                          <button 
-                            onClick={() => { setActiveBook(null); setSelectedUnits([]); setLastClickedUnitIdx(null); }} 
-                            className="text-[11px] font-black text-gray-400 hover:text-red-400 px-3 py-1.5 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 transition-colors rounded-md flex items-center gap-1.5"
-                          >
-                            <X size={12} /> 닫기
-                          </button>
                         </div>
                       </div>
                       
-                      {/* 💡 레이아웃 쉬프트 방지: 옵션 버튼들을 항상 노출하고, 선택값이 없을 땐 비활성화(disabled) */}
+                      {/* 💡 한 행에 정렬된 큼직한 3개 기능 버튼 (쪽수고르기, 숙제취소, 닫기) */}
+                      <div className="flex gap-2 w-full pt-1">
+                        <button 
+                          onClick={() => { setIsMergedViewActive(true); setSelectedPages([]); }} 
+                          disabled={selectedUnits.length === 0}
+                          className="flex-1 py-2.5 bg-emerald-500/10 hover:bg-emerald-500/30 text-emerald-400 hover:text-white disabled:opacity-30 disabled:grayscale border border-emerald-500/20 text-[13px] md:text-[14px] font-black rounded-lg transition-colors flex items-center justify-center gap-1.5 shadow-md shrink-0"
+                        >
+                          <BookOpen size={15} /> 쪽수고르기
+                        </button>
+                        <button 
+                          onClick={() => handleQuickAddUnits('cancel')} 
+                          disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} 
+                          className="flex-1 py-2.5 bg-red-500/10 hover:bg-red-500/25 text-red-400 hover:text-white disabled:opacity-20 disabled:grayscale text-[13px] md:text-[14px] font-black rounded-lg border border-red-500/20 transition-all flex items-center justify-center gap-1.5 shadow-md shrink-0"
+                        >
+                          <X size={15} /> 숙제 취소
+                        </button>
+                        <button 
+                          onClick={() => { setActiveBook(null); setSelectedUnits([]); setLastClickedUnitIdx(null); }} 
+                          className="flex-1 py-2.5 bg-blue-500/10 hover:bg-blue-500/25 text-blue-400 hover:text-white border border-blue-500/20 hover:border-blue-400/40 transition-colors rounded-lg flex items-center justify-center gap-1.5 shadow-md text-[13px] md:text-[14px] font-black shrink-0"
+                        >
+                          <X size={15} /> 닫기
+                        </button>
+                      </div>
+
+                      {/* 💡 학원에서 공부 / 오답고치기 / 집에서 할 숙제 기본 버튼 (높이 상향) */}
                       <div className="flex flex-col gap-2 pb-2">
                         <div className="flex gap-2">
-                          <button onClick={() => handleQuickAddUnits('classwork')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-1.5 bg-emerald-600/90 hover:bg-emerald-500 disabled:opacity-20 disabled:grayscale text-white text-[11px] font-black rounded-lg transition-all shadow-lg border border-emerald-500/20">학원에서 공부</button>
-                          <button onClick={() => handleQuickAddUnits('wrong')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-1.5 bg-amber-600/90 hover:bg-amber-500 disabled:opacity-20 disabled:grayscale text-white text-[11px] font-black rounded-lg transition-all shadow-lg border border-amber-500/20">오답고치기</button>
-                          <button onClick={() => handleQuickAddUnits('homework')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-1.5 bg-blue-600/90 hover:bg-blue-500 disabled:opacity-20 disabled:grayscale text-white text-[11px] font-black rounded-lg transition-all shadow-lg border border-blue-500/20">집에서 할 숙제</button>
-                        </div>
-                        <div className="flex justify-end">
-                          <button onClick={() => handleQuickAddUnits('cancel')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="py-1 px-3 bg-red-500/10 text-red-400 hover:bg-red-500/20 disabled:opacity-20 disabled:grayscale font-black text-[10px] rounded border border-red-500/20 transition-colors">선택 단원 숙제 취소</button>
+                          <button onClick={() => handleQuickAddUnits('classwork')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-3 bg-emerald-600/90 hover:bg-emerald-500 disabled:opacity-20 disabled:grayscale text-white text-[14px] md:text-[15px] font-black rounded-lg transition-all shadow-lg border border-emerald-500/20">학원에서 공부</button>
+                          <button onClick={() => handleQuickAddUnits('wrong')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-3 bg-amber-600/90 hover:bg-amber-500 disabled:opacity-20 disabled:grayscale text-white text-[14px] md:text-[15px] font-black rounded-lg transition-all shadow-lg border border-amber-500/20">오답고치기</button>
+                          <button onClick={() => handleQuickAddUnits('homework')} disabled={selectedUnits.length === 0 || approvalStatus !== 'none'} className="flex-1 py-3 bg-blue-600/90 hover:bg-blue-500 disabled:opacity-20 disabled:grayscale text-white text-[14px] md:text-[15px] font-black rounded-lg transition-all shadow-lg border border-blue-500/20">집에서 할 숙제</button>
                         </div>
                       </div>
                     </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pb-24">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pb-24 flex-1 overflow-y-auto custom-scrollbar-v pr-1">
                       {units.map((u, i) => {
                         const isSelected = selectedUnits.some(s => s.unit === u.unit);
                         const unitStart = parseInt(u.start_page);
@@ -490,7 +614,7 @@ export default function TextbookSystem({
                           <button 
                             key={i} 
                             onClick={(e) => approvalStatus === 'none' && handleUnitToggle(e, u, i)}
-                            className={`w-full flex items-center justify-between px-3 py-2 bg-white/[0.05] border-2 rounded-lg transition-all transform active:scale-[0.98] group relative overflow-hidden ${
+                            className={`w-full flex items-center justify-between px-4 py-3.5 bg-white/[0.05] border-2 rounded-lg transition-all transform active:scale-[0.98] group relative overflow-hidden shrink-0 min-h-[56px] ${
                               isSelected 
                                 ? 'bg-blue-600/30 border-blue-500 shadow-[0_0_20px_rgba(37,99,235,0.15)]' 
                                 : 'border-white/10 hover:border-emerald-500/50'
@@ -511,7 +635,7 @@ export default function TextbookSystem({
                             </div>
 
                             <div className="flex items-center gap-2 shrink-0">
-                              <span className={`text-[10px] font-black tabular-nums px-1.5 py-0.5 rounded transition-colors ${
+                              <span className={`text-[13px] md:text-[14px] font-black tabular-nums px-2 py-0.5 rounded transition-colors ${
                                 isSelected ? 'bg-blue-500 text-white' : 'bg-emerald-500/10 text-emerald-400'
                               }`}>p{u.start_page}~{u.end_page}</span>
                             </div>
@@ -521,14 +645,14 @@ export default function TextbookSystem({
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-6 flex-1 flex flex-col relative">
+                  <div className="space-y-6 flex flex-col relative h-auto">
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 border-b border-white/5 shrink-0 -mx-2 px-2">
                       {units.map((u, i) => {
                         const isActive = activeUnit?.unit === u.unit; const isSelected = selectedUnits.some(s => s.unit === u.unit);
                         return (<button key={i} onClick={(e) => approvalStatus === 'none' && handleUnitToggle(e, u, i)} className={`relative px-4 py-2 rounded-[4px] text-[11px] font-black whitespace-nowrap transition-all border ${isActive || isSelected ? 'bg-blue-600 border-blue-400 text-white shadow-lg shadow-blue-900/20' : 'bg-white/5 border-white/10 text-gray-500 hover:text-white hover:bg-white/10'}`}>{u.unit}{selectedPages.some(p => p >= parseInt(u.start_page) && p <= parseInt(u.end_page)) && !isActive && !isSelected && <div className="absolute top-1 right-1 w-1.5 h-1.5 bg-emerald-500 rounded-full shadow-[0_0_5px_rgba(16,185,129,0.8)]" />}</button>);
                       })}
                     </div>
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between shrink-0">
                       <div className="flex items-center gap-3">
                         <button onClick={() => { setActiveUnit(null); setIsMergedViewActive(false); setSelectedUnits([]); setLastClickedUnitIdx(null); setSelectedPages([]); }} className="p-1.5 bg-white/10 rounded-full text-white hover:bg-emerald-500 transition-all shadow-lg border border-white/10"><ArrowLeft size={14}/></button>
                         <div className="text-left"><h3 className="text-[15px] font-black text-white">{selectedUnits.length > 1 ? (() => { const sorted = [...selectedUnits].sort((a,b) => parseInt(a.start_page) - parseInt(b.start_page)); return `${sorted[0].unit.match(/\d+/)?.[0]}~${sorted[sorted.length-1].unit.match(/\d+/)?.[0]}${sorted[0].unit.replace(/\d+/g, '').trim()}`; })() : (activeUnit?.unit || selectedUnits[0]?.unit)}</h3><p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{activeBook.title}</p></div>
@@ -547,7 +671,7 @@ export default function TextbookSystem({
                         });
                       })()}
                     </div>
-                    <div className="pt-4 border-t border-white/10 flex flex-col gap-3 mt-auto">
+                    <div className="pt-4 border-t border-white/10 flex flex-col gap-3 mt-4">
                       <div className="p-3 bg-white/10 rounded-md border border-white/10">
                         <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1 block">Selected Pages</span>
                         <p className="text-[15px] font-black text-white truncate">{selectedPages.length > 0 ? (() => { const ranges: string[] = []; let s = selectedPages[0]; for (let i = 1; i <= selectedPages.length; i++) { if (selectedPages[i] !== selectedPages[i - 1] + 1) { const e = selectedPages[i - 1]; ranges.push(s === e ? `${s}` : `${s}~${e}`); s = selectedPages[i]; } } return `p${ranges.join(', p')}`; })() : '페이지를 선택하세요'}</p>
@@ -567,9 +691,100 @@ export default function TextbookSystem({
                 )}
               </div>
             </motion.div>
-          )}
-        </AnimatePresence>
+          </>
+        )}
+      </AnimatePresence>
       </div>
+
+      {/* 💡 교재 추가 모달 */}
+      <AnimatePresence>
+        {showAddBookModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            {/* 배경 블러 어둡게 */}
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowAddBookModal(false)}
+              className="absolute inset-0 bg-black/60 backdrop-blur-md"
+            />
+            {/* 모달 박스 */}
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.95, opacity: 0, y: 10 }}
+              className="bg-[#0f0f0f] border border-white/10 w-full max-w-md rounded-2xl shadow-2xl overflow-hidden relative z-10 flex flex-col max-h-[80vh]"
+            >
+              {/* 헤더 */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-white/5 bg-white/[0.02]">
+                <h3 className="text-[14px] md:text-[16px] font-black text-emerald-400">📚 추가할 교재 선택</h3>
+                <button 
+                  onClick={() => setShowAddBookModal(false)} 
+                  className="p-1.5 hover:bg-white/10 rounded-full text-white/50 hover:text-white transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* 🏷️ 가로 스크롤 대분류 칩 */}
+              <div className="px-4 py-2.5 bg-white/[0.01] border-b border-white/5 shrink-0">
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-1">
+                  {bookCategories.map((cat) => {
+                    const isActive = selectedCategory === cat;
+                    return (
+                      <button
+                        key={cat}
+                        onClick={() => setSelectedCategory(cat)}
+                        className={`px-3 py-1.5 rounded-[4px] text-[11px] font-black whitespace-nowrap transition-all border shrink-0 ${
+                          isActive
+                            ? 'bg-emerald-600 border-emerald-400 text-white shadow-md'
+                            : 'bg-white/5 border-white/10 text-white/60 hover:text-white hover:bg-white/10'
+                        }`}
+                      >
+                        {cat}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* 리스트 본문 */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-2 custom-scrollbar-v text-left">
+                {filteredUnassignedBooks.length === 0 ? (
+                  <div className="text-center py-8 text-white/40 text-[12px] font-bold">
+                    {selectedCategory !== '전체' ? '분류 결과와 일치하는 교재가 없습니다.' : '추가할 수 있는 교재가 없습니다.'}
+                  </div>
+                ) : (
+                  filteredUnassignedBooks.map((book) => (
+                    <button
+                      key={book.bookcode}
+                      onClick={async () => {
+                        const nextBooks = [...(student.assigned_books || []), book.bookcode];
+                        if (onUpdateAssignedBooks) {
+                          await onUpdateAssignedBooks(nextBooks);
+                        }
+                        setShowAddBookModal(false);
+                      }}
+                      className="w-full flex items-center justify-between p-3.5 bg-white/5 border border-white/10 rounded-xl hover:bg-emerald-500/10 hover:border-emerald-500/50 transition-all text-left group"
+                    >
+                      <div className="flex items-center gap-3">
+                        <BookOpen size={16} className="text-emerald-500 group-hover:scale-110 transition-transform" />
+                        <div>
+                          <span className="text-[13px] md:text-[14px] font-black text-white block">{book.title}</span>
+                          <span className="text-[10px] text-white/40 font-bold block mt-0.5">{book.grade || '공통'}</span>
+                        </div>
+                      </div>
+                      <span className="text-[10px] font-black bg-emerald-500/20 text-emerald-400 px-2 py-1 rounded-[4px] opacity-0 group-hover:opacity-100 transition-opacity">
+                        즉시 추가
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

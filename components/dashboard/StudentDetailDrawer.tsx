@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck, ClipboardCheck, TrendingUp } from 'lucide-react';
 import { Student, TextbookOption } from '@/types/dashboard';
@@ -32,8 +32,32 @@ export default function StudentDetailDrawer({
   const [localManagementNotes, setLocalManagementNotes] = useState(student.management_notes || ''); 
   const [localRecentMission, setLocalRecentMission] = useState(student.recent_mission || ''); // 💡 추가
   const [bookSearch, setBookSearch] = useState('');
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  // 💡 교재 완료 입력 모달 상태 추가
+  const [doneModalOpen, setDoneModalOpen] = useState(false);
+  const [doneBookCode, setDoneBookCode] = useState<string | null>(null);
+  const [doneBookTitle, setDoneBookTitle] = useState('');
+  const [doneStartGrade, setDoneStartGrade] = useState('');
+  const [doneStartMonth, setDoneStartMonth] = useState('');
+  const [doneEndGrade, setDoneEndGrade] = useState('');
+  const [doneEndMonth, setDoneEndMonth] = useState('');
+  const [doneCourse, setDoneCourse] = useState('C');
+  const [hasStartInfo, setHasStartInfo] = useState(false);
+
+  // 💡 드롭다운 외부 클릭 시 닫기
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setIsDropdownOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   // 💡 [추가] ESC 키로 닫기 기능
   useEffect(() => {
@@ -41,12 +65,13 @@ export default function StudentDetailDrawer({
       if (e.key === 'Escape') {
         // 만약 파기 확인 모달이 떠 있다면 그것부터 닫고, 아니면 전체 창을 닫음
         if (showDeleteConfirm) setShowDeleteConfirm(false);
+        else if (doneModalOpen) setDoneModalOpen(false);
         else onClose();
       }
     };
     window.addEventListener('keydown', handleEsc);
     return () => window.removeEventListener('keydown', handleEsc);
-  }, [onClose, showDeleteConfirm]);
+  }, [onClose, showDeleteConfirm, doneModalOpen]);
 
   useEffect(() => {
     setLocalSchedules(student.day_schedules || {});
@@ -106,11 +131,24 @@ export default function StudentDetailDrawer({
     if (isSelected) {
       const book = availableTextbooks.find(b => b.bookcode === bookcode);
       if (!confirm(`[${book?.title || bookcode}] 교재 배정을 취소하시겠습니까?`)) return;
+
+      const newBooks = student.assigned_books.filter(b => b !== bookcode);
+      onUpdateInfo(student.id, 'assigned_books', newBooks);
+
+      const newCourses = { ...localBookCourses };
+      delete newCourses[bookcode];
+      setLocalBookCourses(newCourses);
+      onUpdateInfo(student.id, 'book_courses', newCourses);
+    } else {
+      const newBooks = [...student.assigned_books, bookcode];
+      onUpdateInfo(student.id, 'assigned_books', newBooks);
+
+      const currentMonth = new Date().getMonth() + 1;
+      const startInfo = `${localCourse}-start-${localGrade || student.grade || '미지정'}_${currentMonth}월`;
+      const newCourses = { ...localBookCourses, [bookcode]: startInfo };
+      setLocalBookCourses(newCourses);
+      onUpdateInfo(student.id, 'book_courses', newCourses);
     }
-    const newBooks = isSelected 
-      ? student.assigned_books.filter(b => b !== bookcode)
-      : [...student.assigned_books, bookcode];
-    onUpdateInfo(student.id, 'assigned_books', newBooks);
   };
 
   return (
@@ -175,12 +213,16 @@ export default function StudentDetailDrawer({
               <div className="flex flex-wrap gap-1.5">
                 {student.assigned_books.filter(code => {
                   const rawCourseValue = localBookCourses[code] || localCourse;
-                  return !!code && !String(rawCourseValue).endsWith('-done'); // 💡 완료된 교재는 위쪽 목록에서 제외
+                  return !!code && !String(rawCourseValue).includes('-done'); // 💡 완료된 교재는 위쪽 목록에서 제외
                 }).map((code, idx) => {
                   const book = availableTextbooks.find(b => b.bookcode === code);
                   const rawCourseValue = localBookCourses[code] || localCourse;
-                  const isKeep = String(rawCourseValue).endsWith('-keep');
-                  const currentCourse = isKeep ? rawCourseValue.replace('-keep', '') : rawCourseValue;
+                  const isKeep = String(rawCourseValue).includes('-keep');
+                  let currentCourse = rawCourseValue;
+                  if (isKeep) currentCourse = currentCourse.replace('-keep', '');
+                  if (currentCourse.includes('-start-')) {
+                    currentCourse = currentCourse.split('-start-')[0]; // 시작 정보 떼어냄
+                  }
 
                   return (
                     <div key={`${code}-${idx}`} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${isKeep ? 'bg-amber-500/5 border-amber-500/20' : book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
@@ -191,7 +233,13 @@ export default function StudentDetailDrawer({
                       <select 
                         value={currentCourse}
                         onChange={(e) => {
-                          const newVal = isKeep ? `${e.target.value}-keep` : e.target.value;
+                          const courseCode = e.target.value;
+                          // 기존에 -start- 정보가 있다면 그것을 결합하여 유지
+                          let newVal = courseCode;
+                          if (rawCourseValue.includes('-start-')) {
+                            newVal = `${courseCode}-start-${rawCourseValue.split('-start-')[1]}`;
+                          }
+                          if (isKeep) newVal = `${newVal}-keep`;
                           const newCourses = { ...localBookCourses, [code]: newVal };
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
@@ -203,7 +251,9 @@ export default function StudentDetailDrawer({
                       
                       <button 
                         onClick={() => {
-                          const newVal = isKeep ? currentCourse : `${currentCourse}-keep`;
+                          let baseVal = rawCourseValue;
+                          if (isKeep) baseVal = baseVal.replace('-keep', '');
+                          const newVal = isKeep ? baseVal : `${baseVal}-keep`;
                           const newCourses = { ...localBookCourses, [code]: newVal };
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
@@ -216,10 +266,32 @@ export default function StudentDetailDrawer({
 
                       <button 
                         onClick={() => {
-                          const newVal = `${currentCourse}-done`;
-                          const newCourses = { ...localBookCourses, [code]: newVal };
-                          setLocalBookCourses(newCourses);
-                          onUpdateInfo(student.id, 'book_courses', newCourses);
+                          const book = availableTextbooks.find(b => b.bookcode === code);
+                          setDoneBookCode(code);
+                          setDoneBookTitle(book ? book.title : code);
+                          
+                          let parsedGrade = localGrade || student.grade || '';
+                          let parsedStartMonth = `${new Date().getMonth() + 1}월`;
+                          let hasStart = false;
+                          
+                          setDoneCourse(currentCourse);
+                          
+                          if (rawCourseValue.includes('-start-')) {
+                            const part = rawCourseValue.split('-start-')[1]; // "중2_2월"
+                            if (part.includes('_')) {
+                              const [g, m] = part.split('_');
+                              parsedGrade = g;
+                              parsedStartMonth = m;
+                              hasStart = true;
+                            }
+                          }
+                          
+                          setDoneStartGrade(parsedGrade);
+                          setDoneStartMonth(parsedStartMonth);
+                          setHasStartInfo(hasStart);
+                          setDoneEndGrade(localGrade || student.grade || '');
+                          setDoneEndMonth(`${new Date().getMonth() + 1}월`);
+                          setDoneModalOpen(true);
                         }}
                         className="text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all bg-white/5 text-gray-500 hover:bg-emerald-500/20 hover:text-emerald-500 border border-transparent"
                         title="교재 완료 처리 (Book History로 이동)"
@@ -235,44 +307,7 @@ export default function StudentDetailDrawer({
             </div>
           )}
 
-          {/* 💡 Book History (완료된 교재) 섹션 */}
-          {student.assigned_books.some(code => String(localBookCourses[code] || localCourse).endsWith('-done')) && (
-            <div className="flex flex-col gap-2 py-1 border-b border-white/5 mx-1 pb-3">
-              <label className="text-[9px] font-black text-emerald-500/60 uppercase tracking-widest px-1">Book History (완료된 교재)</label>
-              <div className="flex flex-wrap gap-1.5">
-                {student.assigned_books.filter(code => String(localBookCourses[code] || localCourse).endsWith('-done')).map((code, idx) => {
-                  const book = availableTextbooks.find(b => b.bookcode === code);
-                  const rawCourseValue = localBookCourses[code] || localCourse;
-                  const currentCourse = String(rawCourseValue).replace('-done', '');
 
-                  return (
-                    <div key={`done-${code}-${idx}`} className="flex items-center gap-1.5 px-2 py-1 rounded-[2px] bg-emerald-500/5 border border-emerald-500/20 opacity-80 hover:opacity-100 transition-opacity">
-                      <span className="text-[9px] font-black px-1.5 text-emerald-500/80">
-                        {book ? book.title : `(${code})`}
-                      </span>
-                      <span className="bg-emerald-500/20 text-emerald-500 text-[9px] font-black rounded-[2px] px-1 py-0.5">
-                        {currentCourse}
-                      </span>
-                      
-                      <button 
-                        onClick={() => {
-                          const newCourses = { ...localBookCourses, [code]: currentCourse };
-                          setLocalBookCourses(newCourses);
-                          onUpdateInfo(student.id, 'book_courses', newCourses);
-                        }}
-                        className="text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all bg-black/20 text-gray-500 hover:bg-blue-500/20 hover:text-blue-400 ml-1"
-                        title="완료 해제 (다시 진행 중으로 복구)"
-                      >
-                        복구
-                      </button>
-
-                      <button onClick={() => toggleBookSelection(code)} className="text-gray-600 hover:text-red-500 transition-colors ml-1" title="완전 삭제"><X size={10} strokeWidth={3} /></button>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
 
           <div className="grid grid-cols-2 gap-2">
             <div className="relative group">
@@ -346,32 +381,46 @@ export default function StudentDetailDrawer({
             <button onClick={onRefreshBooks} className="text-gray-500 hover:text-white transition-all"><RefreshCw size={12} className={isRefreshingBooks ? 'animate-spin' : ''} /></button>
           </div>
 
-          <div className="bg-white/5 border border-white/5 rounded-[4px] flex flex-col overflow-hidden h-[300px] shadow-inner">
-            <div className="p-3 border-b border-white/5 bg-black/20 flex items-center gap-2">
+          <div ref={dropdownRef} className="relative">
+            <div className="bg-white/5 border border-white/5 rounded-[4px] p-3 bg-black/20 flex items-center gap-2 cursor-text" onClick={() => setIsDropdownOpen(true)}>
               <Search size={14} className="text-gray-500" />
-              <input type="text" placeholder="Search textbooks..." value={bookSearch} onChange={(e) => setBookSearch(e.target.value)}
-                className="bg-transparent border-none text-[11px] text-white outline-none w-full" />
+              <input 
+                type="text" 
+                placeholder="Search and add textbooks..." 
+                value={bookSearch} 
+                onChange={(e) => {
+                  setBookSearch(e.target.value);
+                  setIsDropdownOpen(true);
+                }}
+                onFocus={() => setIsDropdownOpen(true)}
+                className="bg-transparent border-none text-[11px] text-white outline-none w-full placeholder:text-gray-600" 
+              />
             </div>
-            <div className="flex-1 overflow-y-auto p-2 custom-scrollbar-v space-y-1">
-              {filteredBooks.filter(b => !!b.bookcode).map((book) => {
-                // 💡 더욱 유연한 선택 상태 판별 (이전 코드와 새 코드가 섞여 있어도 매칭되도록)
-                const isSelected = (student.assigned_books || []).some(code => 
-                  code === book.bookcode || 
-                  book.bookcode.toLowerCase().startsWith(code.toLowerCase()) ||
-                  code.toLowerCase().startsWith(book.bookcode.toLowerCase())
-                );
-                return (
-                  <div key={book.bookcode} onClick={() => toggleBookSelection(book.bookcode)}
-                    className={`flex items-center justify-between p-2.5 rounded-[2px] cursor-pointer transition-all border ${isSelected ? 'bg-blue-600/10 border-blue-500/30' : 'hover:bg-white/5 border-transparent'}`}>
-                    <div>
-                      <h4 className={`text-[11px] font-bold ${isSelected ? 'text-blue-400' : 'text-gray-300'}`}>{book.title}</h4>
-                      <p className="text-[9px] text-gray-500">{book.grade} · {book.ePeriod}</p>
-                    </div>
-                    {isSelected && <div className="bg-blue-500 text-white p-0.5 rounded-full"><Check size={10} strokeWidth={4} /></div>}
-                  </div>
-                );
-              })}
-            </div>
+            
+            {isDropdownOpen && (
+              <div className="absolute left-0 right-0 mt-1.5 bg-[#121212] border border-white/10 rounded-[4px] shadow-2xl max-h-[220px] overflow-y-auto p-2 z-[60] custom-scrollbar-v space-y-1">
+                {filteredBooks.filter(b => !!b.bookcode).length === 0 ? (
+                  <div className="text-[10px] text-gray-500 text-center py-4">검색 결과가 없습니다.</div>
+                ) : (
+                  filteredBooks.filter(b => !!b.bookcode).map((book) => {
+                    const isSelected = (student.assigned_books || []).includes(book.bookcode);
+                    return (
+                      <div 
+                        key={book.bookcode} 
+                        onClick={() => toggleBookSelection(book.bookcode)}
+                        className={`flex items-center justify-between p-2 rounded-[2px] cursor-pointer transition-all border ${isSelected ? 'bg-blue-600/15 border-blue-500/30' : 'hover:bg-white/5 border-transparent'}`}
+                      >
+                        <div>
+                          <h4 className={`text-[10px] font-bold ${isSelected ? 'text-blue-400' : 'text-gray-300'}`}>{book.title}</h4>
+                          <p className="text-[8px] text-gray-500">{book.grade} · {book.ePeriod}</p>
+                        </div>
+                        {isSelected && <div className="bg-blue-500 text-white p-0.5 rounded-full"><Check size={8} strokeWidth={4} /></div>}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            )}
           </div>
         </section>
 
@@ -482,6 +531,101 @@ export default function StudentDetailDrawer({
                 <button onClick={async () => { onUpdateInfo(student.id, 'PERMANENT_DELETE', true); setShowDeleteConfirm(false); onClose(); }}
                   className="flex-1 py-3 bg-red-600 text-white rounded-[2px] text-[10px] font-black uppercase shadow-lg shadow-red-600/20"
                 >파기 확인</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* 💡 교재 완료 이력 입력 모달 */}
+      <AnimatePresence>
+        {doneModalOpen && doneBookCode && (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ scale: 0.95, opacity: 0 }} 
+              animate={{ scale: 1, opacity: 1 }} 
+              exit={{ scale: 0.95, opacity: 0 }}
+              className="bg-[#121212] border border-white/10 rounded-[6px] p-6 w-full max-w-sm shadow-2xl space-y-4 text-left"
+            >
+              <div className="flex items-center justify-between pb-2 border-b border-white/5">
+                <h4 className="text-[12px] font-black text-emerald-400 uppercase tracking-wider">교재 완료 처리</h4>
+                <button onClick={() => setDoneModalOpen(false)} className="text-gray-400 hover:text-white"><X size={16} /></button>
+              </div>
+              
+              <div className="space-y-1">
+                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">교재명</label>
+                <div className="text-[11px] font-bold text-gray-300">{doneBookTitle}</div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">시작 학년</label>
+                  <input 
+                    type="text" 
+                    value={doneStartGrade} 
+                    onChange={(e) => setDoneStartGrade(e.target.value)} 
+                    placeholder="예: 중2"
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">시작 월</label>
+                  <select 
+                    value={doneStartMonth} 
+                    onChange={(e) => setDoneStartMonth(e.target.value)} 
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-2 text-xs font-bold text-white outline-none cursor-pointer"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => `${i + 1}월`).map(m => (
+                      <option key={m} value={m} className="bg-[#121212]">{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">완료 학년</label>
+                  <input 
+                    type="text" 
+                    value={doneEndGrade} 
+                    onChange={(e) => setDoneEndGrade(e.target.value)} 
+                    placeholder="예: 중2"
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">완료 월</label>
+                  <select 
+                    value={doneEndMonth} 
+                    onChange={(e) => setDoneEndMonth(e.target.value)} 
+                    className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-2 text-xs font-bold text-white outline-none cursor-pointer"
+                  >
+                    {Array.from({ length: 12 }, (_, i) => `${i + 1}월`).map(m => (
+                      <option key={m} value={m} className="bg-[#121212]">{m}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-white/5 flex gap-2 justify-end">
+                <button 
+                  onClick={() => setDoneModalOpen(false)}
+                  className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-[2px] text-[10px] font-black uppercase tracking-wider transition-all"
+                >
+                  취소
+                </button>
+                <button 
+                  onClick={() => {
+                    const newVal = `${doneCourse}-done-${doneStartGrade}_${doneStartMonth}-${doneEndGrade}_${doneEndMonth}`;
+                    const newCourses = { ...localBookCourses, [doneBookCode]: newVal };
+                    setLocalBookCourses(newCourses);
+                    onUpdateInfo(student.id, 'book_courses', newCourses);
+                    setDoneModalOpen(false);
+                  }}
+                  className="px-4 py-2 bg-emerald-500/10 border border-emerald-500/20 text-emerald-500 hover:bg-emerald-500 hover:text-white rounded-[2px] text-[10px] font-black uppercase tracking-wider transition-all"
+                >
+                  완료 저장
+                </button>
               </div>
             </motion.div>
           </div>
