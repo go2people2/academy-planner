@@ -311,17 +311,17 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
           />
         </div>
 
-        {/* 💡 최근 제출 오답 내역 추가 (토글 접기 기능 포함) */}
+        {/* 💡 최근 제출 오답 내역 추가 (토글 접기 기능 포함 및 가독성 개선) */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4 text-left">
           <button 
             type="button"
             onClick={() => setShowHistory(!showHistory)}
             className="w-full flex justify-between items-center px-1 font-bold text-slate-500 hover:text-slate-700 transition-colors outline-none cursor-pointer"
           >
-            <span className="text-sm font-black text-slate-400 italic flex items-center gap-1.5">
+            <span className="text-[15px] font-extrabold flex items-center gap-2" style={themeStyle.text}>
               {showHistory ? "📁 최근 제출한 오답 내역 접기" : "📂 최근 제출한 오답 내역 보기"}
             </span>
-            <span className="text-[10px] font-mono bg-slate-100 text-slate-400 px-2 py-0.5 rounded-full">
+            <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full font-mono transition-colors" style={{ ...themeStyle.lightBg, ...themeStyle.text }}>
               {submissions.length}건
             </span>
           </button>
@@ -350,17 +350,17 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
                             minute: '2-digit'
                           })}
                         </span>
-                        <span className="bg-slate-200/60 text-slate-500 px-2 py-0.5 rounded-full">
+                        <span className="bg-slate-200 text-slate-600 px-2.5 py-0.5 rounded-md text-[11px] font-black">
                           {sub.problem_numbers?.length || 0}문제
                         </span>
                       </div>
-                      <div className="font-extrabold text-[13px] text-slate-800 leading-snug mb-0.5 truncate">{sub.book_name}</div>
-                      <div className="text-[11px] font-bold text-slate-400 truncate mb-2">{sub.chapter_name}</div>
+                      <div className="font-black text-[14px] text-slate-800 leading-snug mb-0.5 truncate">{sub.book_name}</div>
+                      <div className="text-[12px] font-bold text-slate-500 truncate mb-2">{sub.chapter_name}</div>
                       <div className="flex flex-wrap gap-1.5 mb-1">
                         {sub.problem_numbers?.map((num: string) => (
                           <span 
                             key={num} 
-                            className="px-2 py-0.5 bg-blue-50/50 text-blue-500 border border-blue-100 font-black rounded-md text-[10px] leading-none"
+                            className="px-2.5 py-1 bg-blue-50/70 text-blue-600 border border-blue-100 font-black rounded-lg text-[11px] leading-none"
                           >
                             {num}번
                           </span>
