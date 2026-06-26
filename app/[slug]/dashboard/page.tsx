@@ -17,6 +17,7 @@ import TeacherTasks from '@/components/dashboard/TeacherTasks';
 import ApprovalModal from '@/components/dashboard/ApprovalModal';
 import ProblemErrorManager from '@/components/dashboard/ProblemErrorManager';
 import WrongAnswerManager from '@/components/dashboard/WrongAnswerManager';
+import ExamPaperManager from '@/components/dashboard/exam/ExamPaperManager';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
@@ -1566,7 +1567,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
             {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} noticeDrafts={noticeDrafts} onNoticeDraftChange={handleNoticeDraftChange} />}
             {viewMode === 'teacherTask' && <TeacherTasks academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} onRefreshStudents={fetchAllData} />}
             {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}
-            {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy.id} currentUser={currentUser} />}
+            {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy?.id || ''} currentUser={currentUser} />}
+             {viewMode === 'exams' && <ExamPaperManager academyId={academy?.id || ''} />}
           </div>
         )}
       </main>

@@ -186,26 +186,34 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       const target = document.activeElement as HTMLElement;
       const isInput = ['INPUT', 'TEXTAREA'].includes(target.tagName);
       
-      // Ctrl+Z / Cmd+Z (Undo)
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key?.toLowerCase() === 'z') {
-        if (!isInput) {
+      // Undo / Redo 단축키 감지 (Cmd+Z, Cmd+Y, Cmd+Shift+Z)
+      const isCmdOrCtrl = e.metaKey || e.ctrlKey;
+      if (isCmdOrCtrl && !e.altKey) {
+        const keyLower = e.key.toLowerCase();
+        
+        // 1) Undo: Cmd+Z (Shift는 안 눌린 상태)
+        if (keyLower === 'z' && !e.shiftKey) {
+          if (isInput) {
+            // 인풋 편집 중일 때는 브라우저 기본 Undo가 동작해야 하므로 통과
+            return;
+          }
           e.preventDefault();
-          if (e.repeat) return; // 💡 키를 꾹 누르고 있어 반복 발생하는 중복 이벤트 차단
-          if (e.shiftKey) {
-            handleRedo?.();
-          } else {
-            handleUndo?.();
+          if (handleUndo) {
+            handleUndo();
           }
           return;
         }
-      }
 
-      // Ctrl+Y / Cmd+Y (Redo)
-      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key?.toLowerCase() === 'y') {
-        if (!isInput) {
+        // 2) Redo: Cmd+Y 또는 Cmd+Shift+Z
+        if (keyLower === 'y' || (keyLower === 'z' && e.shiftKey)) {
+          if (isInput) {
+            // 인풋 편집 중일 때는 통과
+            return;
+          }
           e.preventDefault();
-          if (e.repeat) return; // 💡 키를 꾹 누르고 있어 반복 발생하는 중복 이벤트 차단
-          handleRedo?.();
+          if (handleRedo) {
+            handleRedo();
+          }
           return;
         }
       }

@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
   ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck, Zap, AlertTriangle,
-  BookOpen
+  BookOpen, FileText
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
@@ -171,6 +171,7 @@ export default function Sidebar({
           <SidebarLink icon={<ClipboardCheck size={14} />} label="업무 및 보강 관리" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<AlertTriangle size={14} />} label="교재 오류 관리" active={viewMode === 'problemErrors'} onClick={() => { setViewMode('problemErrors'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Activity size={14} />} label="Progress" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} />
+          <SidebarLink icon={<FileText size={14} className="text-blue-400" />} label="기출문제 관리" active={viewMode === 'exams'} onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<BookOpen size={14} className="text-emerald-400" />} label="오답노트 관리" active={viewMode === 'wrongAnswersAdmin'} onClick={() => { setViewMode('wrongAnswersAdmin'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<UserCog size={14} />} label="학생정보수정" active={viewMode === 'studentEdit'} onClick={() => { setViewMode('studentEdit'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<ArrowLeftRight size={14} />} label="이번 달 변동 사항" active={viewMode === 'monthlyChanges'} onClick={() => { setViewMode('monthlyChanges'); setSelectedFilter('All'); }} />

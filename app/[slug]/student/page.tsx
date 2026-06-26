@@ -804,7 +804,7 @@ export default function StudentPortal() {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-[#050505] text-gray-500">
         <Loader2 className="animate-spin mb-4" size={32} />
-        <p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Student Data...</p>
+        <p className="text-[10px] font-black uppercase tracking-[0.4em]">학생 정보를 불러오는 중...</p>
       </div>
     );
   }

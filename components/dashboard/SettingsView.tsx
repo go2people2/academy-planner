@@ -65,7 +65,8 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
     homepage_title: "", // 💡 학원 홈페이지 버튼 라벨
     naver_cafe_url: "", // 💡 네이버 카페
     naver_cafe_title: "", // 💡 네이버 카페 버튼 라벨
-    textbook_categories: [] as string[] // 💡 교재 카테고리 대분류 추가
+    textbook_categories: [] as string[], // 💡 교재 카테고리 대분류 추가
+    location: "" // 💡 학원 위치(지역) 추가
   });
 
   // 데이터 로드 여부 추적
@@ -91,7 +92,8 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
           homepage_title: dbSettings.homepage_title || "홈페이지",
           naver_cafe_url: dbSettings.naver_cafe_url || "",
           naver_cafe_title: dbSettings.naver_cafe_title || "네이버 카페",
-          textbook_categories: dbSettings.textbook_categories || DEFAULT_CATEGORIES
+          textbook_categories: dbSettings.textbook_categories || DEFAULT_CATEGORIES,
+          location: dbSettings.location || "" // 💡 학원 위치 동기화
         });
       }
     }

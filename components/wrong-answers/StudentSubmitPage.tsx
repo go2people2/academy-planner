@@ -243,7 +243,7 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
           <h2 className="text-xl font-black" style={themeStyle.text}>
             {studentData.name} <span className="text-sm font-bold text-slate-400 ml-2">({studentData.grade})</span>
           </h2>
-          <p className="text-xs font-bold text-slate-400 tracking-wider">ONLINE STUDY NOTE</p>
+          <p className="text-xs font-bold text-slate-400 tracking-wider">온라인 오답노트</p>
         </div>
         <div className="flex gap-2">
           <button onClick={() => setShowChangePinModal(true)} className="p-3 rounded-2xl transition-colors hover:brightness-95" style={themeStyle.lightBg} title="PIN 변경">
@@ -255,7 +255,7 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
       {/* 교재/단원 선택 */}
       <div className="max-w-md mx-auto space-y-5">
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-3">
-          <h3 className="text-sm font-black text-slate-400 px-1 italic">Step 1. 교재 선택</h3>
+          <h3 className="text-sm font-black text-slate-400 px-1 italic">1단계. 교재 선택</h3>
           <select 
             value={bookName} 
             onChange={e => setBookName(e.target.value)} 
@@ -280,7 +280,7 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
         {/* 문제 번호 선택 */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100">
           <div className="flex justify-between items-center mb-6 px-1">
-            <h3 className="text-sm font-black text-slate-400 italic font-mono uppercase tracking-tighter">Step 2. 번호 선택</h3>
+            <h3 className="text-sm font-black text-slate-400 italic font-mono uppercase tracking-tighter">2단계. 번호 선택</h3>
             <span className="text-xs font-black px-3 py-1 rounded-full text-white" style={themeStyle.button}>
               {selectedNumbers.length}개 선택
             </span>
@@ -299,18 +299,6 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
           </div>
         </div>
 
-        {/* 메모 */}
-        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-3 font-bold">
-          <h3 className="text-sm font-black text-slate-400 px-1 italic">Step 3. 메모</h3>
-          <textarea 
-            placeholder="선생님께 남길 메모 (선택)" 
-            value={memo} 
-            onChange={e => setMemo(e.target.value)} 
-            className={`w-full p-4 bg-slate-50 border-none rounded-2xl text-slate-700 h-24 outline-none focus:ring-2 transition-all ${theme.ring}`} 
-            style={themeStyle.ring} 
-          />
-        </div>
-
         {/* 💡 최근 제출 오답 내역 추가 (토글 접기 기능 포함 및 가독성 개선) */}
         <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-4 text-left">
           <button 
@@ -318,7 +306,7 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
             onClick={() => setShowHistory(!showHistory)}
             className="w-full flex justify-between items-center px-1 font-bold text-slate-500 hover:text-slate-700 transition-colors outline-none cursor-pointer"
           >
-            <span className="text-[15px] font-extrabold flex items-center gap-2" style={themeStyle.text}>
+            <span className="text-[15px] font-extrabold flex items-center gap-2" style={{ color: '#0f766e' }}>
               {showHistory ? "📁 최근 제출한 오답 내역 접기" : "📂 최근 제출한 오답 내역 보기"}
             </span>
             <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full font-mono transition-colors" style={{ ...themeStyle.lightBg, ...themeStyle.text }}>
@@ -377,6 +365,18 @@ export default function StudentSubmitPage({ studentData, handleLogout, theme, ac
               )}
             </div>
           )}
+        </div>
+
+        {/* 메모 */}
+        <div className="bg-white p-6 rounded-[2rem] shadow-sm border border-slate-100 space-y-3 font-bold">
+          <h3 className="text-sm font-black text-slate-400 px-1 italic">3단계. 메모</h3>
+          <textarea 
+            placeholder="선생님께 남길 메모 (선택)" 
+            value={memo} 
+            onChange={e => setMemo(e.target.value)} 
+            className={`w-full p-4 bg-slate-50 border-none rounded-2xl text-slate-700 h-24 outline-none focus:ring-2 transition-all ${theme.ring}`} 
+            style={themeStyle.ring} 
+          />
         </div>
       </div>
 

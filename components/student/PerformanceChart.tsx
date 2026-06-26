@@ -73,7 +73,7 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
     <div className="bg-[#121212] border border-white/5 p-10 rounded-[4px] space-y-8 shadow-inner text-left mt-8">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 pb-3 gap-3">
         <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
-          <TrendingUp size={16} className="text-blue-500" /> Performance Trend
+          <TrendingUp size={16} className="text-blue-500" /> 성적 변화 추이
         </h4>
         <div className="flex items-center gap-4 text-[9px] font-bold text-gray-400">
           <div className="flex items-center gap-1.5">
@@ -128,9 +128,9 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
                     initial={{ height: 0 }} 
                     animate={{ height: `${Math.min(100, Math.max(0, data.percentage))}%` }} 
                     transition={{ delay: i * 0.05, duration: 1, ease: [0.33, 1, 0.68, 1] }} 
-                    className={`w-full rounded-t-[1px] opacity-60 group-hover:opacity-100 transition-opacity ${
-                      data.percentage >= 80 ? 'bg-amber-500 shadow-[0_0_20px_rgba(245,158,11,0.5)]' : 
-                      data.percentage >= 60 ? 'bg-amber-600/80' : 'bg-red-500/80'
+                    className={`w-full rounded-t-[1px] opacity-[0.85] group-hover:opacity-100 transition-opacity ${
+                      data.percentage >= 80 ? 'bg-amber-400 shadow-[0_0_20px_rgba(245,158,11,0.5)]' : 
+                      data.percentage >= 60 ? 'bg-amber-500' : 'bg-red-500'
                     }`} 
                   />
                 ) : (
@@ -139,9 +139,9 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
                       initial={{ height: 0 }} 
                       animate={{ height: `${Math.min(100, Math.max(0, data.percentage))}%` }} 
                       transition={{ delay: i * 0.05, duration: 1, ease: [0.33, 1, 0.68, 1] }} 
-                      className={`w-full rounded-t-[1px] opacity-60 group-hover:opacity-100 transition-opacity ${
-                        data.percentage >= 80 ? 'bg-pink-500 shadow-[0_0_20px_rgba(236,72,153,0.5)]' : 
-                        data.percentage >= 60 ? 'bg-pink-600/80' : 'bg-red-500/80'
+                      className={`w-full rounded-t-[1px] opacity-[0.85] group-hover:opacity-100 transition-opacity ${
+                        data.percentage >= 80 ? 'bg-pink-400 shadow-[0_0_20px_rgba(236,72,153,0.5)]' : 
+                        data.percentage >= 60 ? 'bg-pink-500' : 'bg-red-500'
                       }`} 
                     />
                   ) : (
@@ -152,12 +152,12 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
                           <motion.div
                             key={idx}
                             initial={{ scaleY: 0, opacity: 0 }}
-                            animate={{ scaleY: 1, opacity: isLightOn ? 0.7 : 0.2 }}
-                            whileHover={{ opacity: isLightOn ? 1.0 : 0.3 }}
+                            animate={{ scaleY: 1, opacity: isLightOn ? 0.9 : 0.25 }}
+                            whileHover={{ opacity: isLightOn ? 1.0 : 0.35 }}
                             transition={{ delay: i * 0.05 + idx * 0.03, duration: 0.3 }}
                             className={`w-full flex-1 rounded-[1px] transition-all ${
                               isLightOn 
-                                ? (data.percentage >= 80 ? 'bg-pink-500 shadow-[0_0_8px_rgba(236,72,153,0.4)]' : data.percentage >= 60 ? 'bg-pink-600/80' : 'bg-red-500/80')
+                                ? (data.percentage >= 80 ? 'bg-pink-400 shadow-[0_0_8px_rgba(236,72,153,0.4)]' : data.percentage >= 60 ? 'bg-pink-500' : 'bg-red-500')
                                 : 'bg-white/10'
                             }`}
                           />

@@ -61,7 +61,7 @@ export function useTodaySheetClipboard({
         else if (col.id === 'date') val = selectedDate;
         else if (col.id === 'review') val = st.lastSession?.homework_text || '';
         else if (col.id === 'mission') val = st.recent_mission || '';
-        else val = session[mapColumnToField(col.id)] || '';
+        else val = session[mapColumnToProp(col.id)] || '';
         
         const sVal = String(val || '');
         rowData.push((sVal.includes('\n') || sVal.includes('\t') || sVal.includes('"')) ? `"${sVal.replace(/"/g, '""')}"` : sVal);
@@ -180,7 +180,7 @@ export function useTodaySheetClipboard({
         else if (col.id === 'date') val = '';
         else if (col.id === 'review') val = st.lastSession?.homework_text || '';
         else if (col.id === 'mission') val = st.recent_mission || '';
-        else val = session[mapColumnToField(col.id)] || '';
+        else val = session[mapColumnToProp(col.id)] || '';
         const sVal = String(val || '');
         rowData.push((sVal.includes('\n') || sVal.includes('\t') || sVal.includes('"')) ? `"${sVal.replace(/"/g, '""')}"` : sVal);
       }

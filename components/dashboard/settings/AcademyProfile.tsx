@@ -54,13 +54,13 @@ export default function AcademyProfile({
               <h3 className="text-xs font-black text-white uppercase tracking-widest">학원 기본 설정</h3>
             </div>
             
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-1 text-left">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-1 text-left col-span-1">
                 <label className="text-[9px] font-black text-blue-200 tracking-widest ml-0.5">학원명</label>
                 <div className="px-3 py-2 bg-black/40 border border-white/10 rounded text-[13px] font-black text-white truncate">{academyInfo?.academy_name}</div>
               </div>
 
-              <div className="space-y-1 text-left">
+              <div className="space-y-1 text-left col-span-1">
                 <label className="text-[9px] font-black text-blue-200 tracking-widest ml-0.5">상담 주기</label>
                 <div className="relative">
                   <input type="number" defaultValue={academyInfo?.consultation_cycle || 21}
@@ -74,7 +74,7 @@ export default function AcademyProfile({
                 </div>
               </div>
 
-              <div className="space-y-1 text-left">
+              <div className="space-y-1 text-left col-span-1">
                 <label className="text-[9px] font-black text-blue-200 tracking-widest ml-0.5">마스터 패스키</label>
                 <div className="relative group">
                   <Key className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-600 group-focus-within:text-amber-400 transition-colors" />
@@ -94,8 +94,21 @@ export default function AcademyProfile({
                   />
                 </div>
               </div>
+
+              {/* 💡 학원 위치 (지역) 입력 필드 추가 */}
+              <div className="space-y-1 text-left col-span-1">
+                <label className="text-[9px] font-black text-blue-200 tracking-widest ml-0.5">학원 위치 (지역)</label>
+                <input 
+                  type="text"
+                  placeholder="예: 인천, 서울/강남"
+                  value={opSettings.location || ""}
+                  onChange={(e) => setOpSettings((prev:any) => ({ ...prev, location: e.target.value }))}
+                  onBlur={(e) => updateOpSetting('location', e.target.value.trim())}
+                  className="w-full bg-black/40 border border-white/10 rounded px-3 py-1.5 text-[13px] font-black text-blue-400 outline-none focus:border-blue-500 transition-all"
+                />
+              </div>
             </div>
-            <p className="text-[8px] text-blue-200/50 italic text-left ml-0.5">* 상담 주기와 마스터 패스키는 입력 후 커서를 바깥으로 빼면 자동 저장됩니다.</p>
+            <p className="text-[8px] text-blue-200/50 italic text-left ml-0.5">* 모든 학원 정보 설정은 입력 후 마우스 커서를 입력창 바깥으로 빼면 자동 저장됩니다.</p>
           </div>
 
           {/* 2. 수업 및 지각 / 타이머 설정 */}
@@ -228,7 +241,6 @@ export default function AcademyProfile({
             </div>
 
             <div className="space-y-3 text-left">
-              {/* 대분류 칩 목록 가로 스크롤 가능하게 제공하여 공간 절약 */}
               <div className="flex gap-1.5 overflow-x-auto no-scrollbar py-1 bg-black/20 border border-white/5 rounded-lg px-2 min-h-[42px] items-center">
                 {(opSettings.textbook_categories || []).map((cat: string) => (
                   <div key={cat} className="flex items-center gap-1 bg-white/10 hover:bg-white/15 border border-white/10 rounded px-2 py-0.5 text-[11px] font-bold text-white transition-colors shrink-0">

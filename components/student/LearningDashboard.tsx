@@ -57,7 +57,7 @@ function StudentTimer({ startedAt, duration }: { startedAt: number, duration: nu
           </div>
           <div className="text-left">
             <h4 className={`text-[10px] font-black uppercase tracking-widest ${isExpired ? 'text-red-400' : 'text-indigo-400'}`}>
-              {isExpired ? 'Time Expired' : 'Test in Progress'}
+              {isExpired ? 'TEST 시간 종료' : 'TEST 진행 중'}
             </h4>
             <p className="text-[12px] font-bold text-white/70">
               {isExpired ? '시험 시간이 종료되었습니다.' : '선생님이 설정한 시험 시간이 흐르고 있습니다.'}
@@ -160,7 +160,7 @@ export default function LearningDashboard({
       <div className="flex items-center justify-between px-1 mb-1">
         <div className="flex items-center gap-2">
           <Target className="text-gray-600" size={12} />
-          <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Dashboard View</span>
+          <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">학습 현황</span>
         </div>
         <button 
           onClick={() => setIsSlim(!isSlim)}

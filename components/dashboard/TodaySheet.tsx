@@ -17,7 +17,8 @@ import ReportPreview from './ReportPreview';
 import PrintPreviewModal from './todaySheet/PrintPreviewModal';
 import { TagBatchInputModal } from './todaySheet/TagBatchInputModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
-import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
+import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@/lib/sessionFieldMap';
+import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
 
 interface ColumnConfig {
@@ -178,6 +179,150 @@ export default function TodaySheet({
   isFullScreen = false,
   onToggleFullScreen
 }: any) {
+
+  // Undo/Redo stacks
+  const undoStackRef = useRef<any[]>([]);
+  const redoStackRef = useRef<any[]>([]);
+
+  const pushToUndoStack = useCallback((updates: { studentId: string; newData: any; prevData: any }[]) => {
+    const validUpdates = updates.filter(u => {
+      return Object.keys(u.newData).some(key => {
+        return String(u.newData[key] || '') !== String(u.prevData?.[key] || '');
+      });
+    });
+    if (validUpdates.length > 0) {
+      undoStackRef.current.push(validUpdates);
+      redoStackRef.current = []; // 새로운 동작 발생 시 redo 초기화
+    }
+  }, []);
+
+  const handleUndo = useCallback(async () => {
+    if (undoStackRef.current.length === 0) return;
+    const updates = undoStackRef.current.pop();
+    if (!updates || updates.length === 0) return;
+
+    // 💡 실제 변경된 필드만 추출하여 되돌림 (전체 세션이 아닌 변경 필드만)
+    const undoUpdates = updates.map((u: any) => {
+      const changedKeys = Object.keys(u.newData);
+      const restoreData: any = {};
+      changedKeys.forEach((key: string) => {
+        restoreData[key] = u.prevData?.[key] ?? '';
+      });
+      return {
+        studentId: u.studentId,
+        newData: restoreData,
+        prevData: { ...u.newData }
+      };
+    });
+
+    setStudents((prev: any[]) => prev.map(s => {
+      const update = undoUpdates.find((u: any) => u.studentId === s.id);
+      if (update) {
+        const hasMission = 'mission' in update.newData;
+        return {
+          ...s,
+          ...(hasMission ? { recent_mission: update.newData.mission } : {}),
+          todaySession: {
+            ...(s.todaySession || {}),
+            ...update.newData
+          }
+        };
+      }
+      return s;
+    }));
+
+    redoStackRef.current.push(updates);
+
+    const invMap: any = { 
+      'test_id': 'test_id',
+      'test_status': 'test_id', 
+      'test_score': 'test_score', 
+      'classwork_text': 'classwork', 
+      'completed_classwork_text': 'completed_classwork', 
+      'homework_text': 'assign', 
+      'next_quiz_text': 'next_quiz', 
+      'mission': 'mission', 
+      'special_notes': 'notes',
+      'attendance_status': 'attendance'
+    };
+    const affectedColIds = new Set<string>();
+    undoUpdates.forEach((u: any) => {
+      Object.keys(u.newData).forEach((key: string) => {
+        const colId = invMap[key];
+        if (colId) affectedColIds.add(colId);
+      });
+    });
+
+    syncTodaySheetDom(undoUpdates, Array.from(affectedColIds));
+
+    await Promise.all(undoUpdates.map(async (u: any) => {
+      if ('mission' in u.newData && onUpdateStudentInfo) {
+        await onUpdateStudentInfo(u.studentId, 'recent_mission', u.newData.mission);
+      }
+      const savePayload = { ...u.newData };
+      delete savePayload.mission;
+      if (Object.keys(savePayload).length > 0) {
+        await onSave(u.studentId, savePayload);
+      }
+    }));
+  }, [setStudents, onSave, onUpdateStudentInfo]);
+
+  const handleRedo = useCallback(async () => {
+    if (redoStackRef.current.length === 0) return;
+    const updates = redoStackRef.current.pop();
+    if (!updates || updates.length === 0) return;
+
+    setStudents((prev: any[]) => prev.map(s => {
+      const update = updates.find((u: any) => u.studentId === s.id);
+      if (update) {
+        const hasMission = 'mission' in update.newData;
+        return {
+          ...s,
+          ...(hasMission ? { recent_mission: update.newData.mission } : {}),
+          todaySession: {
+            ...(s.todaySession || {}),
+            ...update.newData
+          }
+        };
+      }
+      return s;
+    }));
+
+    undoStackRef.current.push(updates);
+
+    const invMap: any = { 
+      'test_id': 'test_id',
+      'test_status': 'test_id', 
+      'test_score': 'test_score', 
+      'classwork_text': 'classwork', 
+      'completed_classwork_text': 'completed_classwork', 
+      'homework_text': 'assign', 
+      'next_quiz_text': 'next_quiz', 
+      'mission': 'mission', 
+      'special_notes': 'notes',
+      'attendance_status': 'attendance'
+    };
+    const affectedColIds = new Set<string>();
+    updates.forEach((u: any) => {
+      Object.keys(u.newData).forEach((key: string) => {
+        const colId = invMap[key];
+        if (colId) affectedColIds.add(colId);
+      });
+    });
+
+    syncTodaySheetDom(updates, Array.from(affectedColIds));
+
+    await Promise.all(updates.map(async (u: any) => {
+      if ('mission' in u.newData && onUpdateStudentInfo) {
+        await onUpdateStudentInfo(u.studentId, 'recent_mission', u.newData.mission);
+      }
+      const savePayload = { ...u.newData };
+      delete savePayload.mission;
+      if (Object.keys(savePayload).length > 0) {
+        await onSave(u.studentId, savePayload);
+      }
+    }));
+  }, [setStudents, onSave, onUpdateStudentInfo]);
 
   // 1. States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -422,11 +567,38 @@ export default function TodaySheet({
   }, [selectedRange, filteredStudents, activeColumns]);
 
   const handleSave = useCallback(async (studentId: string, newData: any) => {
+    // 💡 단일 셀 변경 내용도 Undo 히스토리에 추가
+    const student = students.find((s: any) => s.id === studentId);
+    const session = student?.todaySession || {};
+    
+    const prevData: any = {};
+    const filteredNewData: any = {};
+    
+    const keys = Object.keys(newData);
+    keys.forEach(key => {
+      if (key === 'mission') {
+        prevData[key] = student?.recent_mission || '';
+        filteredNewData[key] = newData[key] || '';
+      } else {
+        prevData[key] = session[key] || '';
+        filteredNewData[key] = newData[key] || '';
+      }
+    });
+
+    pushToUndoStack([{
+      studentId,
+      newData: filteredNewData,
+      prevData
+    }]);
+
     return onSave(studentId, newData);
-  }, [onSave]);
+  }, [onSave, students, pushToUndoStack]);
 
   const handleBatchSave = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[]) => {
     if (updates.length === 0) return;
+
+    // 💡 Undo 스택에 저장
+    pushToUndoStack(updates);
     
     // 💡 [낙관적 업데이트] DB 저장 전에 로컬 상태를 즉시 업데이트하여 UI 반응성 확보
     setStudents((prev: any[]) => prev.map(s => {
@@ -458,7 +630,7 @@ export default function TodaySheet({
         await onSave(u.studentId, savePayload);
       }
     }));
-  }, [onSave, onUpdateStudentInfo, setStudents]);
+  }, [onSave, onUpdateStudentInfo, setStudents, pushToUndoStack]);
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     if (!activeCell) return;
@@ -708,7 +880,9 @@ export default function TodaySheet({
     setIsDragging,
     selectedIds,
     onSave,
-    toggleSecondRow
+    toggleSecondRow,
+    handleUndo,
+    handleRedo
   });
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
