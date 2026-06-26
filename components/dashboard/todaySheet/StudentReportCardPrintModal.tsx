@@ -84,6 +84,17 @@ export default function StudentReportCardPrintModal({
     return '';
   };
 
+  // 시작 시간(교시) 12시간제 포맷 변환 헬퍼 (예: 17 -> 5시, 7 -> 7시)
+  const formatPeriod = (period: number | string) => {
+    if (period === undefined || period === null || period === '') return '-';
+    const hour = Number(period);
+    if (isNaN(hour)) return String(period);
+    if (hour > 12) {
+      return `${hour - 12}시`;
+    }
+    return `${hour}시`;
+  };
+
   // 테스트 표시 포맷팅
   const getTestDisplay = (session: any) => {
     if (!session || !session.test_id) return '';
@@ -197,12 +208,13 @@ export default function StudentReportCardPrintModal({
               const lastSess = student.lastSession || {};
               const classDays = getClassDays(student);
               const period = getPeriod(student);
+              const formattedPeriod = formatPeriod(period);
               const testDisplay = getTestDisplay(todaySess);
 
               return (
                 <div
                   key={student.id}
-                  className="relative flex flex-col justify-between p-4 border border-dashed border-gray-400"
+                  className="relative flex flex-col justify-between py-2.5 px-3.5 border border-dashed border-gray-400"
                   style={{
                     boxSizing: 'border-box',
                     height: '99mm',
@@ -211,10 +223,10 @@ export default function StudentReportCardPrintModal({
                   }}
                 >
                   <div className="flex flex-col h-full justify-between">
-                    {/* 헤더: 2026. 6. 19 - 윤동건 - 고1 - 화목금 - 7 - <23> */}
+                    {/* 헤더: 2026. 6. 19 - 윤동건 - 고1 - 화목금 - 7시 - <23> */}
                     <div className="flex items-center justify-between border-b-2 border-black pb-1 mb-1">
                       <span className="text-[10px] font-black text-black tracking-tight whitespace-nowrap">
-                        {printedDate} - {student.name} - {student.grade} - {classDays} - {period || '-'}
+                        {printedDate} - {student.name} - {student.grade} - {classDays} - {formattedPeriod}
                       </span>
                       <span className="text-[10px] font-black text-black leading-none">
                         &lt;{globalIdx}&gt;
