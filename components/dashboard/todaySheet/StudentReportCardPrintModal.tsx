@@ -95,6 +95,38 @@ export default function StudentReportCardPrintModal({
     return `${hour}시`;
   };
 
+  // 💡 시작 시간에 따른 왼쪽 열 배경색/텍스트색 매핑 스타일 리턴
+  const getHeaderBgStyle = (period: number | string) => {
+    if (period === undefined || period === null || period === '') {
+      return { backgroundColor: '#f3f4f6', color: '#374151' };
+    }
+    const hour = Number(period);
+    if (isNaN(hour)) return { backgroundColor: '#f3f4f6', color: '#374151' };
+
+    switch (hour) {
+      case 14:
+      case 2:
+        return { backgroundColor: '#ffe4e6', color: '#9f1239' }; // Rose
+      case 15:
+      case 3:
+        return { backgroundColor: '#ffedd5', color: '#9a3412' }; // Orange
+      case 16:
+      case 4:
+        return { backgroundColor: '#fef9c3', color: '#854d0e' }; // Yellow
+      case 17:
+      case 5:
+        return { backgroundColor: '#dcfce7', color: '#166534' }; // Green
+      case 18:
+      case 6:
+        return { backgroundColor: '#e0f2fe', color: '#075985' }; // Sky
+      case 19:
+      case 7:
+        return { backgroundColor: '#f3e8ff', color: '#6b21a8' }; // Purple
+      default:
+        return { backgroundColor: '#f3f4f6', color: '#374151' }; // Gray
+    }
+  };
+
   // 테스트 표시 포맷팅
   const getTestDisplay = (session: any) => {
     if (!session || !session.test_id) return '';
@@ -209,6 +241,7 @@ export default function StudentReportCardPrintModal({
               const classDays = getClassDays(student);
               const period = getPeriod(student);
               const formattedPeriod = formatPeriod(period);
+              const headerStyle = getHeaderBgStyle(period);
               const testDisplay = getTestDisplay(todaySess);
 
               return (
@@ -238,60 +271,60 @@ export default function StudentReportCardPrintModal({
                       
                       {/* 1. Mission */}
                       <div className="flex border-b border-black min-h-[22px] flex-1">
-                        <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
+                        <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ Mission
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-black text-[#ef4444] break-all leading-tight whitespace-pre-wrap">
+                        <div className="flex-1 px-2 py-0.5 flex items-center font-black text-[#ef4444] break-all leading-tight whitespace-pre-wrap">
                           {student.recent_mission || ''}
                         </div>
                       </div>
 
                       {/* 2. 해온숙제 */}
                       <div className="flex border-b border-black min-h-[22px] flex-1">
-                        <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
+                        <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 해온숙제
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
+                        <div className="flex-1 px-2 py-0.5 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {lastSess.homework_text || ''}
                         </div>
                       </div>
 
                       {/* 3. 오늘진도 */}
                       <div className="flex border-b border-black min-h-[22px] flex-1">
-                        <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
+                        <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 오늘진도
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
+                        <div className="flex-1 px-2 py-0.5 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {todaySess.classwork_text || ''}
                         </div>
                       </div>
 
                       {/* 4. 숙제 */}
                       <div className="flex border-b border-black min-h-[22px] flex-1">
-                        <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
+                        <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 숙제
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
+                        <div className="flex-1 px-2 py-0.5 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {todaySess.homework_text || ''}
                         </div>
                       </div>
 
                       {/* 5. 오늘Test */}
                       <div className="flex border-b border-black min-h-[22px] flex-1">
-                        <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
+                        <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 오늘Test
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
+                        <div className="flex-1 px-2 py-0.5 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {testDisplay}
                         </div>
                       </div>
 
                       {/* 6. 다음Test */}
                       <div className="flex min-h-[22px] flex-1">
-                        <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
+                        <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 다음Test
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
+                        <div className="flex-1 px-2 py-0.5 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {todaySess.next_quiz_text || ''}
                         </div>
                       </div>
