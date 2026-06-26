@@ -224,8 +224,8 @@ export default function StudentReportCardPrintModal({
                         <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ Mission
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-black text-[#ef4444] break-all leading-tight">
-                          {todaySess.mission || ''}
+                        <div className="flex-1 px-2 py-1 flex items-center font-black text-[#ef4444] break-all leading-tight whitespace-pre-wrap">
+                          {student.recent_mission || ''}
                         </div>
                       </div>
 
@@ -234,7 +234,7 @@ export default function StudentReportCardPrintModal({
                         <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 해온숙제
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight">
+                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {lastSess.homework_text || ''}
                         </div>
                       </div>
@@ -244,7 +244,7 @@ export default function StudentReportCardPrintModal({
                         <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 오늘진도
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight">
+                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {todaySess.classwork_text || ''}
                         </div>
                       </div>
@@ -254,7 +254,7 @@ export default function StudentReportCardPrintModal({
                         <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 숙제
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight">
+                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {todaySess.homework_text || ''}
                         </div>
                       </div>
@@ -264,7 +264,7 @@ export default function StudentReportCardPrintModal({
                         <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 오늘Test
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight">
+                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {testDisplay}
                         </div>
                       </div>
@@ -274,7 +274,7 @@ export default function StudentReportCardPrintModal({
                         <div className="w-20 bg-gray-100 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 다음Test
                         </div>
-                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight">
+                        <div className="flex-1 px-2 py-1 flex items-center font-bold text-gray-800 break-all leading-tight whitespace-pre-wrap">
                           {todaySess.next_quiz_text || ''}
                         </div>
                       </div>
