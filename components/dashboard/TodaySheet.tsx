@@ -15,6 +15,7 @@ import { TodaySheetRow } from './TodaySheetRow';
 import { HistoryRows } from './TodaySheetHistory';
 import ReportPreview from './ReportPreview';
 import PrintPreviewModal from './todaySheet/PrintPreviewModal';
+import StudentReportCardPrintModal from './todaySheet/StudentReportCardPrintModal';
 import { TagBatchInputModal } from './todaySheet/TagBatchInputModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@/lib/sessionFieldMap';
@@ -400,6 +401,7 @@ export default function TodaySheet({
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false); // 💡 인쇄 미리보기 모달 상태 추가
+  const [isCardPrintOpen, setIsCardPrintOpen] = useState(false); // 💡 학생별 안내장 인쇄 모달 상태 추가
   const [isTagBatchMode, setIsTagBatchMode] = useState(false); // 💡 태그별 일괄입력 모달 상태 추가
 
   const [hideAbsent, setHideAbsent] = useState<boolean>(() => {
@@ -1275,6 +1277,17 @@ export default function TodaySheet({
                     if (document.activeElement instanceof HTMLElement) {
                       document.activeElement.blur();
                     }
+                    setTimeout(() => setIsCardPrintOpen(true), 150);
+                  }} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg mr-1.5"
+                >
+                  <Printer size={12} /> 안내장 인쇄 (6분할)
+                </button>
+                <button 
+                  onClick={() => {
+                    if (document.activeElement instanceof HTMLElement) {
+                      document.activeElement.blur();
+                    }
                     setTimeout(() => setIsPrintPreviewOpen(true), 150);
                   }} 
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg"
@@ -1388,6 +1401,13 @@ export default function TodaySheet({
         academyInfo={academyInfo}
         activeColumns={activeColumns}
         columnWidths={colWidths}
+      />
+      <StudentReportCardPrintModal
+        isOpen={isCardPrintOpen}
+        onClose={() => setIsCardPrintOpen(false)}
+        students={selectedIds.length > 0 ? filteredStudents.filter((s: any) => selectedIds.includes(s.id)) : filteredStudents}
+        selectedDate={selectedDate}
+        academyInfo={academyInfo}
       />
 
       {/* 태그별 일괄입력 모달 */}
