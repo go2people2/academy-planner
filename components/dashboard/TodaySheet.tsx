@@ -957,7 +957,7 @@ export default function TodaySheet({
 
   return (
     <div className="p-3 space-y-4 relative flex flex-col h-full overflow-hidden bg-[#050505] text-center">
-      <div className="flex items-center justify-between px-3 py-2 bg-black/50 border border-white/10 rounded-lg shrink-0">
+      <div className="flex items-center justify-between px-3 py-2 bg-black/50 border border-white/10 rounded-lg shrink-0 no-print">
         <div className="flex items-center gap-6">
           <div className="flex flex-col gap-0.5 items-start">
             <div className="flex items-center gap-3">
