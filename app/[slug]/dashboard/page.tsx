@@ -422,8 +422,6 @@ export default function DashboardPage() {
   const [viewMode, setViewMode] = useState<string>('board');
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
-  const [navHistory, setNavHistory] = useState<string[]>(['board']);
-  const [historyIdx, setHistoryIdx] = useState(0);
   const [isWarpMode, setIsWarpMode] = useState(false); // 💡 임시 원격 지원 모드 플래그 추가
 
   useEffect(() => {
@@ -455,14 +453,10 @@ export default function DashboardPage() {
 
       // 💡 마지막으로 보던 화면(탭) 복구 (새로고침 대응)
       const savedViewMode = localStorage.getItem('ams_viewMode');
-      if (savedViewMode) {
-        if (savedViewMode === 'settings' && localUser?.role !== 'admin' && localUser?.role !== 'master') {
-          setViewMode('board');
-        } else {
-          setViewMode(savedViewMode);
-          setNavHistory([savedViewMode]);
-          setHistoryIdx(0);
-        }
+      const initialMode = savedViewMode && !(savedViewMode === 'settings' && localUser?.role !== 'admin' && localUser?.role !== 'master') ? savedViewMode : 'board';
+      setViewMode(initialMode);
+      if (typeof window !== 'undefined') {
+        window.history.replaceState({ viewMode: initialMode }, '');
       }
 
       // 💡 [개선] 다른 컴퓨터에서 변경된 최신 프리셋 정보를 DB로부터 동기화
@@ -563,29 +557,38 @@ export default function DashboardPage() {
     }
 
     setViewMode(mode); setSelectedStudentId(null); 
-    if (!skipHistory) {
-      setNavHistory(prev => {
-        const newHist = prev.slice(0, historyIdx + 1);
-        newHist.push(mode);
-        setHistoryIdx(newHist.length - 1);
-        return newHist;
-      });
+    if (typeof window !== 'undefined') {
+      if (skipHistory) {
+        window.history.replaceState({ viewMode: mode }, '');
+      } else {
+        window.history.pushState({ viewMode: mode }, '');
+      }
     }
-  }, [viewMode, historyIdx, currentUser?.role]);
+  }, [viewMode, currentUser?.role]);
 
   const goBack = useCallback(() => {
-    if (historyIdx > 0) {
-      const prevMode = navHistory[historyIdx - 1];
-      setHistoryIdx(historyIdx - 1); setViewMode(prevMode); setSelectedStudentId(null);
+    if (typeof window !== 'undefined') {
+      window.history.back();
     }
-  }, [historyIdx, navHistory]);
+  }, []);
 
   const goForward = useCallback(() => {
-    if (historyIdx < navHistory.length - 1) {
-      const nextMode = navHistory[historyIdx + 1];
-      setHistoryIdx(historyIdx + 1); setViewMode(nextMode); setSelectedStudentId(null);
+    if (typeof window !== 'undefined') {
+      window.history.forward();
     }
-  }, [historyIdx, navHistory]);
+  }, []);
+
+  // 💡 [추가] 브라우저 뒤로가기 / 앞으로가기 이벤트 (popstate) 감지 및 연동
+  useEffect(() => {
+    const handlePopState = (e: PopStateEvent) => {
+      if (e.state && typeof e.state.viewMode === 'string') {
+        setViewMode(e.state.viewMode);
+        setSelectedStudentId(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, []);
 
   useEffect(() => {
     const handleNavShortcuts = (e: KeyboardEvent) => {
