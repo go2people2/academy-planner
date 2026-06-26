@@ -53,10 +53,15 @@ export default function StudentReportCardPrintModal({
 
   const dayKey = getDayOfWeek(selectedDate);
 
+  // 💡 요일 표준 정렬 순서 정의
+  const DAYS_ORDER = ['월', '화', '수', '목', '금', '토', '일'];
+
   // 등원 요일 추출 및 조인
   const getClassDays = (st: any) => {
     if (st.class_days && Array.isArray(st.class_days)) {
-      return st.class_days.join('');
+      return [...st.class_days]
+        .sort((a, b) => DAYS_ORDER.indexOf(a) - DAYS_ORDER.indexOf(b))
+        .join('');
     }
     return '';
   };
