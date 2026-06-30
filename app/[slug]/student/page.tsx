@@ -19,6 +19,7 @@ import LearningHistoryList from '@/components/student/LearningHistoryList';
 import StudentSuggestion from '@/components/student/StudentSuggestion';
 import PerformanceChart from '@/components/student/PerformanceChart';
 import StudentSubmitPage from '@/components/wrong-answers/StudentSubmitPage';
+import StudentExamSubmission from '@/components/dashboard/exam/StudentExamSubmission';
 
 const WRONG_ANSWER_THEMES: Record<string, { primary: string; bg: string; ring: string; buttonText?: string }> = {
   navy: { primary: '#1e3a8a', bg: '#f8faff', ring: 'focus:ring-blue-900' },
@@ -55,7 +56,7 @@ export default function StudentPortal() {
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDashboardSlim, setIsDashboardSlim] = useState(false); // 💡 대시보드 접기 상태를 전역으로 관리
-  const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion' | 'wrong-answer'>('study'); // 💡 모바일 탭 상태 추가 및 오답 제출 지원
+  const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion' | 'wrong-answer' | 'exam-submit'>('study'); // 💡 모바일 탭 상태 추가 및 오답 제출 지원
   
   // 💡 오답노트 연동 상태
   const [wrongAnswerStudent, setWrongAnswerStudent] = useState<any>(null);
@@ -826,7 +827,7 @@ export default function StudentPortal() {
         <button
           onClick={() => setActiveTab('study')}
           className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
-            activeTab !== 'wrong-answer'
+            activeTab !== 'wrong-answer' && activeTab !== 'exam-submit'
               ? 'border-blue-500 text-blue-400'
               : 'border-transparent text-gray-500 hover:text-gray-300'
           }`}
@@ -842,6 +843,16 @@ export default function StudentPortal() {
           }`}
         >
           ❌ 틀린 문제 제출
+        </button>
+        <button
+          onClick={() => setActiveTab('exam-submit')}
+          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
+            activeTab === 'exam-submit'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          ✏️ 답안 제출
         </button>
       </div>
 
@@ -865,6 +876,16 @@ export default function StudentPortal() {
                 </p>
               </div>
             )}
+          </div>
+        ) : activeTab === 'exam-submit' ? (
+          <div className="flex-1 overflow-y-auto custom-scrollbar-v bg-[#080808] p-4">
+            <StudentExamSubmission
+              academyId={academy?.id || ''}
+              studentId={student?.id || ''}
+              studentName={student?.name || ''}
+              studentGrade={student?.grade || ''}
+              assignedExamId={todaySession?.test_status || ''}
+            />
           </div>
         ) : (
           <>
@@ -1045,6 +1066,7 @@ export default function StudentPortal() {
         {[
           { id: 'study', label: '오늘 학습', icon: <BookOpen size={16} /> },
           { id: 'wrong-answer', label: '오답 제출', icon: <AlertTriangle size={16} /> },
+          { id: 'exam-submit', label: '답안 제출', icon: <FileText size={16} /> },
           { id: 'history', label: '히스토리', icon: <History size={16} /> },
           { id: 'suggestion', label: '알림장 & 설문', icon: <MessageSquare size={16} /> },
         ].map(tab => {

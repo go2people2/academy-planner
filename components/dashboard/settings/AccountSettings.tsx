@@ -129,6 +129,84 @@ export default function AccountSettings({ currentUser, onUpdateCurrentUser, acad
   const [isEditingPreset, setIsEditingPreset] = useState(false);
   const [editingSnippet, setEditingSnippet] = useState<Record<number, boolean>>({});
 
+  // 💡 [추가] 비밀번호 변경용 상태 및 핸들러
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [isUpdatingPassword, setIsUpdatingPassword] = useState(false);
+
+  const handleUpdatePassword = async () => {
+    if (!currentPassword) {
+      alert('현재 비밀번호를 입력해 주세요.');
+      return;
+    }
+    if (!newPassword) {
+      alert('새 비밀번호를 입력해 주세요.');
+      return;
+    }
+    if (newPassword.length < 4) {
+      alert('새 비밀번호는 최소 4자 이상이어야 합니다.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert('새 비밀번호와 비밀번호 확인이 일치하지 않습니다.');
+      return;
+    }
+
+    setIsUpdatingPassword(true);
+    try {
+      const loginId = currentUser?.login_id;
+      if (!loginId) {
+        alert('사용자 정보가 비어있어 비밀번호를 변경할 수 없습니다.');
+        return;
+      }
+
+      // ams_teachers 테이블에서 현재 로그인한 교사의 아이디를 찾아서 이메일 형식으로 변환
+      const email = loginId.includes('@') ? loginId : `${loginId}@academy.com`;
+
+      // 1. 현재 비밀번호로 Supabase Auth 재로그인 시도하여 이전 비번 인증 검증
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email,
+        password: currentPassword
+      });
+
+      if (authError) {
+        alert('현재 비밀번호가 일치하지 않습니다.');
+        return;
+      }
+
+      // 2. 인증 성공 시, 새 비밀번호로 업데이트 실행
+      const { error: updateError } = await supabase.auth.updateUser({
+        password: newPassword
+      });
+
+      if (updateError) {
+        alert(`비밀번호 변경 중 에러가 발생했습니다: ${updateError.message}`);
+        return;
+      }
+
+      // 3. 교사 테이블(ams_teachers) 평문/백업용 패스워드 칼럼 업데이트
+      const { error: dbError } = await supabase
+        .from('ams_teachers')
+        .update({ password: newPassword })
+        .eq('id', currentUser.id);
+
+      if (dbError) {
+        console.warn('DB 교사 비밀번호 업데이트 실패 (메모 보존 실패):', dbError);
+      }
+
+      alert('비밀번호가 안전하게 변경되었습니다.');
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (err: any) {
+      console.error(err);
+      alert('비밀번호 변경 중 에러가 발생했습니다.');
+    } finally {
+      setIsUpdatingPassword(false);
+    }
+  };
+
   useEffect(() => {
     setLocalSets(currentUser.snippet_sets ?? []);
   }, [currentUser.snippet_sets]);
@@ -517,10 +595,42 @@ export default function AccountSettings({ currentUser, onUpdateCurrentUser, acad
           </div>
           <div className="space-y-4">
             <div className="space-y-1">
-              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest">New Password</label>
-              <input type="password" placeholder="••••••••" className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white outline-none focus:border-red-500 transition-all" />
+              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Current Password</label>
+              <input 
+                type="password" 
+                placeholder="현재 비밀번호 입력" 
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white outline-none focus:border-red-500 transition-all placeholder:text-gray-700 font-bold" 
+              />
             </div>
-            <button className="w-full py-3 bg-white/5 border border-white/10 rounded-[2px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:bg-white/10 transition-all">Update Password</button>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest">New Password</label>
+              <input 
+                type="password" 
+                placeholder="새 비밀번호 입력" 
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white outline-none focus:border-red-500 transition-all placeholder:text-gray-700 font-bold" 
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Confirm New Password</label>
+              <input 
+                type="password" 
+                placeholder="새 비밀번호 확인 입력" 
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white outline-none focus:border-red-500 transition-all placeholder:text-gray-700 font-bold" 
+              />
+            </div>
+            <button 
+              onClick={handleUpdatePassword}
+              disabled={isUpdatingPassword}
+              className="w-full py-3 bg-white/5 border border-white/10 rounded-[2px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:bg-white/10 transition-all disabled:opacity-50"
+            >
+              {isUpdatingPassword ? 'Updating...' : 'Update Password'}
+            </button>
           </div>
         </div>
 

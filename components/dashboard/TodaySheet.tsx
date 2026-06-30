@@ -35,6 +35,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'date', label: '날짜', minWidth: 50, canHide: true },
   { id: 'name', label: '이름', minWidth: 120, isSticky: true, canHide: false },
   { id: 'tools', label: '🛠️', minWidth: 80, isSticky: true, canHide: false },
+  { id: 'management_notes', label: '주의점', minWidth: 150, canHide: true },
   { id: 'attendance', label: '출결', minWidth: 80, canHide: true },
   { id: 'test_id', label: '오늘TEST', minWidth: 140, canHide: true },
   { id: 'test_score', label: '점수', minWidth: 60, canHide: true },
@@ -50,18 +51,101 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 // --- Sub-components ---
 
-function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onBatchQuizCut, onSelectAll, isAllSelected, onFocusColumn, focusColumn }: any) {
+function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onBatchQuizCut, onSelectAll, isAllSelected, onFocusColumn, focusColumn, onColumnReorder }: any) {
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
   const lastDataColumnId = React.useMemo(() => {
     const dataCols = activeColumns.filter((c: any) => c.id !== 'action');
     return dataCols.length > 0 ? dataCols[dataCols.length - 1].id : null;
   }, [activeColumns]);
 
+  // 💡 [추가] 드래그앤드롭 컬럼 순서 변경 상태
+  const [draggedId, setDraggedId] = React.useState<string | null>(null);
+  const [isOrigDragged, setIsOrigDragged] = React.useState(false);
+  const [dragOverId, setDragOverId] = React.useState<string | null>(null);
+  const [canDrag, setCanDrag] = React.useState(true); // 💡 리사이즈 조작 중 드래그 오작동 차단 상태
+
+  const handleDragStart = (e: React.DragEvent, id: string) => {
+    if (!canDrag) {
+      e.preventDefault();
+      return;
+    }
+    const protectedCols = ['select', 'name', 'tools', 'action'];
+    if (protectedCols.includes(id)) {
+      e.preventDefault();
+      return;
+    }
+    setDraggedId(id);
+    setIsOrigDragged(false);
+    e.dataTransfer.setData('text/plain', id);
+    
+    // 💡 [해결] 원본 헤더의 크기 규격을 정확히 복제하여 100% 동일한 크기의 고스트 생성
+    const originalHeader = e.currentTarget as HTMLElement;
+    const rect = originalHeader.getBoundingClientRect();
+
+    const dragImg = document.createElement('div');
+    dragImg.style.position = 'absolute';
+    dragImg.style.top = '-1000px';
+    dragImg.style.left = '-1000px';
+    dragImg.style.width = `${rect.width}px`;
+    dragImg.style.height = `${rect.height}px`;
+    dragImg.style.lineHeight = `${rect.height}px`;
+    dragImg.style.backgroundColor = '#00d2ff'; // 💡 산뜻한 아쿠아 블루
+    dragImg.style.color = '#050505'; // 💡 대비율을 극대화한 매트 블랙
+    dragImg.style.fontWeight = 'bold';
+    dragImg.style.fontSize = '12px';
+    dragImg.style.textAlign = 'center';
+    dragImg.style.border = '1px solid #22d3ee';
+    dragImg.style.boxShadow = '0 10px 25px rgba(0,0,0,0.5)';
+    dragImg.style.whiteSpace = 'nowrap';
+    dragImg.style.overflow = 'hidden';
+    dragImg.style.textOverflow = 'ellipsis';
+    dragImg.style.zIndex = '99999';
+
+    const col = activeColumns.find((c: any) => c.id === id);
+    dragImg.innerText = col ? col.label : id;
+    document.body.appendChild(dragImg);
+
+    // 💡 브라우저에 원본 크기 맞춤 드래그 이미지 주입 (마우스 포인터 정중앙 정렬)
+    e.dataTransfer.setDragImage(dragImg, rect.width / 2, rect.height / 2);
+    
+    // 스냅샷 촬영 후 즉시 원래 자리만 반투명 처리하고 임시 노드 제거
+    setTimeout(() => {
+      if (document.body.contains(dragImg)) {
+        document.body.removeChild(dragImg);
+      }
+      setIsOrigDragged(true);
+    }, 0);
+  };
+
+  const handleDragOver = (e: React.DragEvent, id: string) => {
+    const protectedCols = ['select', 'name', 'tools', 'action'];
+    if (protectedCols.includes(id) || draggedId === id) return;
+    e.preventDefault();
+    setDragOverId(id);
+  };
+
+  const handleDrop = (e: React.DragEvent, targetId: string) => {
+    e.preventDefault();
+    const id = e.dataTransfer.getData('text/plain') || draggedId;
+    if (id && targetId && id !== targetId) {
+      onColumnReorder(id, targetId);
+    }
+    setDraggedId(null);
+    setIsOrigDragged(false);
+    setDragOverId(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setIsOrigDragged(false);
+    setDragOverId(null);
+  };
+
   return (
     <tr className="bg-black border-b border-white/20 select-none">
       {activeColumns.map((col: any) => {
         const isStickyHorizontally = col.id === 'name' || col.id === 'tools' || col.id === 'action' || col.id === 'select';
-        const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes'].includes(col.id);
+        const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes', 'management_notes'].includes(col.id);
         const isAction = col.id === 'action';
         const isSelect = col.id === 'select';
         const isLastDataCol = col.id === lastDataColumnId;
@@ -79,14 +163,35 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
           left: leftOffset,
           right: col.id === 'action' ? 0 : 'auto',
           zIndex: isStickyHorizontally ? 50 : 40,
-          backgroundColor: '#000000',
+          backgroundColor: draggedId === col.id 
+            ? (isOrigDragged ? '#075985' : '#00d2ff') // 💡 고스트는 아쿠아(#00d2ff), 남겨진 원본은 딥 아쿠아(#075985)
+            : dragOverId === col.id 
+            ? '#1e293b' 
+            : focusColumn === col.id 
+            ? '#172554' 
+            : '#000000',
+          cursor: !['select', 'name', 'tools', 'action'].includes(col.id) ? 'grab' : 'default',
         };
         return (
           <th 
             key={col.id} 
             data-col-id={col.id}
             style={styles} 
-            className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-gray-400 text-center border-r border-white/12 shadow-[0_1px_0_rgba(255,255,255,0.1)]`}
+            draggable={canDrag && !['select', 'name', 'tools', 'action'].includes(col.id)}
+            onDragStart={(e) => handleDragStart(e, col.id)}
+            onDragOver={(e) => handleDragOver(e, col.id)}
+            onDragLeave={() => setDragOverId(null)}
+            onDrop={(e) => handleDrop(e, col.id)}
+            onDragEnd={handleDragEnd}
+            className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-center border-r border-white/12 transition-all ${
+              focusColumn === col.id 
+                ? 'text-blue-400 bg-blue-950/20 border-b-2 border-b-blue-500/80 shadow-[0_1px_0_rgba(59,130,246,0.3)]' 
+                : 'text-gray-400 shadow-[0_1px_0_rgba(255,255,255,0.1)]'
+            } ${
+              draggedId === col.id ? `${isOrigDragged ? 'opacity-30' : 'opacity-100'} bg-blue-600/30 border-2 border-dashed border-blue-500 text-white font-extrabold` : ''
+            } ${
+              dragOverId === col.id ? 'border-l-4 border-l-blue-500 bg-white/10' : ''
+            }`}
           >
             {!isAction && (
               <div className="flex items-center justify-center gap-1.5 w-full">
@@ -154,6 +259,8 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
               <div 
                 onMouseDown={(e) => onMouseDown(e, col.id)}
                 onDoubleClick={(e) => { e.stopPropagation(); onDoubleClick(col.id); }}
+                onMouseEnter={() => setCanDrag(false)}
+                onMouseLeave={() => setCanDrag(true)}
                 className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-500/50 transition-colors z-30 opacity-0 group-hover:opacity-100" 
                 title="더블클릭하여 자동 크기 조절 / 드래그하여 수동 조절"
               />
@@ -244,6 +351,7 @@ export default function TodaySheet({
       'next_quiz_text': 'next_quiz', 
       'mission': 'mission', 
       'special_notes': 'notes',
+      'management_notes': 'management_notes',
       'attendance_status': 'attendance'
     };
     const affectedColIds = new Set<string>();
@@ -301,6 +409,7 @@ export default function TodaySheet({
       'next_quiz_text': 'next_quiz', 
       'mission': 'mission', 
       'special_notes': 'notes',
+      'management_notes': 'management_notes',
       'attendance_status': 'attendance'
     };
     const affectedColIds = new Set<string>();
@@ -436,6 +545,40 @@ export default function TodaySheet({
   }, [currentUser?.id]);
 
   // 2. Memos
+  // 💡 [추가] 드래그앤드롭 컬럼 순서 저장용 상태
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ams_today_sheet_column_order');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return DEFAULT_COLUMNS.map(c => c.id);
+  });
+
+  const handleColumnReorder = useCallback((draggedId: string, targetId: string) => {
+    const protectedCols = ['select', 'name', 'tools', 'action'];
+    if (protectedCols.includes(draggedId) || protectedCols.includes(targetId)) return;
+    if (draggedId === targetId) return;
+
+    setColumnOrder(prev => {
+      const next = [...prev];
+      const draggedIdx = next.indexOf(draggedId);
+      const targetIdx = next.indexOf(targetId);
+      if (draggedIdx === -1 || targetIdx === -1) return prev;
+
+      next.splice(draggedIdx, 1);
+      next.splice(targetIdx, 0, draggedId);
+      
+      localStorage.setItem('ams_today_sheet_column_order', JSON.stringify(next));
+      return next;
+    });
+  }, []);
+
   const visibleColumns = useMemo(() => {
     if (focusColumn) {
       // 💡 포커스 모드일 때: 이름, 출결, 선택한 컬럼(+테스트 점수), 저장 버튼만 노출
@@ -448,8 +591,15 @@ export default function TodaySheet({
   }, [presets, activeSet, focusColumn]);
 
   const activeColumns = useMemo(() => {
-    return DEFAULT_COLUMNS.filter(col => !col.canHide || visibleColumns.includes(col.id));
-  }, [visibleColumns]);
+    const active = DEFAULT_COLUMNS.filter(col => !col.canHide || visibleColumns.includes(col.id));
+    return [...active].sort((a, b) => {
+      const idxA = columnOrder.indexOf(a.id);
+      const idxB = columnOrder.indexOf(b.id);
+      const orderA = idxA !== -1 ? idxA : DEFAULT_COLUMNS.findIndex(c => c.id === a.id) + 100;
+      const orderB = idxB !== -1 ? idxB : DEFAULT_COLUMNS.findIndex(c => c.id === b.id) + 100;
+      return orderA - orderB;
+    });
+  }, [visibleColumns, columnOrder]);
 
   // 💡 포커스 모드용 컬럼 너비 계산
   const focusColWidths = useMemo(() => {
@@ -713,7 +863,7 @@ export default function TodaySheet({
         // 💡 [최종 최적화] 브라우저의 다음 프레임에서 즉시 DOM 업데이트 (반응성 우선)
         requestAnimationFrame(() => {
           updates.forEach(u => {
-            const invMap: any = { 'test_status': 'test_id', 'test_score': 'test_score', 'classwork_text': 'classwork', 'completed_classwork_text': 'completed_classwork', 'homework_text': 'assign', 'next_quiz_text': 'next_quiz', 'mission': 'mission', 'special_notes': 'notes' };
+            const invMap: any = { 'test_status': 'test_id', 'test_score': 'test_score', 'classwork_text': 'classwork', 'completed_classwork_text': 'completed_classwork', 'homework_text': 'assign', 'next_quiz_text': 'next_quiz', 'mission': 'mission', 'special_notes': 'notes', 'management_notes': 'management_notes' };
             Object.keys(u.newData).forEach(field => {
               // 💡 [최적화] 이전 데이터와 비교하여 실제 값이 바뀐 경우에만 DOM 조작
               if (String(u.newData[field] || '') === String(u.prevData?.[field] || '')) return;
@@ -772,7 +922,9 @@ export default function TodaySheet({
       });
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
-      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "ACA2000_Upload"); XLSX.writeFile(wb, `${customFileName}.xls`, { bookType: 'biff8' });
+      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "ACA2000_Upload");
+      const acaFileName = `업무일지_${dateClean.slice(2)}_${teacherName}`;
+      XLSX.writeFile(wb, `${acaFileName}.xls`, { bookType: 'biff8' });
     } else {
       const cols = activeColumns.filter(c => !['select', 'action'].includes(c.id));
       headers = cols.map(c => c.label);
@@ -1305,7 +1457,7 @@ export default function TodaySheet({
         onScroll={handleScroll}
       >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} /></thead>
           <tbody className="divide-y divide-white/10">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
@@ -1415,6 +1567,7 @@ export default function TodaySheet({
         isOpen={isTagBatchMode}
         onClose={() => setIsTagBatchMode(false)}
         students={filteredStudents}
+        selectedIds={selectedIds}
         onBatchSave={handleBatchSave}
       />
     </div>

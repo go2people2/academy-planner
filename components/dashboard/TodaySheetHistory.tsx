@@ -1,8 +1,9 @@
 'use client';
 
-import React from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { Student } from '@/types/dashboard';
 import { getDayOfWeek, parseInlineTests } from '@/lib/utils';
+import { supabase } from '@/lib/supabase';
 
 interface HistoryRowsProps {
   student: Student;
@@ -119,6 +120,9 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                       ) : (
                         <div className="text-[9.5px] text-gray-600 italic px-1">배정 교재 없음</div>
                       )}
+
+                      {/* 💡 [추가] 공구함 박스 아래 빈공간에 관리 주의점 히스토리 렌더링 */}
+                      <ManagementLogsTimeline student={student} />
                     </div>
                   </td>
                 );
@@ -214,5 +218,70 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
         );
       })}
     </>
+  );
+});
+
+// 💡 [추가] 관리 주의점 변경이력 타임라인 컴포넌트
+const ManagementLogsTimeline = React.memo(function ManagementLogsTimeline({ student }: { student: Student }) {
+  const [logs, setLogs] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      setIsLoading(true);
+      try {
+        const { data, error } = await supabase
+          .from('ams_student_management_logs')
+          .select(`
+            id,
+            notes,
+            created_at,
+            ams_teachers (
+              name
+            )
+          `)
+          .eq('student_id', student.id)
+          .order('created_at', { ascending: false })
+          .limit(5);
+
+        if (!error && data) {
+          setLogs(data);
+        }
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    fetchLogs();
+  }, [student.id, student.management_notes]);
+
+  return (
+    <div className="mt-4">
+      <div className="text-[9px] font-black text-amber-500/80 tracking-wider uppercase mb-1.5 flex items-center gap-1">
+        ⚠️ 관리 주의점 히스토리
+      </div>
+      {isLoading ? (
+        <div className="text-[9px] text-gray-600 italic px-1">이력 로딩 중...</div>
+      ) : logs.length > 0 ? (
+        <div className="flex flex-col gap-2 max-h-[160px] overflow-y-auto custom-scrollbar-v pr-0.5 select-text">
+          {logs.map((log: any) => (
+            <div 
+              key={log.id} 
+              className="px-2 py-1.5 bg-amber-500/5 border border-amber-500/10 rounded-[4px] text-[10px] leading-relaxed text-gray-200"
+            >
+              <div className="flex justify-between text-[8px] text-amber-500/60 font-bold uppercase tracking-tighter mb-0.5 select-none">
+                <span>{log.ams_teachers?.name || '시스템'}</span>
+                <span>{log.created_at.slice(0, 10).replace(/-/g, '.')}</span>
+              </div>
+              <p className="whitespace-pre-wrap break-all text-gray-300 font-medium">{log.notes}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-[9.5px] text-gray-600 italic px-1">등록된 주의점 이력 없음</div>
+      )}
+    </div>
   );
 });

@@ -10,18 +10,20 @@ interface TagBatchInputModalProps {
   isOpen: boolean;
   onClose: () => void;
   students: Student[];
+  selectedIds?: string[]; // 💡 추가: 선택된(체크된) 학생 ID 목록
   onBatchSave: (updates: { studentId: string, newData: any, prevData: any }[]) => Promise<void>;
 }
 
 const TARGET_COLUMNS = [
   { id: 'test_id', label: '오늘TEST' },
+  { id: 'next_quiz_text', label: '다음테스트' },
+  { id: 'classwork_text', label: '오늘할일(To-Do)' },
   { id: 'homework_text', label: '오늘숙제' },
   { id: 'mission', label: '학생미션' },
-  { id: 'next_quiz_text', label: '다음테스트' },
 ];
 
 export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
-  isOpen, onClose, students, onBatchSave
+  isOpen, onClose, students, selectedIds = [], onBatchSave
 }) => {
   const [mounted, setMounted] = useState(false);
   const [targetCol, setTargetCol] = useState('test_id');
@@ -33,7 +35,13 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
     setMounted(true);
   }, []);
 
-  // 화면에 띄울 태그 그룹들 계산
+  // 💡 선택된 학생들
+  const selectedStudents = useMemo(() => {
+    if (!selectedIds || selectedIds.length === 0) return [];
+    return students.filter(s => selectedIds.includes(s.id));
+  }, [students, selectedIds]);
+
+  // 화면에 띄울 태그 그룹들 계산 (선택된 학생들은 제외)
   const tagGroups = useMemo(() => {
     // 가, 나, 다, 라 그룹은 무조건 화면에 나오도록 기본 할당 (학생 0명이어도 표시)
     const groups: Record<string, Student[]> = {
@@ -44,6 +52,9 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
     };
     
     students.forEach(s => {
+      // 💡 선택된 학생이 있는 경우, 태그 그룹 분류에서 제외하여 상단 "선택됨"에만 들어가게 함
+      if (selectedIds && selectedIds.includes(s.id)) return;
+
       const tag = s.level_tag || '미지정';
       if (!groups[tag]) groups[tag] = [];
       groups[tag].push(s);
@@ -69,7 +80,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
       tag,
       students: groups[tag],
     }));
-  }, [students]);
+  }, [students, selectedIds]);
 
   // 모달 열릴 때마다 입력창 초기화 및 ESC 이벤트 등록
   useEffect(() => {
@@ -93,6 +104,21 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
     try {
       const updates: { studentId: string, newData: any, prevData: any }[] = [];
       
+      // 💡 1. 선택된 학생들 일괄 업데이트
+      if (selectedStudents.length > 0) {
+        const text = inputs['__selected__']?.trim() || '';
+        if (text) {
+          selectedStudents.forEach(s => {
+            updates.push({
+              studentId: s.id,
+              newData: { [targetCol]: text },
+              prevData: s.todaySession || {}
+            });
+          });
+        }
+      }
+
+      // 2. 태그 그룹별 업데이트 (선택되지 않은 학생들 대상)
       tagGroups.forEach(group => {
         const text = inputs[group.tag]?.trim() || '';
         if (text) {
@@ -163,7 +189,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
             {/* Target Column Selector */}
             <div className="bg-[#111] border border-white/5 rounded-lg p-3">
               <label className="block text-[12px] font-bold text-gray-300 mb-2 ml-1">입력할 칸 선택</label>
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-5 gap-2">
                 {TARGET_COLUMNS.map(col => (
                   <button
                     key={col.id}
@@ -182,6 +208,46 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
 
             {/* Tag Input Rows */}
             <div className="space-y-2">
+              {/* 💡 선택된 학생 일괄 입력 로우 */}
+              {selectedStudents.length > 0 && (
+                <div className="flex gap-3 items-center bg-blue-600/10 border border-blue-500/30 p-3 rounded-lg ring-1 ring-blue-500/20 shadow-md shadow-blue-900/5">
+                  {/* Tag Label Info */}
+                  <div className="w-24 shrink-0 flex flex-col gap-2">
+                    <div>
+                      <div className="min-w-[32px] h-[32px] px-2 rounded-[6px] border text-[13px] font-black inline-flex items-center justify-center shadow-sm bg-blue-600 text-white border-blue-400">
+                        선택됨
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-between pl-0.5 mt-0.5">
+                      <div className="text-[10px] text-blue-300 font-bold">
+                        {selectedStudents.length}명
+                      </div>
+                      <button 
+                        onClick={() => setShowStudents(prev => ({ ...prev, '__selected__': !prev['__selected__'] }))}
+                        className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 font-bold"
+                      >
+                        {showStudents['__selected__'] ? '숨기기' : '명단보기'}
+                      </button>
+                    </div>
+                    {showStudents['__selected__'] && (
+                      <div className="text-[12px] text-gray-200 font-medium leading-relaxed bg-black/60 p-2 rounded border border-white/10 mt-1.5 max-h-32 overflow-y-auto custom-scrollbar-h">
+                        {selectedStudents.map(s => s.name).join(', ')}
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Textarea */}
+                  <div className="flex-1 min-w-0">
+                    <textarea
+                      placeholder="선택한 학생들에게 일괄 적용할 내용을 입력하세요."
+                      value={inputs['__selected__'] || ''}
+                      onChange={(e) => setInputs(prev => ({ ...prev, '__selected__': e.target.value }))}
+                      className="w-full h-10 bg-black border border-blue-500/30 rounded-md p-2 text-[12px] text-white placeholder:text-gray-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none resize-none transition-all custom-scrollbar-h"
+                    />
+                  </div>
+                </div>
+              )}
+
               {tagGroups.map((group) => (
                 <div key={group.tag} className="flex gap-3 items-center bg-white/[0.02] border border-white/5 p-3 rounded-lg">
                   {/* Tag Label Info */}
@@ -222,7 +288,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                   </div>
                 </div>
               ))}
-              {tagGroups.length === 0 && (
+              {tagGroups.length === 0 && selectedStudents.length === 0 && (
                 <div className="text-center py-10 text-gray-500 text-[13px]">
                   현재 화면에 학생이 없습니다.
                 </div>
@@ -241,7 +307,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
             </button>
             <button
               onClick={handleSave}
-              disabled={isSaving || tagGroups.length === 0 || Object.values(inputs).every(v => !v.trim())}
+              disabled={isSaving || (selectedStudents.length === 0 && tagGroups.length === 0) || Object.values(inputs).every(v => !v.trim())}
               className="flex items-center gap-1.5 px-5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-[12px] font-bold transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-900/30"
             >
               {isSaving ? (

@@ -76,6 +76,7 @@ export interface ExamSubmission {
   essay_scores: Record<string, number>;
   total_score: number;
   wrong_questions: number[];
+  reveal_answers: boolean; // 💡 추가: 정답 및 해설 공개 여부
   submitted_at: string;
   graded_at: string | null;
 }

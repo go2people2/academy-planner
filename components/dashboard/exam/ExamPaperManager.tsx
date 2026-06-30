@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import type { ExamPaper, ExamPaperFormData } from '@/types/exam';
 
@@ -385,6 +385,144 @@ function ExamPaperDetail({ exam, onEdit, onEditAnswerKey, onBack }: {
   exam: ExamPaper; onEdit: () => void; onEditAnswerKey: () => void; onBack: () => void;
 }) {
   const answerCount = Object.keys(exam.answer_key || {}).length;
+  const [submissions, setSubmissions] = useState<any[]>([]);
+  const [loadingSubmissions, setLoadingSubmissions] = useState(true);
+
+  // 💡 일괄 공개/비공개 처리를 위한 선택 상태
+  const [selectedSubIds, setSelectedSubIds] = useState<string[]>([]);
+
+  // 💡 조회 기간 설정을 위한 상태 (기본값: 올해 1월 1일 ~ 오늘)
+  const getYearStart = () => {
+    const year = new Date().getFullYear();
+    return `${year}-01-01`;
+  };
+  const getTodayStr = () => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offset).toISOString().split('T')[0];
+  };
+
+  const [startDate, setStartDate] = useState<string>(getYearStart());
+  const [endDate, setEndDate] = useState<string>(getTodayStr());
+
+  // 💡 이번 주 월요일 구하기 (오늘 기준)
+  const getThisWeekStart = () => {
+    const now = new Date();
+    const day = now.getDay(); // 0(일) ~ 6(토)
+    const diff = now.getDate() - day + (day === 0 ? -6 : 1); // 월요일로 매칭
+    const monday = new Date(now.setDate(diff));
+    const offset = monday.getTimezoneOffset() * 60000;
+    return new Date(monday.getTime() - offset).toISOString().split('T')[0];
+  };
+
+  // 💡 이번 달 1일 구하기 (오늘 기준)
+  const getThisMonthStart = () => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    return `${year}-${month}-01`;
+  };
+
+  const fetchSubmissions = async () => {
+    setLoadingSubmissions(true);
+    try {
+      let query = supabase
+        .from('ams_exam_submissions')
+        .select('*')
+        .eq('exam_id', exam.id);
+
+      // 시작일과 종료일 조건 적용
+      if (startDate) {
+        query = query.gte('submitted_at', `${startDate}T00:00:00.000Z`);
+      }
+      if (endDate) {
+        query = query.lte('submitted_at', `${endDate}T23:59:59.999Z`);
+      }
+
+      const { data, error } = await query.order('submitted_at', { ascending: false });
+      
+      if (error) throw error;
+      setSubmissions(data || []);
+    } catch (err) {
+      console.error('Error fetching submissions:', err);
+    } finally {
+      setLoadingSubmissions(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchSubmissions();
+  }, [exam.id, startDate, endDate]);
+
+  const handleToggleReveal = async (subId: string, currentReveal: boolean) => {
+    try {
+      const { error } = await supabase
+        .from('ams_exam_submissions')
+        .update({ reveal_answers: !currentReveal })
+        .eq('id', subId);
+
+      if (error) throw error;
+      
+      // 로컬 상태 즉시 갱신
+      setSubmissions(prev => prev.map(s => s.id === subId ? { ...s, reveal_answers: !currentReveal } : s));
+    } catch (err: any) {
+      alert(`상태 업데이트 실패: ${err.message}`);
+    }
+  };
+
+  // 💡 선택 학생 일괄 정답 공개/비공개
+  const handleBatchToggleReveal = async (reveal: boolean) => {
+    if (selectedSubIds.length === 0) return;
+    
+    try {
+      const { error } = await supabase
+        .from('ams_exam_submissions')
+        .update({ reveal_answers: reveal })
+        .in('id', selectedSubIds);
+
+      if (error) throw error;
+
+      setSubmissions(prev => 
+        prev.map(s => 
+          selectedSubIds.includes(s.id) 
+            ? { ...s, reveal_answers: reveal } 
+            : s
+        )
+      );
+      setSelectedSubIds([]); // 선택 초기화
+      alert(`선택한 ${selectedSubIds.length}명 학생의 정답을 일괄 ${reveal ? '공개' : '비공개'} 처리했습니다.`);
+    } catch (err: any) {
+      alert(`일괄 업데이트 실패: ${err.message}`);
+    }
+  };
+
+  // 💡 현재 필터링 조회된 전체 학생 일괄 정답 공개/비공개
+  const handleAllToggleReveal = async (reveal: boolean) => {
+    if (submissions.length === 0) return;
+    
+    const allIds = submissions.map(s => s.id);
+    const confirmMsg = `현재 조회된 ${allIds.length}명 전체 학생의 정답을 일괄 ${reveal ? '공개' : '비공개'} 처리하시겠습니까?`;
+    
+    if (confirm(confirmMsg)) {
+      try {
+        const { error } = await supabase
+          .from('ams_exam_submissions')
+          .update({ reveal_answers: reveal })
+          .in('id', allIds);
+
+        if (error) throw error;
+
+        setSubmissions(prev => 
+          prev.map(s => ({ ...s, reveal_answers: reveal }))
+        );
+        setSelectedSubIds([]);
+        alert(`전체 ${allIds.length}명 학생의 정답을 일괄 ${reveal ? '공개' : '비공개'} 처리했습니다.`);
+      } catch (err: any) {
+        alert(`전체 업데이트 실패: ${err.message}`);
+      }
+    }
+  };
+
   return (
     <div style={styles.detailCard}>
       {exam.has_error && (
@@ -463,6 +601,241 @@ function ExamPaperDetail({ exam, onEdit, onEditAnswerKey, onBack }: {
           <button onClick={onBack} style={styles.backBtnAlt}>목록으로</button>
         </div>
       )}
+
+      {/* 💡 학생 답안 제출 및 채점 현황 목록 추가 */}
+      <div style={{ marginTop: 28, borderTop: '1px solid #2e2e4a', paddingTop: 20 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 800, color: '#f1f5f9', margin: '0 0 12px 0' }}>
+          📝 학생 답안 제출 및 채점 현황
+        </h3>
+
+        {/* 📅 기간 필터 UI 추가 */}
+        <div style={{ 
+          display: 'flex', 
+          alignItems: 'center', 
+          flexWrap: 'wrap',
+          gap: 10, 
+          marginBottom: 16, 
+          background: 'rgba(255,255,255,0.02)', 
+          padding: '10px 14px', 
+          borderRadius: 8, 
+          border: '1px solid rgba(255,255,255,0.05)' 
+        }}>
+          <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>📅 조회 기간 설정</span>
+          <input 
+            type="date" 
+            value={startDate} 
+            onChange={(e) => setStartDate(e.target.value)} 
+            onClick={(e) => { try { e.currentTarget.showPicker(); } catch(err) {} }}
+            onFocus={(e) => { try { e.currentTarget.showPicker(); } catch(err) {} }}
+            style={{ background: '#000', border: '1px solid #3b82f6', borderRadius: 6, padding: '4px 8px', fontSize: 12, color: '#fff', outline: 'none', cursor: 'pointer' }}
+          />
+          <span style={{ fontSize: 12, color: '#475569' }}>~</span>
+          <input 
+            type="date" 
+            value={endDate} 
+            onChange={(e) => setEndDate(e.target.value)} 
+            onClick={(e) => { try { e.currentTarget.showPicker(); } catch(err) {} }}
+            onFocus={(e) => { try { e.currentTarget.showPicker(); } catch(err) {} }}
+            style={{ background: '#000', border: '1px solid #3b82f6', borderRadius: 6, padding: '4px 8px', fontSize: 12, color: '#fff', outline: 'none', cursor: 'pointer' }}
+          />
+
+          {/* ⚡ 퀵 프리셋 단축 버튼 추가 */}
+          <div style={{ display: 'flex', gap: 6, marginLeft: 8 }}>
+            <button
+              onClick={() => {
+                const today = getTodayStr();
+                setStartDate(today);
+                setEndDate(today);
+              }}
+              style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', transition: 'all 0.2s' }}
+              onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#475569'; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.borderColor = '#334155'; }}
+            >
+              오늘
+            </button>
+            <button
+              onClick={() => {
+                setStartDate(getThisWeekStart());
+                setEndDate(getTodayStr());
+              }}
+              style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', transition: 'all 0.2s' }}
+              onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#475569'; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.borderColor = '#334155'; }}
+            >
+              이번주
+            </button>
+            <button
+              onClick={() => {
+                setStartDate(getThisMonthStart());
+                setEndDate(getTodayStr());
+              }}
+              style={{ background: '#1e293b', border: '1px solid #334155', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, color: '#94a3b8', cursor: 'pointer', transition: 'all 0.2s' }}
+              onMouseOver={(e) => { e.currentTarget.style.color = '#fff'; e.currentTarget.style.borderColor = '#475569'; }}
+              onMouseOut={(e) => { e.currentTarget.style.color = '#94a3b8'; e.currentTarget.style.borderColor = '#334155'; }}
+            >
+              이번달
+            </button>
+          </div>
+
+          <button 
+            onClick={() => { setStartDate(''); setEndDate(''); }}
+            style={{ background: '#334155', border: 'none', borderRadius: 6, padding: '4px 12px', fontSize: 11, fontWeight: 700, color: '#fff', cursor: 'pointer', marginLeft: 'auto' }}
+          >
+            전체 기간 보기
+          </button>
+        </div>
+
+        {/* ⚡ 일괄 처리 바 추가 */}
+        {submissions.length > 0 && (
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            flexWrap: 'wrap',
+            gap: 12, 
+            marginBottom: 16, 
+            background: 'rgba(255,255,255,0.01)', 
+            padding: '10px 14px', 
+            borderRadius: 8, 
+            border: '1px solid rgba(255,255,255,0.04)' 
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer' }}>
+              <input 
+                type="checkbox" 
+                checked={selectedSubIds.length === submissions.length}
+                onChange={(e) => {
+                  if (e.target.checked) {
+                    setSelectedSubIds(submissions.map(s => s.id));
+                  } else {
+                    setSelectedSubIds([]);
+                  }
+                }}
+                style={{ width: 15, height: 15, cursor: 'pointer' }}
+              />
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>
+                전체선택 ({selectedSubIds.length}명 선택됨)
+              </span>
+            </div>
+
+            <button
+              onClick={() => handleBatchToggleReveal(true)}
+              disabled={selectedSubIds.length === 0}
+              style={{ background: selectedSubIds.length > 0 ? '#10b981' : '#1e293b', color: selectedSubIds.length > 0 ? '#fff' : '#4b5563', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: selectedSubIds.length > 0 ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
+            >
+              🔓 선택 정답공개
+            </button>
+            <button
+              onClick={() => handleBatchToggleReveal(false)}
+              disabled={selectedSubIds.length === 0}
+              style={{ background: selectedSubIds.length > 0 ? '#ef4444' : '#1e293b', color: selectedSubIds.length > 0 ? '#fff' : '#4b5563', border: 'none', borderRadius: 6, padding: '5px 12px', fontSize: 11, fontWeight: 700, cursor: selectedSubIds.length > 0 ? 'pointer' : 'not-allowed', transition: 'all 0.2s' }}
+            >
+              🔒 선택 정답비공개
+            </button>
+
+            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => handleAllToggleReveal(true)}
+                style={{ background: 'transparent', border: '1px solid #10b981', color: '#10b981', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                전체 공개
+              </button>
+              <button
+                onClick={() => handleAllToggleReveal(false)}
+                style={{ background: 'transparent', border: '1px solid #ef4444', color: '#ef4444', borderRadius: 6, padding: '4px 10px', fontSize: 11, fontWeight: 700, cursor: 'pointer', transition: 'all 0.2s' }}
+              >
+                전체 비공개
+              </button>
+            </div>
+          </div>
+        )}
+
+        {loadingSubmissions ? (
+          <div style={{ padding: '20px 0', textAlign: 'center', color: '#64748b', fontSize: 13 }}>
+            제출 이력 로딩 중...
+          </div>
+        ) : submissions.length === 0 ? (
+          <div style={{ padding: '24px', textAlign: 'center', color: '#64748b', fontSize: 13, background: 'rgba(0,0,0,0.1)', borderRadius: 8 }}>
+            선택한 조회 기간 내에 답안을 제출한 학생이 없습니다.
+          </div>
+        ) : (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            {submissions.map((sub) => (
+              <div 
+                key={sub.id} 
+                style={{ 
+                  display: 'flex', 
+                  justifyContent: 'space-between', 
+                  alignItems: 'center', 
+                  background: 'rgba(255,255,255,0.02)', 
+                  border: '1px solid #2e2e4a', 
+                  borderRadius: 10, 
+                  padding: '12px 18px',
+                  flexWrap: 'wrap',
+                  gap: 12
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  {/* 💡 개별 체크박스 */}
+                  <input 
+                    type="checkbox" 
+                    checked={selectedSubIds.includes(sub.id)}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setSelectedSubIds(prev => [...prev, sub.id]);
+                      } else {
+                        setSelectedSubIds(prev => prev.filter(id => id !== sub.id));
+                      }
+                    }}
+                    style={{ width: 15, height: 15, cursor: 'pointer' }}
+                  />
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <span style={{ fontSize: 14, fontWeight: 700, color: '#fff' }}>{sub.student_name}</span>
+                      <span style={{ fontSize: 11, color: '#94a3b8', background: '#1e293b', padding: '2px 6px', borderRadius: 4 }}>
+                        {sub.input_method === 'digital' ? '디지털 마킹' : 'OMR 스캔'}
+                      </span>
+                    </div>
+                    <span style={{ fontSize: 11, color: '#64748b' }}>
+                      제출일시: {new Date(sub.submitted_at).toLocaleString('ko-KR')}
+                    </span>
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+                  <div style={{ textAlign: 'right' }}>
+                    <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>자동 채점 결과</span>
+                    <div style={{ fontSize: 16, fontWeight: 900, color: '#38bdf8', marginTop: 2 }}>
+                      {sub.total_score}점 
+                      <span style={{ fontSize: 12, color: '#ef4444', marginLeft: 6 }}>
+                        (오답: {sub.wrong_questions?.length || 0}개)
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 💡 정답/해설 공개 토글 버튼 */}
+                  <button
+                    onClick={() => handleToggleReveal(sub.id, sub.reveal_answers)}
+                    style={{
+                      background: sub.reveal_answers ? '#10b981' : '#334155',
+                      color: '#fff',
+                      border: 'none',
+                      padding: '8px 16px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      transition: 'all 0.2s',
+                      boxShadow: sub.reveal_answers ? '0 4px 12px rgba(16,185,129,0.2)' : 'none'
+                    }}
+                  >
+                    {sub.reveal_answers ? '🔓 정답 공개 중' : '🔒 정답 비공개'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

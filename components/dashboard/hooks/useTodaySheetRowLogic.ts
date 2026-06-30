@@ -40,6 +40,7 @@ export function useTodaySheetRowLogic({
   const nqRef = useRef<HTMLTextAreaElement>(null);
   const missionRef = useRef<HTMLTextAreaElement>(null);
   const notesRef = useRef<HTMLTextAreaElement>(null);
+  const managementNotesRef = useRef<HTMLTextAreaElement>(null);
   const tdRefs = useRef<Record<string, HTMLTableCellElement | null>>({});
 
   // 3. Utils
@@ -104,6 +105,7 @@ export function useTodaySheetRowLogic({
       hw_checked_today: session?.hw_checked_today ?? false,
       hw_passed_today: session?.hw_passed_today ?? false,
       mission: translateBookCodes(student.recent_mission || ''),
+      management_notes: translateBookCodes(session?.management_notes || student.management_notes || ''),
       moved_to_hour: session?.moved_to_hour, // 💡 추가
       isTodayClassDay
     };
@@ -143,7 +145,7 @@ export function useTodaySheetRowLogic({
 
     if (typeof updatesOrField === 'string') {
       // ✅ [공용 계약 유지] onSave(colId, value, options?)
-      const fieldMap: any = { test_id: 'test_id', classwork: 'classwork_text', completed_classwork: 'completed_classwork_text', assign: 'homework_text', next_quiz: 'next_quiz_text', mission: 'mission', notes: 'special_notes', test_score: 'test_score', test_total_count: 'test_total_count' };
+      const fieldMap: any = { test_id: 'test_id', classwork: 'classwork_text', completed_classwork: 'completed_classwork_text', assign: 'homework_text', next_quiz: 'next_quiz_text', mission: 'mission', notes: 'special_notes', management_notes: 'management_notes', test_score: 'test_score', test_total_count: 'test_total_count' };
       const dbKey = fieldMap[updatesOrField] || updatesOrField;
       finalUpdates = { [dbKey]: valueOrOptions };
       options = maybeOptions || {};
@@ -163,11 +165,11 @@ export function useTodaySheetRowLogic({
 
     // 2. DOM 데이터 수집 및 병합 (Refs + Updates)
     const lazyData: any = {};
-    const fieldRefs: any = { test_id: testRef, classwork: cwRef, completed_classwork: ccwRef, assign: hwRef, next_quiz: nqRef, mission: missionRef, notes: notesRef };
+    const fieldRefs: any = { test_id: testRef, classwork: cwRef, completed_classwork: ccwRef, assign: hwRef, next_quiz: nqRef, mission: missionRef, notes: notesRef, management_notes: managementNotesRef };
     
     Object.keys(fieldRefs).forEach(key => {
       if (fieldRefs[key].current) {
-        const dbKey = key === 'test_id' ? 'test_id' : (key === 'notes' ? 'special_notes' : (key === 'mission' ? 'mission' : `${key}_text`));
+        const dbKey = key === 'test_id' ? 'test_id' : (key === 'notes' ? 'special_notes' : (key === 'management_notes' ? 'management_notes' : (key === 'mission' ? 'mission' : `${key}_text`)));
         if (!(dbKey in finalUpdates)) lazyData[dbKey] = fieldRefs[key].current.value;
       }
     });
@@ -346,7 +348,7 @@ export function useTodaySheetRowLogic({
       isFeedbackOpen, setIsFeedbackOpen, isSupplementTimePickerOpen, setIsSupplementTimePickerOpen,
       isSaving, saveStatus, formData, setFormData, rowDate
     },
-    refs: { testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, tdRefs },
+    refs: { testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, managementNotesRef, tdRefs },
     handlers: {
       handleSave, handleAttendanceToggle, handleSupplementTimeSelect, selectFeedback, syncTextFromData
     }

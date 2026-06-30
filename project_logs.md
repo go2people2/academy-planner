@@ -36,9 +36,30 @@
 
 ---
 
-## 3. 향후 작업 계획
+## 3. 향후 작업 계획 (1~3단계 통합 완료)
 - [x] **학생용 오답제출 이력 UI 구현**: [StudentSubmitPage.tsx](file:///Users/joonsik_air/documents/makecode/academy-planner/components/wrong-answers/StudentSubmitPage.tsx)에 최근 오답 제출 이력 10개 조회 및 제출 성공 시 즉시 갱신 기능 완료.
 - [x] **교사용 오답노트 관리 화면 구현**: 교사용 대시보드 사이드바에 `오답노트 관리` 메뉴 신설 및 학생 교재 배정과 PIN 리셋 기능 통합 완료.
-1. **교재 동기화 로직 구현**: [app/[slug]/dashboard/page.tsx](file:///Users/joonsik_air/documents/makecode/academy-planner/app/[slug]/dashboard/page.tsx) 의 `updateStudentInfo` 내에 위 2단계 사양의 합집합 동기화 로직 적용.
-2. **학생용 컴포넌트 보강**: [StudentSubmitPage.tsx](file:///Users/joonsik_air/documents/makecode/academy-planner/components/wrong-answers/StudentSubmitPage.tsx)에 실제 문제 DB 검사 후 없는 교재 드롭다운 자동 필터링 기능 탑재.
-3. **통합 테스트**: 교재 배정 변경 후 학생 오답제출 목록 정상 확인 및 파이썬 PDF 시험지 생성 연동 테스트.
+- [x] **교재 동기화 로직 구현**: [app/[slug]/dashboard/page.tsx](file:///Users/joonsik_air/documents/makecode/academy-planner/app/[slug]/dashboard/page.tsx) 의 `updateStudentInfo` 내에 위 2단계 사양의 합집합 동기화 로직 적용.
+- [x] **학생용 컴포넌트 보강**: [StudentSubmitPage.tsx](file:///Users/joonsik_air/documents/makecode/academy-planner/components/wrong-answers/StudentSubmitPage.tsx)에 실제 문제 DB 검사 후 없는 교재 드롭다운 자동 필터링 기능 탑재.
+- [x] **통합 테스트**: 교재 배정 변경 후 학생 오답제출 목록 정상 확인 및 파이썬 PDF 시험지 생성 연동 테스트.
+
+---
+
+## 4. 최근 개발 사항 및 점검 이력 (2026-06-27)
+
+### A. 전역 및 TodaySheet 키보드 단축키 무결성 점검 완료
+- **목적**: `TodaySheet`의 편집, 네비게이션, 복사/붙여넣기 등 단축키 오작동 여부 전수 점검.
+- **점검 결과**:
+   - `e.isComposing` 방어 가드로 한글 IME 조립 중 엔터 조기 블러(Blur) 현상 방지 완벽 작동 확인.
+   - `Ctrl + D`의 윈도우 크롬 북마크 충돌을 해결하기 위해 `Alt + D` 이중 바인딩하여 안전성 확보.
+   - `isInput` 분기 처리를 통해 입력 중인 셀 내의 Undo/Redo(브라우저 기본)와 입력되지 않은 셀 선택 범위의 Undo/Redo(앱 히스토리) 충돌을 명확하게 라우팅함.
+   - 자세한 분석 보고서는 [keyboard_shortcuts_audit.md](file:///Users/joonsik_air/.gemini/antigravity-cli/brain/8de8d4c9-5152-4680-980a-c5a17319f7ce/keyboard_shortcuts_audit.md) 아티팩트로 분리 작성 완료.
+
+### B. 유연한 자동 커리큘럼 스케줄러 (Curriculum Scheduler) 기획 설계
+- **목적**: 교재별 진도표를 일괄 배정하고, 결석/지연 시 뒤쪽 스케줄을 클릭 한 번으로 자동 밀어내기 및 재정렬.
+- **설계 내용**:
+   - **커리큘럼 템플릿**: 회차별 진도, 과제, 테스트 목록 마스터화 (`ams_curriculums` / `ams_curriculum_steps` 테이블).
+   - **요일/날짜 자동 매핑**: 학생의 수업 요일(`class_days`)과 시작일을 대조하여 미래 날짜 달력에 회차별 진도를 1:1 자동 바인딩 (`ams_student_curriculums.schedule_map`).
+   - **유연한 재조정 (Flexible Rescheduling)**: 결석 발생 시, 해당 시점부터 전체 일정을 다음 등원 요일로 1일씩 순차 Shift 연산하는 알고리즘 구상.
+   - **맞춤형 학교 검색**: 전체 학교 DB 대신 실제 DB에 누적된 학생들의 학교명을 `DISTINCT` 쿼리로 조회해 지역 계열 드롭다운을 동적으로 구성하여 불필요한 트래픽 및 오차율 최소화.
+   - 자세한 아키텍처 및 스키마 설계는 [curriculum_planner_design.md](file:///Users/joonsik_air/.gemini/antigravity-cli/brain/8de8d4c9-5152-4680-980a-c5a17319f7ce/curriculum_planner_design.md) 아티팩트에 정리 완료. (현재 보류 중으로 향후 Quota 여유 시 개발 착수)

@@ -782,7 +782,7 @@ const getFilteredBaseFields = (sessionData: any) => {
     'completed_classwork_text', 'completed_classwork_json',
     'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 'approval_status', 
     'session_date', 'academy_id', 'student_id', 'homework_to', 'timer_started_at', 'timer_duration',
-    'moved_to_hour', 'attendance_reason'
+    'moved_to_hour', 'attendance_reason', 'management_notes'
   ];
   const filtered: any = {};
   Object.keys(sessionData).forEach(key => {
@@ -842,6 +842,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   const student = students.find(s => s.id === studentId);
   if (!student || !academy) return false;
   let sessionId = student.todaySession?.id;
+
+  // 💡 [추가] 관리 주의점(management_notes) 수정 시, 학생 마스터 정보 테이블도 함께 연동 갱신
+  if ('management_notes' in sessionData && sessionData.management_notes !== undefined) {
+    await supabase.from('ams_students').update({ 
+      management_notes: sessionData.management_notes 
+    }).eq('id', studentId);
+  }
 
   // 💡 출결이 결석인 경우 수행진도(completed_classwork_text)를 '결석'으로 자동 입력
   const dataToSave = { ...sessionData };
@@ -1346,6 +1353,18 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           updateData.status_changed_at = new Date().toISOString();
         }
         await supabase.from('ams_students').update(updateData).eq('id', studentId);
+
+        // 💡 [추가] 관리 주의점(management_notes) 수정 시 히스토리 로그 테이블에 적재
+        if (updateData.management_notes !== undefined && academy) {
+          const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(currentUser?.id);
+          const creatorId = isValidUUID ? currentUser.id : null;
+          await supabase.from('ams_student_management_logs').insert([{
+            student_id: studentId,
+            academy_id: academy.id,
+            teacher_id: creatorId,
+            notes: updateData.management_notes
+          }]);
+        }
       }
       await fetchAllData(false);
     } catch (e: any) { console.error(e); }

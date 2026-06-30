@@ -2,6 +2,7 @@
 
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
+import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink
@@ -41,6 +42,7 @@ interface TodaySheetCellProps {
   nqRef: React.RefObject<HTMLTextAreaElement | null>;
   missionRef: React.RefObject<HTMLTextAreaElement | null>;
   notesRef: React.RefObject<HTMLTextAreaElement | null>;
+  managementNotesRef: React.RefObject<HTMLTextAreaElement | null>;
   tdRef: (el: HTMLTableCellElement | null) => void;
   scoreInputRef?: (el: HTMLInputElement | null) => void;
 
@@ -84,11 +86,11 @@ interface TodaySheetCellProps {
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
   col, styles, student, formData, isEditing, isActive, isInRange, isSelected, 
   isCompleted, saveStatus, isSaving, isHistoryExpanded, displayDateShort, statusMap, 
-  testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, tdRef, scoreInputRef, // 💡 ccwRef 추가
+  testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, managementNotesRef, tdRef, scoreInputRef,
   onSelectOne, onToggleHistory, onViewProgress, onViewDetail, handleCellInteraction, handleKeyDown, 
   onCellMouseDown, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle, 
   onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback, 
-  onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal, // 💡 onOpenCcwEditor 추가
+  onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal,
   onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave,
   onInputChange,
   rowIndex,
@@ -103,24 +105,54 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   
   const colId = col.id;
 
+  // 💡 [추가] 관리 주의점(management_notes) 퀵 팝업 에디터 상태
+  const [isNotePopupOpen, setIsNotePopupOpen] = useState(false);
+  const [noteText, setNoteText] = useState(student.management_notes || '');
+  const [isSavingNote, setIsSavingNote] = useState(false);
+
+  const handleOpenNotesPopup = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    handleCellInteraction(e, 'management_notes', 'click');
+  };
+
+  const handleSaveNote = async () => {
+    if (!noteText.trim()) {
+      alert('주의사항 내용을 입력해 주세요.');
+      return;
+    }
+    setIsSavingNote(true);
+    try {
+      if (onUpdateStudentInfo) {
+        await onUpdateStudentInfo(student.id, 'management_notes', noteText.trim());
+        setIsNotePopupOpen(false);
+      }
+    } catch (err) {
+      console.error(err);
+      alert('저장에 실패했습니다.');
+    } finally {
+      setIsSavingNote(false);
+    }
+  };
+
   // 💡 여백 최소화: 무조건 상하 2px (최대 밀집도)
   const getDynamicPadding = (text?: string) => 'pt-[2px] pb-[2px] px-1.5';
 
   const currentText = colId === 'test_id' ? formData.test_id :
                     colId === 'classwork' ? formData.classwork_text :
-                    colId === 'completed_classwork' ? formData.completed_classwork_text : // 💡 추가
+                    colId === 'completed_classwork' ? formData.completed_classwork_text :
                     colId === 'assign' ? formData.homework_text :
                     colId === 'next_quiz' ? formData.next_quiz_text :
                     colId === 'mission' ? formData.mission :
+                    colId === 'management_notes' ? formData.management_notes :
                     colId === 'notes' ? formData.special_notes : '';
 
   const dynamicPadding = getDynamicPadding(currentText);
 
   // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 포커스 지연 제거
   React.useLayoutEffect(() => {
-    const refs = [testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef];
+    const refs = [testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, managementNotesRef];
     refs.forEach(ref => {
-      if (ref.current && (isEditing || isActive)) {
+      if (ref?.current && (isEditing || isActive)) {
         ref.current.style.height = 'auto';
         ref.current.style.height = `${ref.current.scrollHeight}px`;
         // 💡 편집 모드일 때만 즉시 포커스 (속도 향상 핵심)
@@ -422,47 +454,52 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'tools' && (
           <div className="flex items-center justify-center gap-1.5 px-1 py-1 w-full min-h-[22px] relative group/tools">
-            {/* 우측 상단: 학생 주의사항 (노란색) */}
-            {student.management_notes && (
-              <div className="absolute top-0 right-0">
-                <div 
-                  className="group/note relative cursor-pointer z-[60]"
-                  onClick={(e) => { e.stopPropagation(); onViewDetail?.(student.id); }}
-                  onMouseEnter={(e) => handleOpenTooltip(e, 'note')}
-                  onMouseLeave={() => setActiveTooltip(null)}
-                  onFocus={(e) => handleOpenTooltip(e, 'note')}
-                  onBlur={() => setActiveTooltip(null)}
-                  tabIndex={0}
-                >
-                  <div className="w-0 h-0 border-t-[16px] border-t-amber-500 border-l-[16px] border-l-transparent shadow-lg drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]" />
-                  
-                  {activeTooltip === 'note' && createPortal(
-                    <AnimatePresence mode="wait">
-                      <motion.div 
-                        initial={{ opacity: 0, y: tooltipCoords.top < 350 ? 10 : -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        style={{ 
-                          position: 'fixed',
-                          top: tooltipCoords.top < 350 ? tooltipCoords.bottom + 8 : 'auto',
-                          bottom: tooltipCoords.top < 350 ? 'auto' : (window.innerHeight - tooltipCoords.top) + 8,
-                          left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
-                          zIndex: 9999
-                        }}
-                        className="w-80 p-5 bg-amber-50 text-amber-950 text-[13px] font-normal rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.5)] border-2 border-amber-200 ring-4 ring-black/20 pointer-events-none"
-                      >
-                        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-200">
-                          <AlertTriangle size={14} className="text-amber-600 animate-bounce" />
-                          <span className="text-[10px] uppercase tracking-widest text-amber-600 font-normal">Student Management Alert</span>
-                        </div>
-                        <p className="whitespace-pre-wrap leading-relaxed text-[14px]">"{student.management_notes}"</p>
-                      </motion.div>
-                    </AnimatePresence>,
-                    document.body
-                  )}
-                </div>
+            {/* 우측 상단: 학생 주의사항 (노란색 스티커 마우스오버 툴팁) */}
+            <div className="absolute top-0 right-0">
+              <div 
+                className="group/note relative cursor-pointer z-[60]"
+                onClick={(e) => handleOpenNotesPopup(e)}
+                onMouseEnter={(e) => {
+                  if (student.management_notes) {
+                    handleOpenTooltip(e, 'note');
+                  }
+                }}
+                onMouseLeave={() => setActiveTooltip(null)}
+                tabIndex={0}
+              >
+                <div className={`w-0 h-0 border-t-[16px] border-l-[16px] border-l-transparent transition-all ${
+                  student.management_notes 
+                    ? 'border-t-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]' 
+                    : 'border-t-white/10 hover:border-t-amber-500/40'
+                }`} />
+                
+                {/* 마우스 오버 말풍선 (주의사항 컬럼이 닫혀있어도 확인 가능) */}
+                {activeTooltip === 'note' && student.management_notes && createPortal(
+                  <AnimatePresence mode="wait">
+                    <motion.div 
+                      initial={{ opacity: 0, y: tooltipCoords.top < 350 ? 10 : -10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                      style={{ 
+                        position: 'fixed',
+                        top: tooltipCoords.top < 350 ? tooltipCoords.bottom + 8 : 'auto',
+                        bottom: tooltipCoords.top < 350 ? 'auto' : (window.innerHeight - tooltipCoords.top) + 8,
+                        left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
+                        zIndex: 9999
+                      }}
+                      className="w-80 p-5 bg-amber-50 text-amber-950 text-[13px] font-normal rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.5)] border-2 border-amber-200 ring-4 ring-black/20 pointer-events-none"
+                    >
+                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-200">
+                        <AlertTriangle size={14} className="text-amber-600 animate-bounce" />
+                        <span className="text-[10px] uppercase tracking-widest text-amber-600 font-normal">Student Management Alert</span>
+                      </div>
+                      <p className="whitespace-pre-wrap leading-relaxed text-[14px]">"{student.management_notes}"</p>
+                    </motion.div>
+                  </AnimatePresence>,
+                  document.body
+                )}
               </div>
-            )}
+            </div>
 
             {/* 좌측 상단: 건의사항 (파란색) */}
             {student.suggestions && student.suggestions.length > 0 && (
@@ -699,9 +736,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {/* 💡 [리팩토링] 단순 텍스트 셀 분리 (mission, notes) */}
-        {(['mission', 'notes'].includes(colId)) && (
+        {(['mission', 'notes', 'management_notes'].includes(colId)) && (
           <SimpleTextCell 
-            ref={colId === 'mission' ? missionRef : notesRef}
+            ref={colId === 'mission' ? missionRef : colId === 'notes' ? notesRef : managementNotesRef}
             student={student}
             colId={colId}
             currentText={currentText}

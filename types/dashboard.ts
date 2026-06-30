@@ -38,6 +38,7 @@ export interface SessionLog {
   test_completed?: boolean; // 💡 추가 (테스트 완료 여부)
   approval_status?: string;
   report_sent_at?: string;
+  management_notes?: string;
   timer_started_at?: number; // 💡 추가 (타이머 시작 시각)
   timer_duration?: number; // 💡 추가 (타이머 시간 - 분)
   moved_to_hour?: number | null; // 💡 추가 (시간 이동/보강 시 변경된 교시)

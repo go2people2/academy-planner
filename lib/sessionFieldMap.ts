@@ -12,7 +12,8 @@ export const COLUMN_TO_FIELD_MAP: Record<string, string> = {
   'completed_classwork': 'completed_classwork_text',
   'mission': 'mission',
   'notes': 'special_notes',
-  'next_quiz': 'next_quiz_text'
+  'next_quiz': 'next_quiz_text',
+  'management_notes': 'management_notes'
 };
 
 // 💡 [추가] Column ID -> JS Property Name (SessionLog 객체 내부 키)
@@ -25,7 +26,8 @@ export const COLUMN_TO_PROP_MAP: Record<string, string> = {
   'completed_classwork': 'completed_classwork_text',
   'mission': 'mission',
   'notes': 'special_notes',
-  'next_quiz': 'next_quiz_text'
+  'next_quiz': 'next_quiz_text',
+  'management_notes': 'management_notes'
 };
 
 // 2. DB Field Name -> Column ID (Inverse Map)
@@ -40,7 +42,8 @@ export const FIELD_TO_COLUMN_MAP: Record<string, string> = {
   'completed_classwork_text': 'completed_classwork',
   'mission': 'mission',
   'special_notes': 'notes',
-  'next_quiz_text': 'next_quiz'
+  'next_quiz_text': 'next_quiz',
+  'management_notes': 'management_notes'
 };
 
 // 3. Attendance Status Constants
