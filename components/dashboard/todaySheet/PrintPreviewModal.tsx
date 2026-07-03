@@ -70,7 +70,13 @@ export default function PrintPreviewModal({
       if (!isNaN(val) && val < 24) return val;
     }
     const hours = st.day_schedules?.[dayKey] || [];
-    return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
+    if (hours.length > 0) {
+      const firstVal = hours[0];
+      let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+      if (h <= 12) h += 12;
+      return h;
+    }
+    return 999;
   };
 
   const getTimeLabel = (time: number) => {

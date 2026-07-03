@@ -275,7 +275,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
 // --- Main Component ---
 
 export default function TodaySheet({
-  students, setStudents, masterTextbooks, onSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
+  students, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange,
   sortDirection = 'asc', onSortDirectionChange,
   onOpenBriefing, // 💡 추가
@@ -678,7 +678,13 @@ export default function TodaySheet({
         if (!isNaN(val) && val < 24) return val; 
       }
       const hours = st.day_schedules?.[dayKey] || [];
-      return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
+      if (hours.length > 0) {
+        const firstVal = hours[0];
+        let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+        if (h <= 12) h += 12;
+        return h;
+      }
+      return 999;
     };
 
     return result.sort((a, b) => {
@@ -695,6 +701,15 @@ export default function TodaySheet({
         const timeB = getStartTime(b);
         if (timeA !== timeB) {
           comparison = timeA - timeB;
+          return sortDirection === 'asc' ? comparison : -comparison;
+        }
+      } else if (sortMode === 'school') {
+        const schoolCmp = (a.school || '').localeCompare(b.school || '', 'ko');
+        if (schoolCmp !== 0) return sortDirection === 'asc' ? schoolCmp : -schoolCmp;
+        const gradeA = getGradeWeight(a.grade);
+        const gradeB = getGradeWeight(b.grade);
+        if (gradeA !== gradeB) {
+          comparison = gradeA - gradeB;
           return sortDirection === 'asc' ? comparison : -comparison;
         }
       }
@@ -955,6 +970,119 @@ export default function TodaySheet({
     setIsExportOpen(false);
   };
 
+  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+        
+        if (rows.length < 2) {
+          alert('엑셀 파일에 데이터가 부족합니다.');
+          return;
+        }
+        
+        const headers: any = rows[0];
+        const classworkIdx = headers.indexOf('진도');
+        const testIdx = headers.indexOf('테스트');
+        const homeworkIdx = headers.indexOf('과제');
+        const notesIdx = headers.indexOf('기타');
+        const classNameIdx = headers.indexOf('반명');
+        
+        if (classNameIdx === -1) {
+          alert("올바른 아카 2000 엑셀 포맷이 아닙니다. '반명' 열이 존재해야 합니다.");
+          return;
+        }
+        
+        const sessionUpdates: any[] = [];
+        
+        for (let i = 1; i < rows.length; i++) {
+          const row: any = rows[i];
+          if (!row || row.length === 0) continue;
+          
+          const classNameVal = String(row[classNameIdx] || '').trim();
+          if (!classNameVal) continue;
+          
+          const studentName = classNameVal.split('-')[0].trim();
+          if (!studentName) continue;
+          
+          const matchedStudent = students.find((s: any) => s.name.trim() === studentName);
+          if (!matchedStudent) {
+            console.log(`[Import Excel] 매칭되는 학생을 찾을 수 없음: ${studentName}`);
+            continue;
+          }
+          
+          const classworkText = classworkIdx !== -1 ? String(row[classworkIdx] || '').trim() : '';
+          const homeworkText = homeworkIdx !== -1 ? String(row[homeworkIdx] || '').trim() : '';
+          const specialNotes = notesIdx !== -1 ? String(row[notesIdx] || '').trim() : '';
+          const rawTestVal = testIdx !== -1 ? String(row[testIdx] || '').trim() : '';
+          
+          let testId = '';
+          let testScore = '';
+          let testScoreType = 'score';
+          let testTotalCount = '';
+          
+          if (rawTestVal) {
+            const parenIdx = rawTestVal.indexOf('(');
+            if (parenIdx !== -1) {
+              testId = rawTestVal.substring(0, parenIdx).trim();
+              const scorePart = rawTestVal.substring(parenIdx + 1, rawTestVal.length - 1).trim();
+              
+              if (scorePart.includes('/') && scorePart.includes('개')) {
+                testScoreType = 'count';
+                const parts = scorePart.replace(/개/g, '').split('/');
+                testScore = parts[0]?.trim() || '';
+                testTotalCount = parts[1]?.trim() || '';
+              } else if (scorePart.includes('점')) {
+                testScoreType = 'score';
+                testScore = scorePart.replace(/점/g, '').trim();
+              } else if (scorePart.includes('개')) {
+                testScoreType = 'count';
+                testScore = scorePart.replace(/개/g, '').trim();
+              } else {
+                testScore = scorePart;
+              }
+            } else {
+              testId = rawTestVal;
+            }
+          }
+          
+          sessionUpdates.push({
+            student_id: matchedStudent.id,
+            completed_classwork_text: classworkText,
+            homework_text: homeworkText,
+            special_notes: specialNotes,
+            test_id: testId,
+            test_score: testScore,
+            test_score_type: testScoreType,
+            test_total_count: testTotalCount
+          });
+        }
+        
+        if (sessionUpdates.length === 0) {
+          alert('오늘 출석부와 일치하는 학생 정보를 엑셀에서 찾지 못했습니다.');
+          return;
+        }
+        
+        if (onBatchSave) {
+          await onBatchSave(sessionUpdates);
+          alert(`엑셀 파일로부터 총 ${sessionUpdates.length}명 학생의 일지 정보가 성공적으로 복원/저장되었습니다!`);
+        }
+      } catch (err: any) {
+        console.error(err);
+        alert('엑셀 파일 파싱 중 오류가 발생했습니다: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
+
   const handleSelectAll = useCallback((checked: boolean) => { setSelectedIds(checked ? students.map((s: any) => s.id) : []); }, [students]);
   const handleSelectOne = useCallback((id: string, checked: boolean, shiftKey: boolean = false) => { 
     if (shiftKey && lastSelectedId) {
@@ -1035,6 +1163,7 @@ export default function TodaySheet({
     selectedIds,
     onSave,
     toggleSecondRow,
+    toggleHistory,
     handleUndo,
     handleRedo
   });
@@ -1114,15 +1243,6 @@ export default function TodaySheet({
           <div className="flex flex-col gap-0.5 items-start">
             <div className="flex items-center gap-3">
               <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
-              {/* 💡 수동 브리핑 버튼 (더 크고 직관적인 노란 삼각형) */}
-              <button 
-                onClick={onOpenBriefing}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500 text-black hover:bg-amber-400 transition-all animate-pulse shadow-[0_0_20px_rgba(245,158,11,0.4)] border-2 border-amber-300/50 group"
-                title="오늘의 중요 브리핑 열기"
-              >
-                <AlertTriangle size={14} className="fill-current" />
-                <span className="text-[10px] font-black uppercase tracking-widest">Morning Briefing</span>
-              </button>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter mr-1">{students.length} Total</span>
@@ -1188,6 +1308,33 @@ export default function TodaySheet({
                     <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-emerald-400 transition-all text-left group"><div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all"><FileSpreadsheet size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Excel File</span><span className="text-[9px] text-gray-600">Microsoft Excel (.xlsx)</span></div></button>
                     <button onClick={() => handleExport('csv')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-amber-400 transition-all text-left group"><div className="w-8 h-8 rounded bg-amber-500/10 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-all"><FileTextIcon size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">CSV File</span><span className="text-[9px] text-gray-600">쉼표로 구분된 텍스트 파일</span></div></button>
                     <button onClick={() => handleExport('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-left group"><div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all"><Copy size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Copy to Clipboard</span><span className="text-[9px] text-gray-600">다른 엑셀 시트에 바로 붙여넣기</span></div></button>
+                    
+                    <div className="border-t border-white/5 my-1.5" />
+                    
+                    <input 
+                      type="file" 
+                      id="excel-aca-import-input" 
+                      accept=".xlsx, .xls" 
+                      onChange={handleImportExcel} 
+                      className="hidden" 
+                    />
+                    <button 
+                      onClick={() => {
+                        setIsExportOpen(false);
+                        document.getElementById('excel-aca-import-input')?.click();
+                      }} 
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-purple-400 transition-all text-left group border border-purple-500/10 hover:border-purple-500/30 bg-purple-500/5"
+                    >
+                      <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500 group-hover:text-white transition-all">
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="text-[12px] font-black">엑셀 일지 가져오기 (Import)</span>
+                        <span className="text-[9px] text-purple-400/80 font-bold">아카2000 엑셀 업로드 복원</span>
+                      </div>
+                    </button>
                   </div>
                 </motion.div>
               )}
@@ -1218,20 +1365,23 @@ export default function TodaySheet({
           >
             {/* 2행 왼쪽: 세트 선택 스위치 & 전체화면 모드 필터들 */}
             <div className="flex flex-wrap items-center gap-2.5">
-              <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
-                {['1', '2', '3', '4'].map((setId, idx) => {
-                  const keys = ['Q', 'W', 'E', 'R'];
-                  return (
-                    <button 
-                      key={setId} 
-                      onClick={() => handleSetSwitch(setId)} 
-                      className={`px-3 py-1.5 rounded-[4px] text-[10px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} 
-                      title={`Alt + ${keys[idx]}`}
-                    >
-                      SET {setId}
-                    </button>
-                  );
-                })}
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Set</span>
+                <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
+                  {['1', '2', '3', '4'].map((setId, idx) => {
+                    const keys = ['Q', 'W', 'E', 'R'];
+                    return (
+                      <button 
+                        key={setId} 
+                        onClick={() => handleSetSwitch(setId)} 
+                        className={`w-7 py-1 rounded-[4px] text-[11px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} 
+                        title={`Alt + ${keys[idx]}`}
+                      >
+                        {setId}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <button 
@@ -1240,7 +1390,7 @@ export default function TodaySheet({
                 title="태그별 일괄입력 모드 열기"
               >
                 <Wand2 size={12} />
-                태그 일괄입력
+                태그입력
               </button>
 
               <button
@@ -1356,7 +1506,7 @@ export default function TodaySheet({
                 <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Sort</span>
                 <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
                   {[
-                    { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }
+                    { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }, { label: '학교순', key: 'school' }
                   ].map((m) => (
                     <button 
                       key={m.key} 
@@ -1433,7 +1583,7 @@ export default function TodaySheet({
                   }} 
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg mr-1.5"
                 >
-                  <Printer size={12} /> 안내장 인쇄 (6분할)
+                  <Printer size={12} /> 안내장 인쇄
                 </button>
                 <button 
                   onClick={() => {
@@ -1472,7 +1622,13 @@ export default function TodaySheet({
                   const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
                   if (stat.includes(':')) { const parts = stat.split(':'); const val = parseInt(parts[parts.length - 1]); if (!isNaN(val) && val < 24) return val; }
                   const hours = st.day_schedules?.[dayKey] || [];
-                  return hours.length > 0 ? Math.min(...hours.map((h: number) => h % 100)) : 999;
+                  if (hours.length > 0) {
+                    const firstVal = hours[0];
+                    let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                    if (h <= 12) h += 12;
+                    return h;
+                  }
+                  return 999;
                 };
                 const currentStartTime = getStartTime(s);
                 const prevStartTime = idx > 0 ? getStartTime(filteredStudents[idx - 1]) : null;

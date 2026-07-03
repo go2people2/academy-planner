@@ -22,7 +22,7 @@ import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 import { Student, SessionLog, StudentStatus, TextbookOption } from '@/types/dashboard';
-import { Loader2 } from 'lucide-react';
+import { Loader2, AlertTriangle } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 /**
@@ -281,7 +281,9 @@ const getEnrichedStudentData = (
     // 💡 baseSession이 없더라도 취합된 숙제가 있다면 강제로 표시되도록 보장
     lastSession: baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', homework_text: aggregatedHw } as any : undefined), 
     todaySession, allLogs: logs,
-    isTodayClassDay // 💡 필터링용 속성 추가
+    isTodayClassDay, // 💡 필터링용 속성 추가
+    isScheduledToday: !!isScheduledToday, // 💡 정규 등원요일 여부 추가
+    isSkipped: !!isSkipped // 💡 오늘 제외(취소) 여부 추가
   };
 };
 
@@ -370,6 +372,7 @@ const filterStudentList = (params: {
       return s.is_deleted === true && s.name.toLowerCase().includes(searchQuery.toLowerCase());
     }
     if (s.is_deleted) return false;
+    if (s.isSkipped && filterTarget === 'rest') return false;
 
     const isTodaySession = s.isTodayClassDay;
 
@@ -470,7 +473,8 @@ export default function DashboardPage() {
         if (!error && latestUser) {
           // 마스터 권한인 경우 DB의 academy_id(시스템 관리국)로 덮어쓰지 않고 현재 원격 임시 접속 중인 학원 ID를 보존
           const preservedAcademyId = localUser.role === 'master' ? localUser.academy_id : latestUser.academy_id;
-          const merged = { ...localUser, ...latestUser, academy_id: preservedAcademyId };
+          const preservedRole = localUser.role === 'master' ? 'master' : latestUser.role;
+          const merged = { ...localUser, ...latestUser, role: preservedRole, academy_id: preservedAcademyId };
           setCurrentUser(merged);
           localStorage.setItem('ams_user', JSON.stringify(merged));
         }
@@ -544,7 +548,7 @@ export default function DashboardPage() {
   // 💡 [추가] 검사(승인) 대기열 모달 상태
   const [isApprovalModalOpen, setIsApprovalModalOpen] = useState(false);
   const [showMorningBriefing, setShowMorningBriefing] = useState(false);
-  const [sortMode, setSortMode] = useState<'time' | 'name' | 'grade'>('time');
+  const [sortMode, setSortMode] = useState<'time' | 'name' | 'grade' | 'school'>('time');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const navigateTo = useCallback((mode: string, skipHistory = false) => { 
@@ -1148,6 +1152,58 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     if (!academy?.id) return;
     const academyId = academy.id;
 
+    // 💡 [추가] 학원 주소 식별자(Slug) 변경 시 동기화 및 중복 체크
+    if (updates.slug !== undefined) {
+      const newSlug = String(updates.slug).trim().toLowerCase();
+      if (!newSlug) {
+        alert('주소 식별자는 공백으로 지정할 수 없습니다.');
+        return;
+      }
+      
+      try {
+        // 1. 중복된 slug가 있는지 ams_academies에서 사전 조회
+        const { data: duplicate, error: dupErr } = await supabase
+          .from('ams_academies')
+          .select('id')
+          .eq('slug', newSlug)
+          .maybeSingle();
+        
+        if (dupErr) throw dupErr;
+        if (duplicate && duplicate.id !== academyId) {
+          alert(`이미 사용 중인 주소 식별자(slug: ${newSlug})입니다. 다른 이름을 지정해 주세요.`);
+          return;
+        }
+
+        // 2. 오답노트 테이블(academies) 동시 수정
+        const oldSlug = academy.slug;
+        if (oldSlug) {
+          const { data: waAc, error: waErr } = await supabase
+            .from('academies')
+            .select('id')
+            .eq('slug', oldSlug)
+            .maybeSingle();
+          
+          if (waErr) throw waErr;
+          
+          if (waAc) {
+            const { error: waUpdateErr } = await supabase
+              .from('academies')
+              .update({ slug: newSlug })
+              .eq('id', waAc.id);
+            if (waUpdateErr) {
+              console.error('Failed to sync WA academy slug:', waUpdateErr);
+            }
+          }
+        }
+      } catch (err: any) {
+        console.error('Slug validation error:', err);
+        alert('주소 식별자 검증 중 오류가 발생했습니다: ' + err.message);
+        return;
+      }
+      
+      updates.slug = newSlug;
+    }
+
     // 💡 [임시 디버그] 현재 세션의 클레임(Claim) 정보 출력
     const { data: { session } } = await supabase.auth.getSession();
     console.log('[AUTH CHECK] user.id =', session?.user?.id);
@@ -1183,6 +1239,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       } else if (data && data.length > 0) {
         // ✅ DB 성공 시에만 로컬 상태 반영 (affectedRows: 1)
         setAcademy((prev: any) => ({ ...prev, ...data[0] }));
+
+        // 💡 [추가] 만약 slug가 정상 변경되었다면 새 URL로 리다이렉트
+        if (updates.slug !== undefined) {
+          alert(`주소 식별자가 '${updates.slug}'(으)로 성공적으로 변경되었습니다. 새로운 주소로 이동합니다.`);
+          window.location.href = `/${updates.slug}/dashboard`;
+          return;
+        }
 
         // 💡 [추가] 성공적으로 저장된 필드만 dirty 플래그 해제 (State & Ref 모두) 및 Draft 강제 동기화
         if (updates.announcements) {
@@ -1239,24 +1302,73 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     } catch (e) { console.error(e); }
   };
 
+  const handleBatchAddStudents = async (newStudents: any[]) => {
+    if (isWarpMode) {
+      alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
+      return false;
+    }
+    if (!academy || newStudents.length === 0) return false;
+    try {
+      const dbPayload = newStudents.map(s => ({
+        academy_id: academy.id,
+        name: s.name,
+        school: s.school || '',
+        grade: s.grade || '',
+        course: s.course || 'C',
+        book_courses: s.book_courses || {},
+        class_name: s.class_name || '',
+        phone: s.phone || '',
+        teacher_id: s.teacher_id || null,
+        class_days: s.class_days || [],
+        day_schedules: s.day_schedules || {},
+        assigned_books: s.assigned_books || [],
+        is_deleted: false
+      }));
+      
+      const { error } = await supabase.from('ams_students').insert(dbPayload);
+      if (error) throw error;
+      
+      await fetchAllData(false);
+      return true;
+    } catch (e: any) {
+      console.error(e);
+      alert('일괄 등록 실패: ' + e.message);
+      return false;
+    }
+  };
+
   const addStudentToToday = async (studentId: string) => {
     if (isWarpMode) {
       alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
       return;
     }
     const student = students.find(s => s.id === studentId);
-    if (!student || (student.todaySession?.id && student.todaySession.id !== 'temp')) return;
+    if (!student) return;
 
-    const settings = academy?.operation_settings || {};
-    const baseTime = settings.first_period_time || "";
-    const baseHour = baseTime ? parseInt(baseTime.split(':')[0]) : 15;
+    // 오늘이 정규 수업 요일인지 판정
+    const { isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, student.class_days || [], academy?.operation_settings?.holidays);
 
-    await saveTodaySession(studentId, { 
-      attendance_status: '보강', 
-      homework_text: student.lastSession?.homework_text || '',
-      moved_to_hour: baseHour,
-      attendance_reason: '보강 수업'
-    });
+    if (isScheduledToday) {
+      // 💡 정규 수업 요일인 학생은 "수업전"으로 온전히 복구
+      await saveTodaySession(studentId, { 
+        attendance_status: ATTENDANCE_STATUS.BEFORE, 
+        homework_text: student.lastSession?.homework_text || '',
+        moved_to_hour: null,
+        attendance_reason: null
+      });
+    } else {
+      // 정규 요일이 아닌 학생은 기존처럼 "보강"으로 추가
+      const settings = academy?.operation_settings || {};
+      const baseTime = settings.first_period_time || "";
+      const baseHour = baseTime ? parseInt(baseTime.split(':')[0]) : 15;
+
+      await saveTodaySession(studentId, { 
+        attendance_status: '보강', 
+        homework_text: student.lastSession?.homework_text || '',
+        moved_to_hour: baseHour,
+        attendance_reason: '보강 수업'
+      });
+    }
   };
 
   const batchAddStudents = async (studentIds: string[], reasons: Record<string, string> = {}, makeupHours: Record<string, number> = {}) => {
@@ -1271,6 +1383,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         const s = students.find(st => st.id === id);
         if (!s) return null;
         
+        const { isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, s.class_days || [], academy?.operation_settings?.holidays);
         const hour = makeupHours[id] !== undefined ? makeupHours[id] : null;
         const reason = reasons[id] || '보강 수업';
         
@@ -1279,10 +1392,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           student_name: s.name, 
           academy_id: academy.id, 
           session_date: selectedDate, 
-          attendance_status: '보강', 
+          attendance_status: isScheduledToday ? ATTENDANCE_STATUS.BEFORE : '보강', 
           status: null, 
-          moved_to_hour: hour,
-          attendance_reason: reason
+          moved_to_hour: isScheduledToday ? null : hour,
+          attendance_reason: isScheduledToday ? null : reason
         };
 
         const exist = s.todaySession?.special_notes || ''; 
@@ -1348,10 +1461,6 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         await supabase.from('ams_students').delete().eq('id', studentId); setSelectedStudentId(null);
       } else {
         let updateData: any = (typeof fieldOrUpdates === 'string') ? { [fieldOrUpdates]: value } : { ...fieldOrUpdates };
-        // 💡 퇴원 처리 시 status_changed_at을 현재 시각으로 자동 기록 (이번달 퇴원생 집계에 사용)
-        if (updateData.is_deleted === true && !updateData.status_changed_at) {
-          updateData.status_changed_at = new Date().toISOString();
-        }
         await supabase.from('ams_students').update(updateData).eq('id', studentId);
 
         // 💡 [추가] 관리 주의점(management_notes) 수정 시 히스토리 로그 테이블에 적재
@@ -1388,7 +1497,14 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     catch (e) { console.error(e); }
   };
 
-  const handleDeleteTeacher = async (id: string) => { if (!confirm('삭제하시겠습니까?')) return; await supabase.from('ams_teachers').delete().eq('id', id); if (academy) await fetchTeachers(academy.id); };
+  const handleDeleteTeacher = async (id: string) => { 
+    if (!confirm('삭제하시겠습니까?')) return; 
+    await supabase.from('ams_teachers').delete().eq('id', id); 
+    if (selectedTeacherId === id) {
+      setSelectedTeacherId('All');
+    }
+    if (academy) await fetchTeachers(academy.id); 
+  };
 
   const handleUpdateTeacher = async (id: string, updates: any) => { 
     try { 
@@ -1479,7 +1595,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     return Array.from(hoursSet).sort((a, b) => a - b);
   }, [students, selectedDayKey, selectedDate, academy]);
 
-  // 1. 오늘의 학생 리스트 (필터링 + 정렬)
+  // 1. 오늘의 학생 리스트 (필터링 + 정렬 - Overview는 항상 이름순)
   const todayStudents = useMemo(() => {
     const list = filterStudentList({
       students, selectedDayKey, selectedDate, academy, searchQuery, 
@@ -1487,11 +1603,18 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       selectedHour
     });
 
-    return list.sort((a, b) => {
-      if (sortMode === 'name') return a.name.localeCompare(b.name, 'ko');
-      return getStudentStartTime(a, selectedDayKey) - getStudentStartTime(b, selectedDayKey);
-    });
+    return list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   }, [students, selectedDayKey, selectedFilter, selectedDays, isAndFilter, searchQuery, selectedTeacherId, sortMode, academy, selectedDate, selectedHour]);
+
+  // 💡 [추가] 오늘 수업 예정이었으나 제외(취소)된 학생 목록
+  const excludedStudents = useMemo(() => {
+    return students.filter(s => {
+      if (s.is_deleted) return false;
+      const { isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, s.class_days || [], academy?.operation_settings?.holidays);
+      const isSkipped = s.todaySession?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
+      return isScheduledToday && isSkipped;
+    }).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+  }, [students, selectedDate, academy]);
 
   // 2. 전체/나머지 학생 리스트 (오늘 수업자 제외)
   const filteredAllStudents = useMemo(() => {
@@ -1523,10 +1646,30 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }).map(s => s.id);
   }, [students]);
 
+  if (academy?.operation_settings?.is_suspended === true && currentUser?.role !== 'master') {
+    return (
+      <div className="min-h-screen bg-[#050505] flex items-center justify-center font-sans p-6 text-white text-xs selection:bg-red-500/30">
+        <div className="text-center space-y-6 max-w-sm">
+          <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center border border-red-500/30 text-red-500 mx-auto animate-pulse">
+            <AlertTriangle size={32} />
+          </div>
+          <div>
+            <h2 className="text-sm font-black uppercase tracking-widest text-white/95">서비스 제공이 일시 중지되었습니다</h2>
+            <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Academy Suspended</p>
+          </div>
+          <p className="text-[11px] text-gray-400 leading-relaxed font-bold">
+            본 지점은 현재 서비스 이용이 잠시 중지되었습니다.<br />
+            구독 갱신 또는 설정 점검 중이오니, 자세한 사항은 시스템 마스터 관리자에게 문의해 주세요.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] flex font-sans selection:bg-blue-500/30 overflow-hidden text-xs">
       {!(viewMode === 'todayTable' && isFullScreen) && (
-        <Sidebar viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} filterTarget={filterTarget} setFilterTarget={setFilterTarget} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} isClassroomModeOpen={isClassroomModeOpen} onStartClass={() => setIsClassroomModeOpen(true)} selectedHour={selectedHour} setSelectedHour={setSelectedHour} availableHours={availableHours} />
+        <Sidebar currentUser={currentUser} viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} filterTarget={filterTarget} setFilterTarget={setFilterTarget} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} isClassroomModeOpen={isClassroomModeOpen} onStartClass={() => setIsClassroomModeOpen(true)} selectedHour={selectedHour} setSelectedHour={setSelectedHour} availableHours={availableHours} />
       )}
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
         {(() => {
@@ -1548,8 +1691,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
         {isLoading ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><Loader2 className="animate-spin mb-4" size={32} /><p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Academy Data...</p></div>) : (
           <div className="h-full">
-             {viewMode === 'board' && <Overview todayStudents={todayStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} />}
-             {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} />}
+             {viewMode === 'board' && <Overview todayStudents={todayStudents} excludedStudents={excludedStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} />}
+             {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onBatchAddStudents={handleBatchAddStudents} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} />}
              {viewMode === 'todayTable' && (
                <TodaySheet 
                  students={todayStudents} 

@@ -11,6 +11,7 @@ import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 
 interface SidebarProps {
+  currentUser?: any; // 💡 추가
   viewMode: string;
   setViewMode: (mode: any) => void;
   todayCount: number;
@@ -45,6 +46,7 @@ const formatHour = (hour: number) => {
 };
 
 export default function Sidebar({ 
+  currentUser,
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
   selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, 
   filterTarget, setFilterTarget,
@@ -55,7 +57,7 @@ export default function Sidebar({
 }: SidebarProps) {
   const router = useRouter();
   const { slug } = useParams();
-  const [user, setUser] = useState<any>(null);
+  const user = currentUser;
   const [theme, setTheme] = useState<'light' | 'dark'>('dark');
 
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -66,9 +68,6 @@ export default function Sidebar({
   const announcements = academyInfo?.announcements || {};
 
   useEffect(() => {
-    const userJson = localStorage.getItem('ams_user');
-    if (userJson) setUser(JSON.parse(userJson));
-
     // 초기 테마 설정 로드
     const savedTheme = localStorage.getItem('theme');
     const isDarkSystem = window.matchMedia('(prefers-color-scheme: dark)').matches;
@@ -145,16 +144,16 @@ export default function Sidebar({
 
         {/* 2 & 3. 날짜 및 사용자 정보 */}
         <div className="flex items-stretch gap-1">
-          <div className="flex-1 px-1.5 py-1 bg-white/[0.03] rounded-[2px] border border-white/5 flex items-center justify-center gap-1 min-w-0">
-            <span className="text-[10px] font-black text-gray-300 tabular-nums leading-none">{new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
-            <span className="text-[9px] font-bold text-blue-500 leading-none">({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})</span>
+          <div className="flex-[1.2] px-1.5 py-1 bg-white/[0.03] rounded-[2px] border border-white/5 flex items-center justify-center gap-1 min-w-0">
+            <span className="text-[15px] font-black text-gray-100 tabular-nums leading-none">{new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
+            <span className="text-[13px] font-bold text-blue-400 leading-none">({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})</span>
           </div>
           {user && (
-            <div className="flex-[1.2] p-1.5 bg-white/5 rounded-[2px] border border-white/5 flex items-center gap-1.5 min-w-0">
+            <div className="flex-1 p-1.5 bg-white/5 rounded-[2px] border border-white/5 flex items-center gap-1.5 min-w-0">
               <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0"><UserCircle size={10} /></div>
               <div className="flex-1 min-w-0">
-                <p className="text-[9px] font-black text-white truncate leading-none">{user.name}</p>
-                <p className="text-[7px] font-bold text-gray-500 uppercase tracking-tighter mt-0.5">{user.role}</p>
+                <p className="text-[12px] font-black text-white truncate leading-none">{user.name}</p>
+                <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter mt-0.5">{user.role}</p>
               </div>
             </div>
           )}

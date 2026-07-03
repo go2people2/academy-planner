@@ -32,6 +32,9 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     book_courses: {} as Record<string, string>
   });
 
+  const [startTimes, setStartTimes] = useState<Record<string, string>>({});
+  const [endTimes, setEndTimes] = useState<Record<string, string>>({});
+
   const filteredBooks = useMemo(() => {
     return (masterTextbooks || []).filter(b => 
       b.title?.toLowerCase().includes(bookSearch.toLowerCase()) || 
@@ -55,20 +58,37 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     onClose();
   };
 
-  const handleTimeToggle = (day: string, hour: number) => {
-    const currentHours = formData.day_schedules[day] || [];
-    const isNormalActive = currentHours.includes(hour);
-    const isWhiteActive = currentHours.includes(hour + 100);
-    let newHours;
-    if (!isNormalActive && !isWhiteActive) newHours = [...currentHours, hour];
-    else if (isNormalActive) newHours = [...currentHours.filter(h => h !== hour), hour + 100];
-    else newHours = currentHours.filter(h => h !== (hour + 100));
-    const sortedHours = newHours.sort((a, b) => (a % 100) - (b % 100));
-    const newSchedules = { ...formData.day_schedules, [day]: sortedHours };
-    let newDays = [...formData.class_days];
-    if (sortedHours.length > 0 && !newDays.includes(day)) newDays.push(day);
-    else if (sortedHours.length === 0 && newDays.includes(day)) newDays = newDays.filter(d => d !== day);
-    setFormData({ ...formData, day_schedules: newSchedules, class_days: newDays });
+  const handleTimeChange = (day: string, startTimeStr: string, endTimeStr: string) => {
+    setStartTimes(prev => ({ ...prev, [day]: startTimeStr }));
+    setEndTimes(prev => ({ ...prev, [day]: endTimeStr }));
+
+    if (startTimeStr === '' && endTimeStr === '') {
+      const newSchedules = { ...formData.day_schedules };
+      delete newSchedules[day];
+      const newDays = formData.class_days.filter(d => d !== day);
+      setFormData(prev => ({ ...prev, day_schedules: newSchedules, class_days: newDays }));
+      return;
+    }
+
+    const isStartValid = startTimeStr && startTimeStr.length === 5 && startTimeStr.includes(':');
+    const isEndValid = endTimeStr && endTimeStr.length === 5 && endTimeStr.includes(':');
+
+    const finalStartVal = isStartValid 
+      ? parseInt(startTimeStr.replace(':', '')) 
+      : (formData.day_schedules[day]?.[0] || 1600);
+      
+    const finalEndVal = isEndValid 
+      ? parseInt(endTimeStr.replace(':', '')) 
+      : (formData.day_schedules[day]?.[1] || 1900);
+
+    if (!isNaN(finalStartVal) && !isNaN(finalEndVal)) {
+      const newSchedules = { ...formData.day_schedules, [day]: [finalStartVal, finalEndVal] };
+      
+      if (isStartValid || isEndValid) {
+        const newDays = formData.class_days.includes(day) ? formData.class_days : [...formData.class_days, day];
+        setFormData(prev => ({ ...prev, day_schedules: newSchedules, class_days: newDays }));
+      }
+    }
   };
 
   const handleDayToggle = (day: string) => {
@@ -77,12 +97,49 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
       const newDays = formData.class_days.filter(d => d !== day);
       const newSchedules = { ...formData.day_schedules };
       delete newSchedules[day];
-      setFormData({ ...formData, class_days: newDays, day_schedules: newSchedules });
+      setFormData(prev => ({ ...prev, class_days: newDays, day_schedules: newSchedules }));
+      
+      setStartTimes(prev => ({ ...prev, [day]: '' }));
+      setEndTimes(prev => ({ ...prev, [day]: '' }));
     } else {
       const newDays = [...formData.class_days, day];
-      const newSchedules = { ...formData.day_schedules, [day]: [16, 17, 18] };
-      setFormData({ ...formData, class_days: newDays, day_schedules: newSchedules });
+      const newSchedules = { ...formData.day_schedules, [day]: [1600, 1900] };
+      setFormData(prev => ({ ...prev, class_days: newDays, day_schedules: newSchedules }));
+      
+      setStartTimes(prev => ({ ...prev, [day]: '16:00' }));
+      setEndTimes(prev => ({ ...prev, [day]: '19:00' }));
     }
+  };
+
+  const handleApplyTimeToAllDays = () => {
+    const selectedDays = DAYS.filter(day => formData.class_days.includes(day));
+    if (selectedDays.length <= 1) return;
+
+    const firstDay = selectedDays[0];
+    const baseStart = startTimes[firstDay] || '';
+    const baseEnd = endTimes[firstDay] || '';
+
+    if (!baseStart && !baseEnd) {
+      alert('일괄 적용할 기준 시간이 입력되지 않았습니다.');
+      return;
+    }
+
+    const newStarts = { ...startTimes };
+    const newEnds = { ...endTimes };
+    const newSchedules = { ...formData.day_schedules };
+
+    selectedDays.forEach(day => {
+      newStarts[day] = baseStart;
+      newEnds[day] = baseEnd;
+      
+      const startVal = baseStart ? parseInt(baseStart.replace(':', '')) : 1600;
+      const endVal = baseEnd ? parseInt(baseEnd.replace(':', '')) : 1900;
+      newSchedules[day] = [startVal, endVal];
+    });
+
+    setStartTimes(newStarts);
+    setEndTimes(newEnds);
+    setFormData(prev => ({ ...prev, day_schedules: newSchedules }));
   };
 
   const toggleBookSelection = (bookcode: string) => {
@@ -251,30 +308,102 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
             </div>
 
             <div className="space-y-6">
-              <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center gap-2 px-1"><Calendar size={14} /> Schedule</h3>
+              <h3 className="text-[11px] font-black text-blue-500 uppercase tracking-[0.2em] flex items-center justify-between px-1 w-full">
+                <span className="flex items-center gap-2">
+                  <Calendar size={14} /> Schedule
+                </span>
+                {formData.class_days.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={handleApplyTimeToAllDays}
+                    className="text-[9px] font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded px-2 py-0.5 transition-all cursor-pointer normal-case"
+                    title="첫 요일의 시간을 다른 모든 요일에 동일하게 적용합니다."
+                  >
+                    ⚡ 동일적용
+                  </button>
+                )}
+              </h3>
               <div className="bg-white/5 border border-white/5 rounded-[4px] p-4 shadow-inner">
-                <div className="grid grid-cols-7 gap-1">
+                {/* 요일 선택 가로 바 */}
+                <div className="grid grid-cols-7 gap-1 mb-4">
                   {DAYS.map(day => {
-                    const activeHours = formData.day_schedules[day] || [];
                     const isDaySelected = formData.class_days.includes(day);
                     return (
-                      <div key={day} className="flex flex-col items-center gap-3">
-                        <button type="button" onClick={() => handleDayToggle(day)}
-                          className={`text-[9px] font-black w-7 h-7 rounded-[2px] flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white' : 'bg-white/5 text-gray-500'}`}>{day}</button>
-                        <div className="flex flex-col gap-1 w-full">
-                          {[16, 17, 18, 19, 20, 21].map((h, idx) => {
-                            const isNormal = activeHours.includes(h);
-                            const isWhite = activeHours.includes(h + 100);
-                            const isFirstHalf = idx < 3;
-                            return (
-                              <button key={h} type="button" onClick={() => handleTimeToggle(day, h)}
-                                className={`w-full h-3 rounded-sm transition-all ${isNormal ? (isFirstHalf ? 'bg-blue-500' : 'bg-orange-400') : isWhite ? 'bg-white' : 'bg-white/[0.03]'}`} />
-                            );
-                          })}
-                        </div>
-                      </div>
+                      <button 
+                        key={`bar-${day}`}
+                        type="button"
+                        onClick={() => handleDayToggle(day)} 
+                        className={`text-[10px] font-black h-8 rounded-[2px] flex items-center justify-center transition-all ${
+                          isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                        }`}
+                      >
+                        {day}
+                      </button>
                     );
                   })}
+                </div>
+
+                {/* 선택된 요일들의 시간대 설정 리스트 */}
+                <div className="flex flex-wrap gap-2">
+                  {(() => {
+                    const selectedDays = DAYS.filter(day => formData.class_days.includes(day));
+                    if (selectedDays.length === 0) {
+                      return (
+                        <div className="text-[10px] text-gray-500 text-center py-4 italic w-full">수업 요일을 위에서 선택해 주세요.</div>
+                      );
+                    }
+
+                    // 4자리 정수(HHMM) -> "HH:MM" 텍스트 추출 헬퍼 (오후 시간 자동 보정 포함)
+                    const formatTimeVal = (val: number) => {
+                      if (!val || val === 999) return '';
+                      if (val < 100) {
+                        const hour = val <= 12 ? val + 12 : val;
+                        return `${hour.toString().padStart(2, '0')}:00`;
+                      }
+                      let h = Math.floor(val / 100);
+                      if (h <= 12) h += 12; // 12시 이하의 값은 학원 특성상 오후(PM)로 보정
+                      const m = (val % 100).toString().padStart(2, '0');
+                      return `${h.toString().padStart(2, '0')}:${m}`;
+                    };
+
+                    // 10분 단위 선택지 리스트 생성
+                    return selectedDays.map(day => {
+                      const startTime = startTimes[day] || '';
+                      const endTime = endTimes[day] || '';
+
+                      return (
+                        <div key={`row-${day}`} className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2 py-1 rounded-[4px] shrink-0">
+                          {/* 활성화된 요일 표시 */}
+                          <span className="text-[9px] font-black text-blue-400 bg-blue-600/10 w-5 h-5 flex items-center justify-center rounded-[2px] shrink-0">
+                            {day}
+                          </span>
+
+                          {/* 시작/종료 시간 직접 입력 인풋 */}
+                          <div className="flex items-center gap-1">
+                            <input
+                              type="time"
+                              value={startTime}
+                              onChange={(e) => handleTimeChange(day, e.target.value, endTime)}
+                              onClick={(e) => {
+                                try { e.currentTarget.showPicker(); } catch (err) {}
+                              }}
+                              className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-blue-500 transition-all font-bold w-[100px] cursor-pointer"
+                            />
+                            <span className="text-[9px] text-gray-600">~</span>
+                            <input
+                              type="time"
+                              value={endTime}
+                              onChange={(e) => handleTimeChange(day, startTime, e.target.value)}
+                              onClick={(e) => {
+                                try { e.currentTarget.showPicker(); } catch (err) {}
+                              }}
+                              className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-blue-500 transition-all font-bold w-[100px] cursor-pointer"
+                            />
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
                 </div>
               </div>
             </div>

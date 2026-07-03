@@ -96,7 +96,12 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
     const day = getDayOfWeek(selectedDate);
     const hours = student.day_schedules?.[day] || [];
-    if (hours.length > 0) return Math.min(...hours.map(h => h >= 100 ? h - 100 : h));
+    if (hours.length > 0) {
+      const firstVal = hours[0];
+      let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+      if (h <= 12) h += 12;
+      return h;
+    }
     return 999; 
   };
 
@@ -596,7 +601,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                             {(() => { const isES = s.grade.includes('초'); const isHS = s.grade.includes('고'); const colorClass = isES ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : isHS ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'; return <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${isPureAttend ? 'text-gray-600 border-white/5 bg-white/5 opacity-50' : colorClass}`}>{s.grade}</p>; })()}
 
                           </div></div>
-                          {isAnyMarked && <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isMakeupActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-gray-400'}`}>{isMakeupActive ? (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null ? `${s.todaySession?.moved_to_hour}시` : '보강') : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status)}</div>}
+                          {isAnyMarked && <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isMakeupActive ? 'bg-blue-500/20 text-blue-400' : 'bg-white/10 text-gray-400'}`}>{isMakeupActive ? (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null ? `${s.todaySession?.moved_to_hour}시` : (s.isScheduledToday ? '이동' : '보강')) : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status)}</div>}
                           {isBeforeClass && <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">수업전</div>}
                           {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isCriticalWarning ? 'bg-red-500 text-white' : 'bg-amber-500 text-black'}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
                         </>

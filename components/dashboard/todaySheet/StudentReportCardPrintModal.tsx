@@ -79,7 +79,10 @@ export default function StudentReportCardPrintModal({
     }
     const hours = st.day_schedules?.[dayKey] || [];
     if (hours.length > 0) {
-      return Math.min(...hours.map((h: number) => h % 100));
+      const firstVal = hours[0];
+      let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+      if (h <= 12) h += 12;
+      return h;
     }
     return '';
   };
@@ -259,7 +262,7 @@ export default function StudentReportCardPrintModal({
                     {/* 헤더: 2026. 6. 19 - 윤동건 - 고1 - 화목금 - 7시 - <23> */}
                     <div className="flex items-center justify-between border-b-2 border-black pb-1 mb-1">
                       <span className="text-[10px] font-black text-black tracking-tight whitespace-nowrap">
-                        {printedDate} - {student.name} - {student.grade} - {classDays} - {formattedPeriod}
+                        {printedDate} ({dayKey}) - {student.name} - {student.grade} - {classDays} - {formattedPeriod}
                       </span>
                       <span className="text-[10px] font-black text-black leading-none">
                         &lt;{globalIdx}&gt;
@@ -271,7 +274,7 @@ export default function StudentReportCardPrintModal({
                       
                       {/* 1. Mission */}
                       <div className="flex border-b border-black min-h-[22px] flex-1">
-                        <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
+                        <div style={{...headerStyle, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact'}} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ Mission
                         </div>
                         <div className="flex-1 px-2 py-0.5 flex items-center font-black text-[#ef4444] break-all leading-tight whitespace-pre-wrap">
@@ -309,8 +312,8 @@ export default function StudentReportCardPrintModal({
                         </div>
                       </div>
 
-                      {/* 5. 오늘Test */}
-                      <div className="flex border-b border-black min-h-[22px] flex-1">
+                      {/* 5. 오늘Test - 2줄 고정 높이 */}
+                      <div className="flex border-b border-black shrink-0" style={{ minHeight: '28px', maxHeight: '30px' }}>
                         <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 오늘Test
                         </div>
@@ -319,8 +322,8 @@ export default function StudentReportCardPrintModal({
                         </div>
                       </div>
 
-                      {/* 6. 다음Test */}
-                      <div className="flex min-h-[22px] flex-1">
+                      {/* 6. 다음Test - 2줄 고정 높이 */}
+                      <div className="flex shrink-0" style={{ minHeight: '28px', maxHeight: '30px' }}>
                         <div style={headerStyle} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">
                           ▶ 다음Test
                         </div>
@@ -341,6 +344,10 @@ export default function StudentReportCardPrintModal({
       {/* 인쇄 시 감출 스타일시트 */}
       <style jsx global>{`
         @media print {
+          * {
+            print-color-adjust: exact !important;
+            -webkit-print-color-adjust: exact !important;
+          }
           body {
             background-color: white !important;
             color: black !important;

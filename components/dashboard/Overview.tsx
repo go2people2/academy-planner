@@ -2,13 +2,15 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, StickyNote, Target, ExternalLink, Search, X } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, StickyNote, Target, ExternalLink, Search, X, Download, Upload } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import AddStudentModal from './AddStudentModal';
 
 interface OverviewProps {
   todayStudents: Student[];
+  excludedStudents?: Student[]; // 💡 추가
   filteredAllStudents: Student[];
   allTodayIds?: string[];
   selectedStudentId: string | null;
@@ -23,6 +25,7 @@ interface OverviewProps {
   onBatchAdd: (ids: string[], reasons: Record<string, string>, makeupHours: Record<string, number>) => Promise<void>;
   onRemoveFromToday: (id: string, reason: string) => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
+  onBatchAddStudents?: (newStudents: any[]) => Promise<boolean>; // 💡 추가
   masterTextbooks: TextbookOption[];
   teachers?: any[]; 
   title?: string;
@@ -36,11 +39,11 @@ interface OverviewProps {
 }
 
 export default function Overview({ 
-  todayStudents = [], filteredAllStudents = [], allTodayIds = [], selectedStudentId, onSelectStudent, 
+  todayStudents = [], excludedStudents = [], filteredAllStudents = [], allTodayIds = [], selectedStudentId, onSelectStudent, 
   onViewProgress,
   selectedDate, onDateChange,
   todayKey,
-  selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, masterTextbooks = [],
+  selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, onBatchAddStudents, masterTextbooks = [],
   teachers = [],
   title,
   showAddButton = false,
@@ -55,6 +58,139 @@ export default function Overview({
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
   const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // 💡 [추가] 학생 등록용 엑셀 템플릿 다운로드
+  const downloadStudentTemplate = () => {
+    const headers = ['이름', '학년', '학교', '반명', '학생연락처', '부모연락처', '코스', '수업요일', '담당교사'];
+    const sampleRow = ['홍길동', '초5', '호크마초등학교', '경시반', '010-1234-5678', '010-9876-5432', 'C', '월수금', '한송이'];
+    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
+    ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "학생일괄등록");
+    XLSX.writeFile(wb, `학생일괄등록_양식.xlsx`);
+  };
+
+  // 💡 [추가] 학생 엑셀 일괄 등록 파서
+  const handleImportStudents = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    
+    const reader = new FileReader();
+    reader.onload = async (evt) => {
+      try {
+        const data = evt.target?.result;
+        const workbook = XLSX.read(data, { type: 'array' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
+        
+        if (rows.length < 2) {
+          alert('엑셀 파일에 등록할 학생 정보가 없습니다.');
+          return;
+        }
+        
+        const headers: any = rows[0];
+        const nameIdx = headers.indexOf('이름');
+        const gradeIdx = headers.indexOf('학년');
+        const schoolIdx = headers.indexOf('학교');
+        const classNameIdx = headers.indexOf('반명');
+        const phoneIdx = headers.indexOf('학생연락처') !== -1 ? headers.indexOf('학생연락처') : headers.indexOf('연락처');
+        const parentPhoneIdx = headers.indexOf('부모연락처');
+        const courseIdx = headers.indexOf('코스');
+        const daysIdx = headers.indexOf('수업요일');
+        const teacherIdx = headers.indexOf('담당교사');
+        
+        if (nameIdx === -1) {
+          alert("올바른 양식이 아닙니다. '이름' 열이 필수로 존재해야 합니다.");
+          return;
+        }
+        
+        const newStudentsPayload: any[] = [];
+        
+        for (let i = 1; i < rows.length; i++) {
+          const row: any = rows[i];
+          if (!row || row.length === 0) continue;
+          
+          const rawName = String(row[nameIdx] || '').trim();
+          if (!rawName) continue;
+          
+          const rawDays = daysIdx !== -1 ? String(row[daysIdx] || '').trim() : '';
+          
+          const cleanedDays: string[] = [];
+          if (rawDays) {
+            const allDaysList = ['월', '화', '수', '목', '금', '토', '일'];
+            allDaysList.forEach(d => {
+              if (rawDays.includes(d)) cleanedDays.push(d);
+            });
+          }
+          
+          const daySchedules: Record<string, number[]> = {};
+          cleanedDays.forEach(d => {
+            daySchedules[d] = [1600, 1900];
+          });
+          
+          let studentPhoneVal = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
+          if (studentPhoneVal) {
+            studentPhoneVal = studentPhoneVal.replace(/[^0-9]/g, '');
+            if (studentPhoneVal.length === 11) {
+              studentPhoneVal = studentPhoneVal.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+            } else if (studentPhoneVal.length === 10) {
+              studentPhoneVal = studentPhoneVal.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+            }
+          }
+
+          let parentPhoneVal = parentPhoneIdx !== -1 ? String(row[parentPhoneIdx] || '').trim() : '';
+          if (parentPhoneVal) {
+            parentPhoneVal = parentPhoneVal.replace(/[^0-9]/g, '');
+            if (parentPhoneVal.length === 11) {
+              parentPhoneVal = parentPhoneVal.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+            } else if (parentPhoneVal.length === 10) {
+              parentPhoneVal = parentPhoneVal.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+            }
+          }
+
+          const combinedPhone = parentPhoneVal ? `${studentPhoneVal} (부모: ${parentPhoneVal})` : studentPhoneVal;
+          
+          const rawTeacherName = teacherIdx !== -1 ? String(row[teacherIdx] || '').trim() : '';
+          let matchedTeacherId = null;
+          if (rawTeacherName && teachers && teachers.length > 0) {
+            const matched = teachers.find(t => t.name.trim() === rawTeacherName || t.nickname?.trim() === rawTeacherName);
+            if (matched) matchedTeacherId = matched.id;
+          }
+          
+          newStudentsPayload.push({
+            name: rawName,
+            grade: gradeIdx !== -1 ? String(row[gradeIdx] || '').trim() : '미지정',
+            school: schoolIdx !== -1 ? String(row[schoolIdx] || '').trim() : '',
+            class_name: classNameIdx !== -1 ? String(row[classNameIdx] || '').trim() : '',
+            phone: combinedPhone,
+            course: (courseIdx !== -1 && String(row[courseIdx]).trim()) ? String(row[courseIdx]).trim() : 'C',
+            class_days: cleanedDays,
+            day_schedules: daySchedules,
+            assigned_books: [],
+            book_courses: {}
+          });
+        }
+        
+        if (newStudentsPayload.length === 0) {
+          alert('등록 가능한 학생 데이터가 없습니다.');
+          return;
+        }
+        
+        if (onBatchAddStudents) {
+          const isSuccess = await onBatchAddStudents(newStudentsPayload);
+          if (isSuccess) {
+            alert(`성공적으로 총 ${newStudentsPayload.length}명의 학생이 한 번에 등록되었습니다!`);
+          }
+        }
+      } catch (err: any) {
+        console.error(err);
+        alert('학생 엑셀 파일 파싱 중 오류가 발생했습니다: ' + err.message);
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    e.target.value = '';
+  };
   
   const [reasonModal, setReasonModal] = useState<{
     isOpen: boolean;
@@ -114,7 +250,7 @@ export default function Overview({
         const activeHours = s?.day_schedules?.[todayKey] || [];
         let defaultHour = baseHour;
         if (activeHours.length > 0) {
-          defaultHour = Math.min(...activeHours.map((h: number) => h % 100));
+          defaultHour = Math.min(...activeHours.map((h: number) => h >= 1000 ? Math.floor(h / 100) : (h % 100)));
         }
         initialHours[id] = defaultHour;
       });
@@ -196,7 +332,7 @@ export default function Overview({
                   {todayKey === getDayOfWeek(getTodayStr()) ? "Today's Schedule" : `${todayKey}요일 Schedule`}
                 </h3>
                 <div className="flex items-center gap-1.5">
-                  <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
+                  <span className="text-[11px] text-gray-200 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
                     <span className="text-amber-400">{todayStudents.length}</span> Students
                   </span>
                   {todayGradeStats.map(([grade, count], idx) => {
@@ -206,7 +342,7 @@ export default function Overview({
                     const colorClass = isES ? 'text-emerald-400' : isHS ? 'text-amber-400' : 'text-blue-400';
                     return (
                       <div key={grade || idx} className="flex items-center gap-1.5 bg-white/[0.04] border border-white/10 px-2 py-1 rounded-[2px] shadow-sm">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase">{grade}</span>
+                        <span className="text-[10px] font-bold text-gray-200 uppercase">{grade}</span>
                         <span className={`text-[10px] font-black ${colorClass}`}>{count}</span>
                       </div>
                     );
@@ -223,7 +359,7 @@ export default function Overview({
                       try { (input as any).showPicker(); } catch (err) { console.error(err); }
                     }
                   }}
-                  className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-1 text-gray-400 hover:text-white transition-all group/date relative cursor-pointer"
+                  className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-1 text-gray-200 hover:text-white transition-all group/date relative cursor-pointer"
                 >
                   <Calendar size={12} className="group-hover/date:text-blue-500" />
                   <span className="text-[10px] font-black uppercase tracking-tighter">
@@ -245,8 +381,8 @@ export default function Overview({
               </p>
             )}
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+ 
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 pt-1">
             {todayStudents.map((s, idx) => {
               const isChecked = selectedToRemove.includes(s.id);
               return (
@@ -266,33 +402,59 @@ export default function Overview({
               );
             })}
             {todayStudents.length === 0 && (
-              <div className="p-6 rounded-[2px] bg-white/[0.02] border border-dashed border-white/5 text-center text-gray-600 font-bold uppercase tracking-widest text-[9px]">No classes scheduled</div>
+              <div className="col-span-full p-8 rounded-[2px] bg-white/[0.02] border border-dashed border-white/5 text-center text-gray-400 font-bold uppercase tracking-widest text-[10px]">No classes scheduled</div>
             )}
           </div>
         </section>
       )}
+ 
+      {/* 💡 [추가] 오늘 수업 제외(취소)된 학생 목록 */}
+      {!hideTodaySection && excludedStudents && excludedStudents.length > 0 && (
+        <section className="space-y-2 pt-4 border-t border-white/5">
+          <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-indigo-400 flex items-center gap-2 px-1">
+            <MinusCircle size={14} /> 오늘 수업 제외 학생 ({excludedStudents.length}명)
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 pt-1">
+            {excludedStudents.map((s, idx) => (
+              <StudentRowItem
+                key={s.id || idx}
+                student={s}
+                isSelected={selectedStudentId === s.id && !isBatchMode}
+                isChecked={selectedForBatch.includes(s.id)}
+                isBatchMode={isBatchMode}
+                currentDay={todayKey}
+                masterTextbooks={masterTextbooks}
+                onViewProgress={onViewProgress}
+                consultationCycle={consultationCycle}
+                onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)}
+                academyInfo={academyInfo}
+              />
+            ))}
+          </div>
+        </section>
+      )}
 
-      <section className={`space-y-2 ${todayStudents.length > 0 ? 'pt-4 border-t border-white/5' : ''}`}>
+      <section className={`space-y-2 ${(todayStudents.length > 0 || excludedStudents.length > 0) ? 'pt-4 border-t border-white/5' : ''}`}>
         <div className={`sticky top-[-8px] z-40 bg-[#050505]/95 backdrop-blur-sm pb-4 pt-2 -mx-2 px-3 border-b border-white/5`}>
           <div className="flex items-center justify-between px-1">
             <div className="flex flex-col gap-0.5">
-              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-400 flex items-center gap-2">
+              <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-gray-100 flex items-center gap-2">
                 <Users size={14} /> 
                 {title ? title : (isArchiveMode ? 'Discharged Students Archive' : 'Rest of Students')}
               </h3>
               {!isArchiveMode && (
                 <div className="flex items-center gap-1.5 mt-0.5">
-                  <span className="text-[11px] text-gray-500 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
+                  <span className="text-[11px] text-gray-200 bg-white/5 px-2 py-1 rounded-[2px] border border-white/10 uppercase font-black tracking-tight">
                     <span className="text-amber-400">{studentsToDisplay.length}</span> Students
                   </span>
                   {otherGradeStats.map(([grade, count], idx) => {
                     const isES = grade.includes('초');
                     const isMS = grade.includes('중');
                     const isHS = grade.includes('고');
-                    const colorClass = isES ? 'text-emerald-500/60' : isHS ? 'text-amber-500/60' : 'text-blue-500/60';
+                    const colorClass = isES ? 'text-emerald-400' : isHS ? 'text-amber-400' : 'text-blue-400';
                     return (
                       <div key={grade || idx} className="flex items-center gap-1.5 bg-white/[0.03] border border-white/10 px-2 py-1 rounded-[2px] shadow-sm">
-                        <span className="text-[10px] font-bold text-gray-500 uppercase">{grade}</span>
+                        <span className="text-[10px] font-bold text-gray-200 uppercase">{grade}</span>
                         <span className={`text-[10px] font-black ${colorClass}`}>{count}</span>
                       </div>
                     );
@@ -303,12 +465,40 @@ export default function Overview({
 
             <div className="flex gap-2">
               {!isBatchMode && !isArchiveMode && showAddButton && (
-                <button 
-                  onClick={() => setIsAddModalOpen(true)}
-                  className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
-                >
-                  <UserPlus size={10} /> 신규 학생 등록
-                </button>
+                <div className="flex gap-2">
+                  {hideTodaySection && (
+                    <>
+                      <button 
+                        onClick={downloadStudentTemplate}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-white/5 text-gray-400 hover:text-white transition-all border border-white/10"
+                        title="대량 등록용 엑셀 템플릿 다운로드"
+                      >
+                        <Download size={10} /> 양식 다운로드
+                      </button>
+
+                      <input 
+                        type="file" 
+                        id="excel-students-bulk-input" 
+                        accept=".xlsx, .xls" 
+                        onChange={handleImportStudents} 
+                        className="hidden" 
+                      />
+                      <button 
+                        onClick={() => document.getElementById('excel-students-bulk-input')?.click()}
+                        className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-purple-600/10 text-purple-400 hover:bg-purple-600 hover:text-white transition-all border border-purple-500/20"
+                        title="엑셀 작성본 업로드하여 학생 일괄 등록"
+                      >
+                        <Upload size={10} /> 엑셀 일괄 등록
+                      </button>
+                    </>
+                  )}
+                  <button 
+                    onClick={() => setIsAddModalOpen(true)}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
+                  >
+                    <UserPlus size={10} /> 신규 학생 등록
+                  </button>
+                </div>
               )}
               
               {isBatchMode && (
@@ -324,16 +514,16 @@ export default function Overview({
                 <div className="flex gap-2">
                   <button 
                     onClick={() => isBatchMode ? handleApplyBatch() : setIsBatchMode(true)}
-                    className={`flex items-center gap-2 px-3.5 py-1.5 rounded-[2px] text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${
+                    className={`flex items-center gap-2 px-6 py-3.5 rounded-[4px] text-[13px] font-black uppercase tracking-widest transition-all duration-200 ${
                       isBatchMode 
-                        ? 'bg-blue-500 text-white shadow-lg shadow-blue-500/20 border border-blue-400 animate-pulse' 
-                        : 'bg-blue-600 text-white hover:bg-blue-500 hover:scale-[1.02] active:scale-[0.98] border border-blue-500/30 shadow-md shadow-blue-900/40'
+                        ? 'bg-blue-500 text-white shadow-xl shadow-blue-500/30 border-2 border-blue-400 animate-pulse' 
+                        : 'bg-blue-600 text-white hover:bg-blue-500 hover:scale-[1.04] active:scale-[0.96] border-2 border-blue-500/40 shadow-lg shadow-blue-900/50'
                     }`}
                   >
                     {isBatchMode ? (
-                      <><Check size={10} /> {selectedForBatch.length + selectedToRemove.length} Confirm</>
+                      <><Check size={14} strokeWidth={3} /> {selectedForBatch.length + selectedToRemove.length} Confirm</>
                     ) : (
-                      <><Users size={10} /> 오늘 수업 변경</>
+                      <><Users size={14} strokeWidth={3} /> 오늘 수업 변경</>
                     )}
                   </button>
                 </div>
@@ -375,7 +565,7 @@ export default function Overview({
           )}
         </AnimatePresence>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2 pt-1">
           {studentsToDisplay.map((s, idx) => {
             const isChecked = selectedForBatch.includes(s.id);
             return (
@@ -394,7 +584,7 @@ export default function Overview({
             );
           })}
           {studentsToDisplay.length === 0 && (
-            <div className="p-10 text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest border border-dashed border-white/5 rounded-sm w-full col-span-full">
+            <div className="p-10 text-center text-gray-400 text-[10px] font-bold uppercase tracking-widest border border-dashed border-white/5 rounded-sm w-full col-span-full">
               {isArchiveMode ? 'No discharged students found' : 'All students are in today\'s list'}
             </div>
           )}
@@ -614,11 +804,17 @@ function StudentRowItem({
             </div>
           )}
           {isMakeup && !isSelected && !isChecked && (
-            <span className="bg-emerald-500/20 text-emerald-500 text-[8px] font-black px-1 py-0.5 rounded border border-emerald-500/20 uppercase tracking-tighter shrink-0">
-              보강
-            </span>
+            student.isScheduledToday ? (
+              <span className="bg-blue-500/20 text-blue-400 text-[8px] font-black px-1 py-0.5 rounded border border-blue-500/20 uppercase tracking-tighter shrink-0">
+                이동
+              </span>
+            ) : (
+              <span className="bg-emerald-500/20 text-emerald-500 text-[8px] font-black px-1 py-0.5 rounded border border-emerald-500/20 uppercase tracking-tighter shrink-0">
+                보강
+              </span>
+            )
           )}
-          <span className={`text-[10px] font-bold truncate ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-400'}`}>
+          <span className={`text-[10px] font-black truncate ${isSelected || isChecked ? 'text-blue-100' : 'text-gray-200'}`}>
             {student.grade} · {student.course} · {student.class}
           </span>
 
@@ -657,7 +853,7 @@ function StudentRowItem({
               if (!book) return null;
               return (
                 <span key={`${code}-${idx}`} className={`text-[8px] px-1.5 py-0.5 rounded-md font-bold truncate max-w-[100px] ${
-                  isSelected || isChecked ? 'bg-white/20 text-white' : 'bg-white/5 text-gray-400 border border-white/5'
+                  isSelected || isChecked ? 'bg-white/20 text-white' : 'bg-white/10 text-gray-100 border border-white/10'
                 }`}>
                   {book.title}
                 </span>
@@ -688,24 +884,48 @@ function StudentRowItem({
             
             return (
               <div key={day} className={`flex items-center gap-0.5 px-1 py-0.5 rounded-md ${isToday ? 'bg-white/10 ring-1 ring-white/10' : ''}`}>
-                <span className={`text-[8px] mr-0.5 font-bold ${isToday ? 'text-emerald-400 font-black' : 'text-gray-500'}`}>{day}</span>
-                <div className="flex gap-0.5">
-                  {activeHours.map(h => {
-                    const isWhite = h >= 100;
-                    const actualHour = isWhite ? h - 100 : h;
+                <span className={`text-[10px] mr-0.5 font-bold ${isToday ? 'text-emerald-400 font-black' : 'text-gray-300'}`}>{day}</span>
+                {activeHours.length > 0 ? (
+                  (() => {
+                    const firstVal = activeHours[0];
+                    let h = 0;
+                    let m = 0;
                     
+                    if (firstVal >= 100) {
+                      h = Math.floor(firstVal / 100);
+                      m = firstVal % 100;
+                    } else {
+                      h = firstVal;
+                      m = 0;
+                    }
+                    if (h <= 12) h += 12;
+                    
+                    let displayH = h > 12 ? h - 12 : h;
+                    if (displayH === 0) displayH = 12;
+                    
+                    const timeStr = m === 0 ? `${displayH}시` : `${displayH}시 ${m}분`;
+                    
+                    const isSpecialTime = h === 13;
+                    const isLateTime = h >= 19;
+                    let colorClass = '';
+                    
+                    if (isSpecialTime) {
+                      colorClass = isToday ? 'text-emerald-400 font-black' : 'text-emerald-300/85';
+                    } else if (isLateTime) {
+                      colorClass = isToday ? 'text-amber-400 font-black' : 'text-amber-300/85';
+                    } else {
+                      colorClass = isToday ? 'text-blue-400 font-black' : 'text-blue-300/85';
+                    }
+
                     return (
-                      <div 
-                        key={h} 
-                        className={`w-0.5 h-2 rounded-sm transition-colors ${
-                          isWhite 
-                            ? 'bg-white border border-gray-400/20' 
-                            : (actualHour < 19 ? 'bg-blue-500/80' : 'bg-orange-400/80')
-                        }`} 
-                      />
+                      <span className={`text-[10px] font-black leading-none ${colorClass}`}>
+                        {timeStr}
+                      </span>
                     );
-                  })}
-                </div>
+                  })()
+                ) : (
+                  <span className="text-[10px] font-bold text-gray-700">-</span>
+                )}
               </div>
             );
           })}

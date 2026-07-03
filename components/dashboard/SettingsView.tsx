@@ -12,7 +12,6 @@ import { getInitial } from '@/lib/utils';
 import SchoolExamSettings from './SchoolExamSettings';
 import NoticeSettings from './settings/NoticeSettings';
 import HolidayManagement from './settings/HolidayManagement';
-import TestManagement from './settings/TestManagement';
 import TeacherManagement from './settings/TeacherManagement';
 import AcademyProfile from './settings/AcademyProfile';
 import AccountSettings from './settings/AccountSettings';
@@ -35,7 +34,7 @@ interface SettingsViewProps {
 // --- Main SettingsView Component ---
 
 export default function SettingsView({ teachers, students, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'tests' | 'holidays' | 'exams' | 'manual'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual'>('teachers');
 
   // 💡 휴일 관리 함수
   const handleAddHoliday = async (date: string, note: string) => {
@@ -125,7 +124,6 @@ const updateTimerPreset = async (index: number, value: number) => {
   // 💡 탭 정의 배열 (권한별 역할(roles) 기반으로 접근 제어 고도화)
   const TABS = useMemo(() => [
     { id: 'notices', label: 'Notices', color: 'text-amber-500', roles: ['admin', 'master'] },
-    { id: 'tests', label: 'Tests', color: 'text-blue-500', roles: ['admin', 'master'] },
     { id: 'exams', label: 'Exams', color: 'text-rose-500', roles: ['admin', 'master'] },
     { id: 'teachers', label: 'Teachers', color: 'text-blue-500', roles: ['admin', 'master'] },
     { id: 'holidays', label: 'Holidays', color: 'text-emerald-500', roles: ['admin', 'master'] },
@@ -215,10 +213,6 @@ const updateTimerPreset = async (index: number, value: number) => {
           />
         )}
 
-        {/* 💡 테스트 및 정답지 관리 탭 */}
-        {activeTab === 'tests' && (
-          <TestManagement academyId={academyInfo?.id} />
-        )}
 
         {/* 💡 매뉴얼 관리 탭 */}
         {activeTab === 'manual' && (
@@ -239,6 +233,7 @@ const updateTimerPreset = async (index: number, value: number) => {
         {activeTab === 'academy' && (
           <AcademyProfile 
             academyInfo={academyInfo} 
+            currentUser={currentUser}
             onUpdateAcademyInfo={onUpdateAcademyInfo} 
             opSettings={opSettings} 
             setOpSettings={setOpSettings} 

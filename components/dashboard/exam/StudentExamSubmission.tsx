@@ -15,9 +15,17 @@ interface StudentExamSubmissionProps {
   studentName: string;
   studentGrade?: string;
   assignedExamId?: string; // 💡 추가: 오늘 배정된 시험 ID
+  sessionDate?: string;     // 💡 추가: 오늘 날짜
 }
 
-export default function StudentExamSubmission({ academyId, studentId, studentName, studentGrade, assignedExamId }: StudentExamSubmissionProps) {
+export default function StudentExamSubmission({ 
+  academyId, 
+  studentId, 
+  studentName, 
+  studentGrade, 
+  assignedExamId,
+  sessionDate
+}: StudentExamSubmissionProps) {
   const [exams, setExams] = useState<ExamPaper[]>([]);
   const [selectedExam, setSelectedExam] = useState<ExamPaper | null>(null);
   const [answers, setAnswers] = useState<Record<string, number | string | number[]>>({});
@@ -557,6 +565,59 @@ export default function StudentExamSubmission({ academyId, studentId, studentNam
         .single();
 
       if (error) throw error;
+
+      // 💡 [추가] Daily Sheet (ams_session_logs) 테이블 연동
+      if (sessionDate) {
+        const { data: existingLog, error: logGetErr } = await supabase
+          .from('ams_session_logs')
+          .select('*')
+          .eq('student_id', studentId)
+          .eq('session_date', sessionDate)
+          .maybeSingle();
+
+        if (logGetErr) {
+          throw new Error(`일지 조회 실패: ${logGetErr.message}`);
+        }
+
+        // exam_code에 #이 없으면 붙여서 매칭 및 치환에 사용
+        const examCodeRaw = selectedExam.exam_code || selectedExam.id.substring(0, 4);
+        const examCode = examCodeRaw.startsWith('#') ? examCodeRaw : `#${examCodeRaw}`;
+
+        if (existingLog) {
+          const currentStatus = existingLog.test_status || '';
+          const updatedStatus = updateTestStatusWithScore(currentStatus, examCode, autoScore);
+
+          const { error: updateErr } = await supabase
+            .from('ams_session_logs')
+            .update({
+              test_status: updatedStatus,
+              test_score: autoScore
+            })
+            .eq('id', existingLog.id);
+
+          if (updateErr) {
+            throw new Error(`일지 업데이트 실패: ${updateErr.message}`);
+          }
+        } else {
+          // 일지 레코드가 아예 없는 날짜인 경우: 신규 인서트 시 필수 컬럼 기본값 보완
+          const initialStatus = `- ${examCode} : ${autoScore} ,`;
+          const { error: insertErr } = await supabase
+            .from('ams_session_logs')
+            .insert({
+              student_id: studentId,
+              session_date: sessionDate,
+              academy_id: academyId,
+              status: 'none',
+              attendance_status: '등원',
+              test_status: initialStatus,
+              test_score: autoScore
+            });
+
+          if (insertErr) {
+            throw new Error(`일지 생성 실패: ${insertErr.message}`);
+          }
+        }
+      }
       
       setSubmission(data as ExamSubmission);
       fetchMySubmissions(); // 💡 이력 즉시 갱신
@@ -567,6 +628,45 @@ export default function StudentExamSubmission({ academyId, studentId, studentNam
     } finally {
       setSubmitting(false);
     }
+  };
+
+  // 💡 Daily Sheet의 오늘 테스트 텍스트에서 점수 자리를 찾아 업데이트하는 헬퍼 함수
+  const updateTestStatusWithScore = (currentStatus: string, examCode: string, score: number) => {
+    const cleanStatus = String(currentStatus || '').trim();
+    if (!cleanStatus) {
+      return `- ${examCode} : ${score} ,`;
+    }
+
+    const lines = cleanStatus.split('\n');
+    let matched = false;
+
+    const updatedLines = lines.map(line => {
+      if (line.includes(examCode)) {
+        matched = true;
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1) {
+          const beforeColon = line.substring(0, colonIdx + 1); // "- #4448 :"
+          const afterColon = line.substring(colonIdx + 1);    // " , 메모" 또는 " 90 , 메모"
+          const commaIdx = afterColon.indexOf(',');
+
+          if (commaIdx !== -1) {
+            const memo = afterColon.substring(commaIdx); // ", 메모"
+            return `${beforeColon} ${score} ${memo}`;
+          } else {
+            return `${beforeColon} ${score}`;
+          }
+        } else {
+          return `${line.trim()} : ${score} ,`;
+        }
+      }
+      return line;
+    });
+
+    if (!matched) {
+      updatedLines.push(`- ${examCode} : ${score} ,`);
+    }
+
+    return updatedLines.join('\n');
   };
 
   // 버블 스타일 색상 매핑

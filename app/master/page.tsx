@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School } from 'lucide-react';
+import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function MasterDashboard() {
@@ -11,6 +11,13 @@ export default function MasterDashboard() {
   const [isAuthorized, setIsAuthorized] = useState(false);
   const [academies, setAcademies] = useState<any[]>([]);
   const [isLoadingList, setIsLoadingList] = useState(false);
+  
+  // 💡 [추가] 학원 수정 상태
+  const [editingAcademy, setEditingAcademy] = useState<any>(null);
+  const [editAcademyName, setEditAcademyName] = useState('');
+  const [editSlug, setEditSlug] = useState('');
+  const [editIsSuspended, setEditIsSuspended] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
 
   // Form fields (Create Academy)
   const [academyName, setAcademyName] = useState('');
@@ -137,7 +144,7 @@ export default function MasterDashboard() {
     try {
       const { data, error } = await supabase
         .from('ams_academies')
-        .select('id, academy_name, slug, created_at')
+        .select('id, academy_name, slug, created_at, operation_settings')
         .order('created_at', { ascending: false });
       if (!error && data) {
         setAcademies(data);
@@ -196,6 +203,42 @@ export default function MasterDashboard() {
       });
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleUpdateAcademy = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingAcademy?.id) return;
+    
+    const targetId = editingAcademy.id;
+    const oldSlug = editingAcademy.slug;
+    const cleanSlug = editSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+    const cleanName = editAcademyName.trim();
+    
+    if (!cleanSlug) { alert('슬러그는 공백으로 지정할 수 없습니다.'); return; }
+    if (!cleanName) { alert('학원 이름은 필수입니다.'); return; }
+    
+    setIsUpdating(true);
+    try {
+      const res = await fetch('/api/master/update-academy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ academyId: targetId, academyName: cleanName, slug: cleanSlug, oldSlug, isSuspended: editIsSuspended })
+      });
+      const data = await res.json();
+      
+      if (data.success) {
+        alert('학원 정보가 정상적으로 변경되었습니다.');
+        setEditingAcademy(null);
+        fetchAcademies();
+      } else {
+        alert(data.error || '학원 정보 수정에 실패했습니다.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('변경 실패: ' + err.message);
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -516,36 +559,65 @@ export default function MasterDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {academies.map((ac) => (
-                      <tr key={ac.id} className="border-b border-white/[0.03] hover:bg-white/[0.01] transition-all font-bold text-white/90 group">
-                        <td className="py-3.5 px-2 flex items-center gap-2">
-                          <span className="w-1.5 h-1.5 rounded-full bg-blue-500 group-hover:scale-125 transition-transform" />
-                          <span>{ac.academy_name}</span>
-                        </td>
-                        <td className="py-3.5 px-2">
-                          <code className="bg-black/40 border border-white/5 px-2 py-1 rounded-[2px] text-[10px] text-blue-300 font-bold">
-                            /{ac.slug}
-                          </code>
-                        </td>
-                        <td className="py-3.5 px-2 text-right text-[10px] text-gray-500">
-                          {new Date(ac.created_at).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit',
-                            hour: '2-digit',
-                            minute: '2-digit'
-                          })}
-                        </td>
-                        <td className="py-3.5 px-2 text-right">
-                          <button
-                            onClick={() => handleWarpToAcademy(ac.id, ac.slug)}
-                            className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-[9px] font-black uppercase tracking-wider rounded-[2px] transition-all shadow-md shadow-purple-900/10"
-                          >
-                            접속
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {academies.map((ac) => {
+                      const isAcSuspended = ac.operation_settings?.is_suspended === true;
+                      return (
+                        <tr key={ac.id} className={`border-b transition-all font-bold group ${
+                          isAcSuspended 
+                            ? 'bg-red-950/15 hover:bg-red-950/25 text-red-200 border-red-500/10' 
+                            : 'text-white/90 hover:bg-white/[0.01] border-white/[0.03]'
+                        }`}>
+                          <td className="py-3.5 px-2 flex items-center gap-2">
+                            <span className={`w-1.5 h-1.5 rounded-full group-hover:scale-125 transition-transform ${
+                              isAcSuspended ? 'bg-red-500 shadow-[0_0_8px_rgba(239,68,68,0.5)]' : 'bg-blue-500'
+                            }`} />
+                            <span className={isAcSuspended ? 'text-red-300' : ''}>{ac.academy_name}</span>
+                            {isAcSuspended && (
+                              <span className="px-2 py-0.5 rounded-[2px] bg-red-600 text-white text-[8px] font-black tracking-tight animate-pulse shadow-sm shadow-red-900/50">서비스 정지</span>
+                            )}
+                          </td>
+                          <td className="py-3.5 px-2">
+                            <code className={`border px-2 py-1 rounded-[2px] text-[10px] font-bold ${
+                              isAcSuspended 
+                                ? 'bg-red-950/40 border-red-500/20 text-red-300' 
+                                : 'bg-black/40 border-white/5 text-blue-300'
+                            }`}>
+                              /{ac.slug}
+                            </code>
+                          </td>
+                          <td className="py-3.5 px-2 text-right text-[10px] text-gray-500">
+                            {new Date(ac.created_at).toLocaleDateString('ko-KR', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit',
+                              hour: '2-digit',
+                              minute: '2-digit'
+                            })}
+                          </td>
+                          <td className="py-3.5 px-2 text-right">
+                            <div className="flex justify-end gap-1.5">
+                              <button
+                                onClick={() => {
+                                  setEditingAcademy(ac);
+                                  setEditAcademyName(ac.academy_name);
+                                  setEditSlug(ac.slug);
+                                  setEditIsSuspended(isAcSuspended);
+                                }}
+                                className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-[9px] font-black uppercase tracking-wider rounded-[2px] border border-white/10 transition-all"
+                              >
+                                수정
+                              </button>
+                              <button
+                                onClick={() => handleWarpToAcademy(ac.id, ac.slug)}
+                                className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-[9px] font-black uppercase tracking-wider rounded-[2px] transition-all shadow-md shadow-purple-900/10"
+                              >
+                                접속
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -554,6 +626,102 @@ export default function MasterDashboard() {
         </section>
 
       </main>
+
+      {/* 💡 [추가] 지점 정보 수정 모달 */}
+      <AnimatePresence>
+        {editingAcademy && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95, y: 10 }} 
+              animate={{ opacity: 1, scale: 1, y: 0 }} 
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              className="bg-[#121212] border border-white/10 rounded-sm p-6 max-w-sm w-full shadow-2xl space-y-5"
+            >
+              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+                <div className="flex items-center gap-2 text-blue-400">
+                  <School size={16} />
+                  <h3 className="text-xs font-black uppercase tracking-widest text-white/95">지점 정보 수정</h3>
+                </div>
+                <button 
+                  onClick={() => setEditingAcademy(null)}
+                  className="text-gray-500 hover:text-white transition-colors"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+
+              <form onSubmit={handleUpdateAcademy} className="space-y-4">
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block ml-0.5">학원 이름 (한글)</label>
+                  <input
+                    type="text"
+                    required
+                    value={editAcademyName}
+                    onChange={(e) => setEditAcademyName(e.target.value)}
+                    className="w-full bg-black/60 border border-white/10 rounded-sm py-2.5 px-3 text-xs text-white outline-none focus:border-blue-500/60 transition-all font-bold"
+                  />
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block ml-0.5">인터넷 주소 슬러그 (영문)</label>
+                  <div className="relative">
+                    <Globe className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600" />
+                    <input
+                      type="text"
+                      required
+                      value={editSlug}
+                      onChange={(e) => setEditSlug(e.target.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, ''))}
+                      className="w-full bg-black/60 border border-white/10 rounded-sm py-2.5 pl-9 pr-3 text-xs text-white outline-none focus:border-blue-500/60 transition-all font-bold"
+                    />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block ml-0.5">서비스 제공 상태</label>
+                  <select
+                    value={editIsSuspended ? 'suspended' : 'active'}
+                    onChange={(e) => setEditIsSuspended(e.target.value === 'suspended')}
+                    className={`w-full bg-black/60 border border-white/10 rounded-sm py-2.5 px-3 text-xs outline-none focus:border-blue-500/60 transition-all font-bold ${
+                      editIsSuspended ? 'text-red-400' : 'text-emerald-400'
+                    }`}
+                  >
+                    <option value="active" className="text-emerald-400 bg-[#121212]">✅ 정상 제공 (Active)</option>
+                    <option value="suspended" className="text-red-400 bg-[#121212]">❌ 일시 중지 (Suspended)</option>
+                  </select>
+                </div>
+
+                <div className="bg-red-500/5 border border-red-500/10 p-3 rounded-sm text-[10px] text-red-400 font-bold leading-relaxed">
+                  ⚠️ 주의: 주소 식별자(slug) 변경 시 해당 지점의 접속 URL이 완전히 변경되며, 오답노트 지점의 슬러그도 동시에 갱신됩니다.
+                </div>
+
+                <div className="flex gap-2.5 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setEditingAcademy(null)}
+                    className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 py-3 text-[10px] font-black uppercase tracking-wider rounded-sm transition-all border border-white/5"
+                  >
+                    취소
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={isUpdating}
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-3 text-[10px] font-black uppercase tracking-wider rounded-sm transition-all flex items-center justify-center gap-1.5"
+                  >
+                    {isUpdating ? (
+                      <>
+                        <Loader2 size={12} className="animate-spin" />
+                        <span>저장 중...</span>
+                      </>
+                    ) : (
+                      <span>변경 저장</span>
+                    )}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }

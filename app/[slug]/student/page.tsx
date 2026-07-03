@@ -187,7 +187,7 @@ export default function StudentPortal() {
   const upcomingMakeups = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
     return allLogs
-      .filter(l => l.session_date >= todayStr && l.attendance_status === '보강')
+      .filter(l => l.session_date >= todayStr && l.attendance_status?.startsWith('보강'))
       .sort((a, b) => a.session_date.localeCompare(b.session_date));
   }, [allLogs]);
 
@@ -714,7 +714,7 @@ export default function StudentPortal() {
     setIsSaving(true);
     try {
       const { answers, calculatedScore, testId } = result;
-      const updateData: any = { student_id: student.id, session_date: selectedDate, test_answers: answers, test_status: testId || todaySession?.test_status };
+      const updateData: any = { student_id: student.id, session_date: selectedDate, test_status: testId || todaySession?.test_status };
       if (calculatedScore !== undefined) updateData.test_score = calculatedScore;
       if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
       else { await supabase.from('ams_session_logs').insert([updateData]); }
@@ -885,6 +885,7 @@ export default function StudentPortal() {
               studentName={student?.name || ''}
               studentGrade={student?.grade || ''}
               assignedExamId={todaySession?.test_status || ''}
+              sessionDate={selectedDate}
             />
           </div>
         ) : (

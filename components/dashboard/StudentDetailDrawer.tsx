@@ -20,6 +20,8 @@ export default function StudentDetailDrawer({
   student, availableTextbooks, teachers, isRefreshingBooks, onRefreshBooks, onUpdateInfo, onAddToToday, onClose
 }: StudentDetailDrawerProps) {
   const [localSchedules, setLocalSchedules] = useState<{[key: string]: number[]}>(student.day_schedules || {});
+  const [startTimes, setStartTimes] = useState<Record<string, string>>({});
+  const [endTimes, setEndTimes] = useState<Record<string, string>>({});
   const [localDays, setLocalDays] = useState<string[]>(student.class_days || []);
   const [localName, setLocalName] = useState(student.name);
   const [localSchool, setLocalSchool] = useState(student.school || '');
@@ -27,7 +29,8 @@ export default function StudentDetailDrawer({
   const [localCourse, setLocalCourse] = useState(student.course || 'C');
   const [localBookCourses, setLocalBookCourses] = useState<Record<string, string>>(student.book_courses || {});
   const [localClass, setLocalClass] = useState(student.class);
-  const [localPhone, setLocalPhone] = useState(student.phone || '');
+  const [localStudentPhone, setLocalStudentPhone] = useState('');
+  const [localParentPhone, setLocalParentPhone] = useState('');
   const [localTeacherId, setLocalTeacherId] = useState(student.teacher_id || '');
   const [localManagementNotes, setLocalManagementNotes] = useState(student.management_notes || ''); 
   const [localRecentMission, setLocalRecentMission] = useState(student.recent_mission || ''); // 💡 추가
@@ -74,7 +77,31 @@ export default function StudentDetailDrawer({
   }, [onClose, showDeleteConfirm, doneModalOpen]);
 
   useEffect(() => {
-    setLocalSchedules(student.day_schedules || {});
+    const schedules = student.day_schedules || {};
+    const newStarts: Record<string, string> = {};
+    const newEnds: Record<string, string> = {};
+
+    const decodeTimeVal = (val: number) => {
+      if (!val || val === 999) return '';
+      if (val < 100) {
+        const hour = val <= 12 ? val + 12 : val;
+        return `${hour.toString().padStart(2, '0')}:00`;
+      }
+      let h = Math.floor(val / 100);
+      if (h <= 12) h += 12;
+      const m = (val % 100).toString().padStart(2, '0');
+      return `${h.toString().padStart(2, '0')}:${m}`;
+    };
+
+    Object.keys(schedules).forEach(day => {
+      const hours = schedules[day] || [];
+      newStarts[day] = hours.length > 0 ? decodeTimeVal(hours[0]) : '';
+      newEnds[day] = hours.length > 1 ? decodeTimeVal(hours[1]) : '';
+    });
+
+    setStartTimes(newStarts);
+    setEndTimes(newEnds);
+    setLocalSchedules(schedules);
     setLocalDays(student.class_days || []);
     setLocalName(student.name);
     setLocalSchool(student.school || '');
@@ -82,11 +109,26 @@ export default function StudentDetailDrawer({
     setLocalCourse(student.course || 'C');
     setLocalBookCourses(student.book_courses || {});
     setLocalClass(student.class);
-    setLocalPhone(student.phone || '');
+    const rawPhone = student.phone || '';
+    if (rawPhone.includes('(부모:')) {
+      const parts = rawPhone.split('(부모:');
+      setLocalStudentPhone(parts[0].trim());
+      setLocalParentPhone(parts[1].replace(')', '').trim());
+    } else {
+      setLocalStudentPhone(rawPhone);
+      setLocalParentPhone('');
+    }
     setLocalTeacherId(student.teacher_id || '');
     setLocalManagementNotes(student.management_notes || '');
-    setLocalRecentMission(student.recent_mission || ''); // 💡 동기화
-  }, [student.id, student.day_schedules, student.class_days, student.name, student.grade, student.course, student.book_courses, student.class, student.phone, student.teacher_id, student.management_notes, student.recent_mission]);
+    setLocalRecentMission(student.recent_mission || '');
+  }, [student.id]);
+
+  const handleSavePhone = (studentPhoneVal: string, parentPhoneVal: string) => {
+    const sClean = studentPhoneVal.trim();
+    const pClean = parentPhoneVal.trim();
+    const combined = pClean ? `${sClean} (부모: ${pClean})` : sClean;
+    onUpdateInfo(student.id, 'phone', combined);
+  };
 
   const filteredBooks = useMemo(() => {
     return (availableTextbooks || []).filter(b => 
@@ -95,23 +137,47 @@ export default function StudentDetailDrawer({
     );
   }, [availableTextbooks, bookSearch]);
 
-  const handleTimeToggle = (day: string, hour: number) => {
-    const currentHours = localSchedules[day] || [];
-    const isNormalActive = currentHours.includes(hour);
-    const isWhiteActive = currentHours.includes(hour + 100);
-    let newHours;
-    if (!isNormalActive && !isWhiteActive) newHours = [...currentHours, hour];
-    else if (isNormalActive) newHours = [...currentHours.filter(h => h !== hour), hour + 100];
-    else newHours = currentHours.filter(h => h !== (hour + 100));
-    const sortedHours = newHours.sort((a, b) => (a % 100) - (b % 100));
-    const newSchedules = { ...localSchedules, [day]: sortedHours };
-    setLocalSchedules(newSchedules);
-    if (!localDays.includes(day) && sortedHours.length > 0) {
-      const newDays = [...localDays, day];
+  const handleTimeChange = (day: string, startTimeStr: string, endTimeStr: string) => {
+    setStartTimes(prev => ({ ...prev, [day]: startTimeStr }));
+    setEndTimes(prev => ({ ...prev, [day]: endTimeStr }));
+
+    if (startTimeStr === '' && endTimeStr === '') {
+      const newSchedules = { ...localSchedules };
+      delete newSchedules[day];
+      setLocalSchedules(newSchedules);
+      onUpdateInfo(student.id, 'day_schedules', newSchedules);
+      
+      const newDays = localDays.filter(d => d !== day);
       setLocalDays(newDays);
       onUpdateInfo(student.id, 'class_days', newDays);
+      return;
     }
-    onUpdateInfo(student.id, 'day_schedules', newSchedules);
+
+    const isStartValid = startTimeStr && startTimeStr.length === 5 && startTimeStr.includes(':');
+    const isEndValid = endTimeStr && endTimeStr.length === 5 && endTimeStr.includes(':');
+
+    const finalStartVal = isStartValid 
+      ? parseInt(startTimeStr.replace(':', '')) 
+      : (localSchedules[day]?.[0] || 1600);
+      
+    const finalEndVal = isEndValid 
+      ? parseInt(endTimeStr.replace(':', '')) 
+      : (localSchedules[day]?.[1] || 1900);
+
+    if (!isNaN(finalStartVal) && !isNaN(finalEndVal)) {
+      const newSchedules = { ...localSchedules, [day]: [finalStartVal, finalEndVal] };
+      setLocalSchedules(newSchedules);
+      
+      if (isStartValid || isEndValid) {
+        onUpdateInfo(student.id, 'day_schedules', newSchedules);
+      }
+
+      if (!localDays.includes(day)) {
+        const newDays = [...localDays, day];
+        setLocalDays(newDays);
+        onUpdateInfo(student.id, 'class_days', newDays);
+      }
+    }
   };
 
   const handleDayToggle = (day: string) => {
@@ -119,11 +185,55 @@ export default function StudentDetailDrawer({
     const newDays = isSelected ? localDays.filter(d => d !== day) : [...localDays, day];
     setLocalDays(newDays);
     onUpdateInfo(student.id, 'class_days', newDays);
-    if (!isSelected && (!localSchedules[day] || localSchedules[day].length === 0)) {
-      const newSchedules = { ...localSchedules, [day]: [16, 17, 18] };
+    
+    if (isSelected) {
+      const newSchedules = { ...localSchedules };
+      delete newSchedules[day];
       setLocalSchedules(newSchedules);
       onUpdateInfo(student.id, 'day_schedules', newSchedules);
+      
+      setStartTimes(prev => ({ ...prev, [day]: '' }));
+      setEndTimes(prev => ({ ...prev, [day]: '' }));
+    } else {
+      const newSchedules = { ...localSchedules, [day]: [1600, 1900] };
+      setLocalSchedules(newSchedules);
+      onUpdateInfo(student.id, 'day_schedules', newSchedules);
+      
+      setStartTimes(prev => ({ ...prev, [day]: '16:00' }));
+      setEndTimes(prev => ({ ...prev, [day]: '19:00' }));
     }
+  };
+
+  const handleApplyTimeToAllDays = () => {
+    const selectedDays = DAYS.filter(day => localDays.includes(day));
+    if (selectedDays.length <= 1) return;
+
+    const firstDay = selectedDays[0];
+    const baseStart = startTimes[firstDay] || '';
+    const baseEnd = endTimes[firstDay] || '';
+
+    if (!baseStart && !baseEnd) {
+      alert('일괄 적용할 기준 시간이 입력되지 않았습니다.');
+      return;
+    }
+
+    const newStarts = { ...startTimes };
+    const newEnds = { ...endTimes };
+    const newSchedules = { ...localSchedules };
+
+    selectedDays.forEach(day => {
+      newStarts[day] = baseStart;
+      newEnds[day] = baseEnd;
+      
+      const startVal = baseStart ? parseInt(baseStart.replace(':', '')) : 1600;
+      const endVal = baseEnd ? parseInt(baseEnd.replace(':', '')) : 1900;
+      newSchedules[day] = [startVal, endVal];
+    });
+
+    setStartTimes(newStarts);
+    setEndTimes(newEnds);
+    setLocalSchedules(newSchedules);
+    onUpdateInfo(student.id, 'day_schedules', newSchedules);
   };
 
   const toggleBookSelection = (bookcode: string) => {
@@ -157,7 +267,7 @@ export default function StudentDetailDrawer({
       
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-2 px-1">
-          <h3 className="text-sm font-black text-gray-500 uppercase tracking-[0.2em]">Student Profile</h3>
+          <h3 className="text-sm font-black text-gray-300 uppercase tracking-[0.2em]">Student Profile</h3>
           {student.is_deleted && <span className="bg-red-500/10 text-red-500 text-[9px] font-black px-2 py-0.5 rounded-[2px] border border-red-500/20">퇴원생</span>}
         </div>
         <button onClick={onClose} className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-white/10 transition-colors"><X size={18} /></button>
@@ -186,11 +296,11 @@ export default function StudentDetailDrawer({
             </div>
             <div className="col-span-3">
               <input type="text" value={localClass} placeholder="Class" onChange={(e) => setLocalClass(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'class_name', localClass)}
-                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-3 text-xs font-bold text-gray-400 text-center outline-none focus:border-blue-500 transition-all" />
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-3 text-xs font-bold text-gray-100 text-center outline-none focus:border-blue-500 transition-all" />
             </div>
             <div className="col-span-12">
               <div className="flex items-center gap-2 bg-white/5 border border-white/5 rounded-[2px] px-3 py-2">
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest shrink-0">Manager:</span>
+                <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest shrink-0">Manager:</span>
                 <select 
                   value={localTeacherId} 
                   onChange={(e) => {
@@ -209,7 +319,7 @@ export default function StudentDetailDrawer({
 
           {student.assigned_books.length > 0 && (
             <div className="flex flex-col gap-2 py-1 border-y border-white/5 mx-1">
-              <label className="text-[9px] font-black text-gray-600 uppercase tracking-widest px-1">Book Courses (Overridable)</label>
+              <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest px-1">Book Courses (Overridable)</label>
               <div className="flex flex-wrap gap-1.5">
                 {student.assigned_books.filter(code => {
                   const rawCourseValue = localBookCourses[code] || localCourse;
@@ -226,7 +336,7 @@ export default function StudentDetailDrawer({
 
                   return (
                     <div key={`${code}-${idx}`} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${isKeep ? 'bg-amber-500/5 border-amber-500/20' : book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
-                      <span className={`text-[9px] font-black px-1.5 ${isKeep ? 'text-amber-500' : book ? 'text-gray-400' : 'text-red-400'}`}>
+                      <span className={`text-[9px] font-black px-1.5 ${isKeep ? 'text-amber-500' : book ? 'text-gray-100' : 'text-red-400'}`}>
                         {book ? book.title : `(${code})`}
                         {isKeep && <span className="ml-1 text-[7px] bg-amber-500 text-black px-1 rounded-sm uppercase tracking-tighter">Keep</span>}
                       </span>
@@ -310,19 +420,39 @@ export default function StudentDetailDrawer({
 
 
           <div className="grid grid-cols-2 gap-2">
-            <div className="relative group">
-              <input type="text" value={localSchool} placeholder="School Name" onChange={(e) => setLocalSchool(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'school', localSchool)}
-                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-400 outline-none focus:border-blue-500/50 transition-all font-bold" />
+            <div className="relative group col-span-2">
+              <input type="text" value={localSchool} placeholder="학교 이름" onChange={(e) => setLocalSchool(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'school', localSchool)}
+                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
-            <div className="relative group">
-              <input type="tel" value={localPhone} placeholder="Phone Number" 
-                onChange={(e) => setLocalPhone(e.target.value)} 
+            <div className="relative group col-span-1">
+              <input type="tel" value={localStudentPhone} placeholder="학생 연락처" 
+                onChange={(e) => setLocalStudentPhone(e.target.value)} 
                 onBlur={() => {
-                  const cleaned = localPhone.replace(/[^0-9]/g, '');
-                  setLocalPhone(cleaned); // 화면 표시값도 정제
-                  onUpdateInfo(student.id, 'phone', cleaned);
+                  let cleaned = localStudentPhone.replace(/[^0-9]/g, '');
+                  if (cleaned.length === 11) {
+                    cleaned = cleaned.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+                  } else if (cleaned.length === 10) {
+                    cleaned = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+                  }
+                  setLocalStudentPhone(cleaned);
+                  handleSavePhone(cleaned, localParentPhone);
                 }}
-                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
+                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
+            </div>
+            <div className="relative group col-span-1">
+              <input type="tel" value={localParentPhone} placeholder="부모님 연락처 (카톡용)" 
+                onChange={(e) => setLocalParentPhone(e.target.value)} 
+                onBlur={() => {
+                  let cleaned = localParentPhone.replace(/[^0-9]/g, '');
+                  if (cleaned.length === 11) {
+                    cleaned = cleaned.replace(/(\d{3})(\d{4})(\d{4})/, '$1-$2-$3');
+                  } else if (cleaned.length === 10) {
+                    cleaned = cleaned.replace(/(\d{3})(\d{3})(\d{4})/, '$1-$2-$3');
+                  }
+                  setLocalParentPhone(cleaned);
+                  handleSavePhone(localStudentPhone, cleaned);
+                }}
+                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
           </div>
 
@@ -347,29 +477,101 @@ export default function StudentDetailDrawer({
 
         {/* 2. 스케줄 설정 */}
         <section className="space-y-4">
-          <h5 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2 px-1"><Calendar size={14} /> Weekly Schedule</h5>
+          <h5 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center justify-between px-1 w-full">
+            <span className="flex items-center gap-2">
+              <Calendar size={14} /> Weekly Schedule
+            </span>
+            {localDays.length > 1 && (
+              <button
+                type="button"
+                onClick={handleApplyTimeToAllDays}
+                className="text-[9px] font-bold text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 rounded px-2 py-0.5 transition-all cursor-pointer normal-case"
+                title="첫 요일의 시간을 다른 모든 요일에 동일하게 적용합니다."
+              >
+                ⚡ 동일적용
+              </button>
+            )}
+          </h5>
           <div className="bg-white/5 border border-white/5 rounded-[4px] p-4 shadow-inner">
-            <div className="grid grid-cols-7 gap-1">
+            {/* 요일 선택 가로 바 */}
+            <div className="grid grid-cols-7 gap-1 mb-4">
               {DAYS.map(day => {
-                const activeHours = localSchedules[day] || [];
                 const isDaySelected = localDays.includes(day);
                 return (
-                  <div key={day} className="flex flex-col items-center gap-3">
-                    <button onClick={() => handleDayToggle(day)} className={`text-[10px] font-black w-8 h-8 rounded-[2px] flex items-center justify-center transition-all ${isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:bg-gray-300'}`}>{day}</button>
-                    <div className="flex flex-col gap-1 w-full px-1">
-                      {[16, 17, 18, 19, 20, 21].map((h, idx) => {
-                        const isNormal = activeHours.includes(h);
-                        const isWhite = activeHours.includes(h + 100);
-                        const isFirstHalf = idx < 3;
-                        return (
-                          <button key={h} onClick={() => handleTimeToggle(day, h)}
-                            className={`w-full h-3.5 rounded-sm transition-all duration-150 ${isNormal ? (isFirstHalf ? 'bg-blue-500' : 'bg-orange-400') : isWhite ? 'bg-white border border-gray-300' : 'bg-white/[0.03] hover:bg-white/10'}`} />
-                        );
-                      })}
-                    </div>
-                  </div>
+                  <button 
+                    key={`bar-${day}`}
+                    type="button"
+                    onClick={() => handleDayToggle(day)} 
+                    className={`text-[10px] font-black h-8 rounded-[2px] flex items-center justify-center transition-all ${
+                      isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                    }`}
+                  >
+                    {day}
+                  </button>
                 );
               })}
+            </div>
+
+            {/* 선택된 요일들의 시간대 설정 리스트 */}
+            <div className="flex flex-wrap gap-2">
+              {(() => {
+                const selectedDays = DAYS.filter(day => localDays.includes(day));
+                if (selectedDays.length === 0) {
+                  return (
+                    <div className="text-[10px] text-gray-500 text-center py-4 italic w-full">수업 요일을 위에서 선택해 주세요.</div>
+                  );
+                }
+
+                // 4자리 정수(HHMM) -> "HH:MM" 텍스트 추출 헬퍼 (오후 시간 자동 보정 포함)
+                const formatTimeVal = (val: number) => {
+                  if (!val || val === 999) return '';
+                  if (val < 100) {
+                    const hour = val <= 12 ? val + 12 : val;
+                    return `${hour.toString().padStart(2, '0')}:00`;
+                  }
+                  let h = Math.floor(val / 100);
+                  if (h <= 12) h += 12; // 12시 이하의 값은 학원 특성상 오후(PM)로 보정
+                  const m = (val % 100).toString().padStart(2, '0');
+                  return `${h.toString().padStart(2, '0')}:${m}`;
+                };
+
+                return selectedDays.map(day => {
+                  const startTime = startTimes[day] || '';
+                  const endTime = endTimes[day] || '';
+
+                  return (
+                    <div key={`row-${day}`} className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2 py-1 rounded-[4px] shrink-0">
+                      {/* 활성화된 요일 표시 */}
+                      <span className="text-[9px] font-black text-blue-400 bg-blue-600/10 w-5 h-5 flex items-center justify-center rounded-[2px] shrink-0">
+                        {day}
+                      </span>
+
+                      {/* 시작/종료 시간 직접 입력 인풋 */}
+                      <div className="flex items-center gap-1">
+                        <input
+                          type="time"
+                          value={startTime}
+                          onChange={(e) => handleTimeChange(day, e.target.value, endTime)}
+                          onClick={(e) => {
+                            try { e.currentTarget.showPicker(); } catch (err) {}
+                          }}
+                          className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-blue-500 transition-all font-bold w-[100px] cursor-pointer"
+                        />
+                        <span className="text-[9px] text-gray-600">~</span>
+                        <input
+                          type="time"
+                          value={endTime}
+                          onChange={(e) => handleTimeChange(day, startTime, e.target.value)}
+                          onClick={(e) => {
+                            try { e.currentTarget.showPicker(); } catch (err) {}
+                          }}
+                          className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-blue-500 transition-all font-bold w-[100px] cursor-pointer"
+                        />
+                      </div>
+                    </div>
+                  );
+                });
+              })()}
             </div>
           </div>
         </section>
@@ -442,7 +644,7 @@ export default function StudentDetailDrawer({
                 onChange={(e) => setLocalManagementNotes(e.target.value)}
                 onBlur={() => onUpdateInfo(student.id, 'management_notes', localManagementNotes)}
                 placeholder="이 학생에 대해 꼭 기억해야 할 핵심 내용을 적어주세요 (성향, 주의사항 등)..."
-                className="w-full bg-transparent border-none text-[13px] font-bold text-amber-900/80 outline-none resize-none leading-relaxed placeholder:text-amber-700/30 flex-1 custom-scrollbar-v"
+                className="w-full bg-transparent border-none text-[13px] font-bold text-amber-900/80 outline-none resize-none leading-relaxed placeholder:text-amber-700/60 flex-1 custom-scrollbar-v"
               />
               <div className="flex justify-between items-center mt-3 pt-2 border-t border-amber-900/10">
                 <span className="text-[8px] font-black text-amber-800/40 uppercase tracking-tighter">Sticky Note</span>
@@ -461,7 +663,7 @@ export default function StudentDetailDrawer({
             <h5 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
               <TrendingUp size={14} /> Student Recent Mission
             </h5>
-            <span className="text-[8px] font-bold text-gray-600 uppercase">학생 대시보드에 상시 노출</span>
+            <span className="text-[8px] font-bold text-gray-300 uppercase">학생 대시보드에 상시 노출</span>
           </div>
           
           <div className="relative group/mission">
@@ -471,7 +673,7 @@ export default function StudentDetailDrawer({
                 onChange={(e) => setLocalRecentMission(e.target.value)}
                 onBlur={() => onUpdateInfo(student.id, 'recent_mission', localRecentMission)}
                 placeholder="학생에게 전달할 이번 주 미션을 입력하세요..."
-                className="w-full bg-transparent border-none text-[12px] font-bold text-blue-100 placeholder:text-blue-500/30 outline-none resize-none flex-1 leading-relaxed"
+                className="w-full bg-transparent border-none text-[12px] font-bold text-blue-100 placeholder:text-blue-400/60 outline-none resize-none flex-1 leading-relaxed"
               />
               <div className="absolute bottom-2 right-2 opacity-20 group-hover/mission:opacity-40 transition-opacity">
                 <TrendingUp size={32} className="text-blue-400" />

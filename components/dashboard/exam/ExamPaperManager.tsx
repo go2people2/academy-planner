@@ -470,6 +470,85 @@ function ExamPaperDetail({ exam, onEdit, onEditAnswerKey, onBack }: {
     }
   };
 
+  // 💡 오늘 테스트 텍스트에서 점수를 지우고 쉼표 형태만 남기는 헬퍼 함수
+  const clearScoreFromTestStatus = (currentStatus: string, examCode: string) => {
+    const cleanStatus = String(currentStatus || '').trim();
+    if (!cleanStatus) return '';
+    
+    const lines = cleanStatus.split('\n');
+    const updatedLines = lines.map(line => {
+      if (line.includes(examCode)) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx !== -1) {
+          const beforeColon = line.substring(0, colonIdx + 1); // "- #4448 :"
+          const afterColon = line.substring(colonIdx + 1);
+          const commaIdx = afterColon.indexOf(',');
+          
+          if (commaIdx !== -1) {
+            const memo = afterColon.substring(commaIdx); // ", 메모"
+            return `${beforeColon} ${memo}`; // "- #4448 : , 메모"
+          } else {
+            return `${beforeColon} `;
+          }
+        }
+      }
+      return line;
+    });
+    return updatedLines.join('\n');
+  };
+
+  // 💡 개별 학생의 시험 제출 이력 삭제
+  const handleDeleteSubmission = async (sub: any) => {
+    const confirmMsg = `${sub.student_name} 학생의 시험 제출 이력을 정말로 삭제하시겠습니까?\nDaily Sheet(일지)의 테스트 결과와 점수도 함께 초기화됩니다.`;
+    if (!confirm(confirmMsg)) return;
+
+    try {
+      // 1. ams_exam_submissions 테이블에서 삭제
+      const { error: deleteErr } = await supabase
+        .from('ams_exam_submissions')
+        .delete()
+        .eq('id', sub.id);
+
+      if (deleteErr) throw deleteErr;
+
+      // 2. Daily Sheet(ams_session_logs) 테이블 연동 초기화
+      // 💡 날짜 불일치 문제를 해결하기 위해, 제출 날짜 대신 해당 학생의 일지 중 시험 코드가 텍스트에 들어있는 일지를 직접 검색하여 초기화합니다.
+      const examCodeRaw = exam.exam_code || exam.id.substring(0, 4);
+      const examCode = examCodeRaw.startsWith('#') ? examCodeRaw : `#${examCodeRaw}`;
+
+      const { data: matchedLogs, error: logGetErr } = await supabase
+        .from('ams_session_logs')
+        .select('*')
+        .eq('student_id', sub.student_id)
+        .like('test_status', `%${examCode}%`);
+
+      if (!logGetErr && matchedLogs && matchedLogs.length > 0) {
+        for (const log of matchedLogs) {
+          const currentStatus = log.test_status || '';
+          const updatedStatus = clearScoreFromTestStatus(currentStatus, examCode);
+
+          const { error: logUpdateErr } = await supabase
+            .from('ams_session_logs')
+            .update({
+              test_status: updatedStatus,
+              test_score: null
+            })
+            .eq('id', log.id);
+
+          if (logUpdateErr) {
+            console.error('Error clearing ams_session_logs score:', logUpdateErr);
+          }
+        }
+      }
+
+      // 3. 로컬 상태 즉시 갱신
+      setSubmissions(prev => prev.filter(s => s.id !== sub.id));
+      alert('제출 이력이 성공적으로 삭제되었습니다.');
+    } catch (err: any) {
+      alert(`삭제 실패: ${err.message}`);
+    }
+  };
+
   // 💡 선택 학생 일괄 정답 공개/비공개
   const handleBatchToggleReveal = async (reveal: boolean) => {
     if (selectedSubIds.length === 0) return;
@@ -829,6 +908,32 @@ function ExamPaperDetail({ exam, onEdit, onEditAnswerKey, onBack }: {
                     }}
                   >
                     {sub.reveal_answers ? '🔓 정답 공개 중' : '🔒 정답 비공개'}
+                  </button>
+
+                  {/* 💡 [신규] 제출 이력 삭제 버튼 */}
+                  <button
+                    onClick={() => handleDeleteSubmission(sub)}
+                    style={{
+                      background: 'rgba(239, 68, 68, 0.1)',
+                      color: '#ef4444',
+                      border: '1px solid rgba(239, 68, 68, 0.2)',
+                      padding: '8px 14px',
+                      borderRadius: 8,
+                      cursor: 'pointer',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      transition: 'all 0.2s'
+                    }}
+                    onMouseOver={(e) => {
+                      e.currentTarget.style.background = '#ef4444';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseOut={(e) => {
+                      e.currentTarget.style.background = 'rgba(239, 68, 68, 0.1)';
+                      e.currentTarget.style.color = '#ef4444';
+                    }}
+                  >
+                    🗑️ 제출 삭제
                   </button>
                 </div>
               </div>

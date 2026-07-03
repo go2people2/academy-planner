@@ -23,6 +23,7 @@ interface UseTodaySheetShortcutsProps {
   selectedIds: string[];
   onSave: (studentId: string, data: any) => Promise<any>;
   toggleSecondRow?: () => void;
+  toggleHistory?: (studentId: string) => void; // 💡 히스토리 토글 함수 추가
   handleUndo?: () => void;
   handleRedo?: () => void;
 }
@@ -36,7 +37,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     students, setStudents,
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
     handleBatchSave, handleSetSwitch, setIsDragging, selectedIds,
-    toggleSecondRow, handleUndo, handleRedo
+    toggleSecondRow, toggleHistory, handleUndo, handleRedo
   } = props;
 
   // 1. 클립보드 로직 분리 (handleCopy, handlePaste, handleCut)
@@ -232,6 +233,16 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         if (toggleSecondRow) {
           e.preventDefault();
           toggleSecondRow();
+          return;
+        }
+      }
+
+      // Alt + H (Option + H) - 히스토리 패널 토글
+      const isHKey = e.key?.toLowerCase() === 'h' || e.code === 'KeyH';
+      if (e.altKey && isHKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        if (activeCell && toggleHistory) {
+          e.preventDefault();
+          toggleHistory(activeCell.studentId);
           return;
         }
       }

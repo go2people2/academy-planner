@@ -6,6 +6,7 @@ import { Shield, Key, Clock, Globe, BookOpen, X } from 'lucide-react';
 
 interface AcademyProfileProps {
   academyInfo: any;
+  currentUser?: any; // 💡 추가
   onUpdateAcademyInfo?: (updates: any) => Promise<void>;
   opSettings: any;
   setOpSettings: React.Dispatch<React.SetStateAction<any>>;
@@ -14,9 +15,10 @@ interface AcademyProfileProps {
 }
 
 export default function AcademyProfile({ 
-  academyInfo, onUpdateAcademyInfo, opSettings, setOpSettings, updateOpSetting, updateTimerPreset 
+  academyInfo, currentUser, onUpdateAcademyInfo, opSettings, setOpSettings, updateOpSetting, updateTimerPreset 
 }: AcademyProfileProps) {
   const [newCategory, setNewCategory] = useState('');
+  const isMaster = currentUser?.role === 'master' || currentUser?.role === 'admin';
 
   const handleAddCategory = () => {
     const val = newCategory.trim();

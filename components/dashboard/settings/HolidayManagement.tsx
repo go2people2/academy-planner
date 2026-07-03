@@ -31,7 +31,7 @@ export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoli
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/40 p-6 rounded-lg border border-white/5">
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Holiday Date</label>
+            <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Holiday Date</label>
             <input 
               type="date" 
               value={newHoliday}
@@ -40,7 +40,7 @@ export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoli
             />
           </div>
           <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest ml-1">Description (Optional)</label>
+            <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Description (Optional)</label>
             <input 
               type="text" 
               placeholder="예: 현충일, 학원 방학"
@@ -61,11 +61,11 @@ export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoli
         </div>
 
         <div className="space-y-4">
-          <h4 className="text-[10px] font-black text-gray-500 uppercase tracking-[0.2em] ml-1">Registered Holidays</h4>
+          <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] ml-1">Registered Holidays</h4>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {holidays.length === 0 ? (
               <div className="col-span-full py-10 text-center border border-dashed border-white/10 rounded-lg">
-                <p className="text-[11px] text-gray-600 font-bold uppercase">No holidays registered</p>
+                <p className="text-[11px] text-gray-300 font-bold uppercase">No holidays registered</p>
               </div>
             ) : (
               holidays.map((h: any) => (
@@ -76,7 +76,7 @@ export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoli
                     </div>
                     <div>
                       <p className="text-sm font-black text-white">{h.date}</p>
-                      <p className="text-[10px] font-bold text-gray-500 uppercase tracking-tight">{h.note || 'No description'}</p>
+                      <p className="text-[13px] font-black text-emerald-400 tracking-tight mt-0.5">{h.note || '설명 없음'}</p>
                     </div>
                   </div>
                   <button 
@@ -90,7 +90,7 @@ export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoli
             )}
           </div>
         </div>
-        <p className="text-[10px] text-gray-600 italic leading-relaxed">
+        <p className="text-[10px] text-gray-400 italic leading-relaxed">
           * 등록된 휴일은 정규 수업일이더라도 "수업 없는 날"로 처리됩니다.<br/>
           * 휴일에는 지난 수업의 테스트 데이터가 "오늘 테스트"로 이월되지 않고 다음 실제 수업일로 연기됩니다.
         </p>

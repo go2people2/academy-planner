@@ -50,6 +50,7 @@ export default function WrongAnswerManager({ academyId, currentUser }: WrongAnsw
   const [categories, setCategories] = useState<string[]>([]);
   
   const [loading, setLoading] = useState(false);
+  const [loadingAcademy, setLoadingAcademy] = useState(true); // 💡 무한 로딩 방지용 플래그
   const [errorMsg, setErrorMsg] = useState('');
 
   // 테마 추출 (지점 slug 기반, 로드 전에는 default 사용)
@@ -66,19 +67,43 @@ export default function WrongAnswerManager({ academyId, currentUser }: WrongAnsw
   // 💡 [조회] 출석부 지점 ID(ams_academies)의 slug와 매칭되는 오답노트 지점(academies) 정보 로드
   useEffect(() => {
     const loadWaAcademy = async () => {
-      if (!academyId) return;
+      if (!academyId) {
+        setLoadingAcademy(false);
+        return;
+      }
       try {
-        const { data: amsAc } = await supabase.from('ams_academies').select('slug').eq('id', academyId).single();
+        const { data: amsAc, error: amsErr } = await supabase
+          .from('ams_academies')
+          .select('slug')
+          .eq('id', academyId)
+          .maybeSingle();
+        
+        if (amsErr) throw amsErr;
+
         if (amsAc) {
-          const { data: waAc } = await supabase.from('academies').select('*').eq('slug', amsAc.slug).single();
+          const { data: waAc, error: waErr } = await supabase
+            .from('academies')
+            .select('*')
+            .eq('slug', amsAc.slug)
+            .maybeSingle();
+          
+          if (waErr) throw waErr;
+
           if (waAc) {
             setWaAcademy(waAc);
-            fetchTeachers(waAc.id);
-            fetchAllBooks(waAc.id);
+            await fetchTeachers(waAc.id);
+            await fetchAllBooks(waAc.id);
+          } else {
+            setErrorMsg(`오답노트 데이터베이스에 해당 지점(slug: ${amsAc.slug}) 정보가 등록되어 있지 않습니다. 관리자에게 등록을 요청하세요.`);
           }
+        } else {
+          setErrorMsg('학원 정보를 불러올 수 없습니다.');
         }
       } catch (err) {
         console.error('Failed to load WA academy:', err);
+        setErrorMsg('오답노트 지점 정보를 불러오는 과정에서 오류가 발생했습니다.');
+      } finally {
+        setLoadingAcademy(false);
       }
     };
     loadWaAcademy();
@@ -182,11 +207,30 @@ export default function WrongAnswerManager({ academyId, currentUser }: WrongAnsw
     }
   };
 
-  if (!waAcademy) {
+  if (loadingAcademy) {
     return (
       <div className="p-8 text-center text-gray-500 font-bold">
         <Loader2 className="animate-spin mx-auto mb-4" size={32} />
         <p className="text-xs uppercase tracking-widest font-black">Syncing Wrong Answer Database...</p>
+      </div>
+    );
+  }
+
+  if (!waAcademy) {
+    return (
+      <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto text-slate-800">
+        <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between gap-4">
+          <h1 className="text-2xl font-black flex items-center gap-2 text-red-600">
+            <BookOpen size={24} />
+            오답노트 관리
+          </h1>
+        </div>
+        {errorMsg && (
+          <div className="p-6 bg-red-50 border border-red-100 rounded-3xl text-red-600 font-bold text-xs space-y-2">
+            <p className="text-sm font-black">⚠️ 오답노트 데이터베이스 연동 실패</p>
+            <p>{errorMsg}</p>
+          </div>
+        )}
       </div>
     );
   }
