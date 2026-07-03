@@ -78,6 +78,8 @@ export interface Student {
   allLogs: SessionLog[];
   is_deleted?: boolean; // 💡 추가 (퇴원 여부)
   isTodayClassDay?: boolean; // 💡 추가 (오늘 수업 여부)
+  isSkipped?: boolean; // 💡 추가 (오늘 제외 여부)
+  isScheduledToday?: boolean; // 💡 추가 (정규 등원 여부)
   teacher_initial?: string; // 💡 추가
   teacher_name?: string; // 💡 추가
   level_tag?: string; // 💡 추가 (반/레벨 태그 정보)
