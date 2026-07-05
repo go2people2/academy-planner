@@ -11,16 +11,16 @@ import {
   Maximize2, Minimize2, ArrowLeft, ArrowRight, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer, ChevronDown, ChevronUp
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { TodaySheetRow } from './TodaySheetRow';
-import { HistoryRows } from './TodaySheetHistory';
-import ReportPreview from './ReportPreview';
-import PrintPreviewModal from './todaySheet/PrintPreviewModal';
-import StudentReportCardPrintModal from './todaySheet/StudentReportCardPrintModal';
-import { TagBatchInputModal } from './todaySheet/TagBatchInputModal';
+import { TodaySheetRow } from './TodaySheetRowLight';
+import { HistoryRows } from '../TodaySheetHistory';
+import ReportPreview from '../ReportPreview';
+import PrintPreviewModal from '../todaySheet/PrintPreviewModal';
+import StudentReportCardPrintModal from '../todaySheet/StudentReportCardPrintModal';
+import { TagBatchInputModal } from '../todaySheet/TagBatchInputModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
-import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
+import { useTodaySheetShortcuts } from '../hooks/useTodaySheetShortcuts';
 
 interface ColumnConfig {
   id: string;
@@ -142,7 +142,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
   };
 
   return (
-    <tr className="bg-black border-b border-white/20 select-none">
+    <tr className="bg-[#f7f7f5] border-b border-[#edece9] select-none">
       {activeColumns.map((col: any) => {
         const isStickyHorizontally = col.id === 'name' || col.id === 'tools' || col.id === 'action' || col.id === 'select';
         const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes', 'management_notes'].includes(col.id);
@@ -164,12 +164,12 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
           right: col.id === 'action' ? 0 : 'auto',
           zIndex: isStickyHorizontally ? 50 : 40,
           backgroundColor: draggedId === col.id 
-            ? (isOrigDragged ? '#075985' : '#00d2ff') // 💡 고스트는 아쿠아(#00d2ff), 남겨진 원본은 딥 아쿠아(#075985)
+            ? (isOrigDragged ? '#e0f2fe' : '#bae6fd') 
             : dragOverId === col.id 
-            ? '#1e293b' 
+            ? '#f1f5f9' 
             : focusColumn === col.id 
-            ? '#172554' 
-            : '#000000',
+            ? '#dbeafe' 
+            : '#f7f7f5',
           cursor: !['select', 'name', 'tools', 'action'].includes(col.id) ? 'grab' : 'default',
         };
         return (
@@ -183,10 +183,10 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
             onDragLeave={() => setDragOverId(null)}
             onDrop={(e) => handleDrop(e, col.id)}
             onDragEnd={handleDragEnd}
-            className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-center border-r border-white/12 transition-all ${
+            className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-center border-r border-[#edece9] transition-all ${
               focusColumn === col.id 
-                ? 'text-blue-400 bg-blue-950/20 border-b-2 border-b-blue-500/80 shadow-[0_1px_0_rgba(59,130,246,0.3)]' 
-                : 'text-gray-400 shadow-[0_1px_0_rgba(255,255,255,0.1)]'
+                ? 'text-blue-600 bg-blue-50 border-b-2 border-b-blue-400 shadow-sm' 
+                : 'text-[#37352f]/70 shadow-sm'
             } ${
               draggedId === col.id ? `${isOrigDragged ? 'opacity-30' : 'opacity-100'} bg-blue-600/30 border-2 border-dashed border-blue-500 text-white font-extrabold` : ''
             } ${
@@ -207,9 +207,9 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
                   <div className={`flex items-center gap-1.5 ${col.id === 'review' ? 'italic' : ''}`}>
                     {col.id === 'review' ? (
                       <>
-                        <span className="text-blue-500/80 font-black mr-0.5">"</span>
-                        <span className="text-blue-200">{col.label}</span>
-                        <span className="text-blue-500/80 font-black ml-0.5">"</span>
+                        <span className="text-blue-600 font-black mr-0.5">"</span>
+                        <span className="text-blue-600 font-black">{col.label}</span>
+                        <span className="text-blue-600 font-black ml-0.5">"</span>
                       </>
                     ) : (
                       col.label
@@ -1237,18 +1237,18 @@ export default function TodaySheet({
   const gradeStats = useMemo(() => { const stats: Record<string, number> = {}; ['초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'].forEach(g => stats[g] = 0); students.forEach((s:any) => { if (stats[s.grade] !== undefined) stats[s.grade]++; }); return stats; }, [students]);
 
   return (
-    <div className="p-3 space-y-4 relative flex flex-col h-full overflow-hidden bg-[#050505] text-center">
-      <div className="flex items-center justify-between px-3 py-2 bg-black/50 border border-white/10 rounded-lg shrink-0 no-print">
+    <div className="p-3 space-y-4 relative flex flex-col h-full overflow-hidden bg-[#fbfbfa] text-center">
+      <div className="flex items-center justify-between px-3 py-2 bg-[#f7f7f5] border border-[#edece9] rounded-lg shrink-0 no-print shadow-sm">
         <div className="flex items-center gap-6">
           <div className="flex flex-col gap-0.5 items-start">
             <div className="flex items-center gap-3">
-              <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
+              <h3 className="text-[13px] font-black uppercase tracking-widest text-[#0c73e8] flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter mr-1">{students.length} Total</span>
               {Object.entries(gradeStats).filter(([_, count]) => count > 0).map(([grade, count], idx) => {
-                const colorClass = grade.includes('초') ? 'text-emerald-500/80' : grade.includes('고') ? 'text-amber-500/80' : 'text-blue-500/80';
-                return <div key={grade || idx} className="flex items-center gap-1 bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded-[2px]"><span className="text-[8px] font-bold text-gray-600 uppercase">{grade}</span><span className={`text-[8px] font-black ${colorClass}`}>{count}</span></div>;
+                const colorClass = grade.includes('초') ? 'text-emerald-600/80' : grade.includes('고') ? 'text-amber-600/80' : 'text-blue-600/80';
+                return <div key={grade || idx} className="flex items-center gap-1 bg-white border border-[#edece9] px-1.5 py-0.5 rounded-[2px] shadow-sm"><span className="text-[8px] font-bold text-gray-650 uppercase">{grade}</span><span className={`text-[8px] font-black ${colorClass}`}>{count}</span></div>;
               })}
             </div>
           </div>
@@ -1256,9 +1256,9 @@ export default function TodaySheet({
 
         <div className="flex items-center gap-4 no-print">
           {focusColumn && (
-            <div className="flex items-center gap-2 bg-blue-600/20 border border-blue-500/40 px-3 py-1.5 rounded-md animate-pulse">
-              <span className="text-[10px] font-black text-blue-400 uppercase tracking-widest">Focus Mode: {DEFAULT_COLUMNS.find(c => c.id === focusColumn)?.label}</span>
-              <button onClick={() => setFocusColumn(null)} className="p-1 hover:bg-blue-500/30 rounded text-blue-400 transition-all"><X size={14} /></button>
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 px-3 py-1.5 rounded-md animate-pulse shadow-sm">
+              <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">Focus Mode: {DEFAULT_COLUMNS.find(c => c.id === focusColumn)?.label}</span>
+              <button onClick={() => setFocusColumn(null)} className="p-1 hover:bg-blue-200 rounded text-blue-600 transition-all"><X size={14} /></button>
             </div>
           )}
 
@@ -1281,10 +1281,10 @@ export default function TodaySheet({
                 <button
                   onClick={() => isNotToday && onDateChange(todayStr)}
                   disabled={!isNotToday}
-                  className={`px-2.5 py-1.5 text-[10.5px] font-black uppercase tracking-wider rounded-[6px] transition-all border shadow-xl ${
+                  className={`px-2.5 py-1.5 text-[10.5px] font-black uppercase tracking-wider rounded-[6px] transition-all border shadow-sm ${
                     isNotToday
-                      ? 'bg-blue-950/40 border-blue-500/30 text-blue-400 hover:bg-blue-600 hover:text-white cursor-pointer'
-                      : 'bg-[#121212] border-white/5 text-gray-600 cursor-not-allowed opacity-40'
+                      ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-600 hover:text-white cursor-pointer'
+                      : 'bg-gray-50 text-gray-400 border-gray-200 cursor-not-allowed opacity-60'
                   }`}
                   title="오늘 날짜로 복귀"
                 >
@@ -1292,22 +1292,22 @@ export default function TodaySheet({
                 </button>
 
                 <div onClick={(e) => { const input = e.currentTarget.querySelector('input'); if (input && 'showPicker' in input) try { (input as any).showPicker(); } catch (err) { console.error(err); } }}
-                  className={`flex items-center gap-1 border rounded-[6px] px-2 py-1.5 transition-all group cursor-pointer shadow-xl relative ${
+                  className={`flex items-center gap-1 border rounded-[6px] px-2 py-1.5 transition-all group cursor-pointer shadow-sm relative ${
                     isNotToday 
-                      ? 'bg-red-950/40 border-red-500/50 text-red-400 hover:bg-red-900/30' 
-                      : 'bg-amber-950/50 border-amber-500/60 text-amber-300 hover:bg-amber-900/40'
+                      ? 'bg-red-50 border-red-300 text-red-650 hover:bg-red-100/70' 
+                      : 'bg-amber-100 border-amber-300/60 text-amber-900 hover:bg-amber-200/80'
                   }`}>
-                  <CalendarIcon size={13} className={isNotToday ? 'text-red-500 animate-pulse' : 'text-amber-500 group-hover:text-amber-400'} />
-                  <span className={`text-[11.5px] font-black tracking-tight shrink-0 select-none ${isNotToday ? 'text-red-400' : 'text-amber-300'}`}>
+                  <CalendarIcon size={13} className={isNotToday ? 'text-red-500 animate-pulse' : 'text-amber-700 group-hover:text-amber-800'} />
+                  <span className={`text-[11.5px] font-black tracking-tight shrink-0 select-none ${isNotToday ? 'text-red-600' : 'text-amber-950'}`}>
                     {displayDate}
                   </span>
                   <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className="absolute opacity-0 w-0 h-0 pointer-events-none" />
                   {isNotToday ? (
-                    <div className="ml-0.5 px-1 py-0.5 bg-red-600/90 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+                    <div className="ml-0.5 px-1 py-0.5 bg-red-600 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(220,38,38,0.2)]">
                       {selectedDayStr}
                     </div>
                   ) : (
-                    <div className="ml-0.5 px-1 py-0.5 bg-amber-600 text-black text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(245,158,11,0.3)]">
+                    <div className="ml-0.5 px-1 py-0.5 bg-amber-600 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-sm">
                       {selectedDayStr}
                     </div>
                   )}
@@ -1316,25 +1316,25 @@ export default function TodaySheet({
             );
           })()}
 
-          <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-black border-white/20 text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
+          <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-sm ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white' : 'bg-white border-[#edece9] text-[#37352f]/60 hover:text-[#37352f] hover:bg-[#edece9]/50'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
           
           {/* 💡 [변경] 전체 리포트 발송 버튼 (1행 안전 구역으로 이동) */}
-          <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-500 border border-blue-500/20 rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-xl no-print">
+          <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-2 bg-blue-50 text-blue-600 border border-blue-200 rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-sm no-print">
             {isSendingReport === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} 전체 리포트 발송
           </button>
           
           <div className="relative">
-            <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-white transition-all shadow-xl"><Download size={14} /> Download</button>
+            <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#edece9] rounded-[6px] text-[10px] font-black uppercase tracking-widest text-[#37352f]/70 hover:text-[#37352f] hover:bg-[#edece9]/50 transition-all shadow-sm"><Download size={14} /> Download</button>
             <AnimatePresence>
               {isExportOpen && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute right-0 mt-2 w-56 bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-lg shadow-2xl p-2 z-[100] overflow-hidden">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute right-0 mt-2 w-56 bg-white border border-[#edece9] rounded-lg shadow-lg p-2 z-[100] overflow-hidden">
                   <div className="space-y-1">
-                    <button onClick={() => handleExport('aca2000')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-indigo-400 transition-all text-left group border border-indigo-500/10 hover:border-indigo-500/30 mb-1 bg-indigo-500/5"><div className="w-8 h-8 rounded bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500 group-hover:text-white transition-all"><Zap size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">ACA2000 전용</span><span className="text-[9px] text-gray-600">업로드용 맞춤 엑셀</span></div></button>
-                    <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-emerald-400 transition-all text-left group"><div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all"><FileSpreadsheet size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Excel File</span><span className="text-[9px] text-gray-600">Microsoft Excel (.xlsx)</span></div></button>
-                    <button onClick={() => handleExport('csv')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-amber-400 transition-all text-left group"><div className="w-8 h-8 rounded bg-amber-500/10 flex items-center justify-center group-hover:bg-amber-500 group-hover:text-white transition-all"><FileTextIcon size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">CSV File</span><span className="text-[9px] text-gray-600">쉼표로 구분된 텍스트 파일</span></div></button>
-                    <button onClick={() => handleExport('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-white transition-all text-left group"><div className="w-8 h-8 rounded bg-white/5 flex items-center justify-center group-hover:bg-white group-hover:text-black transition-all"><Copy size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Copy to Clipboard</span><span className="text-[9px] text-gray-600">다른 엑셀 시트에 바로 붙여넣기</span></div></button>
+                    <button onClick={() => handleExport('aca2000')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#edece9]/50 text-[#37352f]/70 hover:text-indigo-600 transition-all text-left group border border-indigo-100 hover:border-indigo-300 mb-1 bg-indigo-50/30"><div className="w-8 h-8 rounded bg-indigo-100 flex items-center justify-center group-hover:bg-indigo-600 group-hover:text-white transition-all"><Zap size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">ACA2000 전용</span><span className="text-[9px] text-gray-500">업로드용 맞춤 엑셀</span></div></button>
+                    <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#edece9]/50 text-[#37352f]/70 hover:text-emerald-600 transition-all text-left group"><div className="w-8 h-8 rounded bg-emerald-50 flex items-center justify-center group-hover:bg-emerald-600 group-hover:text-white transition-all"><FileSpreadsheet size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Excel File</span><span className="text-[9px] text-gray-500">Microsoft Excel (.xlsx)</span></div></button>
+                    <button onClick={() => handleExport('csv')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#edece9]/50 text-[#37352f]/70 hover:text-amber-600 transition-all text-left group"><div className="w-8 h-8 rounded bg-amber-50 flex items-center justify-center group-hover:bg-amber-600 group-hover:text-white transition-all"><FileTextIcon size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">CSV File</span><span className="text-[9px] text-gray-500">쉼표로 구분된 텍스트 파일</span></div></button>
+                    <button onClick={() => handleExport('copy')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#edece9]/50 text-[#37352f]/70 hover:text-[#37352f] transition-all text-left group"><div className="w-8 h-8 rounded bg-gray-100 flex items-center justify-center group-hover:bg-[#37352f] group-hover:text-white transition-all"><Copy size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Copy to Clipboard</span><span className="text-[9px] text-gray-500">다른 엑셀 시트에 바로 붙여넣기</span></div></button>
                     
-                    <div className="border-t border-white/5 my-1.5" />
+                    <div className="border-t border-[#edece9] my-1.5" />
                     
                     <input 
                       type="file" 
@@ -1348,16 +1348,16 @@ export default function TodaySheet({
                         setIsExportOpen(false);
                         document.getElementById('excel-aca-import-input')?.click();
                       }} 
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-purple-400 transition-all text-left group border border-purple-500/10 hover:border-purple-500/30 bg-purple-500/5"
+                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#edece9]/50 text-[#37352f]/70 hover:text-purple-600 transition-all text-left group border border-purple-100 hover:border-purple-300 bg-purple-5/30"
                     >
-                      <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500 group-hover:text-white transition-all">
+                      <div className="w-8 h-8 rounded bg-purple-100 flex items-center justify-center group-hover:bg-purple-600 group-hover:text-white transition-all">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[12px] font-black">엑셀 일지 가져오기 (Import)</span>
-                        <span className="text-[9px] text-purple-400/80 font-bold">아카2000 엑셀 업로드 복원</span>
+                        <span className="text-[9px] text-purple-600 font-bold">아카2000 엑셀 업로드 복원</span>
                       </div>
                     </button>
                   </div>
@@ -1369,13 +1369,13 @@ export default function TodaySheet({
           {/* 2행 접기/펼치기 토글 버튼 */}
           <button 
             onClick={toggleSecondRow} 
-            className={`p-2 border rounded-[6px] transition-all shadow-xl ${showSecondRow ? 'bg-blue-600/20 border-blue-500/40 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+            className={`p-2 border rounded-[6px] transition-all shadow-sm ${showSecondRow ? 'bg-blue-50 border-blue-200 text-blue-600' : 'bg-white border-[#edece9] text-[#37352f]/60 hover:text-[#37352f] hover:bg-[#edece9]/50'}`}
             title={showSecondRow ? "상세 설정 도구 접기" : "상세 설정 도구 펼치기"}
           >
             {showSecondRow ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
 
-          <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/5 border border-white/10 rounded-[6px] text-gray-400 hover:text-white transition-all shadow-xl"><Settings2 size={18} /></button>
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white border border-[#edece9] rounded-[6px] text-[#37352f]/60 hover:text-[#37352f] hover:bg-[#edece9]/50 transition-all shadow-sm"><Settings2 size={18} /></button>
         </div>
       </div>
 
@@ -1386,20 +1386,20 @@ export default function TodaySheet({
             animate={{ opacity: 1, height: 'auto', marginTop: 0 }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
             transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="flex flex-wrap items-center justify-between gap-4 px-4 py-2.5 bg-[#0a0a0a]/60 border border-white/5 rounded-lg shrink-0 text-left no-print overflow-hidden"
+            className="flex flex-wrap items-center justify-between gap-4 px-4 py-2.5 bg-[#f7f7f5] border border-[#edece9] rounded-lg shrink-0 text-left no-print overflow-hidden shadow-sm"
           >
             {/* 2행 왼쪽: 세트 선택 스위치 & 전체화면 모드 필터들 */}
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Set</span>
-                <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
+                <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Set</span>
+                <div className="flex bg-white p-0.5 rounded-md border border-[#edece9] shadow-sm">
                   {['1', '2', '3', '4'].map((setId, idx) => {
                     const keys = ['Q', 'W', 'E', 'R'];
                     return (
                       <button 
                         key={setId} 
                         onClick={() => handleSetSwitch(setId)} 
-                        className={`w-7 py-1 rounded-[4px] text-[11px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} 
+                        className={`w-7 py-1 rounded-[4px] text-[11px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-sm' : 'text-[#37352f]/50 hover:text-[#37352f]'}`} 
                         title={`Alt + ${keys[idx]}`}
                       >
                         {setId}
@@ -1411,7 +1411,7 @@ export default function TodaySheet({
 
               <button 
                 onClick={() => setIsTagBatchMode(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500 hover:text-white rounded-[4px] text-[10px] font-black transition-all ml-2"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 text-indigo-650 border border-indigo-200 hover:bg-indigo-600 hover:text-white rounded-[4px] text-[10px] font-black transition-all ml-2 shadow-sm"
                 title="태그별 일괄입력 모드 열기"
               >
                 <Wand2 size={12} />
@@ -1420,10 +1420,10 @@ export default function TodaySheet({
 
               <button
                 onClick={toggleHideAbsent}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-[4px] text-[10px] font-black transition-all ml-1 ${
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-[4px] text-[10px] font-black transition-all ml-1 shadow-sm ${
                   hideAbsent
-                    ? 'bg-rose-500/30 text-rose-300 border-rose-500/50 hover:bg-rose-500/50'
-                    : 'bg-white/5 text-gray-500 border-white/10 hover:bg-white/10 hover:text-gray-300'
+                    ? 'bg-rose-50 text-rose-650 border-rose-200 hover:bg-rose-500 hover:text-white'
+                    : 'bg-white text-[#37352f]/60 border-[#edece9] hover:bg-[#edece9]/50 hover:text-[#37352f]'
                 }`}
                 title={hideAbsent ? '결석 학생 다시 표시' : '결석 학생 숨기기'}
               >
@@ -1433,13 +1433,13 @@ export default function TodaySheet({
 
               {isFullScreen && (
                 <>
-                  <div className="h-4 w-px bg-white/10" />
+                  <div className="h-4 w-px bg-[#edece9]" />
 
                   {/* 담당 선생님 필터 (라벨 제거) */}
                   <select 
                     value={selectedTeacherId} 
                     onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className="bg-black border border-white/10 rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold text-white outline-none focus:border-blue-500 [color-scheme:dark]"
+                    className="bg-white border border-[#edece9] rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold text-[#37352f] outline-none focus:border-blue-500 shadow-sm"
                   >
                     <option value="All">전체 선생님</option>
                     {teachers.map((t: any) => (
@@ -1447,24 +1447,24 @@ export default function TodaySheet({
                     ))}
                   </select>
 
-                  <div className="h-4 w-px bg-white/10" />
+                  <div className="h-4 w-px bg-[#edece9]" />
 
                   {/* 학년 필터 (라벨 제거 & 초/중/고 축소) */}
-                  <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+                  <div className="flex bg-white rounded-[4px] p-0.5 border border-[#edece9] shadow-sm">
                     {[
                       { label: 'ALL', key: 'All' }, { label: '초', key: '초' }, { label: '중', key: '중' }, { label: '고', key: '고' }
                     ].map((g) => (
                       <button 
                         key={g.key} 
                         onClick={() => setSelectedFilter(g.key)} 
-                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-[#37352f]/50 hover:text-[#37352f]'}`}
                       >
                         {g.label}
                       </button>
                     ))}
                   </div>
 
-                  <div className="h-4 w-px bg-white/10" />
+                  <div className="h-4 w-px bg-[#edece9]" />
 
                   {/* 요일 필터 (라벨 제거) */}
                   <div className="flex items-center gap-1.5">
@@ -1481,7 +1481,7 @@ export default function TodaySheet({
                                 setSelectedDays([...selectedDays, day]);
                               }
                             }} 
-                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-white'}`}
+                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-white border border-[#edece9] text-[#37352f]/50 hover:bg-[#edece9]/50 hover:text-[#37352f] shadow-sm'}`}
                           >
                             {day}
                           </button>
@@ -1491,7 +1491,7 @@ export default function TodaySheet({
                     {selectedDays.length > 0 && (
                       <button 
                         onClick={() => setIsAndFilter(!isAndFilter)} 
-                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'}`}
+                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-50 border-indigo-200 text-indigo-650 shadow-sm' : 'bg-white border border-[#edece9] text-[#37352f]/50 hover:text-[#37352f]'}`}
                       >
                         {isAndFilter ? 'AND' : 'OR'}
                       </button>
@@ -1504,7 +1504,7 @@ export default function TodaySheet({
             {/* 2행 오른쪽: 정렬, 선택 숨김 제어, 화면 컨트롤 */}
             <div className="flex flex-wrap items-center gap-4 ml-auto justify-end">
               {/* 이전 기록 개수 설정 */}
-              <div className="flex items-center gap-1.5 bg-white/5 rounded-[4px] px-2 py-0.5 border border-white/5">
+              <div className="flex items-center gap-1.5 bg-white rounded-[4px] px-2 py-0.5 border border-[#edece9] shadow-sm">
                 <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-1">이력</span>
                 <select
                   value={historyLimit}
@@ -1513,30 +1513,30 @@ export default function TodaySheet({
                     setHistoryLimit(val);
                     localStorage.setItem('ams_history_limit', String(val));
                   }}
-                  className="bg-transparent border-0 text-[10px] font-black text-white outline-none cursor-pointer focus:ring-0 py-0.5"
+                  className="bg-transparent border-0 text-[10px] font-black text-[#37352f] outline-none cursor-pointer focus:ring-0 py-0.5"
                 >
-                  <option value={1} className="bg-[#050505] text-white">1개</option>
-                  <option value={2} className="bg-[#050505] text-white">2개</option>
-                  <option value={3} className="bg-[#050505] text-white">3개</option>
-                  <option value={5} className="bg-[#050505] text-white">5개</option>
-                  <option value={10} className="bg-[#050505] text-white">10개</option>
-                  <option value={20} className="bg-[#050505] text-white">20개</option>
+                  <option value={1} className="bg-white text-[#37352f]">1개</option>
+                  <option value={2} className="bg-white text-[#37352f]">2개</option>
+                  <option value={3} className="bg-white text-[#37352f]">3개</option>
+                  <option value={5} className="bg-white text-[#37352f]">5개</option>
+                  <option value={10} className="bg-white text-[#37352f]">10개</option>
+                  <option value={20} className="bg-white text-[#37352f]">20개</option>
                 </select>
               </div>
 
-              <div className="h-4 w-px bg-white/10" />
+              <div className="h-4 w-px bg-[#edece9]" />
 
               {/* 정렬 방식 및 방향 필터 */}
               <div className="flex items-center gap-2">
                 <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Sort</span>
-                <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+                <div className="flex bg-white rounded-[4px] p-0.5 border border-[#edece9] shadow-sm">
                   {[
                     { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }, { label: '학교순', key: 'school' }
                   ].map((m) => (
                     <button 
                       key={m.key} 
                       onClick={() => onSortModeChange(m.key as any)} 
-                      className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-[#37352f]/50 hover:text-[#37352f]'}`}
                     >
                       {m.label}
                     </button>
@@ -1544,7 +1544,7 @@ export default function TodaySheet({
                 </div>
                 <button 
                   onClick={() => onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className="px-2 py-1 rounded-[4px] bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1 text-[8px] font-black"
+                  className="px-2 py-1 rounded-[4px] bg-white border border-[#edece9] text-[#37352f]/60 hover:text-[#37352f] hover:bg-[#edece9]/50 transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
                   title={sortDirection === 'asc' ? '오름차순 (Up)' : '내림차순 (Down)'}
                 >
                   {sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-purple-400" />}
@@ -1560,7 +1560,7 @@ export default function TodaySheet({
                         setHiddenStudentIds(prev => [...prev, ...selectedIds]);
                         setSelectedIds([]);
                       }}
-                      className="px-2 py-1 rounded-[4px] bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black animate-pulse"
+                      className="px-2 py-1 rounded-[4px] bg-red-50 border border-red-200 text-red-650 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
                       title="선택한 학생들을 임시로 숨깁니다"
                     >
                       <EyeOff size={10} />
@@ -1570,7 +1570,7 @@ export default function TodaySheet({
                   {hiddenStudentIds.length > 0 && (
                     <button
                       onClick={() => setHiddenStudentIds([])}
-                      className="px-2 py-1 rounded-[4px] bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black"
+                      className="px-2 py-1 rounded-[4px] bg-blue-50 border border-blue-200 text-blue-600 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
                       title="숨겨진 학생들을 모두 다시 표시합니다"
                     >
                       <Eye size={10} />
@@ -1580,21 +1580,21 @@ export default function TodaySheet({
                 </div>
               )}
 
-              <div className="h-4 w-px bg-white/10" />
+              <div className="h-4 w-px bg-[#edece9]" />
 
               {/* 화면 컨트롤 (원래 크기로 복원, 전체화면, 인쇄하기) */}
               <div className="flex items-center gap-1.5">
                 {focusColumn && (
                   <button 
                     onClick={() => setFocusColumn(null)} 
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest shadow-[0_0_15px_rgba(37,99,235,0.4)] transition-all animate-pulse mr-1"
+                    className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest shadow-[0_0_15px_rgba(37,99,235,0.2)] transition-all animate-pulse mr-1"
                   >
                     <ArrowLeft size={12} /> 원래 크기로
                   </button>
                 )}
                 <button 
                   onClick={onToggleFullScreen} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 rounded-[4px] text-[10px] font-black uppercase tracking-widest transition-all shadow-lg"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white border border-[#edece9] text-[#37352f]/70 hover:bg-[#edece9]/50 hover:text-[#37352f] rounded-[4px] text-[10px] font-black uppercase tracking-widest transition-all shadow-sm"
                 >
                   {isFullScreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
                   {isFullScreen ? '원래화면' : '전체화면'}
@@ -1628,12 +1628,12 @@ export default function TodaySheet({
       </AnimatePresence>
 
       <div 
-        className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}
+        className={`bg-[#fbfbfa] border border-[#edece9] rounded-lg shadow-md custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}
         onScroll={handleScroll}
       >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
           <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} /></thead>
-          <tbody className="divide-y divide-white/10">
+          <tbody className="divide-y divide-[#edece9] bg-white">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
               const [_, configM] = (academyInfo?.operation_settings?.first_period_time || "00:00").split(':').map(Number);

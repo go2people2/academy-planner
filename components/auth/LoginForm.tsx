@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { User, Lock, ArrowRight, Loader2, Phone } from 'lucide-react';
 import { motion } from 'framer-motion';
@@ -14,7 +14,17 @@ export default function LoginForm({ academy }: { academy: any }) {
   const [phoneLast4, setPhoneLast4] = useState('');
   const [candidateStudents, setCandidateStudents] = useState<any[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLightTheme, setIsLightTheme] = useState(false);
   const router = useRouter();
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const savedTheme = localStorage.getItem('theme');
+      if (savedTheme === 'light') {
+        setIsLightTheme(true);
+      }
+    }
+  }, []);
 
   if (!academy) {
     return (
@@ -157,147 +167,205 @@ export default function LoginForm({ academy }: { academy: any }) {
   };
 
   return (
-    <motion.div 
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      className="bg-[#111111]/80 backdrop-blur-xl border border-white/10 p-8 rounded-[4px] shadow-2xl"
-    >
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-white tracking-tight mb-2 uppercase">
-          {academy.academy_name}
-        </h1>
-        <p className="text-gray-400 text-sm tracking-wide">Academy Management System</p>
-      </div>
+    <div className={`fixed inset-0 flex items-center justify-center transition-all duration-300 ${
+      isLightTheme 
+        ? 'bg-[#f4f4f5] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-white via-[#f4f4f5] to-[#edece9]' 
+        : 'bg-[#0a0a0a] bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-[#1a1a1a] via-[#0a0a0a] to-[#050505]'
+    }`}>
+      {!isLightTheme && (
+        <div className="absolute inset-0 z-0 opacity-10 pointer-events-none bg-[url('https://www.transparenttextures.com/patterns/carbon-fibre.png')]" />
+      )}
+      
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        className={`z-10 w-full max-w-md p-8 rounded-lg border transition-all duration-350 ${
+          isLightTheme 
+            ? 'bg-white border-[#e3e2e0] shadow-xl text-[#37352f]' 
+            : 'bg-[#111111]/80 backdrop-blur-xl border-white/10 shadow-2xl text-white'
+        }`}
+      >
+        <div className="text-center mb-8">
+          <h1 className={`text-3xl font-black tracking-tight mb-2 uppercase ${
+            isLightTheme ? 'text-[#37352f]' : 'text-white'
+          }`}>
+            {academy.academy_name}
+          </h1>
+        </div>
 
-      {/* 탭 전환 */}
-      <div className="flex mb-8 bg-black/40 p-1 rounded-[2px] border border-white/5 gap-1">
-        <button 
-          onClick={() => setLoginType('teacher')}
-          className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${loginType === 'teacher' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}
-        >
-          Teacher / Admin
-        </button>
-        <button 
-          onClick={() => setLoginType('student')}
-          className={`flex-1 py-2.5 text-[10px] font-black uppercase tracking-widest transition-all ${loginType === 'student' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-600 hover:text-gray-400'}`}
-        >
-          Student Portal
-        </button>
-      </div>
+        <div className={`flex mb-8 p-1 rounded-md border gap-1 transition-all ${
+          isLightTheme 
+            ? 'bg-gray-100 border-[#edece9]' 
+            : 'bg-black/40 border-white/5'
+        }`}>
+          <button 
+            type="button"
+            onClick={() => setLoginType('teacher')}
+            className={`flex-1 py-2.5 text-sm font-black tracking-tight transition-all rounded-md ${
+              loginType === 'teacher' 
+                ? (isLightTheme ? 'bg-white text-blue-600 shadow-sm border border-[#edece9]' : 'bg-blue-600 text-white shadow-lg') 
+                : (isLightTheme ? 'text-gray-400 hover:text-[#37352f]' : 'text-gray-600 hover:text-gray-400')
+            }`}
+          >
+            선생님 / 관리자
+          </button>
+          <button 
+            type="button"
+            onClick={() => setLoginType('student')}
+            className={`flex-1 py-2.5 text-sm font-black tracking-tight transition-all rounded-md ${
+              loginType === 'student' 
+                ? (isLightTheme ? 'bg-white text-blue-600 shadow-sm border border-[#edece9]' : 'bg-blue-600 text-white shadow-lg') 
+                : (isLightTheme ? 'text-gray-400 hover:text-[#37352f]' : 'text-gray-600 hover:text-gray-400')
+            }`}
+          >
+            학생 로그인
+          </button>
+        </div>
 
-      <form onSubmit={handleLogin} className="space-y-6">
-        {loginType === 'teacher' ? (
-          <>
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
-                Teacher ID
-              </label>
-              <div className="relative group">
-                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
-                <input 
-                  type="text"
-                  placeholder="ID"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
-                  required
-                />
-              </div>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
-                Password
-              </label>
-              <div className="relative group">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-500 transition-colors" />
-                <input 
-                  type="password"
-                  placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all"
-                  required
-                />
-              </div>
-            </div>
-          </>
-        ) : (
-          <>
-            {candidateStudents && candidateStudents.length > 0 ? (
-              <div className="space-y-4 text-left">
-                <div className="text-center pb-2 border-b border-white/5">
-                  <h3 className="text-sm font-black text-white uppercase tracking-widest">
-                    {phoneLast4 === (academy.student_passkey || '2324') ? '전체 학생 목록 (마스터)' : '본인 이름을 선택해 주세요'}
-                  </h3>
-                  <p className="text-gray-500 text-[10px] mt-1 font-bold">
-                    {phoneLast4 === (academy.student_passkey || '2324') ? '접속할 학생을 클릭하세요.' : '전화번호 뒷자리가 일치하는 학생 목록입니다.'}
-                  </p>
-                </div>
-                
-                <div className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar-v">
-                  {candidateStudents.map(s => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => handleSelectStudent(s)}
-                      className="py-3.5 px-3 bg-white/5 border border-white/10 hover:bg-blue-600 hover:border-blue-500 text-white rounded-[2px] transition-all text-left flex flex-col justify-between h-16"
-                    >
-                      <span className="font-black text-xs block truncate">{s.name}</span>
-                      <span className="text-[9px] text-gray-500 block truncate font-bold uppercase mt-1">
-                        {s.school || '학원생'} {s.grade || ''}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => setCandidateStudents(null)}
-                  className="w-full py-3.5 bg-white/5 border border-white/10 text-gray-400 hover:text-white rounded-[2px] text-[10px] font-black uppercase tracking-widest transition-all mt-2"
-                >
-                  뒤로 가기 (다시 입력)
-                </button>
-              </div>
-            ) : (
+        <form onSubmit={handleLogin} className="space-y-6">
+          {loginType === 'teacher' ? (
+            <>
               <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em] ml-1">
-                  Student Passkey (전화번호 뒷 4자리)
+                <label className="text-[13px] font-bold text-gray-500 tracking-tight ml-1">
+                  선생님 아이디
                 </label>
                 <div className="relative group">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600 group-focus-within:text-blue-400 transition-colors" />
+                  <User className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
+                    isLightTheme ? 'text-gray-400 group-focus-within:text-blue-600' : 'text-gray-600 group-focus-within:text-blue-500'
+                  }`} />
                   <input 
-                    type="tel"
-                    maxLength={4}
-                    placeholder="번호 4자리 입력"
-                    value={phoneLast4}
-                    onChange={(e) => setPhoneLast4(e.target.value.replace(/[^0-9]/g, ''))}
-                    className="w-full bg-black/40 border border-white/5 rounded-[2px] py-4 pl-12 pr-4 text-white outline-none focus:ring-1 focus:ring-blue-500/50 transition-all font-black text-lg tracking-[0.3em] text-center"
+                    type="text"
+                    placeholder="ID"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    className={`w-full border rounded-[4px] py-4 pl-12 pr-4 outline-none transition-all ${
+                      isLightTheme 
+                        ? 'bg-white border-[#edece9] text-[#37352f] focus:border-blue-500 placeholder-gray-300 font-bold' 
+                        : 'bg-black/40 border-white/5 text-white focus:ring-1 focus:ring-blue-500/50'
+                    }`}
                     required
                   />
                 </div>
               </div>
-            )}
-          </>
-        )}
 
-        {!(loginType === 'student' && candidateStudents && candidateStudents.length > 0) && (
-          <button
-            type="submit"
-            disabled={isLoading}
-            className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-[2px] transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
-          >
-            {isLoading ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <>
-                <span className="uppercase tracking-widest text-[11px]">Sign In Securely</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-              </>
-            )}
-          </button>
-        )}
-      </form>
-    </motion.div>
+              <div className="space-y-1">
+                <label className="text-[13px] font-bold text-gray-500 tracking-tight ml-1">
+                  비밀번호
+                </label>
+                <div className="relative group">
+                  <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
+                    isLightTheme ? 'text-gray-400 group-focus-within:text-blue-600' : 'text-gray-600 group-focus-within:text-blue-500'
+                  }`} />
+                  <input 
+                    type="password"
+                    placeholder="••••••••"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className={`w-full border rounded-[4px] py-4 pl-12 pr-4 outline-none transition-all ${
+                      isLightTheme 
+                        ? 'bg-white border-[#edece9] text-[#37352f] focus:border-blue-500 placeholder-gray-300 font-bold' 
+                        : 'bg-black/40 border-white/5 text-white focus:ring-1 focus:ring-blue-500/50'
+                    }`}
+                    required
+                  />
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              {candidateStudents && candidateStudents.length > 0 ? (
+                <div className="space-y-4 text-left">
+                  <div className={`text-center pb-2 border-b ${
+                    isLightTheme ? 'border-gray-200' : 'border-white/5'
+                  }`}>
+                    <h3 className={`text-sm font-black uppercase tracking-widest ${
+                      isLightTheme ? 'text-[#37352f]' : 'text-white'
+                    }`}>
+                      {phoneLast4 === (academy.student_passkey || '2324') ? '전체 학생 목록 (마스터)' : '본인 이름을 선택해 주세요'}
+                    </h3>
+                    <p className="text-gray-500 text-xs mt-1 font-bold">
+                      {phoneLast4 === (academy.student_passkey || '2324') ? '접속할 학생을 클릭하세요.' : '전화번호 뒷자리가 일치하는 학생 목록입니다.'}
+                    </p>
+                  </div>
+                  
+                  <div className="grid grid-cols-2 gap-2.5 max-h-56 overflow-y-auto pr-1 custom-scrollbar-v">
+                    {candidateStudents.map(s => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => handleSelectStudent(s)}
+                        className={`py-3.5 px-3 border rounded-[4px] transition-all text-left flex flex-col justify-between h-16 ${
+                          isLightTheme 
+                            ? 'bg-white border-[#edece9] hover:bg-blue-50 hover:border-blue-300 text-[#37352f]' 
+                            : 'bg-white/5 border border-white/10 hover:bg-blue-600 hover:border-blue-500 text-white'
+                        }`}
+                      >
+                        <span className={`font-black text-sm block truncate ${isLightTheme ? 'text-[#37352f]' : ''}`}>{s.name}</span>
+                        <span className={`text-[11px] block truncate font-bold mt-1 ${isLightTheme ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {s.school || '학원생'} {s.grade || ''}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+  
+                  <button
+                    type="button"
+                    onClick={() => setCandidateStudents(null)}
+                    className={`w-full py-3.5 border rounded-[4px] text-sm font-black tracking-tight transition-all mt-2 ${
+                      isLightTheme 
+                        ? 'bg-gray-100 border-[#edece9] text-gray-500 hover:text-black' 
+                        : 'bg-white/5 border border-white/10 text-gray-400 hover:text-white'
+                    }`}
+                  >
+                    뒤로 가기 (다시 입력)
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-1">
+                  <label className="text-[13px] font-bold text-gray-500 tracking-tight ml-1">
+                    학생 패스코드 (전화번호 뒷 4자리)
+                  </label>
+                  <div className="relative group">
+                    <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
+                      isLightTheme ? 'text-gray-400 group-focus-within:text-blue-600' : 'text-gray-600 group-focus-within:text-blue-400'
+                    }`} />
+                    <input 
+                      type="tel"
+                      maxLength={4}
+                      placeholder="번호 4자리 입력"
+                      value={phoneLast4}
+                      onChange={(e) => setPhoneLast4(e.target.value.replace(/[^0-9]/g, ''))}
+                      className={`w-full border rounded-[4px] py-4 pl-12 pr-4 outline-none transition-all font-black text-lg tracking-[0.3em] text-center ${
+                        isLightTheme 
+                          ? 'bg-white border-[#edece9] text-[#37352f] focus:border-blue-500 placeholder-gray-300' 
+                          : 'bg-black/40 border-white/5 text-white focus:ring-1 focus:ring-blue-500/50'
+                      }`}
+                      required
+                    />
+                  </div>
+                </div>
+              )}
+            </>
+          )}
+
+          {!(loginType === 'student' && candidateStudents && candidateStudents.length > 0) && (
+            <button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-[4px] transition-all flex items-center justify-center gap-2 group disabled:opacity-50"
+            >
+              {isLoading ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <>
+                  <span className="tracking-tight text-sm font-bold">안전하게 로그인</span>
+                  <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                </>
+              )}
+            </button>
+          )}
+        </form>
+      </motion.div>
+    </div>
   );
 }
