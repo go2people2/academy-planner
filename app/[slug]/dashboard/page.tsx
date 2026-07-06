@@ -1602,11 +1602,12 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   const excludedStudents = useMemo(() => {
     return students.filter(s => {
       if (s.is_deleted) return false;
-      const { isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, s.class_days || [], academy?.operation_settings?.holidays);
       const isSkipped = s.todaySession?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
-      return isScheduledToday && isSkipped;
+      const isMakeup = s.todaySession?.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || 
+                       (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null);
+      return (s.isScheduledToday || isMakeup) && isSkipped;
     }).sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  }, [students, selectedDate, academy]);
+  }, [students]);
 
   // 2. 전체/나머지 학생 리스트 (오늘 수업자 제외)
   const filteredAllStudents = useMemo(() => {
