@@ -248,9 +248,7 @@ export function useTodaySheetRowLogic({
       attendance_status: nextStatus
     };
 
-    if (nextStatus === ATTENDANCE_STATUS.ABSENT) {
-      extraUpdate.completed_classwork_text = '결석';
-    }
+
 
     setFormData((prev: any) => ({ ...prev, ...extraUpdate }));
     handleSave(extraUpdate);

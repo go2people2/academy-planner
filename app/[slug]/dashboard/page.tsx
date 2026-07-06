@@ -854,11 +854,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }).eq('id', studentId);
   }
 
-  // 💡 출결이 결석인 경우 수행진도(completed_classwork_text)를 '결석'으로 자동 입력
   const dataToSave = { ...sessionData };
-  if (dataToSave.attendance_status === '결석') {
-    dataToSave.completed_classwork_text = '결석';
-  }
 
   // 1. 기본 필드 필터링
   const filteredData = getFilteredBaseFields(dataToSave);
@@ -1025,11 +1021,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
     if (!academy) return false;
 
-    // 💡 출결이 결석인 경우 수행진도(completed_classwork_text)를 '결석'으로 자동 입력
     const dataToSave = { ...sessionData };
-    if (dataToSave.attendance_status === '결석') {
-      dataToSave.completed_classwork_text = '결석';
-    }
 
     // 1. 기본 필드 필터링
     const filteredData = getFilteredBaseFields(dataToSave);
