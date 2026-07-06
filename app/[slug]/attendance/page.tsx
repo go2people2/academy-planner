@@ -318,21 +318,13 @@ export default function AttendancePage() {
     <div style={styles.root}>
       {/* 왼쪽 사이드바 패널 */}
       <div style={styles.leftPanel}>
-        {/* 상단 설정 및 전체화면 버튼 */}
-        <div style={{ position: 'absolute', left: 20, top: 20, display: 'flex', gap: '8px', zIndex: 10 }}>
-          <button
-            onClick={() => window.location.href = `/${slugStr}/dashboard`}
-            style={styles.settingBtn}
-          >
-            ⚙ 설정
-          </button>
-          <button
-            onClick={toggleFullscreen}
-            style={styles.settingBtn}
-          >
-            {isFullscreen ? '🗗 창모드' : '🖥 전체화면'}
-          </button>
-        </div>
+        {/* 상단 설정 버튼 */}
+        <button
+          onClick={() => window.location.href = `/${slugStr}/dashboard`}
+          style={styles.settingBtn}
+        >
+          ⚙ 설정
+        </button>
 
         {/* 학원 로고 및 이름 */}
         <div style={styles.brandContainer}>
@@ -381,6 +373,25 @@ export default function AttendancePage() {
               = 기록전체보기
             </button>
           </div>
+          <button
+            onClick={toggleFullscreen}
+            style={{ 
+              ...styles.footerBtn, 
+              width: '100%', 
+              marginTop: '8px', 
+              marginBottom: '12px', 
+              display: 'flex', 
+              alignItems: 'center', 
+              justifyContent: 'center', 
+              gap: '4px',
+              padding: '10px 4px',
+              fontSize: '12px',
+              backgroundColor: 'rgba(255, 255, 255, 0.25)',
+              borderColor: 'rgba(255, 255, 255, 0.35)',
+            }}
+          >
+            {isFullscreen ? '🗗 창모드 전환' : '🖥 전체화면 전환'}
+          </button>
           <div style={styles.footerInfo}>
             <div>☉ 현재 설정된 회신번호 : {replyPhone}</div>
             <div>☉ 현재 설정된 꼬릿말 : {footerMemo}</div>
@@ -599,6 +610,9 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
   },
   settingBtn: {
+    position: 'absolute',
+    left: 20,
+    top: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.15)',
     border: '1px solid rgba(255, 255, 255, 0.2)',
     color: '#ffffff',
