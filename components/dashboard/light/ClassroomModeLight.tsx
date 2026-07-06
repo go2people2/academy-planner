@@ -502,7 +502,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
                     return (
                       <div className="col-span-full mt-8 mb-4 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                          <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center gap-2 ${theme.bg} ${theme.border} text-white`}>
+                          <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center gap-2 ${theme.bg} ${theme.border} ${theme.text}`}>
                             <Clock size={12} /> Timer #{timerIdx + 1} Group
                           </div>
                           <div className="text-[9px] font-bold text-gray-400 uppercase tracking-widest">
