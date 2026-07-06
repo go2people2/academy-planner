@@ -204,7 +204,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
   };
 
   const colWidths = {
-    name: 75,
+    name: 90,
     check: 35,
     memo: 85
   };
@@ -249,7 +249,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
 
       {/* 테이블 래퍼 */}
       <div className="border border-white/5 rounded-[3px] bg-[#090909] overflow-x-auto shadow-sm custom-scrollbar-h">
-        <table className="w-full border-collapse table-fixed">
+        <table style={{ width: colWidths.name + topics.length * (colWidths.check + colWidths.memo) + 40 }} className="border-collapse table-fixed text-xs text-left">
           <colgroup>
             <col style={{ width: colWidths.name, minWidth: colWidths.name }} />
             {topics.map(t => (
@@ -308,11 +308,11 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
                 return (
                   <tr key={student.id} className={`${rowBg} border-b border-white/5 hover:bg-[#1a1a1a] transition-colors align-middle text-[11px]`}>
                     {/* 1열 고정 학생명 */}
-                    <td className="py-2 px-1.5 border-r border-white/5 font-black text-gray-200 sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.2)]">
+                    <td className="py-2.5 px-2 border-r border-white/5 font-black text-gray-200 sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.2)]">
                       <div className="flex flex-col gap-0.5 leading-tight">
-                        <span className="truncate max-w-[65px]" title={student.name}>{student.name}</span>
-                        <span className="text-[8px] text-gray-500 font-bold tracking-tighter truncate max-w-[65px]" title={`${student.grade} · ${student.class}`}>
-                          {student.grade}·{student.class}
+                        <span className="truncate max-w-[80px]" title={student.name}>{student.name}</span>
+                        <span className="text-[9px] text-gray-500 font-bold tracking-tight truncate max-w-[80px]" title={`${student.grade} · ${student.class}`}>
+                          {student.grade} · {student.class}
                         </span>
                       </div>
                     </td>
