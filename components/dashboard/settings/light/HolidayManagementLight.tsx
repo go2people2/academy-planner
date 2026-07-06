@@ -68,25 +68,42 @@ export default function HolidayManagementLight({ holidays, onAddHoliday, onDelet
                 <p className="text-[11px] text-gray-400 font-bold uppercase">No holidays registered</p>
               </div>
             ) : (
-              holidays.map((h: any) => (
-                <div key={h.date} className="flex items-center justify-between p-4 bg-white border border-[#edece9] hover:border-emerald-350 hover:shadow-sm rounded-lg transition-all text-[#37352f]">
-                  <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 rounded bg-emerald-50 flex items-center justify-center border border-emerald-100">
-                      <Calendar size={18} className="text-emerald-600" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-black text-gray-800">{h.date}</p>
-                      <p className="text-[13px] font-bold text-emerald-700 tracking-tight mt-0.5">{h.note || '설명 없음'}</p>
-                    </div>
-                  </div>
-                  <button 
-                    onClick={() => onDeleteHoliday(h.date)}
-                    className="p-2 text-gray-400 hover:text-red-600 hover:bg-rose-50 rounded-full transition-colors"
+              holidays.map((h: any) => {
+                const currentMonthStr = new Date().toISOString().substring(0, 7);
+                const isCurrentMonth = h.date.startsWith(currentMonthStr);
+                return (
+                  <div 
+                    key={h.date} 
+                    className={`flex items-center justify-between p-4 bg-white border rounded-lg transition-all text-[#37352f] ${
+                      isCurrentMonth 
+                        ? 'border-[#edece9] hover:border-emerald-350 hover:shadow-sm' 
+                        : 'border-[#edece9] opacity-60 hover:opacity-100 hover:border-gray-300 hover:shadow-sm'
+                    }`}
                   >
-                    <Trash2 size={16} />
-                  </button>
-                </div>
-              ))
+                    <div className="flex items-center gap-4">
+                      <div className={`w-10 h-10 rounded flex items-center justify-center border ${
+                        isCurrentMonth 
+                          ? 'bg-emerald-50 border-emerald-100' 
+                          : 'bg-gray-100 border-gray-200'
+                      }`}>
+                        <Calendar size={18} className={isCurrentMonth ? 'text-emerald-600' : 'text-gray-500'} />
+                      </div>
+                      <div>
+                        <p className="text-sm font-black text-gray-800">{h.date}</p>
+                        <p className={`text-[13px] font-bold tracking-tight mt-0.5 ${
+                          isCurrentMonth ? 'text-emerald-700' : 'text-gray-550'
+                        }`}>{h.note || '설명 없음'}</p>
+                      </div>
+                    </div>
+                    <button 
+                      onClick={() => onDeleteHoliday(h.date)}
+                      className="p-2 text-gray-400 hover:text-red-650 hover:bg-rose-50 rounded-full transition-colors"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                );
+              })
             )}
           </div>
         </div>
