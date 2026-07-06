@@ -204,17 +204,17 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
   };
 
   const [colWidths, setColWidths] = useState<Record<string, number>>({
-    name: 90
+    name: 70
   });
 
   const handleResizeStart = (e: React.MouseEvent, colKey: string) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = colWidths[colKey] || (colKey.endsWith('-check') ? 35 : colKey.endsWith('-memo') ? 85 : 90);
+    const startWidth = colWidths[colKey] || (colKey.endsWith('-check') ? 30 : colKey.endsWith('-memo') ? 80 : 70);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
-      const newWidth = Math.max(colKey.endsWith('-check') ? 25 : colKey.endsWith('-memo') ? 40 : 50, startWidth + deltaX);
+      const newWidth = Math.max(colKey.endsWith('-check') ? 20 : colKey.endsWith('-memo') ? 30 : 40, startWidth + deltaX);
       setColWidths(prev => ({
         ...prev,
         [colKey]: newWidth
@@ -231,10 +231,10 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
   };
 
   const getTableWidth = () => {
-    const nameW = colWidths.name || 90;
+    const nameW = colWidths.name || 70;
     let sum = nameW + 40;
     topics.forEach(t => {
-      sum += (colWidths[`${t.id}-check`] || 35) + (colWidths[`${t.id}-memo`] || 85);
+      sum += (colWidths[`${t.id}-check`] || 30) + (colWidths[`${t.id}-memo`] || 80);
     });
     return sum;
   };
@@ -279,12 +279,12 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
 
       {/* 테이블 래퍼 */}
       <div className="border border-[#edece9] rounded-[3px] bg-white overflow-x-auto shadow-sm custom-scrollbar-h">
-        <table style={{ width: getTableWidth() }} className="border-collapse table-fixed text-xs text-left">
+        <table style={{ minWidth: getTableWidth(), width: '100%' }} className="w-full border-collapse table-fixed text-xs text-left">
           <colgroup>
-            <col style={{ width: colWidths.name || 90, minWidth: colWidths.name || 90 }} />
+            <col style={{ width: colWidths.name || 70, minWidth: colWidths.name || 70 }} />
             {topics.map(t => {
-              const checkWidth = colWidths[`${t.id}-check`] || 35;
-              const memoWidth = colWidths[`${t.id}-memo`] || 85;
+              const checkWidth = colWidths[`${t.id}-check`] || 30;
+              const memoWidth = colWidths[`${t.id}-memo`] || 80;
               return (
                 <React.Fragment key={`col-${t.id}`}>
                   <col style={{ width: checkWidth, minWidth: checkWidth }} />
@@ -292,7 +292,7 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
                 </React.Fragment>
               );
             })}
-            <col style={{ width: 40, minWidth: 40 }} />
+            <col />
           </colgroup>
           <thead>
             {/* 1단 머지 헤더 */}
@@ -352,11 +352,11 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
                 return (
                   <tr key={student.id} className={`${rowBg} border-b border-[#edece9] hover:bg-[#f5f5f4] transition-colors align-middle text-[11px]`}>
                     {/* 1열 고정 학생명 */}
-                    <td className="py-2.5 px-2 border-r border-[#edece9] font-black text-[#37352f] sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
+                    <td className="py-2.5 px-1.5 border-r border-[#edece9] font-black text-[#37352f] sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
                       <div className="flex flex-col gap-0.5 leading-tight">
-                        <span className="truncate max-w-[80px]" title={student.name}>{student.name}</span>
-                        <span className="text-[9px] text-[#37352f]/45 font-bold tracking-tight truncate max-w-[80px]" title={`${student.grade} · ${student.class}`}>
-                          {student.grade} · {student.class}
+                        <span className="truncate max-w-[60px]" title={student.name}>{student.name}</span>
+                        <span className="text-[8px] text-[#37352f]/45 font-bold tracking-tight truncate max-w-[60px]" title={`${student.grade} · ${student.class}`}>
+                          {student.grade}·{student.class}
                         </span>
                       </div>
                     </td>
