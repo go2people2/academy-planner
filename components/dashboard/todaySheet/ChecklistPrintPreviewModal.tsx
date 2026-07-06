@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Printer, X, FileText } from 'lucide-react';
+import { Printer, X, FileText, Download, Loader2 } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
 
 interface ChecklistPrintPreviewModalProps {
@@ -27,6 +27,10 @@ export default function ChecklistPrintPreviewModal({
 }: ChecklistPrintPreviewModalProps) {
   const [mounted, setMounted] = useState(false);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
+  
+  // 이미지 저장 엔진 로드 관련 상태
+  const [html2canvasLoaded, setHtml2canvasLoaded] = useState(false);
+  const [isSavingImage, setIsSavingImage] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -38,6 +42,26 @@ export default function ChecklistPrintPreviewModal({
       setSelectedTopicIds(topics.map(t => t.id));
     }
   }, [topics]);
+
+  // html2canvas CDN 동적 적재
+  useEffect(() => {
+    if (isOpen && typeof window !== 'undefined') {
+      if ((window as any).html2canvas) {
+        setHtml2canvasLoaded(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      script.async = true;
+      script.onload = () => {
+        setHtml2canvasLoaded(true);
+      };
+      script.onerror = () => {
+        console.error('html2canvas load failed');
+      };
+      document.body.appendChild(script);
+    }
+  }, [isOpen]);
 
   useEffect(() => {
     if (isOpen) {
@@ -53,6 +77,42 @@ export default function ChecklistPrintPreviewModal({
 
   const handlePrint = () => {
     window.print();
+  };
+
+  // 이미지로 저장 처리
+  const handleSaveAsImage = async () => {
+    const html2canvas = (window as any).html2canvas;
+    if (!html2canvas) {
+      alert('이미지 생성 라이브러리가 아직 준비되지 않았습니다. 1~2초 후 다시 시도해 주세요.');
+      return;
+    }
+    const printArea = document.querySelector('.print-area');
+    if (!printArea) {
+      alert('저장할 영역을 찾을 수 없습니다.');
+      return;
+    }
+
+    setIsSavingImage(true);
+    try {
+      // 캡처 전에 임시 스타일 변경 (CSS 그림자나 크기 고정 대비)
+      const canvas = await html2canvas(printArea, {
+        scale: 2, // 2배 고화질
+        useCORS: true,
+        backgroundColor: '#ffffff',
+        logging: false
+      });
+
+      const image = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = image;
+      link.download = `${academyInfo?.name || '학원'}_체크리스트_${selectedDate}.png`;
+      link.click();
+    } catch (e) {
+      console.error('Save Image Error:', e);
+      alert('이미지 파일 변환 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingImage(false);
+    }
   };
 
   // 완료 인원수 집계
@@ -159,13 +219,27 @@ export default function ChecklistPrintPreviewModal({
             </div>
             <div>
               <h3 className="text-sm font-bold text-gray-800">📋 체크리스트 인쇄 미리보기</h3>
-              <p className="text-[10px] text-gray-500 font-bold">인쇄하기 전 레이아웃을 확인하세요.</p>
+              <p className="text-[10px] text-gray-500 font-bold">인쇄 및 이미지 저장 레이아웃을 확인하세요.</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5">
+            {/* 이미지로 저장 버튼 */}
+            <button
+              onClick={handleSaveAsImage}
+              disabled={isSavingImage || !html2canvasLoaded}
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
+            >
+              {isSavingImage ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <Download size={14} />
+              )}
+              이미지로 저장
+            </button>
+            {/* 인쇄하기 버튼 */}
             <button
               onClick={handlePrint}
-              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all mr-1.5"
             >
               <Printer size={14} />
               인쇄하기
@@ -182,7 +256,7 @@ export default function ChecklistPrintPreviewModal({
         {/* 인쇄 대상 제외/선택 컨트롤러 */}
         {topics.length > 0 && (
           <div className="flex flex-wrap items-center gap-2 bg-gray-50 border-b border-gray-150 px-6 py-3 text-[11px] font-bold no-print shrink-0">
-            <span className="text-gray-500 mr-2">📌 인쇄할 체크 주제 선택:</span>
+            <span className="text-gray-500 mr-2">📌 인쇄/저장할 체크 주제 선택:</span>
             {topics.map(t => {
               const isSelected = selectedTopicIds.includes(t.id);
               return (
