@@ -55,8 +55,8 @@ const renderHighlightedHistoryText = (text: string, isLight: boolean = false) =>
 };
 
 export const HistoryRows = React.memo(function HistoryRows({ student, activeColumns, colWidths, isExpanded, selectedDate, limit = 3, masterTextbooks, isLight = false }: HistoryRowsProps) {
-  if (!isExpanded || !student.allLogs) return null;
-  const pastLogs = student.allLogs.filter((l: any) => l.date && l.date < selectedDate).sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+  if (!isExpanded) return null;
+  const pastLogs = (student.allLogs || []).filter((l: any) => l.date && l.date < selectedDate).sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
   const history = pastLogs.slice(0, limit); 
 
   const translateBook = (bookName: string) => {
