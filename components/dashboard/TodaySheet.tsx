@@ -18,6 +18,7 @@ import PrintPreviewModal from './todaySheet/PrintPreviewModal';
 import StudentReportCardPrintModal from './todaySheet/StudentReportCardPrintModal';
 import { TagBatchInputModal } from './todaySheet/TagBatchInputModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
+import { ChecklistTab } from './todaySheet/ChecklistTab';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
@@ -436,6 +437,7 @@ export default function TodaySheet({
 
   // 1. States
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<'daily' | 'checklist'>('daily');
   const [historyLimit, setHistoryLimit] = useState(3);
   
   useEffect(() => {
@@ -1243,6 +1245,28 @@ export default function TodaySheet({
           <div className="flex flex-col gap-0.5 items-start">
             <div className="flex items-center gap-3">
               <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
+              <div className="flex items-center bg-white/5 p-0.5 rounded-[4px] border border-white/10 shadow-inner">
+                <button
+                  onClick={() => setActiveTab('daily')}
+                  className={`px-2.5 py-1 rounded-[3px] text-[10px] font-black tracking-tight transition-all cursor-pointer ${
+                    activeTab === 'daily' 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : 'text-gray-450 hover:text-gray-200'
+                  }`}
+                >
+                  📝 일지 작성
+                </button>
+                <button
+                  onClick={() => setActiveTab('checklist')}
+                  className={`px-2.5 py-1 rounded-[3px] text-[10px] font-black tracking-tight transition-all cursor-pointer ${
+                    activeTab === 'checklist' 
+                      ? 'bg-blue-600 text-white shadow-sm' 
+                      : 'text-gray-450 hover:text-gray-200'
+                  }`}
+                >
+                  📋 체크리스트
+                </button>
+              </div>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter mr-1">{students.length} Total</span>
@@ -1627,10 +1651,13 @@ export default function TodaySheet({
         )}
       </AnimatePresence>
 
-      <div 
-        className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}
-        onScroll={handleScroll}
-      >
+      {activeTab === 'checklist' ? (
+        <ChecklistTab students={filteredStudents} academyInfo={academyInfo} />
+      ) : (
+        <div 
+          className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}
+          onScroll={handleScroll}
+        >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
           <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} /></thead>
           <tbody className="divide-y divide-white/10">
@@ -1708,6 +1735,7 @@ export default function TodaySheet({
           </tbody>
         </table>
       </div>
+      )}
 
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
