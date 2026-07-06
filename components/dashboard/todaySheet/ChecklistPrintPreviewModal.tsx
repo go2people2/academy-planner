@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Printer, X, FileText, Download, Loader2 } from 'lucide-react';
+import { Printer, X, FileText, Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
 
 interface ChecklistPrintPreviewModalProps {
@@ -36,6 +36,10 @@ export default function ChecklistPrintPreviewModal({
   // PDF 저장 엔진 로드 관련 상태 (jsPDF)
   const [jsPdfLoaded, setJsPdfLoaded] = useState(false);
   const [isSavingPdf, setIsSavingPdf] = useState(false);
+
+  // Excel 저장 엔진 로드 관련 상태 (SheetJS)
+  const [xlsxLoaded, setXlsxLoaded] = useState(false);
+  const [isSavingExcel, setIsSavingExcel] = useState(false);
 
   useEffect(() => {
     setMounted(true);
@@ -92,6 +96,26 @@ export default function ChecklistPrintPreviewModal({
       };
       script.onerror = () => {
         console.error('jsPDF load failed');
+      };
+      document.body.appendChild(script);
+    }
+  }, [isOpen]);
+
+  // SheetJS Excel CDN 동적 적재
+  useEffect(() => {
+    if (isOpen && typeof window !== 'undefined') {
+      if ((window as any).XLSX) {
+        setXlsxLoaded(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js';
+      script.async = true;
+      script.onload = () => {
+        setXlsxLoaded(true);
+      };
+      script.onerror = () => {
+        console.error('SheetJS load failed');
       };
       document.body.appendChild(script);
     }
@@ -201,6 +225,75 @@ export default function ChecklistPrintPreviewModal({
       alert('PDF 파일 변환 중 오류가 발생했습니다.');
     } finally {
       setIsSavingPdf(false);
+    }
+  };
+
+  // SheetJS 활용 엑셀 저장 처리
+  const handleSaveAsExcel = () => {
+    const XLSX = (window as any).XLSX;
+    if (!XLSX) {
+      alert('엑셀 변환 라이브러리가 아직 준비되지 않았습니다. 1~2초 후 다시 시도해 주세요.');
+      return;
+    }
+
+    setIsSavingExcel(true);
+    try {
+      const excelData: any[][] = [];
+
+      // 1. 타이틀 행 추가
+      excelData.push([`${customTitle} (${formattedDate})`]);
+      excelData.push([]); // 빈 칸 행
+
+      // 2. 표 헤더 행 추가
+      const headerRow = ['학생 이름'];
+      displayTopics.forEach(t => {
+        headerRow.push(`${t.title} - 완료`);
+        headerRow.push(`${t.title} - 메모`);
+      });
+      excelData.push(headerRow);
+
+      // 3. 학생 데이터 행 추가
+      students.forEach(student => {
+        const row = [student.name];
+        displayTopics.forEach(t => {
+          const cellData = items[student.id]?.[t.id] || { status: 'none', memo: '' };
+          row.push(getStatusSymbol(cellData.status));
+          row.push(cellData.memo || '');
+        });
+        excelData.push(row);
+      });
+
+      // 4. 완료 인원 합계 행 추가
+      if (students.length > 0 && displayTopics.length > 0) {
+        const sumRow = ['완료 인원'];
+        displayTopics.forEach(t => {
+          const count = getCheckedCount(t.id);
+          sumRow.push(`${count}명`);
+          sumRow.push(''); // 메모 열은 빈칸
+        });
+        excelData.push(sumRow);
+      }
+
+      // 워크시트 생성
+      const worksheet = XLSX.utils.aoa_to_sheet(excelData);
+
+      // 열 가로 폭 자동 정의
+      const colsWidth = [{ wch: 15 }]; // 이름 열
+      displayTopics.forEach(() => {
+        colsWidth.push({ wch: 10 }); // 완료 기호 열
+        colsWidth.push({ wch: 25 }); // 메모 열
+      });
+      worksheet['!cols'] = colsWidth;
+
+      // 워크북 생성 및 다운로드 실행
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '체크리스트');
+      XLSX.writeFile(workbook, `${customTitle || '체크리스트'}_${selectedDate}.xlsx`);
+    } catch (e) {
+      console.error('Save Excel Error:', e);
+      alert('엑셀 변환 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingExcel(false);
     }
   };
 
@@ -316,7 +409,7 @@ export default function ChecklistPrintPreviewModal({
             <button
               onClick={handleSaveAsImage}
               disabled={isSavingImage || !domToImageLoaded}
-              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
+              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
             >
               {isSavingImage ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -337,6 +430,19 @@ export default function ChecklistPrintPreviewModal({
                 <FileText size={14} />
               )}
               PDF로 저장
+            </button>
+            {/* 엑셀로 저장 버튼 */}
+            <button
+              onClick={handleSaveAsExcel}
+              disabled={isSavingExcel || !xlsxLoaded}
+              className="flex items-center gap-1.5 px-3 py-2 bg-green-600 hover:bg-green-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
+            >
+              {isSavingExcel ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <FileSpreadsheet size={14} />
+              )}
+              엑셀로 저장
             </button>
             {/* 인쇄하기 버튼 */}
             <button
