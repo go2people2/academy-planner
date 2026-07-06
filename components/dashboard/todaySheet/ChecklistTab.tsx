@@ -204,7 +204,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
   };
 
   const colWidths = {
-    name: 130,
+    name: 90,
     check: 35,
     memo: 85
   };
