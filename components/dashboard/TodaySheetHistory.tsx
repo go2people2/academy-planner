@@ -230,6 +230,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             if (col.id === 'mission') return <td key={col.id} style={styles} className={`py-3 px-4 ${borderClass} ${isLight ? 'text-amber-700 font-medium' : 'text-amber-200/90'} font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left`}>{renderHighlightedHistoryText(log.mission, isLight)}</td>;
             if (col.id === 'next_quiz') return <td key={col.id} style={styles} className={`py-3 px-3 ${borderClass} ${isLight ? 'text-gray-600' : 'text-gray-400'} italic text-[11px] whitespace-pre-wrap leading-tight text-left`}>{log.next_quiz_text}</td>;
             if (col.id === 'notes') return <td key={col.id} style={styles} className={`py-3 px-3 ${borderClass} ${isLight ? 'text-amber-700/60' : 'text-amber-200/50'} italic text-[10px] truncate text-left`}>{log.special_notes}</td>;
+            if (col.id === 'management_notes') return <td key={col.id} style={styles} className={`py-3 px-4 ${borderClass} ${isLight ? 'text-gray-800' : 'text-gray-200'} font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left`}>{renderHighlightedHistoryText(log.management_notes, isLight)}</td>;
             if (col.id === 'action') {
               const actionBg = isLight ? (idx % 2 === 0 ? 'bg-[#f0f4f8]' : 'bg-[#e2ebf5]') : 'bg-[#050505]';
               return <td key={col.id} style={styles} className={`py-3 sticky right-0 ${actionBg} ${isLight ? 'border-l border-blue-100/50' : 'border-l border-white/10'} z-20`} />;
