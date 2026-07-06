@@ -241,7 +241,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     if (!text) return '-';
     
     const isTestField = columnId === 'test_id' || columnId === 'next_quiz';
-    const isTaskField = columnId === 'classwork' || columnId === 'completed_classwork' || columnId === 'assign';
+    const isTaskField = columnId === 'classwork' || columnId === 'completed_classwork' || columnId === 'assign' || columnId === 'mission' || columnId === 'notes' || columnId === 'management_notes';
     
     if (!isTestField && !isTaskField) return text;
     
@@ -303,7 +303,21 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       if (isTaskField) {
         // - 또는 * 기호로 시작하는지 감지
         const match = line.match(/^(\s*[-*+•]\s*)(.*)$/);
-        if (!match) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
+        
+        if (!match) {
+          // 불릿 없는 일반 줄도 ,, 메모 분리 적용
+          const plainCommaIdx = line.indexOf(',,');
+          if (plainCommaIdx === -1) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
+          const plainContent = line.substring(0, plainCommaIdx);
+          const plainMemo = line.substring(plainCommaIdx + 2);
+          return (
+            <React.Fragment key={i}>
+              <span>{plainContent}</span>
+              <span className="text-gray-500 italic ml-0.5">{plainMemo}</span>
+              {!isLast && '\n'}
+            </React.Fragment>
+          );
+        }
         
         const bulletStr = match[1];
         const rest = match[2];
@@ -319,7 +333,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           );
         } else {
           const contentStr = rest.substring(0, commaIdx);
-          const memoStr = rest.substring(commaIdx + 1); // Includes single comma
+          const memoStr = rest.substring(commaIdx + 2);
           return (
             <React.Fragment key={i}>
               <span className="text-blue-400 font-bold">{bulletStr}</span>

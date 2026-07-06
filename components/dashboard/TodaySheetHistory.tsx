@@ -22,16 +22,28 @@ const renderHighlightedHistoryText = (text: string, isLight: boolean = false) =>
   return text.split('\n').map((line, i) => {
     const match = line.match(/^(\s*[-*+•]\s*)(.*)$/);
     if (!match) {
+      // 불릿 없는 일반 줄도 ,, 메모 분리
+      const plainCommaIdx = line.indexOf(',,');
+      if (plainCommaIdx === -1) {
+        return (
+          <div key={i} className="min-h-[14px]">
+            {line || ' '}
+          </div>
+        );
+      }
+      const plainContent = line.substring(0, plainCommaIdx);
+      const plainMemo = line.substring(plainCommaIdx + 2);
       return (
         <div key={i} className="min-h-[14px]">
-          {line || ' '}
+          <span>{plainContent}</span>
+          <span className={`${isLight ? 'text-amber-600/80' : 'text-gray-500'} italic ml-0.5`}>{plainMemo}</span>
         </div>
       );
     }
     
     const bulletStr = match[1];
     const rest = match[2];
-    const commaIdx = rest.indexOf(',');
+    const commaIdx = rest.indexOf(',,');
     
     if (commaIdx === -1) {
       return (
@@ -42,12 +54,12 @@ const renderHighlightedHistoryText = (text: string, isLight: boolean = false) =>
       );
     } else {
       const contentStr = rest.substring(0, commaIdx);
-      const memoStr = rest.substring(commaIdx);
+      const memoStr = rest.substring(commaIdx + 2);
       return (
         <div key={i} className="min-h-[14px]">
           <span className={`${isLight ? 'text-blue-600' : 'text-blue-400'} font-bold`}>{bulletStr}</span>
           <span className={`font-medium ${isLight ? 'text-gray-800' : 'text-white/90'}`}>{contentStr}</span>
-          <span className={`${isLight ? 'text-gray-400' : 'text-gray-505'} italic ml-0.5`}>{memoStr}</span>
+          <span className={`${isLight ? 'text-amber-600/80' : 'text-gray-505'} italic ml-0.5`}>{memoStr}</span>
         </div>
       );
     }
