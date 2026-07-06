@@ -134,6 +134,18 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
     }
   };
 
+  // 완료 인원수 집계 함수
+  const getCheckedCount = (topicId: string) => {
+    let count = 0;
+    students.forEach(student => {
+      const cellData = items[student.id]?.[topicId];
+      if (cellData?.status === 'checked' || cellData?.is_checked === true) {
+        count++;
+      }
+    });
+    return count;
+  };
+
   // 3. 메모 저장 핸들러
   const handleSaveMemo = async (studentId: string, topicId: string, nextMemo: string, currentVal: any) => {
     if ((currentVal.memo || '') === nextMemo) return; // 변경점 없으면 취소
@@ -420,6 +432,26 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
                   </tr>
                 );
               })
+            )}
+            {/* 맨 아래 합계 행 */}
+            {students.length > 0 && (
+              <tr className="bg-[#f8f8f7] border-t border-[#edece9] font-bold text-[11px] text-[#37352f]/70 align-middle sticky bottom-0 z-10 shadow-[0_-2px_5px_rgba(0,0,0,0.015)]">
+                <td className="py-2.5 px-1.5 border-r border-[#edece9] font-black sticky left-0 bg-[#f8f8f7] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)] text-center text-[#37352f]/50">
+                  완료 인원
+                </td>
+                {topics.map(t => {
+                  const checkedCount = getCheckedCount(t.id);
+                  return (
+                    <React.Fragment key={`sum-${t.id}`}>
+                      <td className="py-2 px-2 border-r border-[#edece9] text-center font-black text-green-600 bg-green-50/10">
+                        {checkedCount}명
+                      </td>
+                      <td className="py-2 px-2.5 border-r border-[#edece9]"></td>
+                    </React.Fragment>
+                  );
+                })}
+                <td></td>
+              </tr>
             )}
           </tbody>
         </table>
