@@ -938,7 +938,7 @@ export default function TodaySheet({
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "ACA2000_Upload");
-      const acaFileName = `업무일지_${dateClean.slice(2)}_${teacherName}`;
+      const acaFileName = `업무일지_${dateClean.slice(2)}_${dayOfWeek}_${teacherName}`;
       XLSX.writeFile(wb, `${acaFileName}.xls`, { bookType: 'biff8' });
     } else {
       const cols = activeColumns.filter(c => !['select', 'action'].includes(c.id));
