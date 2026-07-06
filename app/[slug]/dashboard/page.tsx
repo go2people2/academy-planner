@@ -1425,9 +1425,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         student_name: student.name, 
         academy_id: academy.id, 
         session_date: selectedDate, 
-        attendance_status: '수업제외', 
+        attendance_status: '결석', 
         status: null,
-        attendance_reason: reason || '수업 제외'
+        attendance_reason: reason || '결석 공지'
       };
 
       const exist = student.todaySession?.special_notes || ''; 
