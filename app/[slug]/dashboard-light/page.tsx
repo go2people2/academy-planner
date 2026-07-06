@@ -131,7 +131,8 @@ const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
     hw_passed_today: tr.hwPassedToday,
     approval_status: l.approval_status || 'none',
     test_result: l.test_result || null,
-    attendance_reason: l.attendance_reason || null
+    attendance_reason: l.attendance_reason || null,
+    management_notes: translateBookCodes(l.management_notes || '', textbooks)
   };
 };
 
