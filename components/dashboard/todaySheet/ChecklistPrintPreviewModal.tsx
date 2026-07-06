@@ -1,0 +1,311 @@
+'use client';
+
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { motion } from 'framer-motion';
+import { Printer, X, FileText } from 'lucide-react';
+import { getDayOfWeek } from '@/lib/utils';
+
+interface ChecklistPrintPreviewModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  students: any[];
+  selectedDate: string;
+  academyInfo: any;
+  topics: any[];
+  items: Record<string, Record<string, any>>;
+}
+
+export default function ChecklistPrintPreviewModal({
+  isOpen,
+  onClose,
+  students,
+  selectedDate,
+  academyInfo,
+  topics,
+  items
+}: ChecklistPrintPreviewModalProps) {
+  const [mounted, setMounted] = useState(false);
+  const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // topics 변경 시 초기화
+  useEffect(() => {
+    if (topics.length > 0) {
+      setSelectedTopicIds(topics.map(t => t.id));
+    }
+  }, [topics]);
+
+  useEffect(() => {
+    if (isOpen) {
+      const handleKeyDown = (e: KeyboardEvent) => {
+        if (e.key === 'Escape') onClose();
+      };
+      window.addEventListener('keydown', handleKeyDown);
+      return () => window.removeEventListener('keydown', handleKeyDown);
+    }
+  }, [isOpen, onClose]);
+
+  if (!isOpen || !mounted) return null;
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  // 완료 인원수 집계
+  const getCheckedCount = (topicId: string) => {
+    let count = 0;
+    students.forEach(student => {
+      const cellData = items[student.id]?.[topicId];
+      if (cellData?.status === 'checked' || cellData?.is_checked === true) {
+        count++;
+      }
+    });
+    return count;
+  };
+
+  // 상태 기호 텍스트 변환
+  const getStatusSymbol = (status: string) => {
+    switch (status) {
+      case 'checked':
+        return '✓';
+      case 'hold':
+        return '▲';
+      case 'na':
+        return '-';
+      default:
+        return '';
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'checked':
+        return 'text-green-600 font-bold';
+      case 'hold':
+        return 'text-amber-600 font-bold';
+      case 'na':
+        return 'text-gray-400 font-normal';
+      default:
+        return '';
+    }
+  };
+
+  // 인쇄 대상 필터링된 주제들
+  const displayTopics = topics.filter(t => selectedTopicIds.includes(t.id));
+
+  const dayOfWeekStr = getDayOfWeek(selectedDate);
+  const formattedDate = `${selectedDate} (${dayOfWeekStr})`;
+
+  const modalContent = (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/60 backdrop-blur-sm no-print p-4">
+      {/* 인쇄 전용 CSS 삽입 */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden;
+          }
+          .print-area, .print-area * {
+            visibility: visible;
+          }
+          .print-area {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            padding: 0;
+            margin: 0;
+            background: white !important;
+            color: black !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+          /* 테이블 테두리 선명화 */
+          .print-table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            font-size: 10px !important;
+          }
+          .print-table th, .print-table td {
+            border: 1px solid #000000 !important;
+            padding: 6px 4px !important;
+            background: transparent !important;
+            color: #000000 !important;
+          }
+          .print-table th {
+            font-weight: bold !important;
+            background-color: #f2f2f2 !important;
+            -webkit-print-color-adjust: exact !important;
+            print-color-adjust: exact !important;
+          }
+        }
+      `}</style>
+
+      <motion.div 
+        initial={{ opacity: 0, scale: 0.95 }}
+        animate={{ opacity: 1, scale: 1 }}
+        exit={{ opacity: 0, scale: 0.95 }}
+        className="bg-white rounded-lg shadow-2xl flex flex-col w-full max-w-5xl h-[90vh] overflow-hidden text-[#37352f]"
+      >
+        {/* 모달 상단 헤더 */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-150 bg-gray-50 shrink-0">
+          <div className="flex items-center gap-2">
+            <div className="p-1.5 bg-blue-50 text-blue-600 rounded">
+              <FileText size={18} />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-800">📋 체크리스트 인쇄 미리보기</h3>
+              <p className="text-[10px] text-gray-500 font-bold">인쇄하기 전 레이아웃을 확인하세요.</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={handlePrint}
+              className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
+            >
+              <Printer size={14} />
+              인쇄하기
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-gray-200 text-gray-400 hover:text-gray-600 rounded-full cursor-pointer transition-all"
+            >
+              <X size={18} />
+            </button>
+          </div>
+        </div>
+
+        {/* 인쇄 대상 제외/선택 컨트롤러 */}
+        {topics.length > 0 && (
+          <div className="flex flex-wrap items-center gap-2 bg-gray-50 border-b border-gray-150 px-6 py-3 text-[11px] font-bold no-print shrink-0">
+            <span className="text-gray-500 mr-2">📌 인쇄할 체크 주제 선택:</span>
+            {topics.map(t => {
+              const isSelected = selectedTopicIds.includes(t.id);
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => {
+                    setSelectedTopicIds(prev => 
+                      prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
+                    );
+                  }}
+                  className={`px-3 py-1 rounded-full cursor-pointer transition-all border text-[10px] font-black ${
+                    isSelected 
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-sm shadow-blue-500/10' 
+                      : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'
+                  }`}
+                >
+                  {t.title}
+                </button>
+              );
+            })}
+          </div>
+        )}
+
+        {/* 종이 영역 시뮬레이션 */}
+        <div className="flex-1 overflow-y-auto p-8 bg-gray-100 flex justify-center">
+          <div className="print-area bg-white w-[210mm] min-h-[297mm] p-[15mm] shadow-lg border border-gray-200 flex flex-col text-black">
+            {/* 인쇄 문서 타이틀 */}
+            <div className="text-center mb-6 shrink-0">
+              <h2 className="text-xl font-bold tracking-tight mb-1 text-black">
+                {academyInfo?.name || '학원'} 진척도 체크리스트
+              </h2>
+              <p className="text-xs text-gray-600 font-medium">
+                일자: {formattedDate}
+              </p>
+            </div>
+
+            {/* 인쇄 전용 테이블 */}
+            <div className="flex-1 overflow-x-hidden">
+              <table className="print-table w-full border-collapse border border-black text-xs text-left">
+                <thead>
+                  {/* 1단 헤더 */}
+                  <tr className="border-b border-black bg-gray-100">
+                    <th rowSpan={2} className="py-2.5 px-3 border-r border-black font-bold text-center w-[80px]">
+                      학생 이름
+                    </th>
+                    {displayTopics.map(t => (
+                      <th key={t.id} colSpan={2} className="py-2 px-3 border-r border-black font-bold text-center text-[10px]">
+                        {t.title}
+                      </th>
+                    ))}
+                  </tr>
+                  {/* 2단 헤더 */}
+                  <tr className="border-b border-black bg-gray-100">
+                    {displayTopics.map(t => (
+                      <React.Fragment key={`sub-h-${t.id}`}>
+                        <th className="py-1 px-1 border-r border-black font-bold text-center text-[9px] w-[35px]">완료</th>
+                        <th className="py-1 px-2 border-r border-black font-bold text-left text-[9px]">메모 / 특이사항</th>
+                      </React.Fragment>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {students.length === 0 ? (
+                    <tr>
+                      <td colSpan={1 + displayTopics.length * 2} className="py-8 text-center text-gray-400 font-bold italic">
+                        학생이 존재하지 않습니다.
+                      </td>
+                    </tr>
+                  ) : (
+                    students.map(student => (
+                      <tr key={student.id} className="border-b border-black">
+                        {/* 학생 이름 */}
+                        <td className="py-2 px-2.5 border-r border-black font-bold text-left text-[11px]">
+                          {student.name}
+                        </td>
+                        {/* 주제별 완료/메모 */}
+                        {displayTopics.map(t => {
+                          const cellData = items[student.id]?.[t.id] || { status: 'none', memo: '' };
+                          const symbol = getStatusSymbol(cellData.status);
+                          return (
+                            <React.Fragment key={`${student.id}-${t.id}`}>
+                              {/* 완료 기호 */}
+                              <td className={`py-2 px-1 border-r border-black text-center text-xs font-black ${getStatusColor(cellData.status)}`}>
+                                {symbol}
+                              </td>
+                              {/* 메모 */}
+                              <td className="py-2 px-2 border-r border-black text-[10px] text-gray-700 break-all leading-tight">
+                                {cellData.memo || '-'}
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tr>
+                    ))
+                  )}
+
+                  {/* 합계 행 */}
+                  {students.length > 0 && displayTopics.length > 0 && (
+                    <tr className="bg-gray-50 font-bold border-b border-black">
+                      <td className="py-2 px-2.5 border-r border-black text-center font-bold text-gray-600">
+                        완료 인원
+                      </td>
+                      {displayTopics.map(t => {
+                        const count = getCheckedCount(t.id);
+                        return (
+                          <React.Fragment key={`sum-${t.id}`}>
+                            <td className="py-2 px-1 border-r border-black text-center font-bold text-green-600">
+                              {count}명
+                            </td>
+                            <td className="py-2 px-2 border-r border-black"></td>
+                          </React.Fragment>
+                        );
+                      })}
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </motion.div>
+    </div>
+  );
+
+  return createPortal(modalContent, document.body);
+}
