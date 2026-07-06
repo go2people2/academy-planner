@@ -204,7 +204,7 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
   };
 
   const colWidths = {
-    name: 90,
+    name: 75,
     check: 35,
     memo: 85
   };
@@ -308,11 +308,11 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
                 return (
                   <tr key={student.id} className={`${rowBg} border-b border-[#edece9] hover:bg-[#f5f5f4] transition-colors align-middle text-[11px]`}>
                     {/* 1열 고정 학생명 */}
-                    <td className="py-2.5 px-3 border-r border-[#edece9] font-black text-[#37352f] sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
-                      <div className="flex flex-col gap-0.5">
-                        <span className="truncate max-w-[120px]">{student.name}</span>
-                        <span className="text-[9px] text-[#37352f]/40 font-bold tracking-tight truncate max-w-[120px]">
-                          {student.grade} · {student.class}
+                    <td className="py-2 px-1.5 border-r border-[#edece9] font-black text-[#37352f] sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
+                      <div className="flex flex-col gap-0.5 leading-tight">
+                        <span className="truncate max-w-[65px]" title={student.name}>{student.name}</span>
+                        <span className="text-[8px] text-[#37352f]/40 font-bold tracking-tighter truncate max-w-[65px]" title={`${student.grade} · ${student.class}`}>
+                          {student.grade}·{student.class}
                         </span>
                       </div>
                     </td>
