@@ -203,10 +203,40 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
     }
   };
 
-  const colWidths = {
-    name: 90,
-    check: 35,
-    memo: 85
+  const [colWidths, setColWidths] = useState<Record<string, number>>({
+    name: 90
+  });
+
+  const handleResizeStart = (e: React.MouseEvent, colKey: string) => {
+    e.preventDefault();
+    const startX = e.clientX;
+    const startWidth = colWidths[colKey] || (colKey.endsWith('-check') ? 35 : colKey.endsWith('-memo') ? 85 : 90);
+
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      const deltaX = moveEvent.clientX - startX;
+      const newWidth = Math.max(colKey.endsWith('-check') ? 25 : colKey.endsWith('-memo') ? 40 : 50, startWidth + deltaX);
+      setColWidths(prev => ({
+        ...prev,
+        [colKey]: newWidth
+      }));
+    };
+
+    const handleMouseUp = () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  };
+
+  const getTableWidth = () => {
+    const nameW = colWidths.name || 90;
+    let sum = nameW + 40;
+    topics.forEach(t => {
+      sum += (colWidths[`${t.id}-check`] || 35) + (colWidths[`${t.id}-memo`] || 85);
+    });
+    return sum;
   };
 
   if (isLoading) {
@@ -249,22 +279,31 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
 
       {/* 테이블 래퍼 */}
       <div className="border border-white/5 rounded-[3px] bg-[#090909] overflow-x-auto shadow-sm custom-scrollbar-h">
-        <table style={{ width: colWidths.name + topics.length * (colWidths.check + colWidths.memo) + 40 }} className="border-collapse table-fixed text-xs text-left">
+        <table style={{ width: getTableWidth() }} className="border-collapse table-fixed text-xs text-left">
           <colgroup>
-            <col style={{ width: colWidths.name, minWidth: colWidths.name }} />
-            {topics.map(t => (
-              <React.Fragment key={`col-${t.id}`}>
-                <col style={{ width: colWidths.check, minWidth: colWidths.check }} />
-                <col style={{ width: colWidths.memo, minWidth: colWidths.memo }} />
-              </React.Fragment>
-            ))}
+            <col style={{ width: colWidths.name || 90, minWidth: colWidths.name || 90 }} />
+            {topics.map(t => {
+              const checkWidth = colWidths[`${t.id}-check`] || 35;
+              const memoWidth = colWidths[`${t.id}-memo`] || 85;
+              return (
+                <React.Fragment key={`col-${t.id}`}>
+                  <col style={{ width: checkWidth, minWidth: checkWidth }} />
+                  <col style={{ width: memoWidth, minWidth: memoWidth }} />
+                </React.Fragment>
+              );
+            })}
             <col style={{ width: 40, minWidth: 40 }} />
           </colgroup>
           <thead>
             {/* 1단 머지 헤더 */}
             <tr className="border-b border-white/5 bg-[#121212] text-gray-400 uppercase tracking-widest text-[9.5px] font-black">
-              <th rowSpan={2} className="py-3 px-3 border-r border-white/5 text-left sticky left-0 bg-[#121212] z-30 shadow-[2px_0_5px_rgba(0,0,0,0.2)]">
+              <th rowSpan={2} className="py-3 px-3 border-r border-white/5 text-left sticky left-0 bg-[#121212] z-30 shadow-[2px_0_5px_rgba(0,0,0,0.2)] group relative">
                 학생 이름
+                <div 
+                  onMouseDown={(e) => handleResizeStart(e, 'name')}
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/10 transition-colors z-40"
+                  title="드래그하여 이름 열 너비 조절"
+                />
               </th>
               {topics.map(t => (
                 <th key={t.id} colSpan={2} className="py-2.5 px-3 border-r border-white/5 text-center group relative">
@@ -288,8 +327,22 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
             <tr className="border-b border-white/5 bg-[#121212] text-gray-500 uppercase tracking-widest text-[8.5px] font-black">
               {topics.map(t => (
                 <React.Fragment key={`sub-${t.id}`}>
-                  <th className="py-1.5 px-2 border-r border-white/5 text-center">완료</th>
-                  <th className="py-1.5 px-2 border-r border-white/5 text-left">메모 / 특이사항</th>
+                  <th className="py-1.5 px-2 border-r border-white/5 text-center group relative">
+                    완료
+                    <div 
+                      onMouseDown={(e) => handleResizeStart(e, `${t.id}-check`)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/10 transition-colors z-40"
+                      title="드래그하여 완료 칸 너비 조절"
+                    />
+                  </th>
+                  <th className="py-1.5 px-2 border-r border-white/5 text-left group relative">
+                    메모 / 특이사항
+                    <div 
+                      onMouseDown={(e) => handleResizeStart(e, `${t.id}-memo`)}
+                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/10 transition-colors z-40"
+                      title="드래그하여 메모 칸 너비 조절"
+                    />
+                  </th>
                 </React.Fragment>
               ))}
             </tr>
