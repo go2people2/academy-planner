@@ -765,9 +765,9 @@ function StudentRowItem({
             ? 'hover:border-blue-500/50 hover:bg-blue-500/5 bg-white border-[#edece9]' 
             : 'hover:border-red-500/50 hover:bg-red-500/5 bg-white border-[#edece9]'
           : isMakeup 
-            ? 'bg-emerald-500/10 border-emerald-500/35 hover:border-emerald-500/50 hover:bg-emerald-500/15'
+            ? 'bg-emerald-500/15 border-emerald-500/40 hover:border-emerald-500/60 hover:bg-emerald-500/20'
             : isAbsent
-              ? 'bg-red-500/10 border-red-500/25 opacity-[0.65] hover:opacity-95 hover:border-red-500/40'
+              ? 'bg-red-500/15 border-red-500/30 opacity-[0.75] hover:opacity-95 hover:border-red-500/20'
               : 'bg-white border-[#edece9] hover:border-blue-500/50 hover:bg-[#fbfbfa]'
       }`}
     >
