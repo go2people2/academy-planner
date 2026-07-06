@@ -28,8 +28,8 @@ export default function ChecklistPrintPreviewModal({
   const [mounted, setMounted] = useState(false);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   
-  // 이미지 저장 엔진 로드 관련 상태
-  const [html2canvasLoaded, setHtml2canvasLoaded] = useState(false);
+  // 이미지 저장 엔진 로드 관련 상태 (dom-to-image 교체)
+  const [domToImageLoaded, setDomToImageLoaded] = useState(false);
   const [isSavingImage, setIsSavingImage] = useState(false);
 
   useEffect(() => {
@@ -43,21 +43,21 @@ export default function ChecklistPrintPreviewModal({
     }
   }, [topics]);
 
-  // html2canvas CDN 동적 적재
+  // dom-to-image CDN 동적 적재
   useEffect(() => {
     if (isOpen && typeof window !== 'undefined') {
-      if ((window as any).html2canvas) {
-        setHtml2canvasLoaded(true);
+      if ((window as any).domtoimage) {
+        setDomToImageLoaded(true);
         return;
       }
       const script = document.createElement('script');
-      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js';
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/dom-to-image/2.6.0/dom-to-image.min.js';
       script.async = true;
       script.onload = () => {
-        setHtml2canvasLoaded(true);
+        setDomToImageLoaded(true);
       };
       script.onerror = () => {
-        console.error('html2canvas load failed');
+        console.error('dom-to-image load failed');
       };
       document.body.appendChild(script);
     }
@@ -79,14 +79,14 @@ export default function ChecklistPrintPreviewModal({
     window.print();
   };
 
-  // 이미지로 저장 처리
+  // dom-to-image 기반 이미지 저장 처리
   const handleSaveAsImage = async () => {
-    const html2canvas = (window as any).html2canvas;
-    if (!html2canvas) {
+    const domtoimage = (window as any).domtoimage;
+    if (!domtoimage) {
       alert('이미지 생성 라이브러리가 아직 준비되지 않았습니다. 1~2초 후 다시 시도해 주세요.');
       return;
     }
-    const printArea = document.querySelector('.print-area');
+    const printArea = document.querySelector('.print-area') as HTMLElement;
     if (!printArea) {
       alert('저장할 영역을 찾을 수 없습니다.');
       return;
@@ -94,17 +94,22 @@ export default function ChecklistPrintPreviewModal({
 
     setIsSavingImage(true);
     try {
-      // 캡처 전에 임시 스타일 변경 (CSS 그림자나 크기 고정 대비)
-      const canvas = await html2canvas(printArea, {
-        scale: 2, // 2배 고화질
-        useCORS: true,
-        backgroundColor: '#ffffff',
-        logging: false
+      // 2배 선명도 스케일링 설정
+      const scale = 2;
+      const dataUrl = await domtoimage.toPng(printArea, {
+        bgcolor: '#ffffff',
+        width: printArea.offsetWidth * scale,
+        height: printArea.offsetHeight * scale,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: `${printArea.offsetWidth}px`,
+          height: `${printArea.offsetHeight}px`
+        }
       });
 
-      const image = canvas.toDataURL('image/png');
       const link = document.createElement('a');
-      link.href = image;
+      link.href = dataUrl;
       link.download = `${academyInfo?.name || '학원'}_체크리스트_${selectedDate}.png`;
       link.click();
     } catch (e) {
@@ -226,7 +231,7 @@ export default function ChecklistPrintPreviewModal({
             {/* 이미지로 저장 버튼 */}
             <button
               onClick={handleSaveAsImage}
-              disabled={isSavingImage || !html2canvasLoaded}
+              disabled={isSavingImage || !domToImageLoaded}
               className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
             >
               {isSavingImage ? (
