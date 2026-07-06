@@ -255,6 +255,9 @@ export async function POST(request: NextRequest) {
   // ==========================================
   // 🎒 [학생 등하원 처리 분기]
   // ==========================================
+  if (!students || students.length === 0) {
+    return Response.json({ error: '학생 정보를 찾을 수 없습니다.' }, { status: 404 });
+  }
   const student = students[0];
 
   // (1) 학생 취소 액션 처리 (Undo)
