@@ -767,13 +767,21 @@ function StudentRowItem({
           : isMakeup 
             ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10'
             : isAbsent
-              ? 'bg-red-500/5 border-red-500/10 opacity-70 hover:opacity-100 hover:border-red-500/30'
+              ? 'bg-red-500/5 border-red-500/10 opacity-[0.45] hover:opacity-90 hover:border-red-500/30'
               : 'bg-white border-[#edece9] hover:border-blue-500/50 hover:bg-[#fbfbfa]'
       }`}
     >
       <div className="flex flex-col gap-1 overflow-hidden flex-1">
         <div className="flex items-center gap-2 overflow-hidden">
-          <h4 className={`text-[13px] font-semibold tracking-tight shrink-0 ${isSelected || isChecked ? 'text-white' : isBatchMode ? (isSelectionMode ? 'group-hover:text-blue-400' : 'group-hover:text-red-400') : 'text-[#37352f]'}`}>
+          <h4 className={`text-[13px] tracking-tight shrink-0 ${
+            isSelected || isChecked 
+              ? 'text-white font-semibold' 
+              : isBatchMode 
+                ? (isSelectionMode ? 'group-hover:text-blue-400 font-semibold' : 'group-hover:text-red-400 font-semibold') 
+                : isAbsent
+                  ? 'text-black font-black'
+                  : 'text-[#37352f] font-semibold'
+          }`}>
             {student.name}
           </h4>
           {consultationStatus.needs && !isBatchMode && (
