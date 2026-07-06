@@ -78,10 +78,10 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
     <>
       {history.map((log: any, idx: number) => {
         const rowBg = isLight
-          ? (idx % 2 === 0 ? "bg-[#fbfbfa]" : "bg-transparent")
+          ? (idx % 2 === 0 ? "bg-[#f3f2ef]" : "bg-[#eae9e6]")
           : (idx % 2 === 0 ? "bg-white/5" : "bg-transparent");
-        const trBorder = isLight ? "border-b border-gray-150" : "border-b border-white/5";
-        const trHover = isLight ? "hover:bg-gray-50" : "hover:bg-white/10";
+        const trBorder = isLight ? "border-b border-gray-200/50" : "border-b border-white/5";
+        const trHover = isLight ? "hover:bg-[#deddd9]" : "hover:bg-white/10";
         
         return (
           <tr key={`${student.id}-hist-${idx}`} className={`${rowBg} ${trBorder} ${trHover} transition-colors align-middle text-[11px]`}>
@@ -92,7 +92,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
               left: col.id === 'name' ? 0 : 'auto', 
               position: (col.isSticky ? 'sticky' : 'relative') as any, 
               zIndex: 10, 
-              backgroundColor: isLight ? '#ffffff' : '#050505' 
+              backgroundColor: isLight ? (idx % 2 === 0 ? '#f3f2ef' : '#eae9e6') : '#050505' 
             };
             
             if (col.id === 'select') return <td key={col.id} style={styles} className={borderClass}></td>;
@@ -104,7 +104,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                     key={col.id} 
                     rowSpan={history.length} 
                     style={{ ...styles, height: 'auto', verticalAlign: 'top' }} 
-                    className={`py-3.5 px-3 ${borderClass} text-left ${isLight ? 'bg-white' : 'bg-[#050505]'}`}
+                    className={`py-3.5 px-3 ${borderClass} text-left ${isLight ? 'bg-[#f3f2ef]' : 'bg-[#050505]'}`}
                   >
                     <div className="flex flex-col gap-1 pr-1 select-none">
                       <div className={`text-[9px] font-black ${isLight ? 'text-emerald-600' : 'text-emerald-400/80'} tracking-wider uppercase mb-1.5 flex items-center gap-1`}>
@@ -230,7 +230,10 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
             if (col.id === 'mission') return <td key={col.id} style={styles} className={`py-3 px-4 ${borderClass} ${isLight ? 'text-amber-700 font-medium' : 'text-amber-200/90'} font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left`}>{renderHighlightedHistoryText(log.mission, isLight)}</td>;
             if (col.id === 'next_quiz') return <td key={col.id} style={styles} className={`py-3 px-3 ${borderClass} ${isLight ? 'text-gray-600' : 'text-gray-400'} italic text-[11px] whitespace-pre-wrap leading-tight text-left`}>{log.next_quiz_text}</td>;
             if (col.id === 'notes') return <td key={col.id} style={styles} className={`py-3 px-3 ${borderClass} ${isLight ? 'text-amber-700/60' : 'text-amber-200/50'} italic text-[10px] truncate text-left`}>{log.special_notes}</td>;
-            if (col.id === 'action') return <td key={col.id} style={styles} className={`py-3 sticky right-0 ${isLight ? 'bg-white border-l border-gray-200' : 'bg-[#050505] border-l border-white/10'} z-20`} />;
+            if (col.id === 'action') {
+              const actionBg = isLight ? (idx % 2 === 0 ? 'bg-[#f3f2ef]' : 'bg-[#eae9e6]') : 'bg-[#050505]';
+              return <td key={col.id} style={styles} className={`py-3 sticky right-0 ${actionBg} ${isLight ? 'border-l border-gray-200/50' : 'border-l border-white/10'} z-20`} />;
+            }
             return <td key={col.id} style={styles}></td>;
           })}
         </tr>
