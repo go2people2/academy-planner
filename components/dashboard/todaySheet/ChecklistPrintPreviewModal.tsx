@@ -27,8 +27,9 @@ export default function ChecklistPrintPreviewModal({
 }: ChecklistPrintPreviewModalProps) {
   const [mounted, setMounted] = useState(false);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
+  const [customTitle, setCustomTitle] = useState('');
   
-  // 이미지 저장 엔진 로드 관련 상태 (dom-to-image 교체)
+  // 이미지 저장 엔진 로드 관련 상태 (dom-to-image)
   const [domToImageLoaded, setDomToImageLoaded] = useState(false);
   const [isSavingImage, setIsSavingImage] = useState(false);
 
@@ -42,6 +43,15 @@ export default function ChecklistPrintPreviewModal({
       setSelectedTopicIds(topics.map(t => t.id));
     }
   }, [topics]);
+
+  // academyInfo 로드 시 최초 1회 기본 타이틀 설정
+  useEffect(() => {
+    if (academyInfo?.name) {
+      setCustomTitle(`${academyInfo.name} 진척도 체크리스트`);
+    } else {
+      setCustomTitle('학원 진척도 체크리스트');
+    }
+  }, [academyInfo]);
 
   // dom-to-image CDN 동적 적재
   useEffect(() => {
@@ -110,7 +120,7 @@ export default function ChecklistPrintPreviewModal({
 
       const link = document.createElement('a');
       link.href = dataUrl;
-      link.download = `${academyInfo?.name || '학원'}_체크리스트_${selectedDate}.png`;
+      link.download = `${customTitle || '체크리스트'}_${selectedDate}.png`;
       link.click();
     } catch (e) {
       console.error('Save Image Error:', e);
@@ -224,7 +234,7 @@ export default function ChecklistPrintPreviewModal({
             </div>
             <div>
               <h3 className="text-sm font-bold text-gray-800">📋 체크리스트 인쇄 미리보기</h3>
-              <p className="text-[10px] text-gray-500 font-bold">인쇄 및 이미지 저장 레이아웃을 확인하세요.</p>
+              <p className="text-[10px] text-gray-500 font-bold">제목을 클릭하여 인쇄용 제목을 적절히 커스텀하세요.</p>
             </div>
           </div>
           <div className="flex items-center gap-2.5">
@@ -288,12 +298,17 @@ export default function ChecklistPrintPreviewModal({
         {/* 종이 영역 시뮬레이션 */}
         <div className="flex-1 overflow-y-auto p-8 bg-gray-100 flex justify-center">
           <div className="print-area bg-white w-[210mm] min-h-[297mm] p-[15mm] shadow-lg border border-gray-200 flex flex-col text-black">
-            {/* 인쇄 문서 타이틀 */}
-            <div className="text-center mb-6 shrink-0">
-              <h2 className="text-xl font-bold tracking-tight mb-1 text-black">
-                {academyInfo?.name || '학원'} 진척도 체크리스트
-              </h2>
-              <p className="text-xs text-gray-600 font-medium">
+            {/* 인쇄 문서 타이틀 (인라인 편집 지원) */}
+            <div className="text-center mb-6 shrink-0 group relative">
+              <input
+                type="text"
+                value={customTitle}
+                onChange={(e) => setCustomTitle(e.target.value)}
+                className="text-xl font-bold tracking-tight text-center bg-transparent border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:bg-gray-50 rounded px-2 py-0.5 w-full outline-none transition-all text-black font-sans"
+                placeholder="체크리스트 제목을 입력하세요"
+                title="클릭하여 제목을 직접 수정할 수 있습니다."
+              />
+              <p className="text-xs text-gray-600 font-medium mt-1">
                 일자: {formattedDate}
               </p>
             </div>
