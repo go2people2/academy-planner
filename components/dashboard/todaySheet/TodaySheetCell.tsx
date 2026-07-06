@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
 import { getDayOfWeek } from '@/lib/utils';
@@ -575,6 +575,18 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               {student.level_tag || '+'}
             </div>
             
+            {onViewDetail && (
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onViewDetail(student.id);
+                }}
+                className="p-1.5 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600 hover:text-white rounded-[4px] shrink-0 transition-colors"
+                title="학생 프로필 서랍 열기"
+              >
+                <User size={12} strokeWidth={2.5} />
+              </button>
+            )}
             <button 
               onClick={(e) => {
                 e.stopPropagation();
