@@ -257,8 +257,20 @@ export function useTodaySheetRowLogic({
   };
 
   const handleSupplementTimeSelect = (hour: number) => {
-    // 💡 [수정] 보강 시간 지정 시 출석 상태는 '수업전'으로 되돌리고, 시간만 moved_to_hour로 분리 저장
-    const update = { attendance_status: ATTENDANCE_STATUS.BEFORE, moved_to_hour: hour };
+    const day = getDayOfWeek(rowDate);
+    const regularHours = student.day_schedules?.[day] || [];
+    const isOriginalRegularHour = regularHours.some(val => {
+      let h = val >= 100 ? Math.floor(val / 100) : val;
+      if (h <= 12) h += 12;
+      return h === hour;
+    });
+
+    const update: any = { 
+      attendance_status: ATTENDANCE_STATUS.BEFORE, 
+      moved_to_hour: isOriginalRegularHour ? null : hour,
+      attendance_reason: isOriginalRegularHour ? null : '보강 수업'
+    };
+
     setFormData((prev: any) => ({ ...prev, ...update }));
     handleSave(update);
     setIsSupplementTimePickerOpen(false);

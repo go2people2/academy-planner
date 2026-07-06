@@ -226,8 +226,28 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     if (finalStatus === ATTENDANCE_STATUS.BEFORE) {
       const sObj = students.find(s => s.id === studentId);
       const mHour = sObj?.todaySession?.moved_to_hour;
+
       if (mHour !== undefined && mHour !== null) {
-        finalStatus = `${ATTENDANCE_STATUS.SUPPLEMENT}:${String(mHour).padStart(2, '0')}:00`;
+        const day = getDayOfWeek(selectedDate);
+        const regularHours = sObj?.day_schedules?.[day] || [];
+        const isOriginalRegularHour = regularHours.some(val => {
+          let h = val >= 100 ? Math.floor(val / 100) : val;
+          if (h <= 12) h += 12;
+          return h === mHour;
+        });
+
+        if (isOriginalRegularHour) {
+          await onSave(studentId, { 
+            attendance_status: ATTENDANCE_STATUS.BEFORE, 
+            moved_to_hour: null,
+            attendance_reason: null
+          });
+          setActiveStudentId(null);
+          setIsTimeShiftOpen(false);
+          return;
+        } else {
+          finalStatus = `${ATTENDANCE_STATUS.SUPPLEMENT}:${String(mHour).padStart(2, '0')}:00`;
+        }
       }
     }
     
@@ -237,7 +257,30 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   };
 
   const handleTimeShift = async (studentId: string, hour: number) => {
-    await onSave(studentId, { moved_to_hour: hour });
+    const student = students.find(s => s.id === studentId);
+    if (!student) return;
+
+    const day = getDayOfWeek(selectedDate);
+    const regularHours = student.day_schedules?.[day] || [];
+    const isOriginalRegularHour = regularHours.some(val => {
+      let h = val >= 100 ? Math.floor(val / 100) : val;
+      if (h <= 12) h += 12;
+      return h === hour;
+    });
+
+    if (isOriginalRegularHour) {
+      const currentStatus = student.todaySession?.attendance_status || '';
+      const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:')) 
+        ? ATTENDANCE_STATUS.BEFORE 
+        : currentStatus;
+      await onSave(studentId, { 
+        moved_to_hour: null, 
+        attendance_status: finalStatus,
+        attendance_reason: null
+      });
+    } else {
+      await onSave(studentId, { moved_to_hour: hour });
+    }
     setActiveStudentId(null);
     setIsTimeShiftOpen(false);
   };
