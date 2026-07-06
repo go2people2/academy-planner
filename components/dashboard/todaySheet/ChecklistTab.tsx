@@ -311,7 +311,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
       </div>
 
       {/* 테이블 래퍼 */}
-      <div className="border border-white/5 rounded-[3px] bg-[#090909] overflow-x-auto shadow-sm custom-scrollbar-h">
+      <div className="border border-white/5 rounded-[3px] bg-[#090909] overflow-auto shadow-sm max-h-[calc(100vh-280px)] custom-scrollbar-h custom-scrollbar-v relative">
         <table style={{ minWidth: getTableWidth(), width: '100%' }} className="w-full border-collapse table-fixed text-xs text-left">
           <colgroup>
             <col style={{ width: colWidths.name || 70, minWidth: colWidths.name || 70 }} />
@@ -329,8 +329,8 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
           </colgroup>
           <thead>
             {/* 1단 머지 헤더 */}
-            <tr className="border-b border-white/5 bg-[#121212] text-gray-400 uppercase tracking-widest text-[9.5px] font-black">
-              <th rowSpan={2} className="py-3 px-3 border-r border-white/5 text-left sticky left-0 bg-[#121212] z-30 shadow-[2px_0_5px_rgba(0,0,0,0.2)] group relative">
+            <tr className="border-b border-white/5 bg-[#121212] text-gray-400 uppercase tracking-widest text-[9.5px] font-black sticky top-0 z-30 shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+              <th rowSpan={2} className="py-3 px-3 border-r border-white/5 text-left sticky left-0 top-0 bg-[#121212] z-50 shadow-[2px_2px_5px_rgba(0,0,0,0.3)] group relative">
                 학생 이름
                 <div 
                   onMouseDown={(e) => handleResizeStart(e, 'name')}
@@ -362,7 +362,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
               <th rowSpan={2} className="py-3 px-3 text-center"></th>
             </tr>
             {/* 2단 상세 헤더 */}
-            <tr className="border-b border-white/5 bg-[#121212] text-gray-500 uppercase tracking-widest text-[8.5px] font-black">
+            <tr className="border-b border-white/5 bg-[#121212] text-gray-500 uppercase tracking-widest text-[8.5px] font-black sticky top-[37px] z-30 shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
               {topics.map(t => (
                 <React.Fragment key={`sub-${t.id}`}>
                   <th className="py-1.5 px-2 border-r border-white/5 text-center">완료</th>
