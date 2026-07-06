@@ -307,7 +307,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
               </th>
               {topics.map(t => (
                 <th key={t.id} colSpan={2} className="py-2.5 px-3 border-r border-white/5 text-center group relative">
-                  <div className="flex items-center justify-center gap-1.5">
+                  <div className="flex items-center justify-center gap-1.5 mr-2">
                     <span className="text-gray-100 text-[11px] font-black text-center break-all leading-tight" title={t.title}>
                       {t.title}
                     </span>
@@ -319,6 +319,11 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
                       <Trash2 size={11} strokeWidth={2.5} />
                     </button>
                   </div>
+                  <div 
+                    onMouseDown={(e) => handleResizeStart(e, `${t.id}-memo`)}
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/10 transition-colors z-40"
+                    title="드래그하여 이 주제의 가로 폭 조절"
+                  />
                 </th>
               ))}
               <th rowSpan={2} className="py-3 px-3 text-center"></th>
@@ -327,22 +332,8 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
             <tr className="border-b border-white/5 bg-[#121212] text-gray-500 uppercase tracking-widest text-[8.5px] font-black">
               {topics.map(t => (
                 <React.Fragment key={`sub-${t.id}`}>
-                  <th className="py-1.5 px-2 border-r border-white/5 text-center group relative">
-                    완료
-                    <div 
-                      onMouseDown={(e) => handleResizeStart(e, `${t.id}-check`)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/10 transition-colors z-40"
-                      title="드래그하여 완료 칸 너비 조절"
-                    />
-                  </th>
-                  <th className="py-1.5 px-2 border-r border-white/5 text-left group relative">
-                    메모 / 특이사항
-                    <div 
-                      onMouseDown={(e) => handleResizeStart(e, `${t.id}-memo`)}
-                      className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/10 transition-colors z-40"
-                      title="드래그하여 메모 칸 너비 조절"
-                    />
-                  </th>
+                  <th className="py-1.5 px-2 border-r border-white/5 text-center">완료</th>
+                  <th className="py-1.5 px-2 border-r border-white/5 text-left">메모 / 특이사항</th>
                 </React.Fragment>
               ))}
             </tr>
