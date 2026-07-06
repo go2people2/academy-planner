@@ -513,6 +513,7 @@ export default function TodaySheet({
   const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false); // 💡 인쇄 미리보기 모달 상태 추가
   const [isCardPrintOpen, setIsCardPrintOpen] = useState(false); // 💡 학생별 안내장 인쇄 모달 상태 추가
+  const checklistRef = React.useRef<any>(null); // 💡 체크리스트 ref 추가
   const [isTagBatchMode, setIsTagBatchMode] = useState(false); // 💡 태그별 일괄입력 모달 상태 추가
 
   const [hideAbsent, setHideAbsent] = useState<boolean>(() => {
@@ -1639,7 +1640,13 @@ export default function TodaySheet({
                     if (document.activeElement instanceof HTMLElement) {
                       document.activeElement.blur();
                     }
-                    setTimeout(() => setIsPrintPreviewOpen(true), 150);
+                    setTimeout(() => {
+                      if (activeTab === 'checklist') {
+                        checklistRef.current?.openPrintPreview();
+                      } else {
+                        setIsPrintPreviewOpen(true);
+                      }
+                    }, 150);
                   }} 
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 border border-indigo-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-indigo-500 transition-all shadow-lg"
                 >
@@ -1652,7 +1659,7 @@ export default function TodaySheet({
       </AnimatePresence>
 
       {activeTab === 'checklist' ? (
-        <ChecklistTab students={filteredStudents} academyInfo={academyInfo} />
+        <ChecklistTab ref={checklistRef} students={filteredStudents} academyInfo={academyInfo} />
       ) : (
         <div 
           className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}

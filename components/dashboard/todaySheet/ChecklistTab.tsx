@@ -1,17 +1,25 @@
-'use client';
-
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare } from 'lucide-react';
+import ChecklistPrintPreviewModal from './ChecklistPrintPreviewModal';
 
 interface ChecklistTabProps {
   students: any[];
   academyInfo: any;
 }
 
-export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
+export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({ students, academyInfo }, ref) => {
   const [topics, setTopics] = useState<any[]>([]);
   const [items, setItems] = useState<Record<string, Record<string, any>>>({});
+  
+  const [isPrintOpen, setIsPrintOpen] = useState(false);
+
+  useImperativeHandle(ref, () => ({
+    openPrintPreview() {
+      setIsPrintOpen(true);
+    }
+  }));
+
   const [isLoading, setIsLoading] = useState(true);
   const [isAddingTopic, setIsAddingTopic] = useState(false);
   const [newTopicTitle, setNewTopicTitle] = useState('');
@@ -473,6 +481,18 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
           </tbody>
         </table>
       </div>
+      
+      <ChecklistPrintPreviewModal
+        isOpen={isPrintOpen}
+        onClose={() => setIsPrintOpen(false)}
+        students={students}
+        selectedDate={academyInfo?.selectedDate || new Date().toISOString().split('T')[0]}
+        academyInfo={academyInfo}
+        topics={topics}
+        items={items}
+      />
     </div>
   );
-}
+});
+
+ChecklistTab.displayName = 'ChecklistTab';
