@@ -633,12 +633,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           const statusText = isSupplement ? '보강' : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
           
           return (
-            <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] font-normal cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
-              isSupplement ? 'text-blue-400' :
+            <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
+              isSupplement ? 'text-blue-400 font-semibold' :
               statusText === ATTENDANCE_STATUS.BEFORE ? 'text-gray-600' :
-              statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400' : 
-              statusText.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-red-400' : 
-              'text-amber-400'
+              statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400 font-semibold' : 
+              statusText.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-red-400 font-bold' : 
+              'text-amber-400 font-bold'
             }`}>
               <div className="flex items-center gap-1.5">
                 <span>{statusText}</span>

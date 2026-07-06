@@ -636,7 +636,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-start px-4 text-[11px] cursor-pointer select-none transition-colors hover:bg-[#edece9]/30 z-30 ${
               isSupplement ? 'text-blue-600 font-semibold' :
               statusText === ATTENDANCE_STATUS.BEFORE ? 'text-[#37352f]/65 font-normal' :
-              statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-[#37352f] font-normal' : 
+              statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-600 font-semibold' : 
               statusText.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-rose-600 font-bold' : 
               'text-amber-600 font-bold'
             }`}>
