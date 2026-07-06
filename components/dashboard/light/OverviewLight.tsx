@@ -732,6 +732,7 @@ function StudentRowItem({
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   const isMakeup = student.todaySession?.attendance_status?.startsWith('보강');
+  const isAbsent = student.todaySession?.attendance_status === '결석';
   
   const settings = academyInfo?.operation_settings || {};
   const baseTime = settings.first_period_time || "";
@@ -765,7 +766,9 @@ function StudentRowItem({
             : 'hover:border-red-500/50 hover:bg-red-500/5 bg-white border-[#edece9]'
           : isMakeup 
             ? 'bg-emerald-500/5 border-emerald-500/20 hover:border-emerald-500/40 hover:bg-emerald-500/10'
-            : 'bg-white border-[#edece9] hover:border-blue-500/50 hover:bg-[#fbfbfa]'
+            : isAbsent
+              ? 'bg-red-500/5 border-red-500/10 opacity-70 hover:opacity-100 hover:border-red-500/30'
+              : 'bg-white border-[#edece9] hover:border-blue-500/50 hover:bg-[#fbfbfa]'
       }`}
     >
       <div className="flex flex-col gap-1 overflow-hidden flex-1">
@@ -814,6 +817,14 @@ function StudentRowItem({
                 보강
               </span>
             )
+          )}
+          {isAbsent && !isSelected && !isChecked && (
+            <span 
+              className="bg-red-50 text-red-650 text-[8px] font-black px-1.5 py-0.5 rounded border border-red-200 uppercase tracking-tighter shrink-0 cursor-help"
+              title={student.todaySession?.attendance_reason || '결석 사유 미기입'}
+            >
+              결석 {student.todaySession?.attendance_reason ? `(${student.todaySession.attendance_reason})` : ''}
+            </span>
           )}
           <span className={`text-[10px] font-black truncate ${isSelected || isChecked ? 'text-blue-100' : 'text-[#37352f]'}`}>
             {student.grade} · {student.course} · {student.class}
