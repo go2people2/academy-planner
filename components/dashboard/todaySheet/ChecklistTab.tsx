@@ -210,7 +210,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
   const handleResizeStart = (e: React.MouseEvent, colKey: string) => {
     e.preventDefault();
     const startX = e.clientX;
-    const startWidth = colWidths[colKey] || (colKey.endsWith('-check') ? 30 : colKey.endsWith('-memo') ? 80 : 70);
+    const startWidth = colWidths[colKey] || (colKey.endsWith('-check') ? 35 : colKey.endsWith('-memo') ? 85 : 70);
 
     const handleMouseMove = (moveEvent: MouseEvent) => {
       const deltaX = moveEvent.clientX - startX;
@@ -234,7 +234,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
     const nameW = colWidths.name || 70;
     let sum = nameW + 40;
     topics.forEach(t => {
-      sum += (colWidths[`${t.id}-check`] || 30) + (colWidths[`${t.id}-memo`] || 80);
+      sum += (colWidths[`${t.id}-check`] || 35) + (colWidths[`${t.id}-memo`] || 85);
     });
     return sum;
   };
@@ -283,8 +283,8 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
           <colgroup>
             <col style={{ width: colWidths.name || 70, minWidth: colWidths.name || 70 }} />
             {topics.map(t => {
-              const checkWidth = colWidths[`${t.id}-check`] || 30;
-              const memoWidth = colWidths[`${t.id}-memo`] || 80;
+              const checkWidth = colWidths[`${t.id}-check`] || 35;
+              const memoWidth = colWidths[`${t.id}-memo`] || 85;
               return (
                 <React.Fragment key={`col-${t.id}`}>
                   <col style={{ width: checkWidth, minWidth: checkWidth }} />
