@@ -64,6 +64,25 @@ export default function AttendancePage() {
   const [isModalOpen, setIsModalOpen] = useState(false); // 💡 전체기록 팝업 상태 추가
   const [searchTerm, setSearchTerm] = useState(''); // 💡 실시간 이름 검색어 상태 추가
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen().catch(err => {
+        console.error(`Error attempting to enable fullscreen mode: ${err.message}`);
+      });
+    } else {
+      document.exitFullscreen();
+    }
+  };
 
   // 시계 업데이트
   useEffect(() => {
@@ -299,13 +318,21 @@ export default function AttendancePage() {
     <div style={styles.root}>
       {/* 왼쪽 사이드바 패널 */}
       <div style={styles.leftPanel}>
-        {/* 상단 설정 버튼 */}
-        <button
-          onClick={() => window.location.href = `/${slugStr}/dashboard`}
-          style={styles.settingBtn}
-        >
-          ⚙ 설정
-        </button>
+        {/* 상단 설정 및 전체화면 버튼 */}
+        <div style={{ position: 'absolute', left: 20, top: 20, display: 'flex', gap: '8px', zIndex: 10 }}>
+          <button
+            onClick={() => window.location.href = `/${slugStr}/dashboard`}
+            style={styles.settingBtn}
+          >
+            ⚙ 설정
+          </button>
+          <button
+            onClick={toggleFullscreen}
+            style={styles.settingBtn}
+          >
+            {isFullscreen ? '🗗 창모드' : '🖥 전체화면'}
+          </button>
+        </div>
 
         {/* 학원 로고 및 이름 */}
         <div style={styles.brandContainer}>
@@ -572,9 +599,6 @@ const styles: Record<string, React.CSSProperties> = {
     position: 'relative',
   },
   settingBtn: {
-    position: 'absolute',
-    left: 20,
-    top: 20,
     backgroundColor: 'rgba(0, 0, 0, 0.15)',
     border: '1px solid rgba(255, 255, 255, 0.2)',
     color: '#ffffff',
