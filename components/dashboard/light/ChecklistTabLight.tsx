@@ -236,9 +236,26 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
     }
   };
 
-  const [colWidths, setColWidths] = useState<Record<string, number>>({
-    name: 70
+  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
+    const defaultWidths = { name: 70 };
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ams_checklist_col_widths');
+      if (saved) {
+        try {
+          return { ...defaultWidths, ...JSON.parse(saved) };
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return defaultWidths;
   });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ams_checklist_col_widths', JSON.stringify(colWidths));
+    }
+  }, [colWidths]);
 
   const handleResizeStart = (e: React.MouseEvent, colKey: string) => {
     e.preventDefault();
