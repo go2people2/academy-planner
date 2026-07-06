@@ -270,7 +270,7 @@ useEffect(() => {
         })}
       </tr>
 
-      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} limit={props.historyLimit || 3} masterTextbooks={masterTextbooks} />
+      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} limit={props.historyLimit || 3} masterTextbooks={masterTextbooks} isLight={true} />
 
       {/* Editors Container (Invisible row) */}
       <tr style={{ display: 'none' }}>
