@@ -33,6 +33,10 @@ export default function ChecklistPrintPreviewModal({
   const [domToImageLoaded, setDomToImageLoaded] = useState(false);
   const [isSavingImage, setIsSavingImage] = useState(false);
 
+  // PDF 저장 엔진 로드 관련 상태 (jsPDF)
+  const [jsPdfLoaded, setJsPdfLoaded] = useState(false);
+  const [isSavingPdf, setIsSavingPdf] = useState(false);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -68,6 +72,26 @@ export default function ChecklistPrintPreviewModal({
       };
       script.onerror = () => {
         console.error('dom-to-image load failed');
+      };
+      document.body.appendChild(script);
+    }
+  }, [isOpen]);
+
+  // jsPDF CDN 동적 적재
+  useEffect(() => {
+    if (isOpen && typeof window !== 'undefined') {
+      if ((window as any).jspdf) {
+        setJsPdfLoaded(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js';
+      script.async = true;
+      script.onload = () => {
+        setJsPdfLoaded(true);
+      };
+      script.onerror = () => {
+        console.error('jsPDF load failed');
       };
       document.body.appendChild(script);
     }
@@ -127,6 +151,56 @@ export default function ChecklistPrintPreviewModal({
       alert('이미지 파일 변환 중 오류가 발생했습니다.');
     } finally {
       setIsSavingImage(false);
+    }
+  };
+
+  // jsPDF 및 dom-to-image 연동 PDF 변환 저장
+  const handleSaveAsPdf = async () => {
+    const domtoimage = (window as any).domtoimage;
+    const jspdf = (window as any).jspdf;
+    if (!domtoimage || !jspdf) {
+      alert('PDF 변환 도구가 아직 준비되지 않았습니다. 1~2초 후 다시 시도해 주세요.');
+      return;
+    }
+    const printArea = document.querySelector('.print-area') as HTMLElement;
+    if (!printArea) {
+      alert('저장할 영역을 찾을 수 없습니다.');
+      return;
+    }
+
+    setIsSavingPdf(true);
+    try {
+      // 2배 선명도 캡처
+      const scale = 2;
+      const dataUrl = await domtoimage.toPng(printArea, {
+        bgcolor: '#ffffff',
+        width: printArea.offsetWidth * scale,
+        height: printArea.offsetHeight * scale,
+        style: {
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: `${printArea.offsetWidth}px`,
+          height: `${printArea.offsetHeight}px`
+        }
+      });
+
+      // A4 문서 인스턴스화
+      const doc = new jspdf.jsPDF({
+        orientation: 'p',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      // A4 규격(210 x 297)에 맞춰 삽입
+      doc.addImage(dataUrl, 'PNG', 0, 0, 210, 297);
+      
+      // 다운로드 트리거
+      doc.save(`${customTitle || '체크리스트'}_${selectedDate}.pdf`);
+    } catch (e) {
+      console.error('Save PDF Error:', e);
+      alert('PDF 파일 변환 중 오류가 발생했습니다.');
+    } finally {
+      setIsSavingPdf(false);
     }
   };
 
@@ -242,7 +316,7 @@ export default function ChecklistPrintPreviewModal({
             <button
               onClick={handleSaveAsImage}
               disabled={isSavingImage || !domToImageLoaded}
-              className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
             >
               {isSavingImage ? (
                 <Loader2 size={14} className="animate-spin" />
@@ -250,6 +324,19 @@ export default function ChecklistPrintPreviewModal({
                 <Download size={14} />
               )}
               이미지로 저장
+            </button>
+            {/* PDF로 저장 버튼 */}
+            <button
+              onClick={handleSaveAsPdf}
+              disabled={isSavingPdf || !domToImageLoaded || !jsPdfLoaded}
+              className="flex items-center gap-1.5 px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-300 text-white rounded-[6px] text-xs font-black shadow-md cursor-pointer transition-all"
+            >
+              {isSavingPdf ? (
+                <Loader2 size={14} className="animate-spin" />
+              ) : (
+                <FileText size={14} />
+              )}
+              PDF로 저장
             </button>
             {/* 인쇄하기 버튼 */}
             <button
