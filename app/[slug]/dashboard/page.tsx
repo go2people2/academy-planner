@@ -909,6 +909,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       const currentMission = ('mission' in dataToSave) ? dataToSave.mission : (s.todaySession?.mission ?? s.recent_mission ?? '');
       return {
         ...s,
+        management_notes: ('management_notes' in dataToSave) ? (dataToSave.management_notes ?? '') : s.management_notes,
+        recent_mission: ('mission' in dataToSave) ? (dataToSave.mission ?? '') : s.recent_mission,
         todaySession: {
           ...(s.todaySession || { id: 'temp', student_id: studentId, academy_id: academy.id, date: selectedDate, session_date: selectedDate }),
           ...filteredData,

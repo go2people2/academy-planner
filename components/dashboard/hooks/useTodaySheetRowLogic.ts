@@ -105,11 +105,15 @@ export function useTodaySheetRowLogic({
       hw_checked_today: session?.hw_checked_today ?? false,
       hw_passed_today: session?.hw_passed_today ?? false,
       mission: translateBookCodes(student.recent_mission || ''),
-      management_notes: translateBookCodes(session?.management_notes || student.management_notes || ''),
+      management_notes: translateBookCodes(
+        (session?.management_notes !== undefined && session?.management_notes !== null)
+          ? session.management_notes
+          : (student.management_notes || '')
+      ),
       moved_to_hour: session?.moved_to_hour, // 💡 추가
       isTodayClassDay
     };
-  }, [student.allLogs, student.assigned_books, student.todaySession, student.recent_mission, student.class_days, selectedDate, translateBookCodes]);
+  }, [student.allLogs, student.assigned_books, student.todaySession, student.recent_mission, student.management_notes, student.class_days, selectedDate, translateBookCodes]);
 
   const [formData, setFormData] = useState<any>(() => getInitialFormData(selectedDate));
 
