@@ -257,9 +257,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         const beforeColon = line.substring(0, colonIdx + 1);
         const afterColon = line.substring(colonIdx + 1);
         
-        const commaIdx = afterColon.indexOf(',');
+        const commaIdx = afterColon.indexOf(',,');
         const scorePart = commaIdx !== -1 ? afterColon.substring(0, commaIdx) : afterColon;
-        const memoPart = commaIdx !== -1 ? afterColon.substring(commaIdx) : '';
+        const memoPart = commaIdx !== -1 ? afterColon.substring(commaIdx + 1) : '';
         
         const highlightScore = (str: string) => {
           if (!str.includes('/')) return <span className="text-emerald-600 font-bold">{str}</span>;
@@ -307,7 +307,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         
         const bulletStr = match[1];
         const rest = match[2];
-        const commaIdx = rest.indexOf(',');
+        const commaIdx = rest.indexOf(',,');
         
         if (commaIdx === -1) {
           return (
@@ -319,7 +319,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           );
         } else {
           const contentStr = rest.substring(0, commaIdx);
-          const memoStr = rest.substring(commaIdx); // Includes comma
+          const memoStr = rest.substring(commaIdx + 1); // Includes single comma
           return (
             <React.Fragment key={i}>
               <span className="text-blue-600 font-bold">{bulletStr}</span>

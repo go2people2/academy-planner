@@ -70,10 +70,10 @@ export function parseInlineTests(
         const name = parts[0].trim();
         const rest = parts.slice(1).join(':').trim(); // 콜론이 여러 개일 경우 대비
         
-        // 쉼표(,)를 기준으로 점수와 메모 분리
-        const scoreMemoParts = rest.split(',');
+        // 쉼표(,,)를 기준으로 점수와 메모 분리
+        const scoreMemoParts = rest.split(',,');
         const scoreStr = scoreMemoParts[0].trim();
-        const memo = scoreMemoParts.slice(1).join(',').trim(); // 쉼표가 메모 안에 또 있을 경우 대비
+        const memo = scoreMemoParts.slice(1).join(',,').trim(); // 쉼표가 메모 안에 또 있을 경우 대비
         
         let numericScore: number | null = null;
         let maxScore = 100; // 슬래시 없으면 기본 100점
