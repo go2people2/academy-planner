@@ -250,14 +250,24 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
       {/* 테이블 래퍼 */}
       <div className="border border-[#edece9] rounded-[3px] bg-white overflow-x-auto shadow-sm custom-scrollbar-h">
         <table className="w-full border-collapse table-fixed">
+          <colgroup>
+            <col style={{ width: colWidths.name, minWidth: colWidths.name }} />
+            {topics.map(t => (
+              <React.Fragment key={`col-${t.id}`}>
+                <col style={{ width: colWidths.check, minWidth: colWidths.check }} />
+                <col style={{ width: colWidths.memo, minWidth: colWidths.memo }} />
+              </React.Fragment>
+            ))}
+            <col style={{ width: 40, minWidth: 40 }} />
+          </colgroup>
           <thead>
             {/* 1단 머지 헤더 */}
             <tr className="border-b border-[#edece9] bg-[#fcfcfc] text-[#37352f]/50 uppercase tracking-widest text-[9.5px] font-black">
-              <th rowSpan={2} style={{ width: colWidths.name, minWidth: colWidths.name }} className="py-3 px-3 border-r border-[#edece9] text-left sticky left-0 bg-[#fcfcfc] z-30 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
+              <th rowSpan={2} className="py-3 px-3 border-r border-[#edece9] text-left sticky left-0 bg-[#fcfcfc] z-30 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
                 학생 이름
               </th>
               {topics.map(t => (
-                <th key={t.id} colSpan={2} className="py-2.5 px-3 border-r border-[#edece9] text-center group relative min-w-[120px]">
+                <th key={t.id} colSpan={2} className="py-2.5 px-3 border-r border-[#edece9] text-center group relative">
                   <div className="flex items-center justify-center gap-1.5">
                     <span className="text-[#37352f] text-[11px] font-black truncate max-w-[80px]" title={t.title}>
                       {t.title}
@@ -272,14 +282,14 @@ export function ChecklistTabLight({ students, academyInfo }: ChecklistTabLightPr
                   </div>
                 </th>
               ))}
-              <th rowSpan={2} className="py-3 px-3 text-center min-w-[40px]"></th>
+              <th rowSpan={2} className="py-3 px-3 text-center"></th>
             </tr>
             {/* 2단 상세 헤더 */}
             <tr className="border-b border-[#edece9] bg-[#fcfcfc] text-[#37352f]/40 uppercase tracking-widest text-[8.5px] font-black">
               {topics.map(t => (
                 <React.Fragment key={`sub-${t.id}`}>
-                  <th style={{ width: colWidths.check, minWidth: colWidths.check }} className="py-1.5 px-2 border-r border-[#edece9] text-center">완료</th>
-                  <th style={{ width: colWidths.memo, minWidth: colWidths.memo }} className="py-1.5 px-2 border-r border-[#edece9] text-left">메모 / 특이사항</th>
+                  <th className="py-1.5 px-2 border-r border-[#edece9] text-center">완료</th>
+                  <th className="py-1.5 px-2 border-r border-[#edece9] text-left">메모 / 특이사항</th>
                 </React.Fragment>
               ))}
             </tr>
