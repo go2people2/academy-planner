@@ -269,7 +269,7 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
               {topics.map(t => (
                 <th key={t.id} colSpan={2} className="py-2.5 px-3 border-r border-white/5 text-center group relative">
                   <div className="flex items-center justify-center gap-1.5">
-                    <span className="text-gray-100 text-[11px] font-black truncate max-w-[80px]" title={t.title}>
+                    <span className="text-gray-100 text-[11px] font-black text-center break-all leading-tight" title={t.title}>
                       {t.title}
                     </span>
                     <button 
