@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trash2, Plus, Loader2 } from 'lucide-react';
+import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare } from 'lucide-react';
 
 interface ChecklistTabProps {
   students: any[];
@@ -65,16 +65,22 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
     fetchData();
   }, [academyInfo?.id]);
 
-  // 2. 체크 토글 핸들러
-  const handleToggleCheck = async (studentId: string, topicId: string, currentVal: any) => {
-    const nextChecked = !currentVal.is_checked;
+  // 2. 상태 순환 토글 핸들러 (none -> checked -> hold -> na -> none)
+  const handleCycleStatus = async (studentId: string, topicId: string, currentVal: any) => {
+    const currentStatus = currentVal.status || 'none';
+    let nextStatus = 'none';
+    if (currentStatus === 'none') nextStatus = 'checked';
+    else if (currentStatus === 'checked') nextStatus = 'hold';
+    else if (currentStatus === 'hold') nextStatus = 'na';
+    else nextStatus = 'none';
 
     // 1) 로컬 상태 낙관적 갱신
     setItems(prev => {
       const studentMap = { ...(prev[studentId] || {}) };
       studentMap[topicId] = {
         ...currentVal,
-        is_checked: nextChecked,
+        status: nextStatus,
+        is_checked: nextStatus === 'checked', // 하위 호환성용
         student_id: studentId,
         topic_id: topicId
       };
@@ -86,7 +92,8 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
       const payload: any = {
         topic_id: topicId,
         student_id: studentId,
-        is_checked: nextChecked,
+        status: nextStatus,
+        is_checked: nextStatus === 'checked',
         memo: currentVal.memo || ''
       };
       if (currentVal.id) payload.id = currentVal.id;
@@ -107,9 +114,23 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
         });
       }
     } catch (err) {
-      console.error('Toggle Check Error:', err);
+      console.error('Cycle Status Error:', err);
       alert('체크 상태 저장에 실패했습니다.');
       fetchData(); // 롤백 복구
+    }
+  };
+
+  // 상태별 아이콘 렌더링 헬퍼
+  const renderStatusIcon = (status: string) => {
+    switch (status) {
+      case 'checked':
+        return <CheckSquare className="text-green-500 fill-green-500/10 hover:opacity-80 transition-all animate-fade-in" size={16} strokeWidth={2.5} />;
+      case 'hold':
+        return <AlertTriangle className="text-amber-500 fill-amber-500/10 hover:opacity-80 transition-all animate-fade-in" size={16} strokeWidth={2.5} />;
+      case 'na':
+        return <MinusSquare className="text-gray-400 fill-gray-400/10 hover:opacity-80 transition-all animate-fade-in" size={16} strokeWidth={2.5} />;
+      default:
+        return <div className="w-4 h-4 rounded-[3px] border border-white/10 hover:border-blue-500 hover:bg-blue-500/10 transition-all" />;
     }
   };
 
@@ -366,14 +387,15 @@ export function ChecklistTab({ students, academyInfo }: ChecklistTabProps) {
                       const cellData = items[student.id]?.[t.id] || { is_checked: false, memo: '' };
                       return (
                         <React.Fragment key={`${student.id}-${t.id}`}>
-                          {/* 체크박스 셀 */}
+                          {/* 체크 상태 순환 셀 */}
                           <td className="py-2.5 px-2 border-r border-white/5 text-center">
-                            <input 
-                              type="checkbox" 
-                              checked={cellData.is_checked}
-                              onChange={() => handleToggleCheck(student.id, t.id, cellData)}
-                              className="w-4 h-4 rounded-[3px] border-white/10 bg-[#151515] text-blue-600 focus:ring-blue-500 cursor-pointer"
-                            />
+                            <button 
+                              onClick={() => handleCycleStatus(student.id, t.id, cellData)}
+                              className="inline-flex items-center justify-center p-0.5 rounded hover:bg-white/5 transition-all cursor-pointer"
+                              title="클릭하여 상태 순환 (공란 -> 완료 -> 보류 -> 제외)"
+                            >
+                              {renderStatusIcon(cellData.status)}
+                            </button>
                           </td>
                           {/* 메모 입력 셀 */}
                           <td className="py-1.5 px-2.5 border-r border-white/5 align-middle">
