@@ -8,7 +8,8 @@ import {
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
   SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
-  Maximize2, Minimize2, ArrowLeft, ArrowRight, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer, ChevronDown, ChevronUp
+  Maximize2, Minimize2, ArrowLeft, ArrowRight, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer, ChevronDown, ChevronUp,
+  Megaphone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { TodaySheetRow } from './TodaySheetRowLight';
@@ -1268,6 +1269,14 @@ export default function TodaySheet({
                   📋 체크리스트
                 </button>
               </div>
+              <button
+                onClick={onOpenBriefing}
+                title="오늘의 브리핑 열기"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-700 rounded-[4px] text-[10px] font-black tracking-tight transition-all cursor-pointer shadow-sm ml-2"
+              >
+                <Megaphone size={11} className="text-amber-600" />
+                오늘의 브리핑
+              </button>
             </div>
             <div className="flex items-center gap-1.5 mt-0.5">
               <span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter mr-1">{students.length} Total</span>
