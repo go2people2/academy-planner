@@ -98,7 +98,7 @@ export async function POST(req: NextRequest) {
     const academyId = academyData.id;
 
     // 5. ams_teachers 선생님 테이블 인서트 및 연동
-    const { error: tError } = await supabaseAdmin
+    const { data: teacherData, error: tError } = await supabaseAdmin
       .from('ams_teachers')
       .insert([
         {
@@ -110,7 +110,9 @@ export async function POST(req: NextRequest) {
           user_id: userId,
           initials: 'M'
         }
-      ]);
+      ])
+      .select('id')
+      .single();
 
     if (tError) {
       console.error('Teacher Insert Error:', tError);
@@ -119,6 +121,27 @@ export async function POST(req: NextRequest) {
       await supabaseAdmin.auth.admin.deleteUser(userId);
       return NextResponse.json(
         { success: false, error: `선생님 계정 연동 실패: ${tError.message}` },
+        { status: 400 }
+      );
+    }
+
+    // 💡 6. 생성된 원장선생님 Auth 계정에 app_metadata 동기화 설정 (권한 검증용)
+    const { error: authMetaError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+      app_metadata: {
+        role: 'admin',
+        academy_id: academyId,
+        teacher_id: teacherData.id
+      }
+    });
+
+    if (authMetaError) {
+      console.error('Auth User app_metadata Sync Error:', authMetaError);
+      // 💡 롤백: 생성된 선생님 정보, 학원 정보 및 Auth 유저 삭제
+      await supabaseAdmin.from('ams_teachers').delete().eq('id', teacherData.id);
+      await supabaseAdmin.from('ams_academies').delete().eq('id', academyId);
+      await supabaseAdmin.auth.admin.deleteUser(userId);
+      return NextResponse.json(
+        { success: false, error: `선생님 권한 동기화 실패: ${authMetaError.message}` },
         { status: 400 }
       );
     }
