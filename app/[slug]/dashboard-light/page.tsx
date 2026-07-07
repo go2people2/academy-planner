@@ -788,20 +788,8 @@ export default function DashboardPage() {
     const checkBriefing = () => {
       const hasSeenBriefing = sessionStorage.getItem(`ams_briefing_${selectedDate}`);
       if (hasSeenBriefing) return;
-      const hasNotes = students.some(s => s.management_notes?.trim());
       const hasAnnouncements = Object.values(academy.announcements || {}).some(v => String(v).trim());
-      const hasMissingInfo = students.some(s => {
-        if (s.is_deleted) return false;
-        return (
-          !s.phone?.trim() || 
-          !s.school?.trim() || 
-          !s.course?.trim() || 
-          !s.teacher_id || 
-          !s.class_days || 
-          s.class_days.length === 0
-        );
-      });
-      if (hasNotes || hasAnnouncements || hasMissingInfo) { setShowMorningBriefing(true); }
+      if (hasAnnouncements) { setShowMorningBriefing(true); }
     };
     checkBriefing();
   }, [isLoading, !!academy, selectedDate, students.length]);
