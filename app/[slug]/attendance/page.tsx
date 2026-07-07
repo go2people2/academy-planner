@@ -60,7 +60,7 @@ export default function AttendancePage() {
   const [feedbackSub, setFeedbackSub] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [replyPhone, setReplyPhone] = useState('0322620911'); // 기본 회신번호
-  const [footerMemo, setFooterMemo] = useState('호크마수학학원'); // 기본 꼬릿말
+  const [footerMemo, setFooterMemo] = useState(''); // 기본 꼬릿말
   const [isModalOpen, setIsModalOpen] = useState(false); // 💡 전체기록 팝업 상태 추가
   const [searchTerm, setSearchTerm] = useState(''); // 💡 실시간 이름 검색어 상태 추가
   const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -102,14 +102,14 @@ export default function AttendancePage() {
       const res = await fetch(`/api/attendance?slug=${slugStr}`);
       if (!res.ok) return;
       const data = await res.json();
-      setAcademyName(data.academyName || '');
+      const loadedAcademyName = data.academyName || '';
+      setAcademyName(loadedAcademyName);
       setRecentRecords(data.recentRecords || []);
 
-      if (data.operationSettings) {
-        if (data.operationSettings.naver_cafe_title) {
-          setFooterMemo(data.operationSettings.naver_cafe_title);
-        }
-        // 회신 번호 등 설정값이 있다면 연동 가능
+      if (data.operationSettings && data.operationSettings.naver_cafe_title) {
+        setFooterMemo(data.operationSettings.naver_cafe_title);
+      } else {
+        setFooterMemo(loadedAcademyName);
       }
     } catch {}
   }, [slugStr]);
@@ -338,7 +338,7 @@ export default function AttendancePage() {
             {/* 체크 표시 */}
             <div style={styles.logoCheck}>✓</div>
           </div>
-          <h2 style={styles.brandName}>{academyName || '호크마수학학원'}</h2>
+          <h2 style={styles.brandName}>{academyName || ''}</h2>
         </div>
 
         {/* 날짜 및 디지털 시계 */}
