@@ -866,7 +866,7 @@ function StudentRowItem({
           <div className="flex flex-wrap gap-1 items-center">
             {(student.assigned_books || []).filter(code => {
               const bookCourse = student.book_courses?.[code];
-              return !!code && !String(bookCourse).endsWith('-keep');
+              return !!code && !String(bookCourse).includes('-keep') && !String(bookCourse).includes('-done');
             }).map((code, idx) => {
               const book = (masterTextbooks || []).find(m => m.bookcode === code);
               if (!book) return null;

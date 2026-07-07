@@ -230,33 +230,43 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
           <div className="flex flex-col md:flex-row gap-6">
             {/* 1. 배정 교재 목록 */}
             <div className="flex-1 min-w-[200px]">
-              <div className={`text-[9.5px] font-black ${isLight ? 'text-emerald-700' : 'text-emerald-400/80'} tracking-wider uppercase mb-2 flex items-center gap-1 select-none`}>
-                📚 배정 교재 전체 목록 ({student.assigned_books?.length || 0}개)
-              </div>
-              {student.assigned_books && student.assigned_books.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5 pr-1 max-h-[300px] overflow-y-auto custom-scrollbar-v">
-                  {student.assigned_books.map((book: string, bIdx: number) => {
-                    const translated = translateBook(book);
-                    return (
-                      <div 
-                        key={bIdx} 
-                        className={`px-3 py-1.5 ${
-                          isLight 
-                            ? 'bg-white border-gray-250 text-[#37352f] shadow-sm' 
-                            : 'bg-white/10 border-white/20 text-gray-100 shadow-sm'
-                        } border rounded-[4px] text-[10.5px] font-extrabold`}
-                        title={translated}
-                      >
-                        {translated}
+              {(() => {
+                const activeBooks = (student.assigned_books || []).filter((book: string) => {
+                  const status = student.book_courses?.[book];
+                  return !String(status).includes('-done') && !String(status).includes('-keep');
+                });
+                return (
+                  <>
+                    <div className={`text-[9.5px] font-black ${isLight ? 'text-emerald-700' : 'text-emerald-400/80'} tracking-wider uppercase mb-2 flex items-center gap-1 select-none`}>
+                      📚 배정 교재 목록 ({activeBooks.length}개)
+                    </div>
+                    {activeBooks.length > 0 ? (
+                      <div className="flex flex-wrap gap-1.5 pr-1 max-h-[300px] overflow-y-auto custom-scrollbar-v">
+                        {activeBooks.map((book: string, bIdx: number) => {
+                          const translated = translateBook(book);
+                          return (
+                            <div 
+                              key={bIdx} 
+                              className={`px-3 py-1.5 ${
+                                isLight 
+                                  ? 'bg-white border-gray-250 text-[#37352f] shadow-sm' 
+                                  : 'bg-white/10 border-white/20 text-gray-100 shadow-sm'
+                              } border rounded-[4px] text-[10.5px] font-extrabold`}
+                              title={translated}
+                            >
+                              {translated}
+                            </div>
+                          );
+                        })}
                       </div>
-                    );
-                  })}
-                </div>
-              ) : (
-                <div className={`text-[10px] ${isLight ? 'text-gray-400' : 'text-gray-600'} italic select-none`}>
-                  배정 교재 없음
-                </div>
-              )}
+                    ) : (
+                      <div className={`text-[10px] ${isLight ? 'text-gray-400' : 'text-gray-600'} italic select-none`}>
+                        배정 교재 없음
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
             </div>
 
             {/* 2. 관리 주의점 히스토리 타임라인 */}

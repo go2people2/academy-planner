@@ -213,7 +213,11 @@ function SummaryTab({ student, stats, availableTextbooks }: any) {
       <section className="space-y-4">
         <SectionTitle title="현재 학습 중인 교재" />
         <div className="space-y-2">
-          {student.assigned_books.filter((code: string) => !!code).map((bookCode: string) => {
+          {student.assigned_books.filter((code: string) => {
+            if (!code) return false;
+            const status = student.book_courses?.[code];
+            return !String(status).includes('-done') && !String(status).includes('-keep');
+          }).map((bookCode: string) => {
             const bookInfo = availableTextbooks?.find((b: any) => b.bookcode === bookCode);
             const bookTitle = bookInfo?.title || bookCode;
             const bookLogs = student.allLogs.filter((l: any) => l.classwork_text?.includes(bookTitle) || l.homework_text?.includes(bookTitle));
