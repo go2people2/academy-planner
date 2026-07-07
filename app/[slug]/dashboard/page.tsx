@@ -310,7 +310,7 @@ const getStudentStartTime = (student: any, day: string) => {
   // 3. 기본 스케줄 사용
   const hours = student.day_schedules?.[day] || [];
   if (hours.length === 0) return 999; 
-  return Math.min(...hours.map((h: number) => h % 100));
+  return Math.min(...hours.map((h: number) => h >= 100 ? Math.floor(h / 100) : h));
 };
 
 // 💡 [추가] 학생 정보 수정 모드 전용 최소 필터링 로직 (날짜 로직 완전 배제)
