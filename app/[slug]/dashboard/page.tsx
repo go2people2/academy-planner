@@ -428,6 +428,17 @@ export default function DashboardPage() {
   const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
   const [isWarpMode, setIsWarpMode] = useState(false); // 💡 임시 원격 지원 모드 플래그 추가
 
+  const handleAuthError = useCallback(async (e: any) => {
+    if (e && (e.code === '42501' || String(e.message).includes('row-level security') || e.status === 403 || e.status === 401)) {
+      alert('인증 정보가 만료되었거나 계정 권한이 변경되었습니다. 정상적인 이용을 위해 다시 로그인해 주세요.');
+      localStorage.removeItem('ams_user');
+      await supabase.auth.signOut();
+      router.push(`/${slug}/login`);
+      return true;
+    }
+    return false;
+  }, [router, slug]);
+
   useEffect(() => {
     if (!slug) return;
     const userJson = localStorage.getItem('ams_user');
@@ -1001,6 +1012,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       return true;
     } catch (e: any) { 
       console.error('Save error:', e); 
+      if (await handleAuthError(e)) return false;
       if (e && typeof e === 'object') {
         console.error('Save error detailed:', {
           message: e.message,
@@ -1139,6 +1151,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       return true;
     } catch (e: any) { 
       console.error('Batch Save error:', e); 
+      if (await handleAuthError(e)) return false;
       return false; 
     }
   }, [students, academy, selectedDate]);
@@ -1268,7 +1281,11 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         console.warn('[LOG 4] No rows affected. Check RLS policies for ID:', academyId);
         alert('저장 실패: 수정 권한이 없거나 대상을 찾을 수 없습니다. (RLS Check 필요)');
       }
-    } catch (e) { console.error('Update academy error:', e); }
+      alert('학원 설정 저장 완료');
+    } catch (e) { 
+      console.error('Update academy error:', e); 
+      await handleAuthError(e);
+    }
   };
 
   const handleSaveLegacyProgress = useCallback(async (studentId: string, bookCode: string, unitName: string) => {
@@ -1294,7 +1311,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     try {
       await supabase.from('ams_students').insert([{ academy_id: academy.id, name: data.name, school: data.school, grade: data.grade, course: data.course, book_courses: data.book_courses || {}, class_name: data.class_name, phone: data.phone, teacher_id: data.teacher_id || null, class_days: data.class_days, day_schedules: data.day_schedules, assigned_books: data.assigned_books, is_deleted: false }]);
       await fetchAllData(false);
-    } catch (e) { console.error(e); }
+    } catch (e: any) { 
+      console.error(e); 
+      await handleAuthError(e);
+    }
   };
 
   const handleBatchAddStudents = async (newStudents: any[]) => {
@@ -1326,8 +1346,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       await fetchAllData(false);
       return true;
     } catch (e: any) {
-      console.error(e);
-      alert('일괄 등록 실패: ' + e.message);
+      console.error('Update student failed:', e);
+      if (await handleAuthError(e)) return false;
+      alert('학생 정보 수정에 실패했습니다.');
       return false;
     }
   };
@@ -1489,7 +1510,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       }]); 
       await fetchTeachers(academy.id); 
     } 
-    catch (e) { console.error(e); }
+    catch (e) { 
+      console.error(e); 
+      await handleAuthError(e);
+    }
   };
 
   const handleDeleteTeacher = async (id: string) => { 
@@ -1506,6 +1530,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       });
 
       if (!res.ok) {
+        if (res.status === 403 || res.status === 401) {
+          alert('인증 정보가 만료되었거나 계정 권한이 변경되었습니다. 정상적인 이용을 위해 다시 로그인해 주세요.');
+          localStorage.removeItem('ams_user');
+          await supabase.auth.signOut();
+          router.push(`/${slug}/login`);
+          return;
+        }
         const errData = await res.json();
         console.error('Delete Error:', errData.error);
         alert('삭제 실패: ' + errData.error);
@@ -1540,6 +1571,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       });
 
       if (!res.ok) {
+        if (res.status === 403 || res.status === 401) {
+          alert('인증 정보가 만료되었거나 계정 권한이 변경되었습니다. 정상적인 이용을 위해 다시 로그인해 주세요.');
+          localStorage.removeItem('ams_user');
+          await supabase.auth.signOut();
+          router.push(`/${slug}/login`);
+          return;
+        }
         const errData = await res.json();
         console.error('Update Error:', errData.error);
         alert('저장 실패: ' + errData.error);
