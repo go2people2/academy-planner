@@ -116,3 +116,102 @@ export async function PATCH(request: Request, context: any) {
     return NextResponse.json({ error: '서버 내부 오류' }, { status: 500 });
   }
 }
+
+export async function DELETE(request: Request, context: any) {
+  try {
+    const params = await context.params;
+    const targetTeacherId = params.id;
+
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceRoleKey) {
+      return NextResponse.json({ error: '서버 환경 설정 오류' }, { status: 500 });
+    }
+
+    const supabaseAdmin = createClient(supabaseUrl, serviceRoleKey);
+
+    // 💡 1. [보안] 요청자 인증 정보 확보
+    const cookieStore = await cookies();
+    const supabaseAuth = createServerClient(supabaseUrl, process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!, {
+      cookies: {
+        getAll() { return cookieStore.getAll(); },
+        setAll(cookiesToSet) {
+          try { cookiesToSet.forEach(({ name, value, options }) => cookieStore.set(name, value, options)); } catch {}
+        },
+      },
+    });
+
+    let { data: { session } } = await supabaseAuth.auth.getSession();
+    
+    if (!session) {
+      const authHeader = request.headers.get('Authorization');
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+        const token = authHeader.substring(7);
+        const { data: { user }, error: userErr } = await supabaseAdmin.auth.getUser(token);
+        if (!userErr && user) {
+          session = { user } as any;
+        }
+      }
+    }
+
+    if (!session) {
+      return NextResponse.json({ error: '인증되지 않은 사용자입니다.' }, { status: 401 });
+    }
+
+    // 💡 2. [보안] 요청자 권한(Role) 확인 (Admin 또는 Master만 허용)
+    const reqRole = session.user.app_metadata?.role;
+    const reqAcademyId = session.user.app_metadata?.academy_id;
+
+    if (reqRole !== 'admin' && reqRole !== 'master') {
+      return NextResponse.json({ error: '권한이 없습니다. (Forbidden)' }, { status: 403 });
+    }
+
+    // 💡 3. [보안] 대상 교사 조회 및 학원 소속(Academy Bound) 검증
+    const { data: targetTeacher, error: fetchErr } = await supabaseAdmin
+      .from('ams_teachers')
+      .select('user_id, role, academy_id')
+      .eq('id', targetTeacherId)
+      .single();
+
+    if (fetchErr || !targetTeacher) {
+      return NextResponse.json({ error: '대상 교사 정보를 찾을 수 없습니다.' }, { status: 404 });
+    }
+
+    // Master가 아닌 Admin의 경우, 반드시 같은 학원 소속 교사만 삭제 가능하도록 제한
+    if (reqRole === 'admin' && reqAcademyId !== targetTeacher.academy_id) {
+      return NextResponse.json({ error: '다른 학원의 데이터는 삭제할 수 없습니다.' }, { status: 403 });
+    }
+
+    // 자기 자신을 삭제할 수는 없도록 제한
+    const reqTeacherId = session.user.app_metadata?.teacher_id;
+    if (reqTeacherId === targetTeacherId) {
+      return NextResponse.json({ error: '본인 계정은 삭제할 수 없습니다.' }, { status: 400 });
+    }
+
+    // 💡 4. Auth Layer에서 유저 삭제
+    if (targetTeacher.user_id) {
+      const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(targetTeacher.user_id);
+      if (authErr) {
+        console.error('[API] Auth user deletion failed:', authErr.message);
+        return NextResponse.json({ error: '인증 서버 계정 삭제 실패' }, { status: 500 });
+      }
+    }
+
+    // 💡 5. Public DB(ams_teachers)에서 교사 삭제
+    const { error: dbErr } = await supabaseAdmin
+      .from('ams_teachers')
+      .delete()
+      .eq('id', targetTeacherId);
+
+    if (dbErr) {
+      console.error('[API] Public schema deletion failed:', dbErr.message);
+      return NextResponse.json({ error: 'DB 교사 정보 삭제 실패' }, { status: 500 });
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error('[API] Teacher delete critical error:', error);
+    return NextResponse.json({ error: '서버 내부 오류' }, { status: 500 });
+  }
+}

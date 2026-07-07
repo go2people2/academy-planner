@@ -1513,11 +1513,32 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
   const handleDeleteTeacher = async (id: string) => { 
     if (!confirm('삭제하시겠습니까?')) return; 
-    await supabase.from('ams_teachers').delete().eq('id', id); 
-    if (selectedTeacherId === id) {
-      setSelectedTeacherId('All');
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch(`/api/teachers/${id}`, {
+        method: 'DELETE',
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        }
+      });
+
+      if (!res.ok) {
+        const errData = await res.json();
+        console.error('Delete Error:', errData.error);
+        alert('삭제 실패: ' + errData.error);
+      } else {
+        console.log('Delete Success');
+        if (selectedTeacherId === id) {
+          setSelectedTeacherId('All');
+        }
+        if (academy) await fetchTeachers(academy.id); 
+      }
+    } catch (e) {
+      console.error(e);
+      alert('삭제 중 오류가 발생했습니다.');
     }
-    if (academy) await fetchTeachers(academy.id); 
   };
 
   const handleUpdateTeacher = async (id: string, updates: any) => { 
