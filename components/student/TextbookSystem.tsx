@@ -395,7 +395,8 @@ export default function TextbookSystem({
   return (
     <div className="bg-[#0a0a0a] border border-white/10 rounded-xl shadow-2xl flex flex-col overflow-hidden">
       {/* 상단 교재 선택 바 */}
-      <div className="flex items-center justify-center gap-2 overflow-x-auto no-scrollbar py-3 px-6 bg-white/[0.03] border-b border-white/5 shrink-0">
+      <div className="relative bg-white/[0.03] border-b border-white/5 shrink-0">
+        <div className="flex items-center gap-2 overflow-x-auto py-3 px-4 scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         {(student.assigned_books || []).filter((code: string) => !String(student.book_courses?.[code]).includes('-keep') && !String(student.book_courses?.[code]).includes('-done')).map((code: string) => {
           const book = availableTextbooks.find(b => b.bookcode === code); if (!book) return null;
           const isActive = activeBook?.bookcode === code;
@@ -427,7 +428,9 @@ export default function TextbookSystem({
             + 교재 추가
           </motion.button>
         )}
-      </div>
+        </div>{/* inner scroll div */}
+      </div>{/* outer relative div */}
+
 
       <div className="relative flex-1 overflow-hidden">
         {/* 텍스트 영역 2단 그리드 */}
@@ -594,7 +597,7 @@ export default function TextbookSystem({
                     </div>
                   </div>
                 ) : (
-                  <div className="space-y-6 flex flex-col relative h-auto">
+                  <div className="space-y-4 flex-1 flex flex-col overflow-hidden relative">
                     <div className="flex gap-2 overflow-x-auto no-scrollbar pb-3 border-b border-white/5 shrink-0 -mx-2 px-2">
                       {units.map((u, i) => {
                         const isActive = activeUnit?.unit === u.unit; const isSelected = selectedUnits.some(s => s.unit === u.unit);
@@ -608,19 +611,21 @@ export default function TextbookSystem({
                       </div>
                       <button onClick={() => setSelectedPages([])} className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white text-[11px] font-black rounded uppercase border border-white/10">Clear All</button>
                     </div>
-                    <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5">
-                      {(() => {
-                        const range = mergedPageRange || (activeUnit ? { start: parseInt(activeUnit.start_page), end: parseInt(activeUnit.end_page), pages: [] } : null); if (!range) return null;
-                        const pagesToRender = range.pages.length > 0 ? range.pages : (() => { const p = []; for (let i = range.start; i <= range.end; i++) p.push(i); return p; })();
-                        return pagesToRender.map(p => {
-                          const isSel = selectedPages.includes(p); const solStatus = pageStatusMap.get(p);
-                          const isSol = !!solStatus;
-                          const solColor = solStatus === 'wrong' ? 'text-amber-500 bg-amber-500/20 border-amber-500/40' : solStatus === 'homework' ? 'text-blue-500 bg-blue-500/20 border-blue-500/40' : 'text-emerald-500 bg-emerald-500/20 border-emerald-500/40';
-                          return (<button key={p} onClick={() => approvalStatus === 'none' && handlePageClick(p)} className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black tabular-nums transition-all border relative ${isSel ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] scale-105' : isSol ? solColor : 'bg-white/10 border-white/20 text-white hover:bg-emerald-500/30'}`}>{p}{isSol && !isSel && <div className="absolute top-0.5 right-0.5 opacity-50"><Check size={7} strokeWidth={4} /></div>}</button>);
-                        });
-                      })()}
+                    <div className="flex-1 overflow-y-auto pr-1 custom-scrollbar-v py-1">
+                      <div className="grid grid-cols-6 sm:grid-cols-10 gap-1.5">
+                        {(() => {
+                          const range = mergedPageRange || (activeUnit ? { start: parseInt(activeUnit.start_page), end: parseInt(activeUnit.end_page), pages: [] } : null); if (!range) return null;
+                          const pagesToRender = range.pages.length > 0 ? range.pages : (() => { const p = []; for (let i = range.start; i <= range.end; i++) p.push(i); return p; })();
+                          return pagesToRender.map(p => {
+                            const isSel = selectedPages.includes(p); const solStatus = pageStatusMap.get(p);
+                            const isSol = !!solStatus;
+                            const solColor = solStatus === 'wrong' ? 'text-amber-500 bg-amber-500/20 border-amber-500/40' : solStatus === 'homework' ? 'text-blue-500 bg-blue-500/20 border-blue-500/40' : 'text-emerald-500 bg-emerald-500/20 border-emerald-500/40';
+                            return (<button key={p} onClick={() => approvalStatus === 'none' && handlePageClick(p)} className={`aspect-square rounded-md flex items-center justify-center text-[12px] font-black tabular-nums transition-all border relative ${isSel ? 'bg-emerald-600 border-emerald-400 text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] scale-105' : isSol ? solColor : 'bg-white/10 border-white/20 text-white hover:bg-emerald-500/30'}`}>{p}{isSol && !isSel && <div className="absolute top-0.5 right-0.5 opacity-50"><Check size={7} strokeWidth={4} /></div>}</button>);
+                          });
+                        })()}
+                      </div>
                     </div>
-                    <div className="pt-4 border-t border-white/10 flex flex-col gap-3 mt-4">
+                    <div className="pt-4 border-t border-white/10 flex flex-col gap-3 mt-auto shrink-0">
                       <div className="p-3 bg-white/10 rounded-md border border-white/10">
                         <span className="text-[10px] font-black text-emerald-400 uppercase tracking-widest mb-1 block">Selected Pages</span>
                         <p className="text-[15px] font-black text-white truncate">{selectedPages.length > 0 ? (() => { const ranges: string[] = []; let s = selectedPages[0]; for (let i = 1; i <= selectedPages.length; i++) { if (selectedPages[i] !== selectedPages[i - 1] + 1) { const e = selectedPages[i - 1]; ranges.push(s === e ? `${s}` : `${s}~${e}`); s = selectedPages[i]; } } return `p${ranges.join(', p')}`; })() : '페이지를 선택하세요'}</p>

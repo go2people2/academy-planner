@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle } from 'lucide-react';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle, ClipboardCheck } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
@@ -822,8 +822,8 @@ export default function StudentPortal() {
         academy={academy}
       />
 
-      {/* 💡 데스크톱/공용 상단 탭 바 (오답노트 전환용) */}
-      <div className="bg-[#0a0a0a] border-b border-white/5 flex px-4 md:px-8 shrink-0">
+      {/* 💡 데스크톱 전용 상단 탭 바 (오답노트 전환용) */}
+      <div className="bg-[#0a0a0a] border-b border-white/5 hidden lg:flex px-4 md:px-8 shrink-0">
         <button
           onClick={() => setActiveTab('study')}
           className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
@@ -1109,34 +1109,110 @@ export default function StudentPortal() {
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-[#111] border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-left">
               <h3 className="text-lg font-black text-white mb-4">제출할 내용을 확인해주세요</h3>
               
-              <div className="bg-white/5 border border-white/10 rounded-xl p-4 mb-4 text-[13px] space-y-4">
-                <div>
-                  <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><BookOpen size={14} /> 학원공부 / 오답고치기</p>
-                  <p className="text-emerald-400 font-black leading-snug whitespace-pre-wrap">{localCompletedClasswork || '입력된 기록이 없습니다.'}</p>
-                </div>
-                <div>
-                  <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><FileText size={14} /> 집에서 할 숙제</p>
-                  <p className="text-blue-400 font-black leading-snug whitespace-pre-wrap">{localHomework || '입력된 기록이 없습니다.'}</p>
-                </div>
-                <div className="flex gap-4 pt-2 border-t border-white/10">
-                  <div className="flex-1">
-                    <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><TrendingUp size={14} /> 오늘 달성률</p>
-                    <p className="text-white font-black">{todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null ? `${todaySession.todo_achievement}%` : '입력 안함'}</p>
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-gray-400 font-bold mb-1 flex items-center gap-1"><Check size={14} /> 과제 자가평가</p>
-                    <p className="text-amber-400 font-black">
-                      {currentSelfEval !== null && currentSelfEval !== undefined ? `${currentSelfEval}점` : '입력 안함'}
+              <div className="bg-[#0c0c0e] border border-white/10 rounded-xl p-4 mb-4 text-[13px] space-y-3.5">
+                {/* 1. 과제 자가평가 (파란색 계열 가로 바 재현 - 크기 상향 및 텍스트 제거) */}
+                <div className="pb-1">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-gray-400 font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                      <ClipboardCheck className="text-blue-500" size={13} /> 과제 자가평가
                     </p>
+                    <span className="bg-blue-600 px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg">
+                      Lvl {currentSelfEval !== null && currentSelfEval !== undefined ? currentSelfEval : '입력 안함'}
+                    </span>
                   </div>
+                  {/* 가로 바 */}
+                  <div className="grid grid-cols-11 gap-0.5 w-full">
+                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => {
+                      const isSel = currentSelfEval !== null && currentSelfEval !== undefined && num <= currentSelfEval;
+                      const getBtnColor = () => {
+                        if (currentSelfEval === null || currentSelfEval === undefined) return '';
+                        if (currentSelfEval <= 3) return 'bg-rose-600 border-rose-400';
+                        if (currentSelfEval <= 5) return 'bg-orange-500 border-orange-400';
+                        if (currentSelfEval >= 8) return 'bg-blue-600 border-blue-400';
+                        return 'bg-emerald-500 border-emerald-400';
+                      };
+                      return (
+                        <div 
+                          key={num} 
+                          className={`w-full h-[14px] rounded-[2px] text-[9px] sm:text-[10px] font-black flex items-center justify-center border leading-none transition-all ${
+                            isSel 
+                              ? `${getBtnColor()} text-white shadow-lg` 
+                              : 'bg-white/5 border-white/10 text-white/30'
+                          }`}
+                        >
+                          {currentSelfEval === null ? num : (num === currentSelfEval ? num : '')}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. 오늘 달성률 (초록색 계열 가로 바 재현 - 크기 상향 및 텍스트 제거) */}
+                <div className="pt-1 pb-3 border-b border-white/5">
+                  <div className="flex items-center justify-between mb-1.5">
+                    <p className="text-gray-400 font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                      <TrendingUp className="text-emerald-500" size={13} /> 오늘 달성률
+                    </p>
+                    <span className="bg-emerald-600 px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg">
+                      {todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null ? `${todaySession.todo_achievement}%` : '입력 안함'}
+                    </span>
+                  </div>
+                  {/* 가로 바 */}
+                  <div className="grid grid-cols-11 gap-0.5 w-full">
+                    {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(num => {
+                      const isSel = todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null && num <= todaySession.todo_achievement;
+                      return (
+                        <div 
+                          key={num} 
+                          className={`w-full h-[14px] rounded-[2px] text-[8px] sm:text-[9px] font-black flex items-center justify-center border leading-none transition-all ${
+                            isSel
+                              ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
+                              : 'bg-white/5 border-white/10 text-white/30'
+                          }`}
+                        >
+                          {(todaySession?.todo_achievement === undefined || todaySession?.todo_achievement === null) ? num : (num === todaySession?.todo_achievement ? num : '')}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 3. 학원 공부 / 오답 고치기 (초록색 테마) */}
+                <div className="space-y-1.5">
+                  <p className="text-gray-400 font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                    <BookOpen className="text-emerald-500" size={13} /> 학원공부 / 오답고치기
+                  </p>
+                  <p className="text-emerald-400 font-black leading-snug whitespace-pre-wrap pl-3 border-l-2 border-emerald-500/20">
+                    {localCompletedClasswork || '입력된 기록이 없습니다.'}
+                  </p>
+                </div>
+
+                {/* 4. 집에서 할 숙제 (파란색 테마) */}
+                <div className="space-y-1.5">
+                  <p className="text-gray-400 font-bold flex items-center gap-1.5 text-[11px] uppercase tracking-wider">
+                    <FileText className="text-blue-500" size={13} /> 집에서 할 숙제
+                  </p>
+                  <p className="text-blue-400 font-black leading-snug whitespace-pre-wrap pl-3 border-l-2 border-blue-500/20">
+                    {localHomework || '입력된 기록이 없습니다.'}
+                  </p>
                 </div>
               </div>
 
               <p className="text-[12px] text-gray-400 mb-6 text-center">제출하시면 선생님 확인 전까지 <b>수정하거나 취소할 수 없습니다.</b></p>
               
               <div className="flex gap-3">
-                <button onClick={() => setConfirmSubmitOpen(false)} disabled={isSaving} className="flex-1 py-3 bg-white/10 hover:bg-white/20 disabled:opacity-50 text-white font-bold rounded-xl transition-colors">좀 더 쓸래요</button>
-                <button onClick={() => handleApprovalSubmit('submitted')} disabled={isSaving} className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 transition-colors flex justify-center items-center">
+                <button 
+                  onClick={() => setConfirmSubmitOpen(false)} 
+                  disabled={isSaving} 
+                  className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50 text-gray-300 font-bold rounded-xl transition-colors"
+                >
+                  좀 더 쓸래요
+                </button>
+                <button 
+                  onClick={() => handleApprovalSubmit('submitted')} 
+                  disabled={isSaving} 
+                  className="flex-1 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-violet-900/40 transition-colors flex justify-center items-center"
+                >
                   {isSaving ? <Loader2 className="animate-spin" size={20} /> : "이대로 제출하기!"}
                 </button>
               </div>
