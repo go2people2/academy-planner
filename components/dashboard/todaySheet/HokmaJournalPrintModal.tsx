@@ -747,7 +747,7 @@ export default function HokmaJournalPrintModal({
                       <tbody>
                         {testRows.map((r, i) => (
                           <tr key={i}>
-                            <td style={{ height: '30px' }} className="hj-handwriting" style={{ fontSize: '18px' }}>
+                            <td style={{ height: '30px', fontSize: '18px' }} className="hj-handwriting">
                               {r.dateText}
                             </td>
                             <td className="text-left hj-handwriting" style={{ paddingLeft: '8px', fontSize: getHandwritingFontSize(r.testName, 19) }}>
