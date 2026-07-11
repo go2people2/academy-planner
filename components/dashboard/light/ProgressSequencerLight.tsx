@@ -131,7 +131,11 @@ export default function ProgressSequencer({ students, masterTextbooks, initialSt
 
             {selectedStudent.assigned_books.length > 0 ? (
               selectedStudent.assigned_books
-                .filter(code => !!code) // 💡 빈 문자열(코드)은 건너뛰어 중복 키 에러 방지
+                .filter(code => {
+                  if (!code) return false;
+                  const bookCourse = selectedStudent.book_courses?.[code] || selectedStudent.course || '';
+                  return !String(bookCourse).includes('-done'); // 💡 완료된 교재는 진도표에서 숨김
+                })
                 .map(bookCode => {
                 // 💡 더욱 유연한 교재 매칭 (정확히 일치하지 않아도 코드 앞부분이 같으면 매칭 시도)
                 const textbook = masterTextbooks.find(m => m.bookcode === bookCode) || 

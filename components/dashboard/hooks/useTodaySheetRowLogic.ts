@@ -105,15 +105,11 @@ export function useTodaySheetRowLogic({
       hw_checked_today: session?.hw_checked_today ?? false,
       hw_passed_today: session?.hw_passed_today ?? false,
       mission: translateBookCodes(student.recent_mission || ''),
-      management_notes: translateBookCodes(
-        (session?.management_notes !== undefined && session?.management_notes !== null)
-          ? session.management_notes
-          : (student.management_notes || '')
-      ),
+      management_notes: translateBookCodes(student.management_notes || ''),
       moved_to_hour: session?.moved_to_hour, // 💡 추가
       isTodayClassDay
     };
-  }, [student.allLogs, student.assigned_books, student.todaySession, student.recent_mission, student.management_notes, student.class_days, selectedDate, translateBookCodes]);
+  }, [student.allLogs, student.assigned_books, student.todaySession, student.management_notes, student.recent_mission, student.class_days, selectedDate, translateBookCodes]);
 
   const [formData, setFormData] = useState<any>(() => getInitialFormData(selectedDate));
 
@@ -169,11 +165,11 @@ export function useTodaySheetRowLogic({
 
     // 2. DOM 데이터 수집 및 병합 (Refs + Updates)
     const lazyData: any = {};
-    const fieldRefs: any = { test_id: testRef, classwork: cwRef, completed_classwork: ccwRef, assign: hwRef, next_quiz: nqRef, mission: missionRef, notes: notesRef, management_notes: managementNotesRef };
+    const fieldRefs: any = { test_id: testRef, classwork: cwRef, completed_classwork: ccwRef, assign: hwRef, next_quiz: nqRef, notes: notesRef };
     
     Object.keys(fieldRefs).forEach(key => {
       if (fieldRefs[key].current) {
-        const dbKey = key === 'test_id' ? 'test_id' : (key === 'notes' ? 'special_notes' : (key === 'management_notes' ? 'management_notes' : (key === 'mission' ? 'mission' : `${key}_text`)));
+        const dbKey = key === 'test_id' ? 'test_id' : (key === 'notes' ? 'special_notes' : `${key}_text`);
         if (!(dbKey in finalUpdates)) lazyData[dbKey] = fieldRefs[key].current.value;
       }
     });
@@ -184,6 +180,22 @@ export function useTodaySheetRowLogic({
     const scoreInput = tdRefs.current['test_score']?.querySelector('input');
     if (scoreInput && !('test_score' in mergedUpdates)) mergedUpdates.test_score = scoreInput.value;
     if (formData.test_total_count !== undefined && !('test_total_count' in mergedUpdates)) mergedUpdates.test_total_count = formData.test_total_count;
+
+    // 💡 [정교화] 범위(range)나 유닛(units)이 비어있는 가짜/빈 교재 항목 필터링 제거
+    const sanitizeBookJson = (jsonArr: any[] | undefined) => {
+      if (!jsonArr) return [];
+      return jsonArr.filter(item => {
+        if (item.type !== 'book') return true;
+        const hasRange = (item.range || '').trim();
+        const hasUnits = item.units && item.units.length > 0;
+        return hasRange || hasUnits;
+      });
+    };
+
+    if ('classwork_json' in mergedUpdates) mergedUpdates.classwork_json = sanitizeBookJson(mergedUpdates.classwork_json);
+    if ('completed_classwork_json' in mergedUpdates) mergedUpdates.completed_classwork_json = sanitizeBookJson(mergedUpdates.completed_classwork_json);
+    if ('homework_json' in mergedUpdates) mergedUpdates.homework_json = sanitizeBookJson(mergedUpdates.homework_json);
+    if ('next_quiz_json' in mergedUpdates) mergedUpdates.next_quiz_json = sanitizeBookJson(mergedUpdates.next_quiz_json);
 
     const finalData = { ...formData, ...mergedUpdates };
     const initial = getInitialFormData(rowDate);
@@ -212,9 +224,6 @@ export function useTodaySheetRowLogic({
     if (!isBlurCall) skipBlurRef.current = true; // 키보드 저장 시 플래그 활성화
 
     setFormData(finalData);
-    if (finalData.mission !== student.recent_mission && onUpdateStudentInfo) {
-      await onUpdateStudentInfo(student.id, 'recent_mission', finalData.mission);
-    }
 
     // 💡 [수정] 어떤 경우에도 전체 객체(finalData)를 보내지 않고, 
     // 오직 변경된 필드만 포함된 savePayload(Partial)만 전송하여 출석 필드를 보호

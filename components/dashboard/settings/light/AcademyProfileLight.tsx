@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Key, Clock, Globe, BookOpen, X } from 'lucide-react';
+import { Shield, Key, Clock, Globe, BookOpen, X, Upload, Trash2, FileImage } from 'lucide-react';
 
 interface AcademyProfileProps {
   academyInfo: any;
@@ -18,6 +18,52 @@ export default function AcademyProfileLight({
   academyInfo, currentUser, onUpdateAcademyInfo, opSettings, setOpSettings, updateOpSetting, updateTimerPreset 
 }: AcademyProfileProps) {
   const [newCategory, setNewCategory] = useState('');
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+  const handleLogoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    if (file.size > 1.5 * 1024 * 1024) {
+      alert('로고 이미지 용량은 1.5MB 이하여야 합니다.');
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    const reader = new FileReader();
+    reader.onloadend = async () => {
+      const base64String = reader.result as string;
+      try {
+        if (onUpdateAcademyInfo) {
+          await onUpdateAcademyInfo({ logo_url: base64String });
+          alert('학원 로고가 성공적으로 등록되어 저장되었습니다.');
+        }
+      } catch (err) {
+        console.error(err);
+        alert('로고 저장에 실패했습니다.');
+      } finally {
+        setIsUploadingLogo(false);
+      }
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleLogoDelete = async () => {
+    if (!confirm('등록된 학원 로고를 삭제하고 기본 로고로 복원하시겠습니까?')) return;
+
+    setIsUploadingLogo(true);
+    try {
+      if (onUpdateAcademyInfo) {
+        await onUpdateAcademyInfo({ logo_url: null });
+        alert('기본 로고로 복원되었습니다.');
+      }
+    } catch (err) {
+      console.error(err);
+      alert('로고 삭제에 실패했습니다.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
 
   const handleAddCategory = () => {
     const val = newCategory.trim();
@@ -111,6 +157,63 @@ export default function AcademyProfileLight({
                 />
               </div>
             </div>
+            {/* 학원 로고 이미지 관리 */}
+            <div className="border-t border-[#edece9] pt-4 space-y-3">
+              <label className="text-[10px] font-black text-blue-700 tracking-widest ml-0.5 flex items-center gap-1.5 uppercase">
+                <FileImage size={11} className="text-blue-500" /> 학원 로고 이미지 관리
+              </label>
+
+              <div className="flex flex-col sm:flex-row items-center gap-4 bg-gray-50 border border-[#edece9] rounded-lg p-3">
+                {/* 로고 이미지 프리뷰 */}
+                <div className="relative w-32 h-14 bg-white border border-[#edece9] rounded flex items-center justify-center overflow-hidden shrink-0">
+                  {academyInfo?.logo_url ? (
+                    <img
+                      src={academyInfo.logo_url}
+                      alt="Academy Logo Preview"
+                      className="w-full h-full object-contain p-1"
+                    />
+                  ) : (
+                    <span className="text-[10px] font-bold text-gray-400 italic">기본 로고 사용 중</span>
+                  )}
+                  {isUploadingLogo && (
+                    <div className="absolute inset-0 bg-white/80 flex items-center justify-center text-[10px] font-bold text-gray-600">
+                      업로드 중...
+                    </div>
+                  )}
+                </div>
+
+                {/* 로고 변경/삭제 버튼 */}
+                <div className="flex-1 w-full flex flex-col gap-1.5 text-left">
+                  <div className="flex items-center gap-2">
+                    <label className="flex items-center justify-center gap-1 px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded text-[11px] font-black cursor-pointer transition-colors shadow-sm">
+                      <Upload size={12} />
+                      <span>로고 이미지 선택</span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        onChange={handleLogoChange}
+                        disabled={isUploadingLogo}
+                        className="hidden"
+                      />
+                    </label>
+                    {academyInfo?.logo_url && (
+                      <button
+                        onClick={handleLogoDelete}
+                        disabled={isUploadingLogo}
+                        className="flex items-center justify-center gap-1 px-3 py-1.5 bg-red-50 hover:bg-red-600 border border-red-200 hover:border-transparent text-red-500 hover:text-white rounded text-[11px] font-black transition-all"
+                      >
+                        <Trash2 size={12} />
+                        <span>삭제</span>
+                      </button>
+                    )}
+                  </div>
+                  <p className="text-[8px] text-gray-400 leading-tight">
+                    * 권장 비율: 2:1 가로형 로고(예: 270x130px) / 배경이 투명한 PNG 파일을 사용하시면 일지 배경색에 가장 예쁘게 녹아납니다. (최대 1.5MB)
+                  </p>
+                </div>
+              </div>
+            </div>
+
             <p className="text-[9px] text-gray-450 font-bold italic text-left ml-0.5">* 모든 학원 정보 설정은 입력 후 마우스 커서를 입력창 바깥으로 빼면 자동 저장됩니다.</p>
           </div>
 

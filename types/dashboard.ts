@@ -83,6 +83,7 @@ export interface Student {
   teacher_initial?: string; // 💡 추가
   teacher_name?: string; // 💡 추가
   level_tag?: string; // 💡 추가 (반/레벨 태그 정보)
+  login_suffix?: string; // 💡 추가 (중복 원생 로그인 추가번호)
 }
 
 export interface Teacher {

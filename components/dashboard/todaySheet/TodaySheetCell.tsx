@@ -474,7 +474,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 className="group/note relative cursor-pointer z-[60]"
                 onClick={(e) => handleOpenNotesPopup(e)}
                 onMouseEnter={(e) => {
-                  if (student.management_notes) {
+                  if (formData.management_notes) {
                     handleOpenTooltip(e, 'note');
                   }
                 }}
@@ -482,13 +482,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 tabIndex={0}
               >
                 <div className={`w-0 h-0 border-t-[16px] border-l-[16px] border-l-transparent transition-all ${
-                  student.management_notes 
+                  formData.management_notes 
                     ? 'border-t-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]' 
                     : 'border-t-white/10 hover:border-t-amber-500/40'
                 }`} />
                 
                 {/* 마우스 오버 말풍선 (주의사항 컬럼이 닫혀있어도 확인 가능) */}
-                {activeTooltip === 'note' && student.management_notes && createPortal(
+                {activeTooltip === 'note' && formData.management_notes && createPortal(
                   <AnimatePresence mode="wait">
                     <motion.div 
                       initial={{ opacity: 0, y: tooltipCoords.top < 350 ? 10 : -10 }}
@@ -507,7 +507,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         <AlertTriangle size={14} className="text-amber-600 animate-bounce" />
                         <span className="text-[10px] uppercase tracking-widest text-amber-600 font-normal">Student Management Alert</span>
                       </div>
-                      <p className="whitespace-pre-wrap leading-relaxed text-[14px]">"{student.management_notes}"</p>
+                      <p className="whitespace-pre-wrap leading-relaxed text-[14px]">"{formData.management_notes}"</p>
                     </motion.div>
                   </AnimatePresence>,
                   document.body

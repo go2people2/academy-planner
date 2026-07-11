@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { Printer, X, FileText } from 'lucide-react';
+import { Printer, X, FileText, Palette } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
 
 interface PrintPreviewModalProps {
@@ -16,6 +16,77 @@ interface PrintPreviewModalProps {
   columnWidths?: Record<string, number>;
 }
 
+// 🎨 Daily Sheet 인쇄 테마 정의
+const PRINT_THEMES = {
+  classic: {
+    name: '클래식 (Classic)',
+    headerBorderColor: '#1f2937',
+    titleColor: '#000000',
+    theadBg: '#f3f4f6',
+    theadText: '#1f2937',
+    dividerBg: '#eef2ff',
+    dividerText: '#3730a3',
+    badgeBg: '#f9fafb',
+    badgeBorder: '#e5e7eb',
+    badgeText: '#374151',
+    footerBorderColor: '#f3f4f6',
+  },
+  blue: {
+    name: '블루 스틸 (Blue Steel)',
+    headerBorderColor: '#1e40af',
+    titleColor: '#1e3a8a',
+    theadBg: '#dbeafe',
+    theadText: '#1e3a8a',
+    dividerBg: '#eff6ff',
+    dividerText: '#1d4ed8',
+    badgeBg: '#eff6ff',
+    badgeBorder: '#bfdbfe',
+    badgeText: '#1e40af',
+    footerBorderColor: '#dbeafe',
+  },
+  forest: {
+    name: '포레스트 (Forest)',
+    headerBorderColor: '#14532d',
+    titleColor: '#14532d',
+    theadBg: '#dcfce7',
+    theadText: '#14532d',
+    dividerBg: '#f0fdf4',
+    dividerText: '#15803d',
+    badgeBg: '#f0fdf4',
+    badgeBorder: '#bbf7d0',
+    badgeText: '#15803d',
+    footerBorderColor: '#dcfce7',
+  },
+  burgundy: {
+    name: '버건디 (Burgundy)',
+    headerBorderColor: '#881337',
+    titleColor: '#881337',
+    theadBg: '#ffe4e6',
+    theadText: '#881337',
+    dividerBg: '#fff1f2',
+    dividerText: '#9f1239',
+    badgeBg: '#fff1f2',
+    badgeBorder: '#fecdd3',
+    badgeText: '#9f1239',
+    footerBorderColor: '#ffe4e6',
+  },
+  amber: {
+    name: '앰버 (Amber)',
+    headerBorderColor: '#92400e',
+    titleColor: '#78350f',
+    theadBg: '#fef3c7',
+    theadText: '#78350f',
+    dividerBg: '#fffbeb',
+    dividerText: '#b45309',
+    badgeBg: '#fffbeb',
+    badgeBorder: '#fde68a',
+    badgeText: '#b45309',
+    footerBorderColor: '#fef3c7',
+  },
+};
+
+type ThemeKey = keyof typeof PRINT_THEMES;
+
 export default function PrintPreviewModal({
   isOpen,
   onClose,
@@ -27,6 +98,7 @@ export default function PrintPreviewModal({
 }: PrintPreviewModalProps) {
   const [mounted, setMounted] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [selectedTheme, setSelectedTheme] = useState<ThemeKey>('classic');
 
   useEffect(() => {
     setMounted(true);
@@ -44,6 +116,8 @@ export default function PrintPreviewModal({
 
   if (!isOpen || !mounted) return null;
 
+  const theme = PRINT_THEMES[selectedTheme];
+
   // Filter columns to exclude interactive ones (checkbox, action buttons) and date column
   const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action' && c.id !== 'date' && c.id !== 'tools');
 
@@ -51,6 +125,20 @@ export default function PrintPreviewModal({
   const totalScreenWidth = displayCols.reduce((sum, col) => sum + (columnWidths?.[col.id] || col.minWidth || 100), 0);
 
   const handlePrint = () => {
+    document.body.classList.add('daily-print-mode');
+
+    // createPortal은 body 맨 끝에 붙으므로, 인쇄 전에 모달을 body 첫 번째로 이동
+    // → 앞쪽 앱 콘텐츠(display:none)가 빈 첫 페이지를 만드는 현상 방지
+    const modal = document.querySelector('.print-preview-modal-container');
+    if (modal) {
+      document.body.prepend(modal);
+    }
+
+    const cleanup = () => {
+      document.body.classList.remove('daily-print-mode');
+      window.removeEventListener('afterprint', cleanup);
+    };
+    window.addEventListener('afterprint', cleanup);
     window.print();
   };
 
@@ -179,7 +267,24 @@ export default function PrintPreviewModal({
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {/* 🎨 테마 선택 */}
+          <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
+            <Palette size={13} className="text-indigo-400" />
+            <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">테마</span>
+            <select
+              value={selectedTheme}
+              onChange={(e) => setSelectedTheme(e.target.value as ThemeKey)}
+              className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
+            >
+              {Object.entries(PRINT_THEMES).map(([key, cfg]) => (
+                <option key={key} value={key} className="bg-slate-800 text-white">
+                  {cfg.name}
+                </option>
+              ))}
+            </select>
+          </div>
+
           <button
             onClick={handlePrint}
             className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 border border-indigo-500 text-white rounded-lg text-xs font-black uppercase tracking-wider transition-all shadow-lg shadow-indigo-600/10 active:scale-95"
@@ -202,22 +307,28 @@ export default function PrintPreviewModal({
           return (
             <div 
               key={pageIdx} 
-              className="print-page-panel w-full bg-white text-gray-900 rounded-2xl shadow-2xl p-8 md:p-12 overflow-x-auto border border-gray-200 flex flex-col justify-between print:block print:break-after-page print:border-none print:shadow-none print:p-0 print:overflow-visible print:mb-0 mb-8"
-              style={{ minHeight: '680px', pageBreakAfter: 'always', pageBreakInside: 'avoid' }} // Proportional A4 landscape height + Explicit page breaks
+              className={`print-page-panel w-full bg-white text-gray-900 rounded-2xl shadow-2xl p-8 md:p-12 overflow-x-auto border border-gray-200 flex flex-col justify-between print:block print:border-none print:shadow-none print:p-0 print:overflow-visible print:mb-0 mb-8${pageIdx < pages.length - 1 ? ' print:break-after-page' : ''}`}
+              style={{ minHeight: '680px', pageBreakAfter: pageIdx < pages.length - 1 ? 'always' : 'auto', pageBreakInside: 'avoid' }}
             >
               <div>
-                {/* Paper Header (Rendered on every single page) */}
-                <div className="flex justify-between items-end border-b-2 border-gray-800 pb-2 mb-3 text-left">
+                {/* Paper Header */}
+                <div
+                  className="flex justify-between items-end pb-2 mb-3 text-left"
+                  style={{ borderBottom: `2px solid ${theme.headerBorderColor}` }}
+                >
                   <div>
-                    <h1 className="text-lg font-black text-black tracking-tight leading-none">
+                    <h1 className="text-lg font-black tracking-tight leading-none" style={{ color: theme.titleColor }}>
                       {academyInfo?.academy_name || 'Hokma Math'} 수업 일지
                     </h1>
                     <p className="text-[8px] text-gray-500 font-bold uppercase tracking-widest mt-1">
-                      Daily Study & Task Report
+                      Daily Study &amp; Task Report
                     </p>
                   </div>
                   <div className="text-right flex items-center gap-3">
-                    <span className="text-[10px] font-black text-gray-700 bg-gray-100 border border-gray-200 px-2.5 py-1 rounded-full leading-none">
+                    <span
+                      className="text-[10px] font-black px-2.5 py-1 rounded-full leading-none"
+                      style={{ color: theme.badgeText, background: theme.badgeBg, border: `1px solid ${theme.badgeBorder}` }}
+                    >
                       수업일자: {selectedDate.replace(/-/g, '.')} ({getDayOfWeek(selectedDate)}요일)
                     </span>
                   </div>
@@ -226,15 +337,15 @@ export default function PrintPreviewModal({
                 {/* Paper Table */}
                 <table className="w-full border-collapse table-fixed text-[9px] text-left border border-gray-300">
                   <thead>
-                    <tr className="bg-gray-100 border-b border-gray-300">
+                    <tr style={{ backgroundColor: theme.theadBg }}>
                       {displayCols.map(col => {
                         const screenWidth = columnWidths?.[col.id] || col.minWidth || 100;
                         const widthPercent = (screenWidth / totalScreenWidth) * 100;
                         return (
                           <th 
                             key={col.id} 
-                            style={{ width: `${widthPercent}%` }}
-                            className="px-2 py-1.2 font-black text-gray-800 border border-gray-300 uppercase tracking-widest text-[8.5px]"
+                            style={{ width: `${widthPercent}%`, color: theme.theadText, backgroundColor: theme.theadBg }}
+                            className="px-2 py-1.2 font-black border border-gray-300 uppercase tracking-widest text-[8.5px]"
                           >
                             {col.label}
                           </th>
@@ -246,10 +357,11 @@ export default function PrintPreviewModal({
                     {pageRows.map((row, rIdx) => {
                       if (row.type === 'divider') {
                         return (
-                          <tr key={`div-${rIdx}`} className="bg-gray-50 border-y border-gray-300">
+                          <tr key={`div-${rIdx}`} className="border-y border-gray-300">
                             <td 
                               colSpan={displayCols.length} 
-                              className="px-2 py-0.8 text-[8.5px] font-black text-indigo-700 tracking-wider bg-indigo-50/40 border border-gray-300"
+                              className="px-2 py-0.8 text-[8.5px] font-black tracking-wider border border-gray-300"
+                              style={{ backgroundColor: theme.dividerBg, color: theme.dividerText }}
                             >
                               🕒 {row.label}
                             </td>
@@ -355,10 +467,16 @@ export default function PrintPreviewModal({
                 </table>
               </div>
 
-              {/* Paper Footer with page numbers */}
-              <div className="mt-3.5 pt-1.5 border-t border-gray-100 flex items-center justify-between text-[8px] text-gray-400 font-bold uppercase tracking-widest shrink-0">
+              {/* Paper Footer */}
+              <div
+                className="mt-3.5 pt-1.5 flex items-center justify-between text-[8px] text-gray-400 font-bold uppercase tracking-widest shrink-0"
+                style={{ borderTop: `1px solid ${theme.footerBorderColor}` }}
+              >
                 <span>© {academyInfo?.academy_name || 'Hokma Math'} Management System</span>
-                <span className="text-[10px] text-gray-700 bg-gray-50 px-2 py-0.5 rounded border border-gray-100">
+                <span
+                  className="text-[10px] px-2 py-0.5 rounded"
+                  style={{ color: theme.badgeText, background: theme.badgeBg, border: `1px solid ${theme.badgeBorder}` }}
+                >
                   {pageIdx + 1} / {pages.length} 페이지
                 </span>
               </div>

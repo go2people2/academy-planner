@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, BookOpen, BarChart3, Calendar, MessageSquare, 
   TrendingUp, CheckCircle2, AlertCircle, Clock, 
   ChevronRight, BookMarked, Target, GraduationCap,
-  Check, Square, CheckSquare
+  Check, Square, CheckSquare, Trash2, Edit3, Plus, Loader2
 } from 'lucide-react';
 import { Student, SessionLog, TextbookOption } from '@/types/dashboard';
 import { supabase } from '@/lib/supabase';
@@ -626,19 +626,313 @@ function RoadmapTab({ student }: any) {
 }
 
 function JournalTab({ student }: any) {
+  const [consultations, setConsultations] = useState<any[]>([]);
+  const [isFetchLoading, setIsFetchLoading] = useState(false);
+
+  // 작성/수정용 상태
+  const [newDate, setNewDate] = useState(() => {
+    const now = new Date();
+    const offset = now.getTimezoneOffset() * 60000;
+    return new Date(now.getTime() - offset).toISOString().split('T')[0];
+  });
+  const [newContent, setNewContent] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 수정 전용 상태
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingDate, setEditingDate] = useState('');
+  const [editingContent, setEditingContent] = useState('');
+
+  // 1. 상담 데이터 조회 (Read)
+  const fetchConsultations = async () => {
+    if (!student?.id) return;
+    setIsFetchLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('ams_consultations')
+        .select('*')
+        .eq('student_id', student.id)
+        .order('date', { ascending: false });
+
+      if (error) throw error;
+      setConsultations(data || []);
+    } catch (err) {
+      console.error('Error fetching consultations:', err);
+    } finally {
+      setIsFetchLoading(false);
+    }
+  };
+
+  // 학생이 바뀔 때 또는 마운트 시 조회
+  useEffect(() => {
+    fetchConsultations();
+  }, [student?.id]);
+
+  // 2. 상담 데이터 추가 (Create)
+  const handleAddConsultation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newContent.trim() || isSubmitting) return;
+    setIsSubmitting(true);
+
+    try {
+      const { error } = await supabase
+        .from('ams_consultations')
+        .insert({
+          student_id: student.id,
+          academy_id: student.academy_id,
+          date: newDate.replace(/-/g, '.'), // 2026.07.10 형식으로 저장
+          content: newContent.trim()
+        });
+
+      if (error) throw error;
+      setNewContent('');
+      
+      // 상담일이 오늘 날짜라면 학생 테이블의 'last_consulted_at'도 자동으로 오늘로 연계 업데이트!
+      const todayStr = new Date().toISOString().split('T')[0];
+      if (newDate === todayStr) {
+        await supabase
+          .from('ams_students')
+          .update({ last_consulted_at: todayStr })
+          .eq('id', student.id);
+      }
+
+      await fetchConsultations();
+    } catch (err) {
+      console.error('Error saving consultation:', err);
+      alert('상담 일지를 저장하는 중 오류가 발생했습니다.');
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  // 3. 상담 데이터 수정 (Update)
+  const handleUpdateConsultation = async (id: string) => {
+    if (!editingContent.trim()) return;
+    try {
+      const { error } = await supabase
+        .from('ams_consultations')
+        .update({
+          date: editingDate.replace(/-/g, '.'),
+          content: editingContent.trim()
+        })
+        .eq('id', id);
+
+      if (error) throw error;
+      setEditingId(null);
+      await fetchConsultations();
+    } catch (err) {
+      console.error('Error updating consultation:', err);
+      alert('상담 일지를 수정하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 4. 상담 데이터 삭제 (Delete)
+  const handleDeleteConsultation = async (id: string) => {
+    if (!confirm('정말로 이 상담 일지를 영구 삭제하시겠습니까?')) return;
+    try {
+      const { error } = await supabase
+        .from('ams_consultations')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+      await fetchConsultations();
+    } catch (err) {
+      console.error('Error deleting consultation:', err);
+      alert('상담 일지를 삭제하는 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 5. [하이브리드 타임라인 병합] 수업 일지 특이사항 + 학부모 전용 상담 일지
+  const mergedFeed = useMemo(() => {
+    const feed: any[] = [];
+
+    // 1) 수업 일지 특이사항 (지도 일지)
+    const studyLogs = (student.allLogs || []).filter((l: any) => l.special_notes);
+    studyLogs.forEach((log: any) => {
+      feed.push({
+        type: 'study',
+        id: log.id || `${log.date}-study`,
+        date: log.date.replace(/-/g, '.'),
+        content: log.special_notes,
+      });
+    });
+
+    // 2) 학부모 상담 기록
+    consultations.forEach((c: any) => {
+      feed.push({
+        type: 'consult',
+        id: c.id,
+        date: c.date.replace(/-/g, '.'),
+        content: c.content,
+      });
+    });
+
+    // 3) 내림차순 정렬 (최신 날짜순)
+    return feed.sort((a, b) => b.date.localeCompare(a.date));
+  }, [student.allLogs, consultations]);
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <SectionTitle title="누적 상담 및 지도 일지" />
-      <div className="space-y-3">
-        {student.allLogs.filter((l: any) => l.special_notes).map((log: any, idx: number) => (
-          <div key={log.id || `${log.date}-${idx}`} className="bg-white/5 border border-white/5 p-4 rounded-[4px] space-y-2">
-            <div className="flex justify-between items-center">
-              <span className="text-[10px] font-black text-gray-500 flex items-center gap-1.5"><Clock size={12}/> {log.date}</span>
-            </div>
-            <p className="text-[11px] font-bold text-gray-300 leading-relaxed">{log.special_notes}</p>
+      
+      {/* ✍️ 신규 상담 일지 작성 폼 */}
+      <div className="bg-amber-500/5 border border-amber-500/10 rounded-[4px] p-4 space-y-3 no-print">
+        <div className="flex items-center gap-1.5 text-amber-500 font-black text-[10px] uppercase tracking-wider">
+          <MessageSquare size={12} />
+          학부모 상담 일지 새 기록
+        </div>
+        
+        <form onSubmit={handleAddConsultation} className="space-y-3">
+          <div className="flex items-center gap-2">
+            <span className="text-[9px] text-gray-500 uppercase font-black">상담 일자 :</span>
+            <input 
+              type="date"
+              value={newDate}
+              onChange={(e) => setNewDate(e.target.value)}
+              className="bg-black/30 border border-white/10 rounded-[2px] px-2 py-1 text-xs text-white outline-none font-bold focus:border-amber-500/50 [color-scheme:dark]"
+              required
+            />
           </div>
-        ))}
+          
+          <textarea 
+            value={newContent}
+            onChange={(e) => setNewContent(e.target.value)}
+            placeholder="학부모님과 면담하거나 상담한 내용을 자유롭고 자세히 적어보세요..."
+            className="w-full h-24 bg-black/40 border border-white/5 rounded-[2px] p-3 text-xs text-gray-100 placeholder:text-gray-600 outline-none focus:border-amber-500/30 transition-all font-bold resize-none leading-relaxed custom-scrollbar-v"
+            required
+          />
+          
+          <div className="flex justify-end">
+            <button 
+              type="submit"
+              disabled={isSubmitting || !newContent.trim()}
+              className="px-4 py-2 bg-amber-500/10 text-amber-500 border border-amber-500/20 hover:bg-amber-500 hover:text-white rounded-[2px] text-[10px] font-black uppercase tracking-wider transition-all disabled:opacity-45 disabled:pointer-events-none flex items-center gap-1.5"
+            >
+              {isSubmitting ? (
+                <>
+                  <Loader2 size={12} className="animate-spin" />
+                  저장 중...
+                </>
+              ) : (
+                <>
+                  <Plus size={12} />
+                  상담 일지 저장
+                </>
+              )}
+            </button>
+          </div>
+        </form>
       </div>
+
+      {/* 📅 누적 타임라인 피드 */}
+      <div className="space-y-4">
+        <SectionTitle title="통합 상담 및 지도 피드" />
+        
+        <div className="space-y-3">
+          {mergedFeed.length === 0 ? (
+            <div className="p-12 text-center text-gray-600 text-[10px] font-black uppercase tracking-widest italic bg-white/[0.01] border border-dashed border-white/5 rounded-[4px]">
+              기록된 상담이나 지도 일지가 없습니다
+            </div>
+          ) : (
+            mergedFeed.map((item) => {
+              const isConsult = item.type === 'consult';
+              const isEditing = editingId === item.id;
+
+              return (
+                <div 
+                  key={item.id} 
+                  className={`border p-4 rounded-[4px] space-y-2 transition-all shadow-inner ${
+                    isConsult 
+                      ? 'bg-amber-500/[0.02] border-amber-500/10 hover:border-amber-500/20' 
+                      : 'bg-white/5 border-white/5 hover:border-white/10'
+                  }`}
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-black text-gray-500 flex items-center gap-1.5">
+                        <Clock size={12}/> {item.date}
+                      </span>
+                      {isConsult ? (
+                        <span className="text-[8px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded-[2px] uppercase border border-amber-500/20">
+                          학부모 상담
+                        </span>
+                      ) : (
+                        <span className="text-[8px] font-black text-blue-400 bg-blue-500/10 px-1.5 py-0.5 rounded-[2px] uppercase border border-blue-500/10">
+                          수업 지도 특이사항
+                        </span>
+                      )}
+                    </div>
+
+                    {/* 수정 / 삭제 단추 (학부모 상담 일지인 경우만 활성화) */}
+                    {isConsult && !isEditing && (
+                      <div className="flex items-center gap-2 no-print">
+                        <button 
+                          onClick={() => {
+                            setEditingId(item.id);
+                            // 날짜 변환 "2026.07.10" -> "2026-07-10"
+                            setEditingDate(item.date.replace(/\./g, '-'));
+                            setEditingContent(item.content);
+                          }}
+                          className="text-gray-500 hover:text-amber-500 transition-colors"
+                          title="일지 수정"
+                        >
+                          <Edit3 size={11} />
+                        </button>
+                        <button 
+                          onClick={() => handleDeleteConsultation(item.id)}
+                          className="text-gray-500 hover:text-red-500 transition-colors"
+                          title="일지 삭제"
+                        >
+                          <Trash2 size={11} />
+                        </button>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* 내용 노출 혹은 수정 모드 */}
+                  {isEditing ? (
+                    <div className="space-y-2 mt-1.5 pt-1 border-t border-white/5 no-print">
+                      <div className="flex items-center gap-2">
+                        <span className="text-[8px] text-gray-500 uppercase font-black">날짜 변경 :</span>
+                        <input 
+                          type="date"
+                          value={editingDate}
+                          onChange={(e) => setEditingDate(e.target.value)}
+                          className="bg-black/40 border border-white/10 rounded-[2px] px-2 py-0.5 text-xs text-white outline-none font-bold focus:border-amber-500/40 [color-scheme:dark]"
+                        />
+                      </div>
+                      <textarea 
+                        value={editingContent}
+                        onChange={(e) => setEditingContent(e.target.value)}
+                        className="w-full h-20 bg-black/40 border border-amber-500/20 rounded-[2px] p-2.5 text-xs text-gray-100 focus:border-amber-500/40 outline-none resize-none leading-relaxed font-bold custom-scrollbar-v"
+                      />
+                      <div className="flex justify-end gap-2 text-[10px]">
+                        <button 
+                          onClick={() => setEditingId(null)}
+                          className="px-2.5 py-1 text-gray-400 hover:bg-white/5 border border-white/5 rounded-[2px] font-black"
+                        >
+                          취소
+                        </button>
+                        <button 
+                          onClick={() => handleUpdateConsultation(item.id)}
+                          className="px-2.5 py-1 bg-amber-500/15 text-amber-500 border border-amber-500/25 hover:bg-amber-500 hover:text-white rounded-[2px] font-black transition-all"
+                        >
+                          저장
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <p className="text-[11px] font-bold text-gray-300 leading-relaxed whitespace-pre-wrap break-all pl-0.5">
+                      {item.content}
+                    </p>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
     </motion.div>
   );
 }

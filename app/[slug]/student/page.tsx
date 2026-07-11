@@ -1198,7 +1198,7 @@ export default function StudentPortal() {
                 </div>
               </div>
 
-              <p className="text-[12px] text-gray-400 mb-6 text-center">제출하시면 선생님 확인 전까지 <b>수정하거나 취소할 수 없습니다.</b></p>
+              <p className="text-[12px] text-amber-500 mb-6 text-center font-semibold">제출하시면 선생님 확인 전까지 <b className="text-amber-400 font-black">수정하거나 취소할 수 없습니다.</b></p>
               
               <div className="flex gap-3">
                 <button 

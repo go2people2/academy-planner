@@ -36,6 +36,7 @@ interface OverviewProps {
   academyInfo?: any;
   searchQuery?: string; // 💡 추가
   onSearchChange?: (val: string) => void; // 💡 추가
+  currentUser?: any; // 💡 추가
 }
 
 export default function Overview({ 
@@ -52,7 +53,8 @@ export default function Overview({
   onStartClass,
   academyInfo,
   searchQuery = '', // 💡 추가
-  onSearchChange // 💡 추가
+  onSearchChange, // 💡 추가
+  currentUser // 💡 추가
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
@@ -719,6 +721,7 @@ export default function Overview({
             onSave={onAddNewStudent}
             masterTextbooks={masterTextbooks}
             teachers={teachers}
+            currentUser={currentUser}
           />
         )}      </AnimatePresence>
     </div>

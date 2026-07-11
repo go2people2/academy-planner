@@ -18,6 +18,11 @@ export default function MasterDashboard() {
   const [editSlug, setEditSlug] = useState('');
   const [editIsSuspended, setEditIsSuspended] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  
+  // 💡 [추가] 학원 삭제 상태 관리
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [showDeleteSection, setShowDeleteSection] = useState(false);
 
   // Form fields (Create Academy)
   const [academyName, setAcademyName] = useState('');
@@ -239,6 +244,51 @@ export default function MasterDashboard() {
       alert('변경 실패: ' + err.message);
     } finally {
       setIsUpdating(false);
+    }
+  };
+
+  // 💡 [추가] 학원 영구 삭제 API 연동 핸들러
+  const handleDeleteAcademy = async () => {
+    if (!editingAcademy?.id) return;
+    if (editingAcademy.slug !== deleteConfirmInput.trim().toLowerCase()) {
+      alert('확인용 학원 주소 슬러그가 일치하지 않습니다.');
+      return;
+    }
+
+    if (!confirm('🚨 경고: 이 학원의 모든 정보(선생님, 학생, 일지, 인증 계정 포함)가 영구 파괴됩니다. 정말로 진행하시겠습니까?')) {
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const res = await fetch('/api/master/delete-academy', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          academyId: editingAcademy.id,
+          confirmSlug: deleteConfirmInput.trim()
+        })
+      });
+      const data = await res.json();
+
+      if (data.success) {
+        alert(data.message || '학원이 완벽하게 삭제되었습니다.');
+        setEditingAcademy(null);
+        fetchAcademies();
+      } else {
+        alert(data.error || '학원 삭제에 실패했습니다.');
+      }
+    } catch (err: any) {
+      console.error(err);
+      alert('삭제 처리 중 에러 발생: ' + err.message);
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -602,6 +652,9 @@ export default function MasterDashboard() {
                                   setEditAcademyName(ac.academy_name);
                                   setEditSlug(ac.slug);
                                   setEditIsSuspended(isAcSuspended);
+                                  // 💡 삭제 상태 리셋
+                                  setDeleteConfirmInput('');
+                                  setShowDeleteSection(false);
                                 }}
                                 className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-[9px] font-black uppercase tracking-wider rounded-[2px] border border-white/10 transition-all"
                               >
@@ -688,6 +741,44 @@ export default function MasterDashboard() {
                     <option value="active" className="text-emerald-400 bg-[#121212]">✅ 정상 제공 (Active)</option>
                     <option value="suspended" className="text-red-400 bg-[#121212]">❌ 일시 중지 (Suspended)</option>
                   </select>
+                </div>
+
+                {/* 💡 [추가] 위험 지대: 학원 영구 삭제 UI */}
+                <div className="border-t border-red-950/30 pt-4 mt-2">
+                  {!showDeleteSection ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowDeleteSection(true)}
+                      className="w-full py-2 bg-red-950/20 hover:bg-red-950/40 text-red-400 border border-red-900/30 hover:border-red-500/30 rounded-sm text-[10px] font-black uppercase tracking-widest transition-all"
+                    >
+                      🚨 이 학원 영구 삭제하기
+                    </button>
+                  ) : (
+                    <div className="space-y-3 bg-red-950/10 border border-red-900/30 p-4 rounded-sm">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] text-red-400 font-black uppercase tracking-widest">위험: 학원 영구 파괴</span>
+                        <button type="button" onClick={() => setShowDeleteSection(false)} className="text-gray-500 hover:text-white text-[10px] font-bold">닫기</button>
+                      </div>
+                      <p className="text-[9px] text-red-300/80 leading-relaxed font-bold">
+                        이 작업은 되돌릴 수 없습니다. 확인을 위해 학원 주소 슬러그 <code className="bg-black/60 px-1.5 py-0.5 rounded text-white font-mono text-[9px]">{editingAcademy.slug}</code>를 아래에 똑같이 입력해 주세요.
+                      </p>
+                      <input
+                        type="text"
+                        placeholder="슬러그 입력"
+                        value={deleteConfirmInput}
+                        onChange={(e) => setDeleteConfirmInput(e.target.value)}
+                        className="w-full bg-black/60 border border-red-500/30 rounded-sm py-2 px-3 text-xs text-white outline-none focus:border-red-500 font-bold"
+                      />
+                      <button
+                        type="button"
+                        disabled={isDeleting || deleteConfirmInput.trim().toLowerCase() !== editingAcademy.slug}
+                        onClick={handleDeleteAcademy}
+                        className="w-full py-3 bg-red-700 hover:bg-red-600 disabled:opacity-30 disabled:hover:bg-red-700 text-white rounded-sm text-[10px] font-black uppercase tracking-widest transition-all flex items-center justify-center gap-1.5"
+                      >
+                        {isDeleting ? <Loader2 size={12} className="animate-spin" /> : '영구 삭제 실행 (Auth 포함)'}
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <div className="bg-red-500/5 border border-red-500/10 p-3 rounded-sm text-[10px] text-red-400 font-bold leading-relaxed">

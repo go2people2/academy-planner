@@ -10,11 +10,12 @@ interface AddStudentModalProps {
   onSave: (studentData: any) => Promise<void>;
   masterTextbooks: TextbookOption[];
   teachers?: any[]; // 💡 추가
+  currentUser?: any; // 💡 추가
 }
 
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
-export default function AddStudentModal({ onClose, onSave, masterTextbooks, teachers = [] }: AddStudentModalProps) {
+export default function AddStudentModal({ onClose, onSave, masterTextbooks, teachers = [], currentUser }: AddStudentModalProps) {
   const [isSaving, setIsSaving] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
   
@@ -25,7 +26,8 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     course: 'C' as 'E' | 'D' | 'C' | 'B' | 'A',
     class_name: '일반반',
     phone: '',
-    teacher_id: '', // 💡 추가
+    login_suffix: '', // 💡 추가 (번호 중복 로그인 방지 접미사)
+    teacher_id: (currentUser && currentUser.role === 'teacher') ? currentUser.id : '', // 💡 교사 로그인 시 본인 자동 배정
     class_days: [] as string[],
     day_schedules: {} as { [key: string]: number[] },
     assigned_books: [] as string[],
@@ -45,12 +47,19 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSaving) return;
+
+    // 💡 수업 요일 유효성 검사 추가 (요일 미지정 등록 방지)
+    if (!formData.class_days || formData.class_days.length === 0) {
+      alert('⚠️ 최소 하나 이상의 수업 요일을 선택하셔야 등록이 가능합니다.');
+      return;
+    }
+
     setIsSaving(true);
     
-    // 💡 전화번호 숫자만 추출 (하이픈 제거)
     const cleanedData = {
       ...formData,
-      phone: formData.phone.replace(/[^0-9]/g, '')
+      phone: formData.phone.replace(/[^0-9]/g, ''),
+      login_suffix: formData.login_suffix.trim() || null
     };
 
     await onSave(cleanedData);
@@ -247,10 +256,17 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                     {teachers.map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
                   </select>
                 </div>
-                <div className="space-y-1.5">
-                  <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Phone (Password)</label>
-                  <input required type="tel" placeholder="010-0000-0000" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})}
-                    className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Phone (Password)</label>
+                    <input required type="tel" placeholder="010-0000-0000" value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})}
+                      className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-bold" />
+                  </div>
+                  <div className="space-y-1.5">
+                    <label className="text-[10px] font-black text-amber-500 uppercase ml-1 flex items-center gap-1">Login Extra Digit <span className="text-[8px] text-gray-500 lowercase">(중복자용)</span></label>
+                    <input type="text" maxLength={1} placeholder="숫자 1자리 (예: 1)" value={formData.login_suffix || ''} onChange={(e) => setFormData({...formData, login_suffix: e.target.value.replace(/[^0-9]/g, '')})}
+                      className="w-full bg-black/40 border border-amber-500/20 rounded-[2px] py-3 px-4 text-amber-400 placeholder-amber-600/30 text-sm focus:border-amber-500 outline-none transition-all font-bold" />
+                  </div>
                 </div>
               </div>
             </div>

@@ -48,7 +48,20 @@ export default function SystemManual() {
     {
       icon: <UserCog size={20} className="text-indigo-400" />,
       title: "학생 정보 관리 (추가/수정)",
-      desc: "신규 학생을 등록하거나 기존 학생의 정보(수강 반, 등원 요일, 부여된 교재 목록, 앱 비밀번호 초기화)를 수정하고 퇴원 처리를 진행할 수 있습니다."
+      desc: (
+        <div className="space-y-1.5">
+          <p>신규 학생을 등록하거나 기존 학생의 정보(수강 반, 등원 요일, 부여된 교재 목록, 앱 비밀번호 초기화)를 수정하고 퇴원 처리를 진행할 수 있습니다.</p>
+          <div className="p-2 bg-black/25 rounded border border-amber-500/10 text-[11px] text-amber-300 font-bold leading-relaxed">
+            ⚠️ <b>[전화번호 뒷 4자리 중복 해결 가이드]</b><br/>
+            학원에 전화번호 뒷자리가 겹치는 학생들이 존재할 경우, 로그인 페이지 충돌 및 타인 페이지 노출을 방지하기 위해 <b>&apos;Login Extra Digit(추가번호)&apos;</b>를 지정해야 합니다.
+            <ul className="list-disc pl-4 mt-1 space-y-0.5 text-gray-400 font-semibold">
+              <li>중복된 학생들의 상세 수정 창에서 <span className="text-amber-400">Login Extra Digit</span> 칸에 각각 <span className="text-amber-400">1</span>, <span className="text-amber-400">2</span> 등의 숫자를 부여해 저장해 주세요.</li>
+              <li>추가번호를 받은 원생은 학생 페이지 로그인 시 기존의 <span className="text-white">연락처 뒷 4자리 + 부여받은 추가번호 1자리(총 5자리)</span>를 입력하여 안전하게 독립 로그인할 수 있습니다.</li>
+              <li>추가번호가 설정되지 않은 원생은 평소와 똑같이 4자리로 로그인됩니다.</li>
+            </ul>
+          </div>
+        </div>
+      )
     },
     {
       icon: <ArrowLeftRight size={20} className="text-teal-400" />,

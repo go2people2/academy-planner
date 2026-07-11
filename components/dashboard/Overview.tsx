@@ -36,6 +36,7 @@ interface OverviewProps {
   academyInfo?: any;
   searchQuery?: string; // 💡 추가
   onSearchChange?: (val: string) => void; // 💡 추가
+  currentUser?: any; // 💡 추가
 }
 
 export default function Overview({ 
@@ -52,12 +53,46 @@ export default function Overview({
   onStartClass,
   academyInfo,
   searchQuery = '', // 💡 추가
-  onSearchChange // 💡 추가
+  onSearchChange, // 💡 추가
+  currentUser // 💡 추가
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
   const [selectedToRemove, setSelectedToRemove] = useState<string[]>([]);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+
+  // 💡 [추가] 로그인 전화번호 뒷자리 중복 학생 탐지 및 경고 목록 추출
+  const duplicatePhoneStudents = useMemo(() => {
+    if (!filteredAllStudents || filteredAllStudents.length === 0) return [];
+    
+    // 1) 학생들의 뒷 4자리와 login_suffix 현황 매핑
+    const groupMap: Record<string, Student[]> = {};
+    filteredAllStudents.forEach(s => {
+      if (s.is_deleted) return;
+      const cleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
+      if (cleanPhone.length >= 4) {
+        const last4 = cleanPhone.slice(-4);
+        if (!groupMap[last4]) groupMap[last4] = [];
+        groupMap[last4].push(s);
+      }
+    });
+
+    // 2) 중복이 발생했는데 login_suffix가 지정되지 않았거나, login_suffix가 동일하게 설정되어 충돌 우려가 있는 그룹 필터링
+    const duplicates: { last4: string; students: Student[] }[] = [];
+    Object.entries(groupMap).forEach(([last4, list]) => {
+      if (list.length > 1) {
+        const suffixes = list.map(s => (s as any).login_suffix || '');
+        const hasEmptySuffix = suffixes.some(s => s === '');
+        const hasDuplicateSuffix = suffixes.filter((item, index) => suffixes.indexOf(item) !== index).length > 0;
+
+        if (hasEmptySuffix || hasDuplicateSuffix) {
+          duplicates.push({ last4, students: list });
+        }
+      }
+    });
+
+    return duplicates;
+  }, [filteredAllStudents]);
 
   // 💡 [추가] 학생 등록용 엑셀 템플릿 다운로드
   const downloadStudentTemplate = () => {
@@ -322,6 +357,45 @@ export default function Overview({
 
   return (
     <div className="p-2 space-y-6 relative">
+      {/* ⚠️ 로그인 전화번호 중복 탐지 알림 배너 */}
+      {!isArchiveMode && duplicatePhoneStudents.length > 0 && (
+        <div className="bg-amber-500/10 border border-amber-500/20 rounded-[4px] p-4 text-amber-200 text-xs space-y-2 shadow-lg animate-fade-in no-print">
+          <div className="flex items-center gap-2 font-black text-amber-500 uppercase tracking-wider text-[10px]">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
+            ⚠️ 로그인 충돌 경보 (전화번호 뒷 4자리 중복 감지)
+          </div>
+          <p className="text-gray-400 text-[11px] font-bold leading-relaxed">
+            학원에 전화번호 끝자리가 일치하여 로그인 페이지 충돌 우려가 있는 학생들이 발견되었습니다.<br/>
+            선생님은 아래 학생 카드(학생정보 수정 서랍)를 클릭해 <strong>Login Extra Digit (추가번호)</strong>를 <strong>1</strong>, <strong>2</strong> 등으로 부여해 주시면 즉시 해결됩니다.
+          </p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 mt-2 pt-1">
+            {duplicatePhoneStudents.map(group => (
+              <div key={group.last4} className="bg-black/40 border border-amber-500/10 rounded-[2px] p-2.5 space-y-1">
+                <div className="flex justify-between items-center text-[10px] font-black text-amber-500/80 uppercase">
+                  <span>끝자리: {group.last4}</span>
+                  <span className="bg-amber-500/10 px-1 rounded text-[8px]">{group.students.length}명 대기</span>
+                </div>
+                <div className="space-y-1 mt-1">
+                  {group.students.map(s => {
+                    const suffix = (s as any).login_suffix || '';
+                    return (
+                      <div key={s.id} onClick={() => onSelectStudent(s.id)} className="flex items-center justify-between bg-white/[0.02] hover:bg-amber-500/10 p-1.5 rounded-[2px] border border-white/5 cursor-pointer transition-all">
+                        <span className="font-bold text-gray-200">{s.name} <span className="text-[10px] text-gray-400 font-bold">({s.school || '학원생'} {s.grade})</span></span>
+                        {suffix ? (
+                          <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[9px] px-1 rounded font-black">추가번호 {suffix}</span>
+                        ) : (
+                          <span className="bg-red-500/20 text-red-400 border border-red-500/30 text-[9px] px-1 rounded font-black animate-pulse">설정 필요</span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {!isArchiveMode && !hideTodaySection && (
         <section className="space-y-2">
           <div className="flex items-center justify-between gap-4 mb-2">
@@ -718,6 +792,7 @@ export default function Overview({
             onSave={onAddNewStudent}
             masterTextbooks={masterTextbooks}
             teachers={teachers}
+            currentUser={currentUser}
           />
         )}      </AnimatePresence>
     </div>

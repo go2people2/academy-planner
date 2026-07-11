@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import { User, Lock, ArrowRight, Loader2, Phone } from 'lucide-react';
+import { User, Lock, ArrowRight, Loader2, Phone, Sun, Moon } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { supabase } from '@/lib/supabase';
 
@@ -16,6 +16,14 @@ export default function LoginForm({ academy }: { academy: any }) {
   const [isLoading, setIsLoading] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(false);
   const router = useRouter();
+
+  const toggleTheme = () => {
+    const newTheme = !isLightTheme;
+    setIsLightTheme(newTheme);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('theme', newTheme ? 'light' : 'dark');
+    }
+  };
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -71,15 +79,50 @@ export default function LoginForm({ academy }: { academy: any }) {
 
         if (data?.user) {
           // 💡 [중요] Auth 세션 기반으로 ams_teachers 테이블에서 실제 프로필 정보 로드
-          const { data: profile, error: pErr } = await supabase
+          let profile: any = null;
+          const { data: directProfile, error: pErr } = await supabase
             .from('ams_teachers')
-            .select('id, name, role, academy_id')
+            .select('id, name, role, academy_id, user_id')
             .eq('user_id', data.user.id)
             .maybeSingle();
 
-          if (pErr || !profile) {
+          if (directProfile) {
+            profile = directProfile;
+          }
+
+          // 💡 [자가 복구] user_id 매핑이 누락된 경우, login_id 기준으로 복구 및 자동 매핑 시도
+          if (!profile && !pErr) {
+            const { data: fallbackProfile } = await supabase
+              .from('ams_teachers')
+              .select('id, name, role, academy_id, user_id')
+              .eq('login_id', username.trim())
+              .maybeSingle();
+
+            if (fallbackProfile && !fallbackProfile.user_id) {
+              const { error: updateErr } = await supabase
+                .from('ams_teachers')
+                .update({ user_id: data.user.id })
+                .eq('id', fallbackProfile.id);
+
+              if (!updateErr) {
+                console.log('✅ [SELF-HEALING] Connected user_id for:', fallbackProfile.name);
+                profile = { ...fallbackProfile, user_id: data.user.id };
+              }
+            }
+          }
+
+          if (!profile) {
             console.error('Profile fetch error:', pErr);
-            alert('인증은 성공했으나 교사 정보를 찾을 수 없습니다. (마이그레이션 확인 필요)');
+            alert('인증은 성공했으나 교사 정보를 찾을 수 없습니다. (계정 정보 일치 확인 필요)');
+            await supabase.auth.signOut();
+            setIsLoading(false);
+            return;
+          }
+
+          // 💡 [보안 강화] 로그인하려는 학원의 소속이 아닐 경우 접속 차단
+          if (profile.academy_id !== academy.id) {
+            alert('해당 학원에 등록된 선생님이 아닙니다. 접속하신 학원을 확인해 주세요.');
+            await supabase.auth.signOut();
             setIsLoading(false);
             return;
           }
@@ -93,7 +136,12 @@ export default function LoginForm({ academy }: { academy: any }) {
           }));
           
           setIsLoading(false); // 이동 전 로딩 상태 해제
-          router.push(`/${slug}/dashboard`);
+          const savedTheme = localStorage.getItem('theme');
+          if (savedTheme === 'light') {
+            router.push(`/${slug}/dashboard-light`);
+          } else {
+            router.push(`/${slug}/dashboard`);
+          }
         }
       } else {
         // 3. 학생 로그인 체크 (ams_students 테이블 조회)
@@ -101,7 +149,7 @@ export default function LoginForm({ academy }: { academy: any }) {
         const isMasterAccess = phoneLast4 === masterPasskey;
 
         if (!phoneLast4 || phoneLast4.length < 4) {
-          alert('번호 4자리를 입력해 주세요.');
+          alert('번호 4~5자리를 입력해 주세요.');
           setIsLoading(false);
           return;
         }
@@ -127,21 +175,46 @@ export default function LoginForm({ academy }: { academy: any }) {
             return;
           }
 
-          // 일반 4자리 조회
-          const { data: list, error: sErr } = await supabase
-            .from('ams_students')
-            .select('*')
-            .eq('academy_id', academy.id)
-            .is('is_deleted', false)
-            .like('phone', `%${phoneLast4}`);
+          // 일반 4자리 또는 5자리 조회 처리
+          const inputLen = phoneLast4.length;
+          let matchedList: any[] = [];
 
-          if (sErr) throw sErr;
+          if (inputLen === 5) {
+            const base4 = phoneLast4.slice(0, 4);
+            const suffix = phoneLast4.slice(4);
 
-          // 실제 전화번호 뒷 4자리 재검증
-          const matchedList = (list || []).filter(s => {
-            const sCleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
-            return sCleanPhone.endsWith(phoneLast4);
-          });
+            const { data: list, error: sErr } = await supabase
+              .from('ams_students')
+              .select('*')
+              .eq('academy_id', academy.id)
+              .is('is_deleted', false)
+              .eq('login_suffix', suffix)
+              .like('phone', `%${base4}`);
+
+            if (sErr) throw sErr;
+
+            matchedList = (list || []).filter(s => {
+              const sCleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
+              return sCleanPhone.endsWith(base4);
+            });
+          } else {
+            // 기존 4자리 조회
+            const { data: list, error: sErr } = await supabase
+              .from('ams_students')
+              .select('*')
+              .eq('academy_id', academy.id)
+              .is('is_deleted', false)
+              .like('phone', `%${phoneLast4}`);
+
+            if (sErr) throw sErr;
+
+            matchedList = (list || []).filter(s => {
+              const sCleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
+              // 💡 4자리만 입력했을 때는 추가 번호(login_suffix)가 설정되지 않은 학생만 매칭시킵니다.
+              const hasNoSuffix = !s.login_suffix;
+              return sCleanPhone.endsWith(phoneLast4) && hasNoSuffix;
+            });
+          }
 
           if (matchedList.length === 0) {
             alert('등록된 학생 정보를 찾을 수 없습니다.');
@@ -179,12 +252,28 @@ export default function LoginForm({ academy }: { academy: any }) {
       <motion.div 
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
-        className={`z-10 w-full max-w-md p-8 rounded-lg border transition-all duration-350 ${
+        className={`relative z-10 w-full max-w-md p-8 rounded-lg border transition-all duration-350 ${
           isLightTheme 
             ? 'bg-white border-[#e3e2e0] shadow-xl text-[#37352f]' 
             : 'bg-[#111111]/80 backdrop-blur-xl border-white/10 shadow-2xl text-white'
         }`}
       >
+        {/* 테마 토글 플로팅 버튼 */}
+        <div className="absolute top-4 right-4 z-20">
+          <button
+            type="button"
+            onClick={toggleTheme}
+            className={`p-2 rounded-full border transition-all active:scale-95 flex items-center justify-center ${
+              isLightTheme 
+                ? 'bg-[#f4f4f5] hover:bg-gray-200 border-[#edece9] text-amber-500' 
+                : 'bg-white/5 hover:bg-white/10 border-white/10 text-indigo-400'
+            }`}
+            title={isLightTheme ? "Dark Mode로 전환" : "Light Mode로 전환"}
+          >
+            {isLightTheme ? <Sun size={14} /> : <Moon size={14} />}
+          </button>
+        </div>
+
         <div className="text-center mb-8">
           <h1 className={`text-3xl font-black tracking-tight mb-2 uppercase ${
             isLightTheme ? 'text-[#37352f]' : 'text-white'
@@ -323,7 +412,7 @@ export default function LoginForm({ academy }: { academy: any }) {
               ) : (
                 <div className="space-y-1">
                   <label className="text-[13px] font-bold text-gray-500 tracking-tight ml-1">
-                    학생 패스코드 (전화번호 뒷 4자리)
+                    학생 패스코드 (전화번호 뒷 4자리 + 추가번호)
                   </label>
                   <div className="relative group">
                     <Lock className={`absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 transition-colors ${
@@ -331,8 +420,8 @@ export default function LoginForm({ academy }: { academy: any }) {
                     }`} />
                     <input 
                       type="tel"
-                      maxLength={4}
-                      placeholder="번호 4자리 입력"
+                      maxLength={5}
+                      placeholder="번호 4~5자리 입력"
                       value={phoneLast4}
                       onChange={(e) => setPhoneLast4(e.target.value.replace(/[^0-9]/g, ''))}
                       className={`w-full border rounded-[4px] py-4 pl-12 pr-4 outline-none transition-all font-black text-lg tracking-[0.3em] text-center ${

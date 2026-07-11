@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck, ClipboardCheck, TrendingUp } from 'lucide-react';
+import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck, ClipboardCheck, TrendingUp, Printer } from 'lucide-react';
+import HokmaJournalPrintModal from './todaySheet/HokmaJournalPrintModal';
 import { Student, TextbookOption } from '@/types/dashboard';
 
 interface StudentDetailDrawerProps {
@@ -12,17 +13,19 @@ interface StudentDetailDrawerProps {
   onUpdateInfo: (studentId: string, fieldOrUpdates: string | any, value?: any) => void;
   onAddToToday: (studentId: string) => void;
   onClose: () => void;
+  academyInfo?: any; // 💡 학원 정보
 }
 
 const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 export default function StudentDetailDrawer({
-  student, availableTextbooks, teachers, isRefreshingBooks, onRefreshBooks, onUpdateInfo, onAddToToday, onClose
+  student, availableTextbooks, teachers, isRefreshingBooks, onRefreshBooks, onUpdateInfo, onAddToToday, onClose, academyInfo
 }: StudentDetailDrawerProps) {
   const [localSchedules, setLocalSchedules] = useState<{[key: string]: number[]}>(student.day_schedules || {});
   const [startTimes, setStartTimes] = useState<Record<string, string>>({});
   const [endTimes, setEndTimes] = useState<Record<string, string>>({});
   const [localDays, setLocalDays] = useState<string[]>(student.class_days || []);
+  const [isHokmaPrintOpen, setIsHokmaPrintOpen] = useState(false); // 💡 호크마 일지 인쇄 모달 상태 추가
   const [localName, setLocalName] = useState(student.name);
   const [localSchool, setLocalSchool] = useState(student.school || '');
   const [localGrade, setLocalGrade] = useState(student.grade);
@@ -31,9 +34,8 @@ export default function StudentDetailDrawer({
   const [localClass, setLocalClass] = useState(student.class);
   const [localStudentPhone, setLocalStudentPhone] = useState('');
   const [localParentPhone, setLocalParentPhone] = useState('');
+  const [localLoginSuffix, setLocalLoginSuffix] = useState(''); // 💡 추가 (번호 중복 로그인 방지용)
   const [localTeacherId, setLocalTeacherId] = useState(student.teacher_id || '');
-  const [localManagementNotes, setLocalManagementNotes] = useState(student.management_notes || ''); 
-  const [localRecentMission, setLocalRecentMission] = useState(student.recent_mission || ''); // 💡 추가
   const [bookSearch, setBookSearch] = useState('');
   const [isDropdownOpen, setIsDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -119,8 +121,7 @@ export default function StudentDetailDrawer({
       setLocalParentPhone('');
     }
     setLocalTeacherId(student.teacher_id || '');
-    setLocalManagementNotes(student.management_notes || '');
-    setLocalRecentMission(student.recent_mission || '');
+    setLocalLoginSuffix(student.login_suffix || ''); // 💡 추가
   }, [student.id]);
 
   const handleSavePhone = (studentPhoneVal: string, parentPhoneVal: string) => {
@@ -128,6 +129,11 @@ export default function StudentDetailDrawer({
     const pClean = parentPhoneVal.trim();
     const combined = pClean ? `${sClean} (부모: ${pClean})` : sClean;
     onUpdateInfo(student.id, 'phone', combined);
+  };
+
+  const handleSaveLoginSuffix = (suffixVal: string) => {
+    const clean = suffixVal.trim().replace(/[^0-9]/g, '');
+    onUpdateInfo(student.id, 'login_suffix', clean || null);
   };
 
   const filteredBooks = useMemo(() => {
@@ -270,7 +276,16 @@ export default function StudentDetailDrawer({
           <h3 className="text-sm font-black text-gray-300 uppercase tracking-[0.2em]">Student Profile</h3>
           {student.is_deleted && <span className="bg-red-500/10 text-red-500 text-[9px] font-black px-2 py-0.5 rounded-[2px] border border-red-500/20">퇴원생</span>}
         </div>
-        <button onClick={onClose} className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-white/10 transition-colors"><X size={18} /></button>
+        <div className="flex items-center gap-2">
+          <button 
+            onClick={() => setIsHokmaPrintOpen(true)}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:bg-amber-600 hover:text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest transition-all"
+            title="이 학생의 월간 호크마 일지 인쇄"
+          >
+            <Printer size={12} /> 일지인쇄
+          </button>
+          <button onClick={onClose} className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-white/10 transition-colors"><X size={18} /></button>
+        </div>
       </div>
       
       <div className="flex-1 space-y-10">
@@ -454,6 +469,13 @@ export default function StudentDetailDrawer({
                 }}
                 className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
+            <div className="relative group col-span-2 flex items-center gap-2 bg-amber-500/5 border border-amber-500/10 rounded-[2px] p-2 mt-1">
+              <span className="text-[10px] text-amber-500 font-black tracking-tight shrink-0 uppercase">Login Extra Digit <span className="text-[8px] text-amber-600/50 lowercase">(중복자용)</span> :</span>
+              <input type="text" maxLength={1} value={localLoginSuffix} placeholder="없음 (보통 비워둡니다)"
+                onChange={(e) => setLocalLoginSuffix(e.target.value.replace(/[^0-9]/g, ''))}
+                onBlur={() => handleSaveLoginSuffix(localLoginSuffix)}
+                className="flex-1 bg-transparent border-none text-xs text-amber-400 font-bold outline-none placeholder-amber-500/20 py-1" />
+            </div>
           </div>
 
           <div className="pt-2 border-t border-white/5 flex items-center justify-between gap-4">
@@ -626,61 +648,9 @@ export default function StudentDetailDrawer({
           </div>
         </section>
 
-        {/* 5. 💡 선생님 전용 관리 메모 (포스트잇 스타일) */}
-        <section className="space-y-3">
-          <div className="flex items-center justify-between px-1">
-            <h5 className="text-[10px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-2">
-              <ClipboardCheck size={14} /> Teacher's Management Notes
-            </h5>
-            <span className="text-[8px] font-bold text-gray-600 uppercase">선생님간 공유 / 학생 비노출</span>
-          </div>
-          
-          <div className="relative group/postit">
-            <div className="absolute inset-0 bg-amber-200 rounded-sm shadow-[5px_5px_15px_rgba(0,0,0,0.3)] rotate-[-1deg] transition-transform group-hover/postit:rotate-0" />
-            <div className="relative bg-amber-100/90 backdrop-blur-sm p-5 min-h-[120px] rounded-sm flex flex-col shadow-inner">
-              <textarea 
-                value={localManagementNotes}
-                maxLength={300}
-                onChange={(e) => setLocalManagementNotes(e.target.value)}
-                onBlur={() => onUpdateInfo(student.id, 'management_notes', localManagementNotes)}
-                placeholder="이 학생에 대해 꼭 기억해야 할 핵심 내용을 적어주세요 (성향, 주의사항 등)..."
-                className="w-full bg-transparent border-none text-[13px] font-bold text-amber-900/80 outline-none resize-none leading-relaxed placeholder:text-amber-700/60 flex-1 custom-scrollbar-v"
-              />
-              <div className="flex justify-between items-center mt-3 pt-2 border-t border-amber-900/10">
-                <span className="text-[8px] font-black text-amber-800/40 uppercase tracking-tighter">Sticky Note</span>
-                <span className={`text-[9px] font-black ${localManagementNotes.length >= 280 ? 'text-red-500' : 'text-amber-800/40'}`}>
-                  {localManagementNotes.length}/300
-                </span>
-              </div>
-            </div>
-            <div className="absolute bottom-0 right-0 w-4 h-4 bg-amber-300/50 rounded-tl-full shadow-[-2px_-2px_5px_rgba(0,0,0,0.1)] pointer-events-none" />
-          </div>
-        </section>
 
-        {/* 5. 💡 학생 노출용 미션 설정 (블루 테마) */}
-        <section className="space-y-3 pt-4 border-t border-white/5">
-          <div className="flex items-center justify-between px-1">
-            <h5 className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
-              <TrendingUp size={14} /> Student Recent Mission
-            </h5>
-            <span className="text-[8px] font-bold text-gray-300 uppercase">학생 대시보드에 상시 노출</span>
-          </div>
-          
-          <div className="relative group/mission">
-            <div className="relative bg-blue-600/5 border border-blue-500/20 p-5 min-h-[100px] rounded-sm flex flex-col shadow-inner">
-              <textarea 
-                value={localRecentMission}
-                onChange={(e) => setLocalRecentMission(e.target.value)}
-                onBlur={() => onUpdateInfo(student.id, 'recent_mission', localRecentMission)}
-                placeholder="학생에게 전달할 이번 주 미션을 입력하세요..."
-                className="w-full bg-transparent border-none text-[12px] font-bold text-blue-100 placeholder:text-blue-400/60 outline-none resize-none flex-1 leading-relaxed"
-              />
-              <div className="absolute bottom-2 right-2 opacity-20 group-hover/mission:opacity-40 transition-opacity">
-                <TrendingUp size={32} className="text-blue-400" />
-              </div>
-            </div>
-          </div>
-        </section>
+
+
 
         {/* 6. 💡 학생 관리 (재원, 퇴원) */}
         <section className="space-y-4 pt-10 border-t border-white/5">
@@ -833,6 +803,13 @@ export default function StudentDetailDrawer({
           </div>
         )}
       </AnimatePresence>
+      <HokmaJournalPrintModal
+        isOpen={isHokmaPrintOpen}
+        onClose={() => setIsHokmaPrintOpen(false)}
+        selectedStudents={[student]}
+        masterTextbooks={availableTextbooks}
+        academyInfo={academyInfo}
+      />
     </motion.div>
   );
 }

@@ -177,7 +177,7 @@ export default function Sidebar({
             <h3 className="text-[9px] font-bold text-[#37352f]/45 uppercase tracking-widest">Filter</h3>
             <div className="flex bg-[#edece9]/50 rounded-[2px] p-0.5 border border-[#edece9]">
               {(['all', 'today', 'rest'] as const).map((t) => (
-                <button key={t} onClick={() => setFilterTarget(t)} className={`text-[7px] px-1.5 py-0.5 rounded-[1px] font-black uppercase transition-all ${filterTarget === t ? 'bg-[#edece9] text-[#37352f] shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>
+                <button key={t} onClick={() => setFilterTarget(t)} className={`text-[7px] px-1.5 py-0.5 rounded-[1px] font-black uppercase transition-all ${filterTarget === t ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>
                   {t === 'all' ? 'All' : t === 'today' ? 'Top' : 'Btm'}
                 </button>
               ))}
@@ -201,10 +201,10 @@ export default function Sidebar({
                            setSelectedFilter(g.key);
                          }
                        }} 
-                       className={`flex-1 flex flex-col items-center py-1 rounded-[1px] transition-all ${isActive ? 'bg-[#edece9] text-[#37352f] shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}
+                       className={`flex-1 flex flex-col items-center py-1 rounded-[1px] transition-all ${isActive ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}
                     >
                       <span className="text-[9px] font-black uppercase">{g.label}</span>
-                      <span className={`text-[7px] font-bold opacity-80 ${isActive ? 'text-[#37352f]' : 'text-[#37352f]/50'}`}>
+                      <span className={`text-[7px] font-bold opacity-80 ${isActive ? 'text-white/90' : 'text-[#37352f]/50'}`}>
                         {g.key === 'All' ? students.filter(s => !s.is_deleted).length : students.filter(s => !s.is_deleted && s.grade.includes(g.key)).length}
                       </span>
                     </button>
@@ -232,7 +232,7 @@ export default function Sidebar({
                               onClick={() => setSelectedFilter(isSubActive ? '초' : gradeKey)}
                               className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
                                 isSubActive 
-                                  ? 'bg-[#edece9] text-[#37352f] shadow-sm' 
+                                  ? 'bg-[#0c73e8] text-white border border-[#0c73e8] shadow-md' 
                                   : 'bg-white border border-[#edece9] text-[#37352f]/70 hover:bg-[#edece9]/55'
                               }`}
                             >
@@ -253,7 +253,7 @@ export default function Sidebar({
                               onClick={() => setSelectedFilter(isSubActive ? '중' : gradeKey)}
                               className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
                                 isSubActive 
-                                  ? 'bg-[#edece9] text-[#37352f] shadow-sm' 
+                                  ? 'bg-[#0c73e8] text-white border border-[#0c73e8] shadow-md' 
                                   : 'bg-white border border-[#edece9] text-[#37352f]/70 hover:bg-[#edece9]/55'
                               }`}
                             >
@@ -274,7 +274,7 @@ export default function Sidebar({
                               onClick={() => setSelectedFilter(isSubActive ? '고' : gradeKey)}
                               className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
                                 isSubActive 
-                                  ? 'bg-[#edece9] text-[#37352f] shadow-sm' 
+                                  ? 'bg-[#0c73e8] text-white border border-[#0c73e8] shadow-md' 
                                   : 'bg-white border border-[#edece9] text-[#37352f]/70 hover:bg-[#edece9]/55'
                               }`}
                             >
@@ -301,8 +301,8 @@ export default function Sidebar({
               {selectedDays.length > 0 && (
                 <div className="flex items-center justify-between px-0.5">
                   <div className="flex items-center gap-0.5 bg-[#edece9]/50 p-0.5 rounded-[2px] border border-[#edece9]">
-                    <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-[#edece9] text-[#37352f] shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>AND</button>
-                    <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-[#edece9] text-[#37352f] shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>OR</button>
+                    <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>AND</button>
+                    <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>OR</button>
                   </div>
                   <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-600 hover:text-blue-500 lowercase font-bold tracking-normal text-[8px] px-1">reset</button>
                 </div>

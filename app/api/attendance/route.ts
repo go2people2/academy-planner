@@ -31,6 +31,20 @@ function isLate(firstPeriodTime: string, lateThreshold: number): boolean {
   return hour * 60 + minute > fh * 60 + fm + lateThreshold;
 }
 
+function getStudentStartHour(student: any, todayDayKST: string, existingSession: any): number | null {
+  if (existingSession?.moved_to_hour !== undefined && existingSession?.moved_to_hour !== null) {
+    return existingSession.moved_to_hour;
+  }
+  const hours = student.day_schedules?.[todayDayKST] || [];
+  if (hours.length > 0) {
+    const firstVal = hours[0];
+    let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+    if (h <= 12) h += 12;
+    return h;
+  }
+  return null;
+}
+
 function getDayOfWeekKST(): string {
   const kst = new Date(Date.now() + 9 * 3600 * 1000);
   const days = ['일', '월', '화', '수', '목', '금', '토'];
@@ -59,10 +73,11 @@ export async function GET(request: NextRequest) {
 
   const today = getTodayKST();
 
-  // 오늘 등원 기록이 있는 세션 조회 (등원 + 하원 모두 포함)
+  // 오늘 등원 기록이 있는 세션 조회 (해당 학원 전용)
   const { data: logs } = await supabase
     .from('ams_session_logs')
     .select('id, student_id, attendance_status, check_in_at, check_out_at')
+    .eq('academy_id', academy.id) // 💡 [보안 강화] 해당 학원 데이터만 필터링
     .eq('session_date', today)
     .not('check_in_at', 'is', null)
     .order('check_in_at', { ascending: false })
@@ -134,7 +149,7 @@ export async function POST(request: NextRequest) {
   // 2. [조회 1단계] 학생 명단 조회
   const { data: students } = await supabase
     .from('ams_students')
-    .select('id, name, phone, class_days')
+    .select('id, name, phone, class_days, day_schedules')
     .eq('academy_id', academy.id)
     .eq('is_deleted', false)
     .like('phone', `%${digits}`);
@@ -308,7 +323,21 @@ export async function POST(request: NextRequest) {
 
   // 등원 처리
   if (!existing || !existing.check_in_at) {
-    const attendanceStatus = isLate(ops.first_period_time || '', ops.late_threshold ?? 10) ? '지각' : '출석';
+    const todayDayKST = getDayOfWeekKST();
+    const sStartHour = getStudentStartHour(student, todayDayKST, existing);
+    
+    let attendanceStatus = '출석';
+    if (sStartHour !== null) {
+      const { hour: curH, minute: curM } = getNowKST();
+      const classLimitMinutes = sStartHour * 60 + (ops.late_threshold ?? 10);
+      const currentMinutes = curH * 60 + curM;
+      if (currentMinutes > classLimitMinutes) {
+        attendanceStatus = '지각';
+      }
+    } else {
+      attendanceStatus = isLate(ops.first_period_time || '', ops.late_threshold ?? 10) ? '지각' : '출석';
+    }
+
     const { error } = await supabase
       .from('ams_session_logs')
       .upsert(

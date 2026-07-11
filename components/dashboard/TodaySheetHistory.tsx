@@ -66,9 +66,26 @@ const renderHighlightedHistoryText = (text: string, isLight: boolean = false) =>
   });
 };
 
+// 💡 빈 껍데기 세션 로그(출결도 없고 학습 내용도 없는 가짜 로그) 판정 헬퍼
+const isValidHistoryLog = (l: any) => {
+  if (!l) return false;
+  const hasStatus = l.status && l.status !== 'none';
+  const hasAttendance = l.attendance_status && l.attendance_status !== '출석전' && l.attendance_status !== 'BEFORE';
+  const hasContent = (l.classwork_text || '').trim() || 
+                     (l.completed_classwork_text || '').trim() || 
+                     (l.homework_text || '').trim() || 
+                     (l.special_notes || '').trim() || 
+                     (l.mission || '').trim();
+  const hasTest = l.test_completed || (l.test_score !== undefined && l.test_score !== null && l.test_score !== '');
+  
+  return hasStatus || hasAttendance || hasContent || hasTest;
+};
+
 export const HistoryRows = React.memo(function HistoryRows({ student, activeColumns, colWidths, isExpanded, selectedDate, limit = 3, masterTextbooks, isLight = false }: HistoryRowsProps) {
   if (!isExpanded) return null;
-  const pastLogs = (student.allLogs || []).filter((l: any) => l.date && l.date < selectedDate).sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+  const pastLogs = (student.allLogs || [])
+    .filter((l: any) => l.date && l.date < selectedDate && isValidHistoryLog(l))
+    .sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
   const history = pastLogs.slice(0, limit); 
 
   const translateBook = (bookName: string) => {

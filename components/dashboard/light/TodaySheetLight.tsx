@@ -17,6 +17,7 @@ import { HistoryRows } from '../TodaySheetHistory';
 import ReportPreview from '../ReportPreview';
 import PrintPreviewModal from '../todaySheet/PrintPreviewModal';
 import StudentReportCardPrintModal from '../todaySheet/StudentReportCardPrintModal';
+import HokmaJournalPrintModal from '../todaySheet/HokmaJournalPrintModal';
 import { TagBatchInputModal } from '../todaySheet/TagBatchInputModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import { ChecklistTabLight } from './ChecklistTabLight';
@@ -53,7 +54,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 // --- Sub-components ---
 
-function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onBatchQuizCut, onSelectAll, isAllSelected, onFocusColumn, focusColumn, onColumnReorder }: any) {
+function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onSelectAll, isAllSelected, onFocusColumn, focusColumn, onColumnReorder }: any) {
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
   const lastDataColumnId = React.useMemo(() => {
     const dataCols = activeColumns.filter((c: any) => c.id !== 'action');
@@ -236,22 +237,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
                       )
                     )}
                   </div>
-                  {col.id === 'next_quiz' && onBatchQuizCut && (
-                    <div className="relative group/batch" title="모든 학생 커트라인 일괄 설정">
-                       <select 
-                        onChange={(e) => onBatchQuizCut(parseInt(e.target.value))}
-                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                        defaultValue=""
-                      >
-                        <option value="" disabled>전체 설정</option>
-                        {[...Array(11)].map((_, i) => <option key={i} value={i} className="bg-[#121212]">{i}개</option>)}
-                      </select>
-                      <div className="flex items-center gap-1 bg-indigo-500/20 hover:bg-indigo-500 hover:text-white px-1.5 py-0.5 rounded-[2px] border border-indigo-500/30 transition-all cursor-pointer">
-                        <span className="text-[7px] font-black tracking-tighter">SET ALL</span>
-                        <Percent size={8} strokeWidth={4} />
-                      </div>
-                    </div>
-                  )}
+
                 </>
               )}
               </div>
@@ -514,6 +500,7 @@ export default function TodaySheet({
   const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false); // 💡 인쇄 미리보기 모달 상태 추가
   const [isCardPrintOpen, setIsCardPrintOpen] = useState(false); // 💡 학생별 안내장 인쇄 모달 상태 추가
+  const [isHokmaPrintOpen, setIsHokmaPrintOpen] = useState(false); // 💡 호크마 일지 인쇄 모달 상태 추가
   const checklistRef = React.useRef<any>(null); // 💡 체크리스트 ref 추가
   const [isTagBatchMode, setIsTagBatchMode] = useState(false); // 💡 태그별 일괄입력 모달 상태 추가
 
@@ -1225,19 +1212,7 @@ export default function TodaySheet({
 
   const handleSendAll = async () => { if (!confirm(`${students.length}명 일괄 발송하시겠습니까?`)) return; setIsSendingReport('all'); let count = 0; for (const s of students) { try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: s.id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) count++; } catch(e){} } alert(`${count}명 완료`); setIsSendingReport(null); };
   const handleSendIndividual = async (id: string) => { const s = students.find((st:any) => st.id === id); if (!s) return; setIsSendingReport(id); try { const res = await fetch('/api/report', { method: 'POST', body: JSON.stringify({ studentId: id, sessionDate: selectedDate, academyId: academyInfo.id }) }); if (res.ok) alert(`${s.name} 발송 완료`); } catch(e){} finally { setIsSendingReport(null); } };
-  const handleBatchQuizCut = async (cut: number) => {
-    const actives = students.filter((s:any) => !s.is_deleted);
-    if (actives.length === 0) return;
-    if (!confirm(`${actives.length}명 커트라인을 ${cut}개로 변경하시겠습니까?`)) return;
-    setIsSendingReport('batch-cut');
-    try {
-      // 💡 [수정] 전체 세션 데이터를 보내지 않고 변경된 필드만 명시적으로 전송
-      await Promise.all(actives.map((s:any) => handleSave(s.id, { next_quiz_cut: cut })));
-      alert('변경 완료');
-    } catch(e){} finally {
-      setIsSendingReport(null);
-    }
-  };
+
   const gradeStats = useMemo(() => { const stats: Record<string, number> = {}; ['초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'].forEach(g => stats[g] = 0); students.forEach((s:any) => { if (stats[s.grade] !== undefined) stats[s.grade]++; }); return stats; }, [students]);
 
   return (
@@ -1642,7 +1617,18 @@ export default function TodaySheet({
                   }} 
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 border border-emerald-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg mr-1.5"
                 >
-                  <Printer size={12} /> 안내장 인쇄
+                  <Printer size={12} /> 안내장
+                </button>
+                <button 
+                  onClick={() => {
+                    if (document.activeElement instanceof HTMLElement) {
+                      document.activeElement.blur();
+                    }
+                    setTimeout(() => setIsHokmaPrintOpen(true), 150);
+                  }} 
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 border border-amber-500 text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest hover:bg-amber-500 transition-all shadow-lg mr-1.5"
+                >
+                  <Printer size={12} /> 개별일지
                 </button>
                 <button 
                   onClick={() => {
@@ -1675,7 +1661,7 @@ export default function TodaySheet({
           onScroll={handleScroll}
         >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onBatchQuizCut={handleBatchQuizCut} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} /></thead>
           <tbody className="divide-y divide-[#edece9] bg-white">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
@@ -1784,6 +1770,16 @@ export default function TodaySheet({
         onClose={() => setIsCardPrintOpen(false)}
         students={selectedIds.length > 0 ? filteredStudents.filter((s: any) => selectedIds.includes(s.id)) : filteredStudents}
         selectedDate={selectedDate}
+        academyInfo={academyInfo}
+      />
+      <HokmaJournalPrintModal
+        isOpen={isHokmaPrintOpen}
+        onClose={() => setIsHokmaPrintOpen(false)}
+        selectedStudents={selectedIds.length > 0 ? filteredStudents.filter((s: any) => selectedIds.includes(s.id)) : filteredStudents}
+        allStudents={students}
+        selectedTeacherId={selectedTeacherId}
+        masterTextbooks={masterTextbooks}
+        initialMonth={selectedDate.substring(0, 7)}
         academyInfo={academyInfo}
       />
 
