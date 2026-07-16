@@ -5,7 +5,7 @@ interface UseBookProgressProps {
   student: Student;
   bookCode: string;
   textbook: any;
-  onSaveLegacy?: (studentId: string, bookCode: string, unitName: string) => Promise<boolean>;
+  onSaveLegacy?: (studentId: string, bookCode: string, unitName: string, mode?: 'add' | 'remove') => Promise<boolean>;
 }
 
 export function useBookProgress({ student, bookCode, textbook, onSaveLegacy }: UseBookProgressProps) {
@@ -57,20 +57,26 @@ export function useBookProgress({ student, bookCode, textbook, onSaveLegacy }: U
     fetchUnits();
   }, [textbook]);
 
-  // 4. 단원 수동 완료 처리 핸들러
+  // 4. 단원 수동 완료/취소 토글 핸들러
   const handleFlagClick = async (targetUnitIdx: number) => {
     if (!onSaveLegacy || isSavingLegacy) return;
 
     const targetUnitName = units[targetUnitIdx].unit;
+    const isAlreadyCompleted = completedUnitNames.has(targetUnitName);
 
-    if (!confirm(`[${targetUnitName}] 단원을 완료 처리하시겠습니까?\n(기존 기록이 없어도 완료바가 100% 차게 됩니다)`)) return;
-
-    setIsSavingLegacy(targetUnitName);
-    const success = await onSaveLegacy(student.id, textbook.bookcode, targetUnitName);
-    setIsSavingLegacy(null);
-
-    if (success) {
-      alert(`[${targetUnitName}] 단원이 완료 처리되었습니다.`);
+    if (isAlreadyCompleted) {
+      // 완료 취소
+      if (!confirm(`[${targetUnitName}] 단원의 완료를 취소하시겠습니까?\n이전 진행률로 돌아갑니다.`)) return;
+      setIsSavingLegacy(targetUnitName);
+      await onSaveLegacy(student.id, textbook.bookcode, targetUnitName, 'remove');
+      setIsSavingLegacy(null);
+    } else {
+      // 완료 처리
+      if (!confirm(`[${targetUnitName}] 단원을 완료 처리하시겠습니까?\n(기존 기록이 없어도 완료바가 100% 차게 됩니다)`)) return;
+      setIsSavingLegacy(targetUnitName);
+      const success = await onSaveLegacy(student.id, textbook.bookcode, targetUnitName, 'add');
+      setIsSavingLegacy(null);
+      if (success) alert(`[${targetUnitName}] 단원이 완료 처리되었습니다.`);
     }
   };
 

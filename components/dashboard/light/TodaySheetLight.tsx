@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Send, Loader2, Settings2, Check, 
@@ -24,6 +25,7 @@ import { ChecklistTabLight } from './ChecklistTabLight';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetShortcuts } from '../hooks/useTodaySheetShortcuts';
+import { useCoopCollaboration } from '@/hooks/useCoopCollaboration';
 
 interface ColumnConfig {
   id: string;
@@ -494,6 +496,22 @@ export default function TodaySheet({
   const [expandedHistory, setExpandedHistory] = useState<Record<string, number>>({});
   const [isSendingReport, setIsSendingReport] = useState<string | null>(null);
   const [isReportVisible, setIsReportVisible] = useState(false);
+  // 📝 [리팩토링] 다중 기기 실시간 편집 및 협업 상태 분리 훅 호출
+  const { cooperatingCells, sendCoopEvent } = useCoopCollaboration(academyInfo?.id);
+
+  // 📝 편집 셀 상태 변경 및 브로드캐스트 전송 일괄 래퍼 함수
+  const updateEditingCell = useCallback((next: { studentId: string, columnId: string } | null) => {
+    setEditingCell((prev) => {
+      if (prev) {
+        sendCoopEvent('focus_out', prev.studentId, prev.columnId);
+      }
+      if (next) {
+        sendCoopEvent('focus_in', next.studentId, next.columnId);
+      }
+      return next;
+    });
+  }, [sendCoopEvent]);
+
   const [isExportOpen, setIsExportOpen] = useState(false);
   const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
@@ -1128,9 +1146,9 @@ export default function TodaySheet({
       setSelectedRange({ startStudentId: studentId, startColId: colId, endStudentId: studentId, endColId: colId });
       setIsDragging(true);
       if (!isShift) { setActiveCell({ studentId, columnId: colId }); }
-      setEditingCell(null);
+      updateEditingCell(null);
     });
-  }, []);
+  }, [updateEditingCell]);
 
   const onCellMouseEnter = useCallback((studentId: string, colId: string) => {
     if (!isDragging || !selectedRange) return;
@@ -1140,14 +1158,14 @@ export default function TodaySheet({
   const handleActiveCellChange = useCallback((studentId: string, colId: string) => { 
     requestAnimationFrame(() => {
       setActiveCell({ studentId, columnId: colId }); 
-      setEditingCell(null);
+      updateEditingCell(null);
     });
-  }, []);
+  }, [updateEditingCell]);
   const handleEditingCellChange = useCallback((studentId: string, colId: string | null) => { 
     requestAnimationFrame(() => {
-      setEditingCell(colId ? { studentId, columnId: colId } : null); 
+      updateEditingCell(colId ? { studentId, columnId: colId } : null); 
     });
-  }, []);
+  }, [updateEditingCell]);
   const toggleHistory = useCallback((studentId: string) => { setExpandedHistory(prev => ({ ...prev, [studentId]: prev[studentId] ? 0 : 3 })); }, []);
 
   const handleSetSwitch = useCallback((setId: string) => { 
@@ -1725,6 +1743,7 @@ export default function TodaySheet({
                     <TodaySheetRow
                       key={`${s.id}-${selectedDate}`}
                       student={s}
+                      cooperatingCells={cooperatingCells}
                       rowIndex={idx}
                       masterTextbooks={masterTextbooks}
                       onSave={handleSave}

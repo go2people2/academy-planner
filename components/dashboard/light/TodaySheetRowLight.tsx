@@ -41,6 +41,7 @@ interface TodaySheetRowProps {
   timeSectionLabel?: string;
   isScrolled?: boolean;
   historyLimit?: number;
+  cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number }>; // 📝 [추가] 실시간 협업 셀 맵
 }
 
 /**
@@ -52,7 +53,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     selectedDate, isHistoryExpanded, onToggleHistory, activeCell, editingCell,
     onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
     selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
-    rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel
+    rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel,
+    cooperatingCells
   } = props;
 
   // 💡 단축어 및 트리거 기호 추출
@@ -158,6 +160,7 @@ useEffect(() => {
             <TodaySheetCell
               key={col.id}
               col={col}
+              cooperatingCells={cooperatingCells}
               snippets={localSnippets}
               snippetTrigger={snippetTrigger}
               isFirstInTimeSection={isFirstInTimeSection}

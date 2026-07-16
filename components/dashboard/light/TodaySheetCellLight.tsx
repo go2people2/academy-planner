@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
 import { getDayOfWeek } from '@/lib/utils';
@@ -81,6 +81,7 @@ interface TodaySheetCellProps {
   rowIndex?: number;
   onApplyTestPreset?: (preset: any, colId: 'test_id' | 'next_quiz') => void;
   onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
+  cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number }>; // 📝 [추가] 실시간 협업 편집 중인 셀 맵
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
@@ -98,9 +99,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   snippetTrigger,
   isFirstInTimeSection,
   timeSectionLabel,
-  testPresets,
   onApplyTestPreset,
-  onUpdateStudentInfo
+  onUpdateStudentInfo,
+  cooperatingCells // 📝 [추가] 실시간 협업 셀 맵
 }: TodaySheetCellProps) {
   
   const colId = col.id;
@@ -147,6 +148,21 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     colId === 'notes' ? formData.special_notes : '';
 
   const dynamicPadding = getDynamicPadding(currentText);
+
+  // 🔒 [추가] 학생이 모바일로 제출하여 승인 대기 상태인지 검사
+  const isSubmitted = ['pending', 'submitted'].includes(student.todaySession?.approval_status || '');
+  // 보호 대상 컬럼 (진도, 완료된 진도, 과제)
+  const isProtectedCol = ['classwork', 'completed_classwork', 'assign'].includes(colId);
+  const isLockActive = isSubmitted && isProtectedCol;
+
+  // 📝 [추가] 다른 기기에서 실시간 편집 중인지 판별
+  const coopData = cooperatingCells?.[`${student.id}_${colId}`];
+  const isCooperating = !!coopData;
+
+  const handleLockedCellDoubleClick = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    alert("아직 승인되지 않은 학생 제출본이 있습니다. 우측 알림창이나 툴박스에서 승인 버튼을 누르시면 학생이 쓴 내용이 일지에 자동으로 입력되며, 입력이 완료된 후에 직접 내용을 확인하고 수정하실 수 있습니다.");
+  };
 
   // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 포커스 지연 제거
   React.useLayoutEffect(() => {
@@ -355,12 +371,44 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       data-col-id={colId}
       className={`border-r border-white/12 relative group/td outline-none align-top ${
         isFirstInTimeSection ? 'border-t-[3px] border-t-blue-500/60 shadow-[inset_0_1px_0_rgba(59,130,246,0.2)]' : ''
-      } ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''}`}
+      } ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''} ${
+        isLockActive ? 'bg-amber-50/50 border border-dashed border-amber-300/60 cursor-not-allowed' : ''
+      } ${
+        isCooperating ? 'ring-2 ring-inset ring-pink-400 z-30 cursor-not-allowed bg-pink-50/[0.04]' : ''
+      }`}
       onMouseDown={(e) => onCellMouseDown(e, student.id, colId)}
       onMouseEnter={() => onCellMouseEnter(student.id, colId)}
       onClick={(e) => handleCellInteraction(e, colId, 'click')}
-      onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
-      onKeyDown={(e) => handleKeyDown(e, colId)}
+      onDoubleClick={(e) => {
+        if (isLockActive) {
+          handleLockedCellDoubleClick(e);
+        } else if (isCooperating) {
+          e.stopPropagation();
+          alert("다른 기기(조교 컴퓨터)에서 이미 이 셀을 편집하고 있습니다.");
+        } else {
+          handleCellInteraction(e, colId, 'dblclick');
+        }
+      }}
+      onKeyDown={(e) => {
+        const navigationKeys = [
+          'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
+          'Tab', 'Escape', 'Shift', 'Control', 'Alt', 'Meta'
+        ];
+        if (isLockActive && !navigationKeys.includes(e.key)) {
+          e.preventDefault();
+          if (e.key === 'Enter') {
+            handleLockedCellDoubleClick(e as any);
+          }
+        } else if (isCooperating && !navigationKeys.includes(e.key)) {
+          e.preventDefault();
+          if (e.key === 'Enter') {
+            e.stopPropagation();
+            alert("다른 기기(조교 컴퓨터)에서 이미 이 셀을 편집하고 있습니다.");
+          }
+        } else {
+          handleKeyDown(e, colId);
+        }
+      }}
     >
       {!isEditing && !['select', 'action', 'attendance', 'name', 'tools', 'review'].includes(colId) && (
         <div className="absolute inset-0 z-20 cursor-default" />
@@ -628,20 +676,28 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 <TrendingUp size={12} strokeWidth={2.5} />
               </button>
             )}
-            {['pending', 'approved'].includes(student.todaySession?.approval_status || '') && (
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  if (confirm("이 학생의 제출 상태를 초기화하시겠습니까? (학생이 다시 내용을 수정하고 제출할 수 있습니다.)")) {
-                    onSave({ approval_status: 'none' });
-                  }
-                }}
-                className="p-1.5 bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white rounded-[4px] shrink-0 transition-colors"
-                title="학생 제출 리셋 (다시 수정 가능하게 하기)"
-              >
-                <HistoryIcon size={12} strokeWidth={2.5} />
-              </button>
-            )}
+            {(() => {
+              const isSubmittedOrApproved = ['pending', 'approved'].includes(student.todaySession?.approval_status || '');
+              return (
+                <button 
+                  disabled={!isSubmittedOrApproved}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    if (confirm("이 학생의 제출 상태를 초기화하시겠습니까? (학생이 다시 내용을 수정하고 제출할 수 있습니다.)")) {
+                      onSave({ approval_status: 'none' });
+                    }
+                  }}
+                  className={`p-1.5 rounded-[4px] shrink-0 transition-colors ${
+                    isSubmittedOrApproved 
+                      ? "bg-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white cursor-pointer" 
+                      : "bg-black/5 text-gray-300 opacity-25 cursor-not-allowed"
+                  }`}
+                  title={isSubmittedOrApproved ? "학생 제출 리셋 (다시 수정 가능하게 하기)" : "제출 또는 승인 전 상태입니다"}
+                >
+                  <HistoryIcon size={12} strokeWidth={2.5} />
+                </button>
+              );
+            })()}
           </div>
         )}
 
@@ -784,6 +840,21 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="relative w-full h-full flex items-start justify-start group/cell">
             {/* 💡 칩카드 UI가 제거되었습니다. 선생님이 직접 텍스트로 테스트를 기록합니다. */}
             
+            {/* 🔒 [추가] 실시간 승인 대기 보호 셀 시각 뱃지 */}
+            {isLockActive && !isEditing && !isActive && (
+              <div className="absolute right-1 top-1 z-30 flex items-center gap-1 bg-amber-50 text-amber-700 border border-amber-300/50 px-1 py-[1px] rounded-[3px] text-[9px] font-medium animate-pulse select-none">
+                <Lock size={8} className="stroke-[2.5]" />
+                승인대기
+              </div>
+            )}
+
+            {/* 📝 [추가] 실시간 협업 다른 기기 편집 중 뱃지 */}
+            {isCooperating && !isEditing && !isActive && (
+              <div className="absolute right-1 top-1 z-30 flex items-center gap-1 bg-pink-50 text-pink-600 border border-pink-200/60 px-1 py-[1px] rounded-[3px] text-[9px] font-medium animate-pulse select-none">
+                📝 다른 기기 입력 중
+              </div>
+            )}
+
             {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
             {(isEditing || isActive) && (
               <textarea 
@@ -813,8 +884,20 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             
             {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 (하이라이팅 적용) */}
             {!isEditing && !isActive && (
-              <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start`}>
-                <div className="w-full">{renderHighlightedText(currentText, colId)}</div>
+              <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start w-full`}>
+                <div className="w-full">
+                  {currentText ? renderHighlightedText(currentText, colId) : (
+                    isLockActive ? (
+                      <span className="text-amber-600/50 text-[11px] font-normal italic select-none">
+                        ⏳ 승인을 누르면 내용이 입력됩니다
+                      </span>
+                    ) : isCooperating ? (
+                      <span className="text-pink-600/50 text-[11px] font-normal italic select-none">
+                        📝 다른 기기에서 입력하고 있습니다
+                      </span>
+                    ) : '-'
+                  )}
+                </div>
               </div>
             )}
             

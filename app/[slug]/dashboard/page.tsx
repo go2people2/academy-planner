@@ -23,6 +23,7 @@ import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 import { Student, SessionLog, StudentStatus, TextbookOption } from '@/types/dashboard';
+import { getEnrichedStudentData } from '@/lib/studentDataEnricher';
 import { Loader2, AlertTriangle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
@@ -31,331 +32,7 @@ import { motion, AnimatePresence } from 'framer-motion';
  */
 
 // 1. 교재 코드를 실제 이름으로 변환하는 유틸리티
-const translateBookCodes = (text: string, availableTextbooks: any[]) => {
-  if (!text || !availableTextbooks || availableTextbooks.length === 0) return text;
-  let result = text;
-  const sortedMaster = [...availableTextbooks].sort((a, b) => (b.bookcode?.length || 0) - (a.bookcode?.length || 0));
-  sortedMaster.forEach(m => {
-    if (m.bookcode && m.title) {
-      const escapedCode = m.bookcode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      const regex = new RegExp(escapedCode, 'gi');
-      result = result.replace(regex, m.title);
-    }
-  });
-  return result;
-};
-
-// 2. [추가] 예정 테스트 정보 파싱 헬퍼
-const parseHomeworkTo = (homeworkToRaw: any) => {
-  let text = '', cut = 0, trial = 1, json = [];
-  let hasHwTo = false;
-  try {
-    if (homeworkToRaw?.startsWith('{')) {
-      const parsed = JSON.parse(homeworkToRaw);
-      text = parsed.text || ''; cut = parsed.cut || 0; trial = parsed.trial || 1; json = parsed.json || [];
-      if (text) hasHwTo = true;
-    } else if (homeworkToRaw) {
-      hasHwTo = true; text = homeworkToRaw;
-    }
-  } catch (e) {}
-  return { text, cut, trial, json, hasHwTo };
-};
-
-// 3. [추가] 테스트 결과 정보 파싱 헬퍼
-const parseTestResult = (testResultRaw: any, testStatus: string) => {
-  let isTestCompleted = undefined;
-  let tCut = 0;
-  let missionSnapshot = '';
-  let todoAchievement = 0;
-  let sType: 'score' | 'count' = 'score';
-  let tTotal = 0;
-  let hasTestResult = false;
-  let hwCheckedToday = false;
-  let hwPassedToday = false;
-  try {
-    if (testResultRaw?.startsWith('{')) {
-      const res = JSON.parse(testResultRaw);
-      isTestCompleted = res.completed === true ? true : (res.completed === false ? false : undefined);
-      tCut = res.cut || 0;
-      missionSnapshot = res.mission || '';
-      todoAchievement = res.todo_achievement || 0;
-      sType = res.score_type || 'score';
-      tTotal = res.total_count || 0;
-      hwCheckedToday = res.hw_checked_today === true;
-      hwPassedToday = res.hw_passed_today === true;
-      if (isTestCompleted !== undefined || testStatus || missionSnapshot || todoAchievement > 0) hasTestResult = true;
-    }
-  } catch (e) {}
-  return { isTestCompleted, tCut, missionSnapshot, todoAchievement, sType, tTotal, hasTestResult, hwCheckedToday, hwPassedToday };
-};
-
-// 4. 개별 DB 로그를 SessionLog 형식으로 변환
-const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
-  const nq = parseHomeworkTo(l.homework_to);
-  const tr = parseTestResult(l.test_result, l.test_status);
-
-  return {
-    id: l.id, date: l.session_date, status: (l.status || 'none') as StudentStatus,
-    attendance_status: normalizeAttendanceStatus(l.attendance_status), 
-    special_notes: translateBookCodes(l.special_notes || '', textbooks),
-    classwork_text: translateBookCodes(l.classwork_text || '', textbooks), classwork_json: l.classwork_json || [],
-    completed_classwork_text: translateBookCodes(l.completed_classwork_text || '', textbooks), 
-    completed_classwork_json: l.completed_classwork_json || [],
-    homework_text: translateBookCodes(l.homework_text || '', textbooks), homework_json: l.homework_json || [],
-    next_quiz_text: translateBookCodes(nq.text, textbooks), next_quiz_json: nq.json, next_quiz_cut: nq.text ? nq.cut : (nq.hasHwTo ? nq.cut : 0), next_quiz_trial: nq.text ? nq.trial : (nq.hasHwTo ? nq.trial : 1),
-    test_id: translateBookCodes(l.test_status || '', textbooks), test_score: l.test_score, 
-    test_score_type: tr.sType,
-    test_total_count: tr.tTotal,
-    test_cut: tr.tCut, 
-    test_completed: tr.isTestCompleted, 
-    mission: translateBookCodes(tr.missionSnapshot, textbooks),
-    todo_achievement: tr.todoAchievement,
-    report_sent_at: l.report_sent_at,
-    timer_started_at: l.timer_started_at,
-    timer_duration: l.timer_duration,
-    test_answers: l.test_answers || null,
-    moved_to_hour: (() => {
-      // 💡 [데이터 모델 전이] 신규 저장은 moved_to_hour 필드를 사용하지만,
-      // 기존 attendance_status에 시간이 인코딩된 구형 데이터는 읽기 단계(Read-side)에서만 하위 호환을 위해 파싱합니다.
-      if (l.moved_to_hour !== undefined && l.moved_to_hour !== null) return l.moved_to_hour;
-      const status = l.attendance_status || '';
-      if (status.includes(':')) {
-        const parts = status.split(':');
-        const val = parseInt(parts[parts.length - 1]);
-        if (!isNaN(val) && val < 24) return val;
-      }
-      return null;
-    })(),
-    hasHwTo: nq.hasHwTo, hasTestResult: tr.hasTestResult,
-    hw_checked_today: tr.hwCheckedToday,
-    hw_passed_today: tr.hwPassedToday,
-    approval_status: l.approval_status || 'none',
-    test_result: l.test_result || null,
-    attendance_reason: l.attendance_reason || null,
-    management_notes: translateBookCodes(l.management_notes || '', textbooks)
-  };
-};
-
-// 5. 과거 숙제 내역 취합 유틸리티
-const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: any) => {
-  let aggregatedHw = "";
-  if (pastLogs.length === 0) return "";
-
-  for (const log of pastLogs) {
-    const dayName = getDayOfWeek(log.date);
-    const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
-
-    // 💡 [수정] 출결 상태(결석, 수업전 등)에 의해 루프가 건너뛰어지기 전에, 
-    // 선생님이 수동으로 기입해 둔 숙제가 있다면 무조건 먼저 취합(누적)합니다!
-    if (log.homework_text && log.homework_text.trim() !== '결석') {
-      const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
-      const makeupLabel = (!isRegularClass || log.attendance_status?.startsWith('보강')) ? ' [보강]' : '';
-      const line = `${dateStr}(${dayName})${makeupLabel}\n${log.homework_text}`;
-      aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
-    }
-
-    const isPresent = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].some(st => log.attendance_status?.startsWith(st));
-    const hasHomework = !!log.homework_text;
-
-    // 💡 [수정] 출결이 '수업전'이라도 정규수업에 선생님이 숙제를 입력했다면, 새로운 숙제 주기의 시작이므로 과거 숙제 취합을 중단(break)
-    if (
-      log.hw_checked_today === true || 
-      (isPresent && isRegularClass) ||
-      (hasHomework && isRegularClass)
-    ) {
-      break;
-    }
-
-    const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === log.date);
-    if (isLogHoliday && !log.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT)) continue;
-    if (!log.attendance_status || log.attendance_status === ATTENDANCE_STATUS.BEFORE) continue;
-    if ([ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(log.attendance_status as any)) continue;
-
-    if (log.hw_passed_today === true) continue;
-  }
-  return aggregatedHw;
-};
-
-// 4. 오늘의 세션 데이터 결정 및 이월 로직
-const determineTodaySession = (
-  student: any, todayLog: SessionLog | undefined, baseSession: SessionLog | undefined, 
-  isTodayClassDay: boolean, selectedDate: string, academy: any
-) => {
-  const activePlanText = baseSession?.next_quiz_text || "";
-  const activePlanCut = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_cut) || 0) : 0;
-  const activePlanTrial = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_trial) || 1) : 1;
-  
-  // 💡 [미션 자동 복사 끊기] 미션은 억지로 복사하지 않고 오늘 세션에 실제 기록된 미션만 표현합니다.
-  const todayMission = todayLog?.mission || "";
-  
-  // 💡 [개선] 이전 수업의 점수 입력 타입(score/count)을 기본값으로 상속
-  const defaultScoreType = baseSession?.test_score_type || 'score';
-
-  const attStatus = todayLog?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-  
-  // 💡 [정교화] 오늘 시험을 보지 않는 예외적인 출결 상태(결석, 제외, 취소) 판정
-  const isSkippedFromTest = [
-    ATTENDANCE_STATUS.ABSENT,
-    ATTENDANCE_STATUS.EXCLUDED,
-    ATTENDANCE_STATUS.CANCELED
-  ].includes(attStatus as any);
-
-  if (todayLog) {
-    todayLog.mission = todayMission;
-    
-    // 💡 [개선] 타입 정보가 없는 기존 로그에도 기본 타입 적용
-    if (!todayLog.test_score_type) todayLog.test_score_type = defaultScoreType;
-
-    if (isTodayClassDay) {
-      if (!isSkippedFromTest) {
-        // 💡 [안정화] 오늘 테스트(test_id)가 비어있거나, 순수 공백 스페이스 상태이거나,
-        // 혹은 Supabase 데이터베이스 기본 디폴트 값인 "없음" 단어로만 박혀있는 상태라면,
-        // 지난 수요일에 예고해둔 진짜 소중한 다음 테스트 범위(activePlanText)로 기분 좋게 덮어씌워 이월 연동해 줍니다!
-        const hasNoTestId = !todayLog.test_id || 
-                            !(todayLog.test_id.trim()) || 
-                            todayLog.test_id.trim() === '없음';
-
-        const isRealActivePlanExists = activePlanText && activePlanText.trim() && activePlanText.trim() !== '없음';
-
-        if (hasNoTestId && isRealActivePlanExists) {
-          todayLog.test_id = activePlanText; todayLog.test_cut = activePlanCut;
-        }
-      } else {
-        // 결석/제외 상태가 되면 연동된 시험 범위를 비워서 찌꺼기를 깔끔히 지워냅니다.
-        if (todayLog.test_id === activePlanText) {
-          todayLog.test_id = '';
-          todayLog.test_cut = 0;
-        }
-      }
-    } else if (!todayLog.next_quiz_text && activePlanText) {
-      todayLog.next_quiz_text = activePlanText; todayLog.next_quiz_cut = activePlanCut; todayLog.next_quiz_trial = activePlanTrial;
-    }
-    return todayLog;
-  }
-
-  // todayLog가 없는 임시 카드(출석전) 상태에서도 정규 수업일이 맞다면 시험 준비 및 시험지 인쇄를 위해 퀴즈 예고를 미리 쏙 채워넣어 줍니다!
-  return { 
-    id: 'temp', date: selectedDate, status: 'none', 
-    attendance_status: ATTENDANCE_STATUS.BEFORE, 
-    test_id: (isTodayClassDay && !isSkippedFromTest) ? activePlanText : '', 
-    test_cut: (isTodayClassDay && !isSkippedFromTest) ? activePlanCut : 0, 
-    mission: '', next_quiz_text: !isTodayClassDay ? activePlanText : '', 
-    next_quiz_cut: !isTodayClassDay ? activePlanCut : 0, next_quiz_trial: !isTodayClassDay ? activePlanTrial : 1, 
-    test_completed: undefined,
-    test_score_type: defaultScoreType
-  } as any;
-};
-
-// 💡 빈 껍데기 세션 로그(출결도 없고 학습 내용도 없는 가짜 로그) 판정 헬퍼
-const isValidHistoryLog = (l: any) => {
-  if (!l) return false;
-  const hasStatus = l.status && l.status !== 'none';
-  const hasAttendance = l.attendance_status && l.attendance_status !== '출석전' && l.attendance_status !== 'BEFORE';
-  // 💡 [선생님의 명 지침] 주의점(special_notes) 및 관리 주의점은 실제 수업 진행 여부(출석/진도/숙제/시험)와는 무관하므로 내용 유무 판정에서 완전히 격리 배제합니다!
-  const hasContent = (l.classwork_text || '').trim() || 
-                     (l.completed_classwork_text || '').trim() || 
-                     (l.homework_text || '').trim() || 
-                     (l.mission || '').trim();
-  const hasTest = l.test_completed || (l.test_score !== undefined && l.test_score !== null && l.test_score !== '');
-  
-  return hasStatus || hasAttendance || hasContent || hasTest;
-};
-
-// 5. 학생의 최근 5회차 학습 상태 히스토리 계산
-const calculateStudentHistory = (logs: SessionLog[], targetDate: string): StudentStatus[] => {
-  const history = logs
-    .filter(l => l.date < targetDate && isValidHistoryLog(l))
-    .slice(0, 5)
-    .map(l => l.status);
-  while (history.length < 5) history.push('none');
-  return history;
-};
-
-// 6. 오늘 수업 계획의 모태가 될 과거 세션(베이스 세션) 선택
-const selectBaseSession = (logs: SessionLog[], targetDate: string, holidays: any[]): SessionLog | undefined => {
-  const pastLogs = logs.filter(l => l.date < targetDate).sort((a, b) => b.date.localeCompare(a.date));
-  return pastLogs.find(l => {
-    const isLogHoliday = (holidays || []).some((h: any) => h.date === l.date);
-    const isMakeup = l.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
-    return (l.next_quiz_text || l.test_id || l.classwork_text || l.homework_text) && 
-           ![ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(l.attendance_status as any) && (!isLogHoliday || isMakeup); 
-  }) || pastLogs[0];
-};
-
-// 7. 오늘의 수업 여부 및 휴일 상태 판정 (순수 스케줄 기반)
-const evaluateTodayStatus = (targetDate: string, classDays: string[], holidays: any[]) => {
-  const isScheduledDay = classDays?.map((d: string) => d.trim()).includes(getDayOfWeek(targetDate));
-  const isHoliday = (holidays || []).some((h: any) => h.date === targetDate);
-  const isTodayClassDay = isScheduledDay && !isHoliday;
-  return { isScheduledDay, isHoliday, isTodayClassDay };
-};
-
-// 8. 학생 담당 교사 정보 추출
-const findTeacherInfo = (teachers: any[], teacherId?: string, fallbackName?: string) => {
-  const teacher = (teachers || []).find(t => t.id === teacherId);
-  return {
-    name: teacher?.name || '',
-    initial: teacher ? (teacher.initials || getInitial(teacher.name)) : (fallbackName ? getInitial(fallbackName) : '?')
-  };
-};
-
-// 9. 학생 1명의 데이터 보강 (최종 조합)
-const getEnrichedStudentData = (
-  s: any, logsData: any[], selectedDate: string, 
-  availableTextbooks: any[], academy: any, teachers: any[], tasksData: any[]
-) => {
-  const logs = (logsData || []).map(l => buildSessionLog(l, availableTextbooks));
-  
-  const history = calculateStudentHistory(logs, selectedDate);
-  const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays);
-  const todayLog = logs.find(l => String(l.date) === String(selectedDate));
-  
-  // 💡 [안정화] 정규 수업일과 선택 수업일을 합산하여 오늘의 등원 예정 여부를 판정합니다.
-  let electiveDays: string[] = [];
-  const rawElective = s.book_courses?.['__elective_courses'];
-  if (rawElective) {
-    try {
-      const parsed = JSON.parse(rawElective);
-      if (Array.isArray(parsed)) {
-        parsed.forEach(item => {
-          if (Array.isArray(item.days)) electiveDays = [...electiveDays, ...item.days];
-        });
-      }
-    } catch (e) {}
-  }
-  const allClassDays = Array.from(new Set([...(s.class_days || []), ...electiveDays]));
-
-  const { isHoliday, isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, allClassDays, academy?.operation_settings?.holidays);
-  const isMakeup = todayLog?.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || 
-                   (todayLog?.moved_to_hour !== undefined && todayLog?.moved_to_hour !== null && todayLog?.moved_to_hour > 0);
-  const isSkipped = todayLog?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
-  
-  // 💡 [지능형 필터 가드] 등원 요일도 아니고 보강 등록일도 아니지만, 과거에 우연히 내용이 기입된 진짜 로그가 존재할 경우에만 예외적으로 표시합니다.
-  const hasValidContentInLog = todayLog && isValidHistoryLog(todayLog);
-  const isTodayClassDay = (isScheduledToday || isMakeup || !!hasValidContentInLog) && !isSkipped; // 💡 최종 수업 대상 여부
-  
-  const pastLogs = logs
-    .filter(l => l.date < selectedDate && isValidHistoryLog(l))
-    .sort((a, b) => b.date.localeCompare(a.date));
-  const aggregatedHw = calculateAggregatedHw(pastLogs, academy, s);
-  const todaySession = determineTodaySession(s, todayLog, baseSession, isTodayClassDay, selectedDate, academy);
-
-  const tInfo = findTeacherInfo(teachers, s.teacher_id, s.teacher_name);
-
-  return {
-    ...s, teacher_name: tInfo.name, teacher_initial: tInfo.initial,
-    school: s.school || '미지정', grade: s.grade || '미지정', course: s.course || 'C', book_courses: s.book_courses || {}, class: s.class_name || '일반반',
-    is_deleted: !!s.is_deleted, class_days: s.class_days || [], assigned_books: s.assigned_books || [],
-    suggestions: (tasksData || []).filter(t => t.title === `[건의] ${s.name}`),
-    history, isRedLight: history.includes('poor') || history.includes('bad'),
-    // 💡 baseSession이 없더라도 취합된 숙제가 있다면 강제로 표시되도록 보장
-    lastSession: baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', homework_text: aggregatedHw } as any : undefined), 
-    todaySession, allLogs: logs,
-    isTodayClassDay, // 💡 필터링용 속성 추가
-    isScheduledToday: !!isScheduledToday, // 💡 정규 등원요일 여부 추가
-    isSkipped: !!isSkipped // 💡 오늘 제외(취소) 여부 추가
-  };
-};
+;
 
 /**
  * 💡 [리팩토링] 파생 상태 계산 및 필터링 유틸리티
@@ -1417,16 +1094,27 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
   };
 
-  const handleSaveLegacyProgress = useCallback(async (studentId: string, bookCode: string, unitName: string) => {
+  const handleSaveLegacyProgress = useCallback(async (studentId: string, bookCode: string, unitName: string, mode: 'add' | 'remove' = 'add') => {
     if (!academy) return false;
     try {
       const { data: legacyLog } = await supabase.from('ams_session_logs').select('*').eq('student_id', studentId).eq('session_date', '1900-01-01').maybeSingle();
       let currentCwJson: any[] = []; if (legacyLog && legacyLog.classwork_json) currentCwJson = [...(legacyLog.classwork_json as any[])];
       const bookIdx = currentCwJson.findIndex(j => j.book_name === bookCode);
-      if (bookIdx > -1) { const currentUnits = currentCwJson[bookIdx].units || []; if (!currentUnits.includes(unitName)) currentCwJson[bookIdx].units = [...currentUnits, unitName]; } 
-      else { currentCwJson.push({ type: 'book', book_name: bookCode, range: 'Legacy Completion', units: [unitName] }); }
+
+      if (mode === 'remove') {
+        // 단원 완료 취소: units 배열에서 해당 단원 제거
+        if (bookIdx > -1) {
+          currentCwJson[bookIdx].units = (currentCwJson[bookIdx].units || []).filter((u: string) => u !== unitName);
+          if (currentCwJson[bookIdx].units.length === 0) currentCwJson.splice(bookIdx, 1);
+        }
+      } else {
+        // 단원 완료 추가 (기존 로직)
+        if (bookIdx > -1) { const currentUnits = currentCwJson[bookIdx].units || []; if (!currentUnits.includes(unitName)) currentCwJson[bookIdx].units = [...currentUnits, unitName]; } 
+        else { currentCwJson.push({ type: 'book', book_name: bookCode, range: 'Legacy Completion', units: [unitName] }); }
+      }
+
       const logData = { student_id: studentId, academy_id: academy.id, session_date: '1900-01-01', classwork_text: `[LEGACY] 진도 수동 보정 데이터`, classwork_json: currentCwJson, status: null };
-      if (legacyLog) { await supabase.from('ams_session_logs').update(logData).eq('id', legacyLog.id); } else { await supabase.from('ams_session_logs').insert([logData]); }
+      if (legacyLog) { await supabase.from('ams_session_logs').update(logData).eq('id', legacyLog.id); } else if (mode === 'add') { await supabase.from('ams_session_logs').insert([logData]); }
       await fetchAllData(false); return true;
     } catch (e) { console.error('Legacy progress error:', e); return false; }
   }, [academy, fetchAllData]);

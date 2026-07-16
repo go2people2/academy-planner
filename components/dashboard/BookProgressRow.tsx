@@ -91,21 +91,32 @@ export default function BookProgressRow({ student, bookCode, textbook, onSaveLeg
                   </div>
                   <div className="flex items-center gap-1.5">
                     {isCompleted ? (
-                      <CheckCircle2 size={12} className="text-amber-500 shrink-0" />
-                    ) : (
-                      <button 
-                        onClick={() => handleFlagClick(idx)}
-                        disabled={!!isSavingLegacy}
-                        className="text-gray-600 hover:text-blue-500 transition-colors p-0.5"
-                        title="이 단원까지 일괄 완료 처리 (Flag)"
-                      >
-                        {isSavingLegacy === u.unit ? (
-                          <RotateCcw size={10} className="animate-spin" />
-                        ) : (
-                          <Flag size={10} />
-                        )}
-                      </button>
-                    )}
+                    <button
+                      onClick={() => handleFlagClick(idx)}
+                      disabled={!!isSavingLegacy}
+                      className="text-amber-500 hover:text-red-400 transition-colors p-0.5"
+                      title="완료 취소 (클릭하여 이전 진행률로 되돌리기)"
+                    >
+                      {isSavingLegacy === u.unit ? (
+                        <RotateCcw size={10} className="animate-spin" />
+                      ) : (
+                        <CheckCircle2 size={12} />
+                      )}
+                    </button>
+                  ) : (
+                    <button 
+                      onClick={() => handleFlagClick(idx)}
+                      disabled={!!isSavingLegacy}
+                      className="text-gray-600 hover:text-blue-500 transition-colors p-0.5"
+                      title="이 단원까지 일괄 완료 처리 (Flag)"
+                    >
+                      {isSavingLegacy === u.unit ? (
+                        <RotateCcw size={10} className="animate-spin" />
+                      ) : (
+                        <Flag size={10} />
+                      )}
+                    </button>
+                  )}
                   </div>
                 </div>
 
@@ -156,9 +167,10 @@ export default function BookProgressRow({ student, bookCode, textbook, onSaveLeg
                         key={step.id} title={step.label}
                         onClick={(e) => { 
                           e.stopPropagation(); 
-                          toggleStep(u.unit, sIdx); 
-                          if (sIdx === 3 && !isStepDone) {
-                            handleFlagClick(idx); 
+                          if (sIdx === 3) {
+                            handleFlagClick(idx);
+                          } else {
+                            toggleStep(u.unit, sIdx); 
                           }
                         }}
                         className={`rounded-[2px] border border-white/5 flex items-center justify-center transition-all hover:scale-105 active:scale-95 ${
