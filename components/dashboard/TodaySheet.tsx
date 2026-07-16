@@ -26,6 +26,8 @@ import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
 import { useCoopCollaboration } from '@/hooks/useCoopCollaboration';
+import { useTodaySheetExport } from '@/hooks/useTodaySheetExport';
+import { useTodaySheetImport } from '@/hooks/useTodaySheetImport';
 
 interface ColumnConfig {
   id: string;
@@ -940,216 +942,23 @@ export default function TodaySheet({
     } catch (err) { console.error('Paste error:', err); }
   }, [activeCell, editingCell, activeColumns, selectedIds, students, handleBatchSave]);
 
-  const handleExport = (type: 'csv' | 'excel' | 'copy' | 'aca2000') => {
-    let headers: string[] = []; let dataRows: any[][] = [];
-    const dateClean = selectedDate.replace(/-/g, '');
-    const days = ['일', '월', '화', '수', '목', '금', '토'];
-    const dayOfWeek = days[new Date(selectedDate).getDay()];
-    const teacherName = currentUser?.name || '관리자';
-    const customFileName = `업무일지_${dateClean}_${dayOfWeek}_${teacherName}`;
+  // 📝 [리팩토링] 엑셀 및 ACA2000 가공/다운로드 전용 분리 훅 호출
+  const { handleExport } = useTodaySheetExport({
+    students,
+    teachers,
+    currentUser,
+    academyInfo,
+    selectedDate,
+    masterTextbooks,
+    activeColumns,
+    setIsExportOpen,
+  });
 
-    if (type === 'aca2000') {
-      headers = ['일자', '강사', '반명', '과목', '교재', '진도', '테스트', '과제', '기타'];
-      dataRows = students.map((s: any) => {
-        const session = s.todaySession || {}; 
-        const teacher = teachers?.find((t: any) => t.id === s.teacher_id);
-        const tName = teacher?.nickname || teacher?.name || '';
-        const sortedDays = (s.class_days || []).slice().sort((a: string, b: string) => {
-          const order: any = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-          return (order[a] || 0) - (order[b] || 0);
-        }).join('');
-        const teacherInitial = teacher?.initials || s.teacher_initial || '';
-
-        // 💡 [안정화] 오늘 날짜의 요일에 선택과목 수업이 배정되어 있는 경우, 반명을 해당 선택과목 전용 반명으로 변경합니다.
-        const daysKorean = ['일', '월', '화', '수', '목', '금', '토'];
-        const currentKoreanDay = daysKorean[new Date(selectedDate).getDay()];
-        
-        let electiveClassName = '';
-        const rawElective = s.book_courses?.['__elective_courses'];
-        if (rawElective) {
-          try {
-            const parsed = JSON.parse(rawElective);
-            if (Array.isArray(parsed)) {
-              const matched = parsed.find(item => (item.days || []).includes(currentKoreanDay));
-              if (matched) {
-                electiveClassName = matched.className?.trim() || `${s.name}-${teacherInitial}-${matched.subject}`;
-              }
-            }
-          } catch (e) {
-            console.error('Failed to parse elective courses during ACA export', e);
-          }
-        }
-
-        const combinedName = electiveClassName 
-          ? electiveClassName 
-          : `${s.name}-${teacherInitial}-${sortedDays}`;
-        const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code).filter((title: any) => !!title).join(', ');
-        const testDisplay = (() => {
-          if (!session.test_id) return '';
-          
-          // 💡 하위 호환: 이미 test_id에 괄호 점수 정보가 직접 포함된 구형 데이터인 경우 추가 결합 생략
-          if (session.test_id.includes('(')) return session.test_id;
-          
-          if (session.test_score === undefined || session.test_score === null || session.test_score === '') return session.test_id;
-          
-          const scoreType = session.test_score_type || 'score';
-          if (scoreType === 'score') {
-            return `${session.test_id} (${session.test_score}점)`;
-          } else {
-            return session.test_total_count 
-              ? `${session.test_id} (${session.test_score}개 / ${session.test_total_count}개)`
-              : `${session.test_id} (${session.test_score}개)`;
-          }
-        })();
-        return [selectedDate, tName, combinedName, '개별수업', books, session.completed_classwork_text || '', testDisplay, session.homework_text || '', session.special_notes || ''];
-      });
-      const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
-      ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
-      const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "ACA2000_Upload");
-      const acaFileName = `업무일지_${dateClean.slice(2)}_${dayOfWeek}_${teacherName}`;
-      XLSX.writeFile(wb, `${acaFileName}.xls`, { bookType: 'biff8' });
-    } else {
-      const cols = activeColumns.filter(c => !['select', 'action'].includes(c.id));
-      headers = cols.map(c => c.label);
-      dataRows = students.map((s: any) => {
-        const sess = s.todaySession || {};
-        return cols.map(col => {
-          if (col.id === 'date') return selectedDate; if (col.id === 'name') return s.name;
-          if (col.id === 'attendance') {
-            const status = normalizeAttendanceStatus(sess.attendance_status);
-            const moved = sess.moved_to_hour;
-            return moved ? `${status}(${moved}시)` : status;
-          }
-          if (col.id === 'test_id') return sess.test_id || '';
-          if (col.id === 'test_score') return sess.test_score ? `${sess.test_score}${sess.test_score_type === 'count' ? '개' : '점'}` : '';
-          if (col.id === 'next_quiz') return sess.next_quiz_text || '';
-          if (col.id === 'review') return s.lastSession?.homework_text || '';
-          if (col.id === 'classwork') return sess.classwork_text || '';
-          if (col.id === 'assign') return sess.homework_text || '';
-          if (col.id === 'mission') return s.recent_mission || '';
-          if (col.id === 'notes') return sess.special_notes || '';
-          return '';
-        });
-      });
-      if (type === 'copy') { const text = [headers.join('\t'), ...dataRows.map(row => row.join('\t'))].join('\n'); navigator.clipboard.writeText(text); alert('표 전체가 클립보드에 복사되었습니다.'); } 
-      else if (type === 'csv') { const content = '\uFEFF' + [headers.join(','), ...dataRows.map(row => row.map(v => `"${v}"`).join(','))].join('\n'); const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' }); const link = document.createElement('a'); link.href = URL.createObjectURL(blob); link.download = `${customFileName}.csv`; link.click(); } 
-      else if (type === 'excel') { const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]); ws['!cols'] = headers.map(() => ({ wch: 20 })); const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "DailySheet"); XLSX.writeFile(wb, `${customFileName}.xlsx`); }
-    }
-    setIsExportOpen(false);
-  };
-
-  const handleImportExcel = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    
-    const reader = new FileReader();
-    reader.onload = async (evt) => {
-      try {
-        const data = evt.target?.result;
-        const workbook = XLSX.read(data, { type: 'array' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const rows = XLSX.utils.sheet_to_json<any[]>(sheet, { header: 1 });
-        
-        if (rows.length < 2) {
-          alert('엑셀 파일에 데이터가 부족합니다.');
-          return;
-        }
-        
-        const headers: any = rows[0];
-        const classworkIdx = headers.indexOf('진도');
-        const testIdx = headers.indexOf('테스트');
-        const homeworkIdx = headers.indexOf('과제');
-        const notesIdx = headers.indexOf('기타');
-        const classNameIdx = headers.indexOf('반명');
-        
-        if (classNameIdx === -1) {
-          alert("올바른 아카 2000 엑셀 포맷이 아닙니다. '반명' 열이 존재해야 합니다.");
-          return;
-        }
-        
-        const sessionUpdates: any[] = [];
-        
-        for (let i = 1; i < rows.length; i++) {
-          const row: any = rows[i];
-          if (!row || row.length === 0) continue;
-          
-          const classNameVal = String(row[classNameIdx] || '').trim();
-          if (!classNameVal) continue;
-          
-          const studentName = classNameVal.split('-')[0].trim();
-          if (!studentName) continue;
-          
-          const matchedStudent = students.find((s: any) => s.name.trim() === studentName);
-          if (!matchedStudent) {
-            console.log(`[Import Excel] 매칭되는 학생을 찾을 수 없음: ${studentName}`);
-            continue;
-          }
-          
-          const classworkText = classworkIdx !== -1 ? String(row[classworkIdx] || '').trim() : '';
-          const homeworkText = homeworkIdx !== -1 ? String(row[homeworkIdx] || '').trim() : '';
-          const specialNotes = notesIdx !== -1 ? String(row[notesIdx] || '').trim() : '';
-          const rawTestVal = testIdx !== -1 ? String(row[testIdx] || '').trim() : '';
-          
-          let testId = '';
-          let testScore = '';
-          let testScoreType = 'score';
-          let testTotalCount = '';
-          
-          if (rawTestVal) {
-            const parenIdx = rawTestVal.indexOf('(');
-            if (parenIdx !== -1) {
-              testId = rawTestVal.substring(0, parenIdx).trim();
-              const scorePart = rawTestVal.substring(parenIdx + 1, rawTestVal.length - 1).trim();
-              
-              if (scorePart.includes('/') && scorePart.includes('개')) {
-                testScoreType = 'count';
-                const parts = scorePart.replace(/개/g, '').split('/');
-                testScore = parts[0]?.trim() || '';
-                testTotalCount = parts[1]?.trim() || '';
-              } else if (scorePart.includes('점')) {
-                testScoreType = 'score';
-                testScore = scorePart.replace(/점/g, '').trim();
-              } else if (scorePart.includes('개')) {
-                testScoreType = 'count';
-                testScore = scorePart.replace(/개/g, '').trim();
-              } else {
-                testScore = scorePart;
-              }
-            } else {
-              testId = rawTestVal;
-            }
-          }
-          
-          sessionUpdates.push({
-            student_id: matchedStudent.id,
-            completed_classwork_text: classworkText,
-            homework_text: homeworkText,
-            special_notes: specialNotes,
-            test_id: testId,
-            test_score: testScore,
-            test_score_type: testScoreType,
-            test_total_count: testTotalCount
-          });
-        }
-        
-        if (sessionUpdates.length === 0) {
-          alert('오늘 출석부와 일치하는 학생 정보를 엑셀에서 찾지 못했습니다.');
-          return;
-        }
-        
-        if (onBatchSave) {
-          await onBatchSave(sessionUpdates);
-          alert(`엑셀 파일로부터 총 ${sessionUpdates.length}명 학생의 일지 정보가 성공적으로 복원/저장되었습니다!`);
-        }
-      } catch (err: any) {
-        console.error(err);
-        alert('엑셀 파일 파싱 중 오류가 발생했습니다: ' + err.message);
-      }
-    };
-    reader.readAsArrayBuffer(file);
-    e.target.value = '';
-  };
+  // 📝 [리팩토링] 아카2000 일지 엑셀 데이터 파일 복원/가져오기 전용 분리 훅 호출
+  const { handleImportExcel } = useTodaySheetImport({
+    students,
+    onBatchSave,
+  });
 
   const handleSelectAll = useCallback((checked: boolean) => { setSelectedIds(checked ? students.map((s: any) => s.id) : []); }, [students]);
   const handleSelectOne = useCallback((id: string, checked: boolean, shiftKey: boolean = false) => { 
