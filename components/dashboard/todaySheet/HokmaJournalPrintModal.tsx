@@ -472,7 +472,7 @@ export default function HokmaJournalPrintModal({
             onClick={handlePrint}
             className="flex items-center gap-2 px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-black rounded shadow transition-all"
           >
-            <Printer size={16} /> 인쇄 대화상자 열기
+            <Printer size={16} /> 인쇄
           </button>
           <button
             onClick={onClose}
@@ -507,12 +507,39 @@ export default function HokmaJournalPrintModal({
               return new Date(a.date || a.session_date || '').getTime() - new Date(b.date || b.session_date || '').getTime();
             });
 
-          const testLogs = monthLogs
-            .filter((log) => log.test_id || log.test_completed === true);
+          // 💡 [안정화] 합의된 결석(수업제외, 수업취소)만 걷어내며, 출결 상태가 null이거나 빈 값인 유효 세션도 정상 포함합니다.
+          const validMonthLogs = monthLogs.filter(
+            (log) => !log.attendance_status || !['수업제외', '수업취소'].includes(log.attendance_status)
+          );
+
+          // 💡 [안정화] 예정만 잡아놓고 미응시한 날(예: /8/2)은 제외하고, 실제로 채점(예: 6/8/2 또는 90점)이 완료된 건만 앞페이지에 인쇄합니다.
+          const testLogs = validMonthLogs.filter((log) => {
+            const hasTestId = log.test_id && 
+                              log.test_id.trim() !== '' && 
+                              log.test_id.trim() !== '없음' && 
+                              log.test_id.trim() !== '-';
+            if (!hasTestId) return false;
+            
+            const hasScoreField = log.test_score !== undefined && 
+                                  log.test_score !== null && 
+                                  String(log.test_score).trim() !== '';
+            if (hasScoreField) return true;
+
+            if (log.test_id && log.test_id.includes(':')) {
+              const parts = log.test_id.split(':');
+              const scorePart = parts.slice(1).join(':').trim(); // 예: "6/8/2" 또는 "/8/2"
+              if (scorePart.includes('/')) {
+                const correctCount = scorePart.split('/')[0].trim();
+                return correctCount !== '' && !isNaN(Number(correctCount)); // 슬래시 앞 맞은 개수가 빈칸이 아닌 숫자인지 체크
+              }
+              return scorePart !== '';
+            }
+            return false;
+          });
 
           const logsPerSheet = 13;
           const totalSheets = Math.max(
-            Math.ceil(monthLogs.length / logsPerSheet),
+            Math.ceil(validMonthLogs.length / logsPerSheet),
             Math.ceil(testLogs.length / logsPerSheet),
             1
           );
@@ -523,7 +550,7 @@ export default function HokmaJournalPrintModal({
 
             const rows = Array.from({ length: logsPerSheet }).map((_, idx) => {
               const globalIdx = startIdx + idx;
-              const log = monthLogs[globalIdx] as SessionLog | undefined;
+              const log = validMonthLogs[globalIdx] as SessionLog | undefined;
               
               if (log) {
                 const logDate = new Date(log.date || log.session_date || '');
@@ -540,7 +567,9 @@ export default function HokmaJournalPrintModal({
                 }
 
                 let hwScore = '';
-                if (log.hw_checked_today === true || log.hw_passed_today === true) {
+                if (attStatus.includes('결석')) {
+                  hwScore = '-'; // 💡 결석인 날은 숙제 기록에 0점이 적히지 않고 하이픈(-)으로 대체
+                } else if (log.hw_checked_today === true || log.hw_passed_today === true) {
                   hwScore = '10점';
                 } else if (log.todo_achievement !== undefined) {
                   if (log.todo_achievement >= 100) hwScore = '10점';
@@ -550,12 +579,25 @@ export default function HokmaJournalPrintModal({
                   else hwScore = '0점';
                 }
 
+                let classworkText = log.completed_classwork_text || '';
+                let homeworkText = log.homework_text || '';
+
+                if (attStatus.includes('결석')) {
+                  const reason = log.attendance_reason ? ` (${log.attendance_reason})` : '';
+                  classworkText = `결석${reason}`;
+                  homeworkText = '-'; // 💡 숙제란도 하이픈(-)으로 정돈
+                } else if (attStatus.includes('수업제외') || attStatus.includes('수업취소')) {
+                  const reason = log.attendance_reason ? ` (${log.attendance_reason})` : '';
+                  classworkText = `${attStatus}${reason}`;
+                  homeworkText = '-'; // 💡 숙제란도 하이픈(-)으로 정돈
+                }
+
                 return {
                   dateText,
                   attendanceSign,
                   hwScore,
-                  classworkText: log.classwork_text || '',
-                  homeworkText: log.homework_text || ''
+                  classworkText,
+                  homeworkText
                 };
               }
               return {
@@ -576,15 +618,37 @@ export default function HokmaJournalPrintModal({
                 const dateText = `${logDate.getMonth() + 1}월 ${logDate.getDate()}일`;
 
                 let scoreText = '';
-                if (log.test_score !== undefined && log.test_score !== null && log.test_score !== '') {
+                let testName = log.test_id || '';
+
+                // 💡 [안정화] test_score가 비어있고 test_id에 콜론(:)이 포함된 인라인 채점 기록의 경우, 쪼개서 분배합니다.
+                const hasScoreField = log.test_score !== undefined && log.test_score !== null && log.test_score !== '';
+                const hasInlineScore = testName.includes(':');
+
+                if (hasScoreField) {
                   if (log.test_score_type === 'count') {
                     scoreText = `${log.test_score} / ${log.test_total_count || 20}`;
                   } else {
                     scoreText = `${log.test_score}점`;
                   }
+                } else if (hasInlineScore) {
+                  const parts = testName.split(':');
+                  testName = parts[0].trim();
+                  scoreText = parts.slice(1).join(':').trim();
                 }
 
-                let testName = log.test_id || '';
+                // 💡 [안정화] 쉼표 2개(,,) 뒤에 붙은 메모 텍스트는 인쇄용 점수 컬럼에서 제외하고 순수 점수/개수만 남깁니다.
+                if (scoreText.includes(',,')) {
+                  scoreText = scoreText.split(',,')[0].trim();
+                }
+
+                // 💡 [개선] 6/8/2 나 7/8/1 처럼 커트라인 개수까지 적힌 인라인 채점 결과의 경우, 마지막 커트라인(2, 1 등) 정보는 지우고 6/8, 7/8 형태로만 출력합니다.
+                if (scoreText.includes('/')) {
+                  const slashParts = scoreText.split('/');
+                  if (slashParts.length >= 3) {
+                    scoreText = `${slashParts[0].trim()}/${slashParts[1].trim()}`;
+                  }
+                }
+
                 const matchedTextbook = masterTextbooks.find((m) => m.bookcode === testName);
                 if (matchedTextbook) testName = matchedTextbook.title;
 
@@ -682,7 +746,7 @@ export default function HokmaJournalPrintModal({
                         <tr>
                           <th>출석 체크</th>
                           {rows.map((r, i) => (
-                            <td key={i} className="hj-handwriting" style={{ fontSize: '24px' }}>
+                            <td key={i} className="hj-handwriting" style={{ fontSize: r.attendanceSign === '▲' ? '17px' : '24px' }}>
                               {r.dateText ? r.attendanceSign : ''}
                             </td>
                           ))}

@@ -12,10 +12,13 @@ import TeacherManagement from '../settings/light/TeacherManagementLight';
 import AcademyProfile from '../settings/light/AcademyProfileLight';
 import AccountSettings from '../settings/light/AccountSettingsLight';
 import SystemManual from '../settings/light/SystemManualLight';
+import TextbookPdfSettings from '../settings/TextbookPdfSettings';
+import TimetableSettings from '../settings/TimetableSettings';
 
 interface SettingsViewProps {
   teachers: any[];
   students: any[];
+  masterTextbooks: any[]; // 💡 추가
   onAddTeacher: (data: any) => Promise<void>;
   onDeleteTeacher: (id: string) => Promise<void>;
   onUpdateTeacher: (id: string, updates: any) => Promise<void>;
@@ -27,8 +30,8 @@ interface SettingsViewProps {
   onNoticeDraftChange: (key: string, value: string) => void;
 }
 
-export default function SettingsViewLight({ teachers, students, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual'>('teachers');
+export default function SettingsViewLight({ teachers, students, masterTextbooks, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual' | 'textbooks' | 'timetables'>('teachers');
 
   // 학원 운영 설정 로컬 상태
   const [opSettings, setOpSettings] = useState({
@@ -42,7 +45,9 @@ export default function SettingsViewLight({ teachers, students, onAddTeacher, on
     naver_cafe_url: "",
     naver_cafe_title: "",
     textbook_categories: [] as string[],
-    location: ""
+    location: "",
+    default_score_cut: 80, // 💡 100점 만점 합격 기준점 추가
+    default_count_cut: 2 // 💡 오답 개수형 통과 기준 추가
   });
 
   const [isDataInitialized, setIsDataInitialized] = useState(false);
@@ -65,7 +70,9 @@ export default function SettingsViewLight({ teachers, students, onAddTeacher, on
           naver_cafe_url: dbSettings.naver_cafe_url || "",
           naver_cafe_title: dbSettings.naver_cafe_title || "네이버 카페",
           textbook_categories: dbSettings.textbook_categories || DEFAULT_CATEGORIES,
-          location: dbSettings.location || ""
+          location: dbSettings.location || "",
+          default_score_cut: dbSettings.default_score_cut ?? 80, // 💡 DB에서 불러오기
+          default_count_cut: dbSettings.default_count_cut ?? 2 // 💡 DB에서 불러오기
         });
       }
     }
@@ -108,6 +115,8 @@ export default function SettingsViewLight({ teachers, students, onAddTeacher, on
     { id: 'teachers', label: 'Teachers', color: 'text-blue-600', activeBg: 'bg-blue-500', roles: ['admin', 'master'] },
     { id: 'holidays', label: 'Holidays', color: 'text-emerald-600', activeBg: 'bg-emerald-500', roles: ['admin', 'master'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-650', activeBg: 'bg-blue-650', roles: ['admin', 'master'] },
+    { id: 'textbooks', label: 'Textbook PDFs', color: 'text-indigo-600', activeBg: 'bg-indigo-500', roles: ['admin', 'master'] },
+    { id: 'timetables', label: 'Weekly Timetable', color: 'text-emerald-600', activeBg: 'bg-emerald-500', roles: ['admin', 'master'] },
     { id: 'manual', label: 'Manual', color: 'text-purple-600', activeBg: 'bg-purple-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'account', label: 'My Account', color: 'text-slate-700', activeBg: 'bg-slate-700', roles: ['admin', 'master', 'teacher'] }
   ], []);
@@ -223,6 +232,25 @@ export default function SettingsViewLight({ teachers, students, onAddTeacher, on
             onUpdateCurrentUser={onUpdateCurrentUser} 
             academyInfo={academyInfo} 
             onUpdateAcademyInfo={onUpdateAcademyInfo} 
+          />
+        )}
+
+        {/* 📖 교재 PDF 링크 관리 탭 */}
+        {activeTab === 'textbooks' && (
+          <TextbookPdfSettings 
+            academyInfo={academyInfo}
+            masterTextbooks={masterTextbooks}
+            isLight={true}
+          />
+        )}
+
+        {/* 📅 주간 시간표 관리 탭 */}
+        {activeTab === 'timetables' && (
+          <TimetableSettings 
+            academyInfo={academyInfo}
+            teachers={teachers}
+            students={students}
+            isLight={true}
           />
         )}
       </div>

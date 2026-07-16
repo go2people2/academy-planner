@@ -312,47 +312,7 @@ export default function AcademyProfile({
             </div>
           </div>
 
-          {/* 3. 기본 통과 기준 설정 */}
-          <div className="bg-white/5 border border-white/5 rounded-xl p-5 space-y-4">
-            <div className="flex items-center gap-3 pb-2 border-b border-white/5">
-              <Shield className="text-emerald-500" size={18} />
-              <h3 className="text-xs font-black text-white tracking-widest">기본 통과 기준 설정</h3>
-            </div>
 
-            <div className="grid grid-cols-2 gap-4 text-left">
-              <div className="bg-black/40 border border-white/10 rounded-lg p-3 space-y-1.5">
-                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">백분율형(100점) 기준</label>
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="number" 
-                    value={opSettings.default_score_cut !== undefined ? opSettings.default_score_cut : 80} 
-                    onChange={(e) => {
-                      setOpSettings((prev:any) => ({ ...prev, default_score_cut: parseInt(e.target.value) || 0 }));
-                    }}
-                    onBlur={(e) => updateOpSetting('default_score_cut', parseInt(e.target.value) || 0)}
-                    className="w-16 bg-transparent border-b border-white/10 px-1 py-0.5 text-sm font-black text-white outline-none focus:border-blue-500 text-center"
-                  />
-                  <span className="text-[10px] text-gray-400 font-bold">점 이상 통과</span>
-                </div>
-              </div>
-
-              <div className="bg-black/40 border border-white/10 rounded-lg p-3 space-y-1.5">
-                <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">개수형 오답 허용 기준</label>
-                <div className="flex items-center gap-2">
-                  <input 
-                    type="number" 
-                    value={opSettings.default_count_cut !== undefined ? opSettings.default_count_cut : 2} 
-                    onChange={(e) => {
-                      setOpSettings((prev:any) => ({ ...prev, default_count_cut: parseInt(e.target.value) || 0 }));
-                    }}
-                    onBlur={(e) => updateOpSetting('default_count_cut', parseInt(e.target.value) || 0)}
-                    className="w-16 bg-transparent border-b border-white/10 px-1 py-0.5 text-sm font-black text-white outline-none focus:border-blue-500 text-center"
-                  />
-                  <span className="text-[10px] text-gray-400 font-bold">개 이하 통과</span>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         {/* 💡 오른쪽 단 (분류 및 링크 영역) */}

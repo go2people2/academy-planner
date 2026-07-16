@@ -16,10 +16,13 @@ import TeacherManagement from './settings/TeacherManagement';
 import AcademyProfile from './settings/AcademyProfile';
 import AccountSettings from './settings/AccountSettings';
 import SystemManual from './settings/SystemManual';
+import TextbookPdfSettings from './settings/TextbookPdfSettings';
+import TimetableSettings from './settings/TimetableSettings';
 
 interface SettingsViewProps {
   teachers: any[];
   students: any[]; // 💡 추가
+  masterTextbooks: any[]; // 💡 추가
   onAddTeacher: (data: any) => Promise<void>;
   onDeleteTeacher: (id: string) => Promise<void>;
   onUpdateTeacher: (id: string, updates: any) => Promise<void>;
@@ -33,8 +36,8 @@ interface SettingsViewProps {
 
 // --- Main SettingsView Component ---
 
-export default function SettingsView({ teachers, students, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual'>('teachers');
+export default function SettingsView({ teachers, students, masterTextbooks, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual' | 'textbooks' | 'timetables'>('teachers');
 
   // 💡 휴일 관리 함수
   const handleAddHoliday = async (date: string, note: string) => {
@@ -65,7 +68,9 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
     naver_cafe_url: "", // 💡 네이버 카페
     naver_cafe_title: "", // 💡 네이버 카페 버튼 라벨
     textbook_categories: [] as string[], // 💡 교재 카테고리 대분류 추가
-    location: "" // 💡 학원 위치(지역) 추가
+    location: "", // 💡 학원 위치(지역) 추가
+    default_score_cut: 80, // 💡 100점 만점 합격 기준점 추가
+    default_count_cut: 2 // 💡 오답 개수형 통과 기준 추가
   });
 
   // 데이터 로드 여부 추적
@@ -92,7 +97,9 @@ export default function SettingsView({ teachers, students, onAddTeacher, onDelet
           naver_cafe_url: dbSettings.naver_cafe_url || "",
           naver_cafe_title: dbSettings.naver_cafe_title || "네이버 카페",
           textbook_categories: dbSettings.textbook_categories || DEFAULT_CATEGORIES,
-          location: dbSettings.location || "" // 💡 학원 위치 동기화
+          location: dbSettings.location || "", // 💡 학원 위치 동기화
+          default_score_cut: dbSettings.default_score_cut ?? 80, // 💡 DB에서 불러오기
+          default_count_cut: dbSettings.default_count_cut ?? 2 // 💡 DB에서 불러오기
         });
       }
     }
@@ -128,6 +135,8 @@ const updateTimerPreset = async (index: number, value: number) => {
     { id: 'teachers', label: 'Teachers', color: 'text-blue-500', roles: ['admin', 'master'] },
     { id: 'holidays', label: 'Holidays', color: 'text-emerald-500', roles: ['admin', 'master'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-500', roles: ['admin', 'master'] },
+    { id: 'textbooks', label: 'Textbook PDFs', color: 'text-indigo-500', roles: ['admin', 'master'] },
+    { id: 'timetables', label: 'Weekly Timetable', color: 'text-emerald-500', roles: ['admin', 'master'] },
     { id: 'manual', label: 'Manual', color: 'text-purple-500', roles: ['admin', 'master', 'teacher'] },
     // 💡 My Account는 향후 일반 선생님('teacher')에게도 개방 가능하도록 설계
     { id: 'account', label: 'My Account', color: 'text-blue-500', roles: ['admin', 'master', 'teacher'] }
@@ -249,6 +258,25 @@ const updateTimerPreset = async (index: number, value: number) => {
             onUpdateCurrentUser={onUpdateCurrentUser} 
             academyInfo={academyInfo} 
             onUpdateAcademyInfo={onUpdateAcademyInfo} 
+          />
+        )}
+
+        {/* 📖 교재 PDF 링크 관리 탭 */}
+        {activeTab === 'textbooks' && (
+          <TextbookPdfSettings 
+            academyInfo={academyInfo}
+            masterTextbooks={masterTextbooks}
+            isLight={false}
+          />
+        )}
+
+        {/* 📅 주간 시간표 관리 탭 */}
+        {activeTab === 'timetables' && (
+          <TimetableSettings 
+            academyInfo={academyInfo}
+            teachers={teachers}
+            students={students}
+            isLight={false}
           />
         )}
       </div>

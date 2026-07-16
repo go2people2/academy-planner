@@ -33,6 +33,8 @@ interface TodaySheetCellProps {
   isFirstInTimeSection?: boolean;
   timeSectionLabel?: string;
   testPresets?: any[];
+  defaultScoreCut?: number;
+  defaultCountCut?: number;
   
   // Refs
   testRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -100,7 +102,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   timeSectionLabel,
   testPresets,
   onApplyTestPreset,
-  onUpdateStudentInfo
+  onUpdateStudentInfo,
+  defaultScoreCut = 80,
+  defaultCountCut = 2
 }: TodaySheetCellProps) {
   
   const colId = col.id;
@@ -840,6 +844,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             handleLocalInput={handleLocalInput}
             handleCellInteraction={handleCellInteraction}
             onTestScoreTypeToggle={onTestScoreTypeToggle}
+            defaultScoreCut={defaultScoreCut}
+            defaultCountCut={defaultCountCut}
           />
         )}
       </div>

@@ -341,9 +341,9 @@ export default function Sidebar({
  
       <div className="pt-4 border-t border-[#edece9] space-y-1">
         {/* 테마 토글 버튼 */}
-        <button onClick={toggleTheme} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-[#37352f]/70 hover:bg-[#edece9] hover:text-[#37352f] transition-all group font-bold">
-          <Moon size={14} className="text-[#0c73e8] group-hover:animate-bounce" />
-          <span className="text-[11px]">Dark Mode</span>
+        <button onClick={toggleTheme} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-[#37352f]/70 hover:bg-[#edece9] hover:text-[#37352f] transition-all group font-bold" title="Dark Mode로 전환">
+          <Sun size={14} className="text-amber-500 group-hover:animate-bounce" />
+          <span className="text-[11px]">Light Mode</span>
         </button>
  
         {/* 💡 [수정] 관리자 전용 메뉴로 제한 */}

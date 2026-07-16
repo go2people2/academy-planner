@@ -41,6 +41,7 @@ export default function StudentDetailDrawer({
   const dropdownRef = useRef<HTMLDivElement>(null);
   
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [electiveCourses, setElectiveCourses] = useState<any[]>([]);
 
   // 💡 교재 완료 입력 모달 상태 추가
   const [doneModalOpen, setDoneModalOpen] = useState(false);
@@ -122,7 +123,19 @@ export default function StudentDetailDrawer({
     }
     setLocalTeacherId(student.teacher_id || '');
     setLocalLoginSuffix(student.login_suffix || ''); // 💡 추가
-  }, [student.id]);
+
+    // 💡 선택과목 정보 JSON 파싱 후 동기화
+    const rawElective = student.book_courses?.['__elective_courses'];
+    if (rawElective) {
+      try {
+        setElectiveCourses(JSON.parse(rawElective));
+      } catch (e) {
+        setElectiveCourses([]);
+      }
+    } else {
+      setElectiveCourses([]);
+    }
+  }, [student.id, student.book_courses]);
 
   const handleSavePhone = (studentPhoneVal: string, parentPhoneVal: string) => {
     const sClean = studentPhoneVal.trim();
@@ -240,6 +253,81 @@ export default function StudentDetailDrawer({
     setEndTimes(newEnds);
     setLocalSchedules(newSchedules);
     onUpdateInfo(student.id, 'day_schedules', newSchedules);
+  };
+
+  // 💡 선택과목 저장 헬퍼
+  const saveElectiveCourses = (courses: any[]) => {
+    setElectiveCourses(courses);
+    const newBookCourses = { 
+      ...localBookCourses, 
+      '__elective_courses': JSON.stringify(courses) 
+    };
+    setLocalBookCourses(newBookCourses);
+    onUpdateInfo(student.id, 'book_courses', newBookCourses);
+  };
+
+  // 💡 선택과목 추가
+  const handleAddElective = () => {
+    const newCourse = {
+      id: Math.random().toString(36).substr(2, 9),
+      subject: '',
+      days: [] as string[],
+      schedules: {} as Record<string, number[]>,
+      className: ''
+    };
+    saveElectiveCourses([...electiveCourses, newCourse]);
+  };
+
+  // 💡 선택과목 삭제
+  const handleRemoveElective = (id: string) => {
+    if (!confirm('해당 선택과목 설정을 삭제하시겠습니까?')) return;
+    saveElectiveCourses(electiveCourses.filter(c => c.id !== id));
+  };
+
+  // 💡 선택과목 필드 변경 (과목명, 반명)
+  const handleElectiveFieldChange = (id: string, field: string, val: any) => {
+    const updated = electiveCourses.map(c => {
+      if (c.id === id) {
+        return { ...c, [field]: val };
+      }
+      return c;
+    });
+    saveElectiveCourses(updated);
+  };
+
+  // 💡 선택과목 요일 토글
+  const handleElectiveDayToggle = (id: string, day: string) => {
+    const updated = electiveCourses.map(c => {
+      if (c.id === id) {
+        const days = c.days || [];
+        const isSelected = days.includes(day);
+        const newDays = isSelected ? days.filter((d: string) => d !== day) : [...days, day];
+        const newScheds = { ...(c.schedules || {}) };
+        if (isSelected) {
+          delete newScheds[day];
+        } else {
+          newScheds[day] = [1900, 2200]; // 7시 ~ 10시 기본값
+        }
+        return { ...c, days: newDays, schedules: newScheds };
+      }
+      return c;
+    });
+    saveElectiveCourses(updated);
+  };
+
+  // 💡 선택과목 요일별 시간대 변경
+  const handleElectiveTimeChange = (id: string, day: string, startStr: string, endStr: string) => {
+    const updated = electiveCourses.map(c => {
+      if (c.id === id) {
+        const newScheds = { ...(c.schedules || {}) };
+        const startVal = startStr ? parseInt(startStr.replace(':', '')) : 1900;
+        const endVal = endStr ? parseInt(endStr.replace(':', '')) : 2200;
+        newScheds[day] = [startVal, endVal];
+        return { ...c, schedules: newScheds };
+      }
+      return c;
+    });
+    saveElectiveCourses(updated);
   };
 
   const toggleBookSelection = (bookcode: string) => {
@@ -596,6 +684,134 @@ export default function StudentDetailDrawer({
               })()}
             </div>
           </div>
+        </section>
+
+        {/* 2-2. 선택과목 스케줄 설정 (자유 입력 방식) */}
+        <section className="space-y-4">
+          <h5 className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center justify-between px-1 w-full">
+            <span className="flex items-center gap-2">
+              <Calendar size={14} /> Elective Courses (선택과목 시간표)
+            </span>
+            <button
+              type="button"
+              onClick={handleAddElective}
+              className="text-[9px] font-bold text-emerald-400 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 rounded px-2.5 py-1 transition-all cursor-pointer normal-case flex items-center gap-1"
+            >
+              + 추가
+            </button>
+          </h5>
+
+          {electiveCourses.length === 0 ? (
+            <div className="bg-white/5 border border-white/5 rounded-[4px] p-4 text-[10px] text-gray-500 text-center italic shadow-inner">
+              추가된 선택과목이 없습니다. 우측 상단의 '+ 추가' 버튼을 눌러주세요.
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {electiveCourses.map((c, cIdx) => {
+                const parseTimeStr = (val: number) => {
+                  if (!val || val === 999) return '';
+                  let h = Math.floor(val / 100);
+                  if (h <= 12) h += 12;
+                  const m = (val % 100).toString().padStart(2, '0');
+                  return `${h.toString().padStart(2, '0')}:${m}`;
+                };
+
+                return (
+                  <div key={c.id || cIdx} className="bg-white/5 border border-white/5 rounded-[4px] p-4 space-y-3 shadow-inner relative group/card">
+                    {/* 상단 헤더 & 과목 삭제 */}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveElective(c.id)}
+                      className="absolute top-3 right-3 text-gray-500 hover:text-red-500 opacity-0 group-hover/card:opacity-100 transition-opacity"
+                      title="선택과목 삭제"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+
+                    {/* 과목명 & 반명 입력 */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <label className="text-[8px] font-black text-gray-500 uppercase block mb-1">선택과목 명칭</label>
+                        <input
+                          type="text"
+                          value={c.subject || ''}
+                          placeholder="예: 확통, 기하, 미적분2"
+                          onChange={(e) => handleElectiveFieldChange(c.id, 'subject', e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500 transition-all font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-black text-gray-500 uppercase block mb-1">아카 반명 (선택)</label>
+                        <input
+                          type="text"
+                          value={c.className || ''}
+                          placeholder="비워두면 자동 매핑"
+                          onChange={(e) => handleElectiveFieldChange(c.id, 'className', e.target.value)}
+                          className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500 transition-all font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 요일 선택 */}
+                    <div>
+                      <label className="text-[8px] font-black text-gray-500 uppercase block mb-1">수업 요일</label>
+                      <div className="grid grid-cols-7 gap-1">
+                        {DAYS.map(day => {
+                          const isDaySelected = (c.days || []).includes(day);
+                          return (
+                            <button
+                              key={`elective-day-${day}`}
+                              type="button"
+                              onClick={() => handleElectiveDayToggle(c.id, day)}
+                              className={`text-[9px] font-black h-7 rounded-[2px] flex items-center justify-center transition-all ${
+                                isDaySelected ? 'bg-emerald-600 text-white shadow-md' : 'bg-white/5 text-gray-500 hover:bg-white/10'
+                              }`}
+                            >
+                              {day}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>
+
+                    {/* 요일별 시간 입력 */}
+                    {(c.days || []).length > 0 && (
+                      <div className="flex flex-wrap gap-2 pt-1">
+                        {(c.days || []).map((day: string) => {
+                          const sched = c.schedules?.[day] || [1900, 2200];
+                          const startTime = parseTimeStr(sched[0]);
+                          const endTime = parseTimeStr(sched[1]);
+
+                          return (
+                            <div key={`elective-time-${day}`} className="flex items-center gap-1.5 bg-white/5 border border-white/5 px-2 py-1 rounded-[4px] shrink-0">
+                              <span className="text-[9px] font-black text-emerald-400 bg-emerald-600/10 w-5 h-5 flex items-center justify-center rounded-[2px] shrink-0">
+                                {day}
+                              </span>
+                              <div className="flex items-center gap-1">
+                                <input
+                                  type="time"
+                                  value={startTime}
+                                  onChange={(e) => handleElectiveTimeChange(c.id, day, e.target.value, endTime)}
+                                  className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-emerald-500 transition-all font-bold w-[90px] cursor-pointer"
+                                />
+                                <span className="text-[9px] text-gray-600">~</span>
+                                <input
+                                  type="time"
+                                  value={endTime}
+                                  onChange={(e) => handleElectiveTimeChange(c.id, day, startTime, e.target.value)}
+                                  className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-emerald-500 transition-all font-bold w-[90px] cursor-pointer"
+                                />
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         {/* 3. 교재 다중 선택 */}

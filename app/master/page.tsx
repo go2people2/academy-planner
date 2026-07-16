@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X } from 'lucide-react';
+import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 export default function MasterDashboard() {
@@ -18,6 +18,9 @@ export default function MasterDashboard() {
   const [editSlug, setEditSlug] = useState('');
   const [editIsSuspended, setEditIsSuspended] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
+  
+  // 💡 [추가] AI 설정 상태
+  const [editAiSettings, setEditAiSettings] = useState<{ active_models: string[]; default_model: string }>({ active_models: ['openai'], default_model: 'openai' });
   
   // 💡 [추가] 학원 삭제 상태 관리
   const [isDeleting, setIsDeleting] = useState(false);
@@ -228,7 +231,14 @@ export default function MasterDashboard() {
       const res = await fetch('/api/master/update-academy', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ academyId: targetId, academyName: cleanName, slug: cleanSlug, oldSlug, isSuspended: editIsSuspended })
+        body: JSON.stringify({ 
+          academyId: targetId, 
+          academyName: cleanName, 
+          slug: cleanSlug, 
+          oldSlug, 
+          isSuspended: editIsSuspended,
+          aiSettings: editAiSettings 
+        })
       });
       const data = await res.json();
       
@@ -570,6 +580,48 @@ export default function MasterDashboard() {
               <div className="flex items-center justify-between"><span className="text-gray-300">학생 로그인</span><span>https://hokmanote.xyz/[슬러그]/student</span></div>
             </div>
           </div>
+
+          {/* 🤖 AI Briefing Sales & Spec Guide */}
+          <div className="bg-[#111111]/80 border border-blue-500/10 rounded-sm p-6 space-y-4 shadow-xl relative overflow-hidden">
+            <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-blue-500 to-indigo-500" />
+            <div className="flex items-center gap-2.5 text-blue-400">
+              <Sparkles size={16} />
+              <h4 className="text-xs font-black uppercase tracking-widest text-white/95">AI 브리핑 작동 원리 & 세일즈 가이드</h4>
+            </div>
+            
+            <div className="space-y-3.5 text-[11px] text-gray-400 leading-relaxed font-bold">
+              <div className="space-y-1">
+                <span className="text-[10px] text-white/90 font-black block">1. 어떤 자료(Data)가 수집되나요?</span>
+                <p className="text-gray-500">학원 DB(Supabase)에서 학생의 핵심 학습 기록만을 안전하게 비식별화하여 결합합니다.</p>
+                <ul className="list-disc ml-4 text-[10px] text-gray-400 space-y-0.5">
+                  <li>학생 기본 인적사항 (학년, 학교, 담당 선생님)</li>
+                  <li>성실도 지표: 최근 10회 수업의 출결 상태 및 숙제 수행률(%)</li>
+                  <li>성취도 지표: 일일 테스트 퀴즈 점수 및 평균 성적</li>
+                  <li>정기 고사 OMR 결과: 최근 3회 고사 점수 및 오답 문항 정보</li>
+                </ul>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] text-white/90 font-black block">2. 어떤 과정을 거쳐 브리핑이 나오나요?</span>
+                <p className="text-gray-500">수집된 원천 데이터를 AI가 읽기 쉬운 정량적 요약 프롬프트 텍스트로 가공합니다.</p>
+                <ul className="list-disc ml-4 text-[10px] text-gray-400 space-y-0.5">
+                  <li>안전한 SSL 보안망을 통해 설정된 AI API(OpenAI/Gemini)로 송신됩니다.</li>
+                  <li>수학 전문 강사 및 학습 설계사의 톤앤매너 프롬프트 규칙이 적용됩니다.</li>
+                  <li>3대 세부 영역(성적 및 취약점, 성실도 분석, 추천 상담 멘트)으로 자동 분류되어 가맹 학원 화면에 렌더링됩니다.</li>
+                </ul>
+              </div>
+
+              <div className="space-y-1">
+                <span className="text-[10px] text-white/90 font-black block">3. 원장님/고객 대상 핵심 세일즈 멘트</span>
+                <p className="text-gray-500">가맹 학원에 본 시스템의 가치를 설명할 때 유용한 핵심 장점입니다.</p>
+                <ul className="list-disc ml-4 text-[10px] text-gray-400 space-y-0.5">
+                  <li><strong className="text-blue-400">시간 단축</strong>: 10회차 일지를 뒤지며 숙제 완성도와 지각 횟수를 계산할 필요 없이 클릭 한 번에 성실도가 정량화됩니다.</li>
+                  <li><strong className="text-blue-400">맞춤형 진단</strong>: OMR 오답 문항을 토대로 학생이 서술형에 약한지, 특정 개념 실수가 잦은지 AI가 즉석에서 짚어냅니다.</li>
+                  <li><strong className="text-blue-400">즉각 연동</strong>: 분석된 상담 가이드 멘트를 상담 일지에 원클릭으로 저장해 상담 기록 누적 업무를 자동화합니다.</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </section>
 
         {/* Right: Existing Academy List */}
@@ -604,6 +656,7 @@ export default function MasterDashboard() {
                     <tr className="border-b border-white/5 text-[9px] font-black text-gray-500 uppercase tracking-widest">
                       <th className="py-3 px-2">학원명</th>
                       <th className="py-3 px-2">슬러그 (인터넷 주소)</th>
+                      <th className="py-3 px-2">AI 엔진</th>
                       <th className="py-3 px-2 text-right">개설 일시</th>
                       <th className="py-3 px-2 text-right">작업</th>
                     </tr>
@@ -635,6 +688,19 @@ export default function MasterDashboard() {
                               /{ac.slug}
                             </code>
                           </td>
+                          <td className="py-3.5 px-2">
+                            <div className="flex gap-1 items-center">
+                              {ac.operation_settings?.ai_settings?.active_models?.includes('openai') ? (
+                                <span className="px-1.5 py-0.5 rounded-[2px] bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-black uppercase tracking-tight">GPT-4o</span>
+                              ) : null}
+                              {ac.operation_settings?.ai_settings?.active_models?.includes('gemini') ? (
+                                <span className="px-1.5 py-0.5 rounded-[2px] bg-purple-500/10 text-purple-400 border border-purple-500/20 text-[9px] font-black uppercase tracking-tight">Gemini</span>
+                              ) : null}
+                              {(!ac.operation_settings?.ai_settings?.active_models || ac.operation_settings?.ai_settings?.active_models.length === 0) ? (
+                                <span className="px-1.5 py-0.5 rounded-[2px] bg-slate-800 text-slate-400 border border-white/5 text-[9px] font-black uppercase tracking-tight">GPT-4o (기본)</span>
+                              ) : null}
+                            </div>
+                          </td>
                           <td className="py-3.5 px-2 text-right text-[10px] text-gray-500">
                             {new Date(ac.created_at).toLocaleDateString('ko-KR', {
                               year: 'numeric',
@@ -652,6 +718,13 @@ export default function MasterDashboard() {
                                   setEditAcademyName(ac.academy_name);
                                   setEditSlug(ac.slug);
                                   setEditIsSuspended(isAcSuspended);
+                                  
+                                  const aiSettings = ac.operation_settings?.ai_settings || { active_models: ['openai'], default_model: 'openai' };
+                                  setEditAiSettings({
+                                    active_models: Array.isArray(aiSettings.active_models) ? aiSettings.active_models : ['openai'],
+                                    default_model: aiSettings.default_model || 'openai'
+                                  });
+                                  
                                   // 💡 삭제 상태 리셋
                                   setDeleteConfirmInput('');
                                   setShowDeleteSection(false);
@@ -741,6 +814,70 @@ export default function MasterDashboard() {
                     <option value="active" className="text-emerald-400 bg-[#121212]">✅ 정상 제공 (Active)</option>
                     <option value="suspended" className="text-red-400 bg-[#121212]">❌ 일시 중지 (Suspended)</option>
                   </select>
+                </div>
+
+                {/* 💡 AI 브리핑 연동 설정 */}
+                <div className="space-y-2 border-t border-white/5 pt-3">
+                  <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block ml-0.5">🤖 AI 브리핑 연동 설정</label>
+                  <div className="bg-black/40 border border-white/5 rounded-sm p-3 space-y-3">
+                    <div className="space-y-1.5">
+                      <span className="text-[9px] text-gray-400 font-bold block mb-1">사용 가능한 AI 엔진</span>
+                      {[
+                        { id: 'openai', label: 'OpenAI (GPT-4o)' },
+                        { id: 'gemini', label: 'Google (Gemini 1.5 Pro)' }
+                      ].map((model) => {
+                        const isChecked = editAiSettings.active_models.includes(model.id);
+                        return (
+                          <label key={model.id} className="flex items-center gap-2 text-xs text-white/80 cursor-pointer select-none">
+                            <input 
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={(e) => {
+                                let nextModels = [...editAiSettings.active_models];
+                                if (e.target.checked) {
+                                  if (!nextModels.includes(model.id)) nextModels.push(model.id);
+                                } else {
+                                  nextModels = nextModels.filter(m => m !== model.id);
+                                }
+                                
+                                if (nextModels.length === 0) {
+                                  alert('최소 1개의 AI 엔진은 선택되어야 합니다.');
+                                  return;
+                                }
+                                
+                                let nextDefault = editAiSettings.default_model;
+                                if (!nextModels.includes(nextDefault)) {
+                                  nextDefault = nextModels[0];
+                                }
+                                setEditAiSettings({
+                                  active_models: nextModels,
+                                  default_model: nextDefault
+                                });
+                              }}
+                              className="accent-blue-500 rounded border-white/10"
+                            />
+                            <span>{model.label}</span>
+                          </label>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-1">
+                      <span className="text-[9px] text-gray-400 font-bold block">기본 AI 엔진</span>
+                      <select 
+                        value={editAiSettings.default_model}
+                        onChange={(e) => setEditAiSettings(prev => ({ ...prev, default_model: e.target.value }))}
+                        className="w-full bg-black/60 border border-white/10 rounded-sm py-1.5 px-2 text-xs text-white outline-none focus:border-blue-500/60 font-bold"
+                      >
+                        {editAiSettings.active_models.includes('openai') && (
+                          <option value="openai" className="bg-[#121212]">OpenAI (GPT-4o)</option>
+                        )}
+                        {editAiSettings.active_models.includes('gemini') && (
+                          <option value="gemini" className="bg-[#121212]">Google (Gemini 1.5 Pro)</option>
+                        )}
+                      </select>
+                    </div>
+                  </div>
                 </div>
 
                 {/* 💡 [추가] 위험 지대: 학원 영구 삭제 UI */}

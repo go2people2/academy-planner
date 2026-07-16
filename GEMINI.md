@@ -1,5 +1,31 @@
 # GEMINI.md
 
+---
+
+## 🚨 절대 규칙 — 사고 기록 (2026-07-12)
+
+### [시간표] ams_students 데이터는 절대 시간표 저장으로 덮어쓰지 않는다
+
+**사고 내용**: `TimetableSettings`에서 "시간표 최종 저장" 버튼을 누르자, `app/api/timetables/route.ts`의 자동 동기화 코드가 해당 선생님 담당 학생 전원의 `class_days`와 `day_schedules`를 빈 값(`[]`, `{}`)으로 초기화했다. Supabase Free 플랜 특성상 DB 롤백 불가. 사용자가 수십 명의 학생 스케줄을 수동으로 복구해야 했다.
+
+**올바른 데이터 흐름**:
+```
+ams_students.class_days / day_schedules
+        ↓ (읽기 전용)
+  TimetableSettings 화면에 학생 이름 표시
+        ↓ (저장)
+  ams_timetables (시간표 레이아웃 전용 테이블)
+```
+
+**절대 금지**:
+- `app/api/timetables/route.ts` (또는 어떤 시간표 관련 API)에서 `ams_students`의 `class_days`, `day_schedules` 컬럼을 UPDATE하는 코드를 추가하는 것
+- 시간표 저장 로직이 학생 프로필 데이터를 "동기화"하거나 "역산"하는 구조를 만드는 것
+
+**원칙**: `ams_students`의 요일/시간 정보는 학생 프로필에서만 관리한다. 시간표는 그 정보를 읽어서 표시할 뿐, 절대 수정하지 않는다.
+
+---
+
+
 ## 💡 개발 원칙 (Core Principles)
 
 1. **Language**

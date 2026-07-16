@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { LayoutDashboard, Bell, Table, ClipboardCheck, Activity, UserCog, ArrowLeftRight, Settings, Info, Keyboard } from 'lucide-react';
+import { LayoutDashboard, Bell, Table, ClipboardCheck, Activity, UserCog, ArrowLeftRight, Settings, Info, Keyboard, Sparkles } from 'lucide-react';
 
 export default function SystemManualLight() {
   const manuals = [
@@ -72,6 +72,47 @@ export default function SystemManualLight() {
       icon: <Settings size={20} className="text-gray-500" />,
       title: "Settings (시스템 설정)",
       desc: "학원의 기본 운영 방침을 세팅합니다. (휴일 캘린더 등록, 학원 홈페이지 연동, 사용할 교재 마스터 목록 관리, 학교별 시험 기간 설정, 동료 선생님 계정 발급 등)"
+    },
+    {
+      icon: <Sparkles size={20} className="text-blue-600" />,
+      title: "🤖 AI 상담 브리핑 연동 스펙 (프롬프트 명세)",
+      desc: (
+        <div className="space-y-2">
+          <p className="text-gray-600">AI 브리핑 생성 시 전달되는 정량/정성 데이터와 프롬프트 규칙 안내입니다. 가맹 학원 설명 또는 AI 조율 시 아래 명세를 활용하실 수 있습니다.</p>
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-250 shadow-inner space-y-3 text-[11px] leading-relaxed text-[#37352f]">
+            <div>
+              <span className="text-amber-800 font-bold block">1. System Prompt (역할 설정 및 지시문)</span>
+              <p className="text-gray-650 font-semibold mt-0.5">
+                "당신은 수학 학원의 원장님과 담당 강사를 돕는 전문적인 인공지능 학습 컨설턴트 및 상담 분석가입니다. 전달받은 학생의 기본 정보, 지정된 날짜 범위의 수업 일지 데이터(출결, 숙제 태도, 평소 테스트 점수, 특이사항), 그리고 최근 OMR 고사 시험 성적 정보를 종합 분석하여 '학부모 상담용 고품질 리포트'를 작성해 주세요."
+              </p>
+            </div>
+            <div className="border-t border-gray-250 pt-2">
+              <span className="text-blue-700 font-bold block">2. User Prompt (데이터 구조화 템플릿)</span>
+              <pre className="text-gray-600 font-mono text-[9px] whitespace-pre-wrap mt-0.5 bg-white p-2.5 rounded border border-gray-250">
+{`[학생 기본 정보]
+- 이름: {이름} / 학년: {학년} / 학교: {학교}
+- 코스/클래스: {코스} / {클래스}
+
+[설정된 기간의 수업 일지 기록]
+- 날짜: {날짜} / 출결: {출결} / 일지 상태: {상태} / 숙제체크: {완료/미흡} / 성적: {일일테스트점수} / 특이사항: {메모}
+... (기간 내 전체 로그)
+
+[설정된 기간의 정기/OMR 고사 성적]
+- 시험명: {시험지 제목} / 점수: {총점}점 / 틀린 문항 번호: {오답 문항 번호 목록}
+... (기간 내 전체 시험 제출)`}
+              </pre>
+            </div>
+            <div className="border-t border-gray-250 pt-2">
+              <span className="text-emerald-800 font-bold block">3. AI 출력 가이드라인 (H3 3단 구성)</span>
+              <ul className="list-disc pl-4 text-gray-600 space-y-0.5 font-semibold">
+                <li><strong className="text-gray-800">### 📊 성적 및 취약점 분석</strong>: OMR 오답 문항 번호 기반 취약 단원 도출 및 퀴즈 대비 성취도 비교</li>
+                <li><strong className="text-gray-800">### 🏃 성실도 및 태도 분석</strong>: 출결 상태와 숙제 이행률 수치적 요약, 태도 및 학습 습관 평가</li>
+                <li><strong className="text-gray-800">### 🗣️ 학부모 추천 상담 멘트</strong>: 선생님이 구두로 즉시 발화하기에 적절하고 신뢰감 높은 구체적인 클리닉 멘트 제공</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )
     }
   ];
 

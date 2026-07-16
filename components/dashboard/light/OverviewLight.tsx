@@ -153,6 +153,13 @@ export default function Overview({
 
           const combinedPhone = parentPhoneVal ? `${studentPhoneVal} (부모: ${parentPhoneVal})` : studentPhoneVal;
           
+          // 💡 부모연락처(숫자만 남긴 것)에서 뒷 4자리를 추출하여 학부모 로그인 비밀번호 뒷자리(login_suffix)로 자동 매핑!
+          let loginSuffixVal = null;
+          const parentDigits = parentPhoneVal.replace(/[^0-9]/g, '');
+          if (parentDigits.length >= 4) {
+            loginSuffixVal = parentDigits.substring(parentDigits.length - 4);
+          }
+
           const rawTeacherName = teacherIdx !== -1 ? String(row[teacherIdx] || '').trim() : '';
           let matchedTeacherId = null;
           if (rawTeacherName && teachers && teachers.length > 0) {
@@ -166,6 +173,8 @@ export default function Overview({
             school: schoolIdx !== -1 ? String(row[schoolIdx] || '').trim() : '',
             class_name: classNameIdx !== -1 ? String(row[classNameIdx] || '').trim() : '',
             phone: combinedPhone,
+            login_suffix: loginSuffixVal,
+            teacher_id: matchedTeacherId,
             course: (courseIdx !== -1 && String(row[courseIdx]).trim()) ? String(row[courseIdx]).trim() : 'C',
             class_days: cleanedDays,
             day_schedules: daySchedules,

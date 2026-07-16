@@ -465,16 +465,13 @@ export default function StudentPortal() {
       let finalValue = value;
       const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, [dbField]: finalValue };
       
-      let savedLog: any = null;
-      if (todaySession?.id && todaySession.id !== 'temp') { 
-        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      } else { 
-        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      }
+      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
+      const { data, error } = await supabase
+        .from('ams_session_logs')
+        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .select();
+      if (error) throw error;
+      let savedLog = data && data[0] ? data[0] : null;
       
       if (savedLog) {
         setTodaySession((prev: any) => ({ ...prev, ...savedLog }));
@@ -499,16 +496,13 @@ export default function StudentPortal() {
         test_result: JSON.stringify(newResult)
       };
       
-      let savedLog: any = null;
-      if (todaySession?.id && todaySession.id !== 'temp') { 
-        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      } else { 
-        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      }
+      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
+      const { data, error } = await supabase
+        .from('ams_session_logs')
+        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .select();
+      if (error) throw error;
+      let savedLog = data && data[0] ? data[0] : null;
 
       if (savedLog) {
         let savedAchievement = null;
@@ -597,16 +591,13 @@ export default function StudentPortal() {
         completed_classwork_text: currentClasswork
       };
       
-      let savedLog: any = null;
-      if (todaySession?.id && todaySession.id !== 'temp') { 
-        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      } else { 
-        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      }
+      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
+      const { data, error } = await supabase
+        .from('ams_session_logs')
+        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .select();
+      if (error) throw error;
+      let savedLog = data && data[0] ? data[0] : null;
       
       setLocalCompletedClasswork(currentClasswork);
       if (savedLog) {
@@ -634,17 +625,22 @@ export default function StudentPortal() {
     
     setIsSaving(true);
     try {
-      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, approval_status: status };
-      let savedLog: any = null;
-      if (todaySession?.id && todaySession.id !== 'temp') { 
-        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      } else { 
-        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      }
+      // 💡 [동시성 안전조치] 텍스트 저장 완료 전에 최종 제출이 클릭되더라도 입력값 유실이 없도록 현재 최종 내용을 병합하여 전송합니다.
+      const updateData: any = { 
+        student_id: student.id, 
+        session_date: selectedDate, 
+        academy_id: academy.id, 
+        approval_status: status,
+        completed_classwork_text: localCompletedClasswork || '',
+        homework_text: localHomework || ''
+      };
+      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
+      const { data, error } = await supabase
+        .from('ams_session_logs')
+        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .select();
+      if (error) throw error;
+      let savedLog = data && data[0] ? data[0] : null;
       if (savedLog) {
         setTodaySession((prev: any) => ({ ...prev, ...savedLog }));
       } else {

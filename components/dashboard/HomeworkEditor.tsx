@@ -3,8 +3,9 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ClipboardList, Plus, BookOpen, ChevronRight, RefreshCcw, Trash2 } from 'lucide-react';
+import { X, ClipboardList, Plus, BookOpen, ChevronRight, RefreshCcw, Trash2, Eye, FileText, Loader2 } from 'lucide-react';
 import { HomeworkItem, TextbookOption } from '@/types/dashboard';
+import { supabase } from '@/lib/supabase';
 
 interface HomeworkEditorProps {
   title?: string;
@@ -14,15 +15,18 @@ interface HomeworkEditorProps {
   onUpdate: (newHw: HomeworkItem[]) => void;
   onToggleKeepBook?: (bookCode: string, isKeep: boolean) => void;
   onClose: (finalJson?: HomeworkItem[]) => void;
+  isLight?: boolean; // 💡 추가: 라이트 모드 테마 지원
 }
 
 export default function HomeworkEditor({ 
-  title = "Smart Study Editor", student, homeworkJson, masterTextbooks, onUpdate, onToggleKeepBook, onClose 
+  title = "Smart Study Editor", student, homeworkJson, masterTextbooks, onUpdate, onToggleKeepBook, onClose, isLight = false 
 }: HomeworkEditorProps) {
   const [mounted, setMounted] = useState(false);
 
   const [unitDataMap, setUnitDataMap] = useState<Record<string, any[]>>({});
   const [isLoadingUnits, setIsLoadingUnits] = useState(false);
+  const [pdfLinks, setPdfLinks] = useState<Record<string, string>>({});
+  const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
 
   // 💡 편집 중 로컬 상태로만 관리 → 모달 닫을 때만 부모에게 전달 (깜빡임/배열 순서 버그 방지)
   const [items, setItems] = useState<HomeworkItem[]>(homeworkJson);
@@ -30,6 +34,33 @@ export default function HomeworkEditor({
   useEffect(() => {
     itemsRef.current = items;
   }, [items]);
+
+  // 💡 학원 등록 PDF 링크 데이터 로드
+  useEffect(() => {
+    const loadPdfLinks = async () => {
+      if (!student?.academy_id) return;
+      try {
+        const session = await supabase.auth.getSession();
+        const token = session.data?.session?.access_token;
+        if (!token) return;
+
+        const res = await fetch(`/api/textbooks/pdf?academyId=${student.academy_id}`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (res.ok) {
+          const data = await res.json();
+          const mapped: Record<string, string> = {};
+          (data.pdfs || []).forEach((p: any) => {
+            mapped[p.bookcode] = p.pdf_url;
+          });
+          setPdfLinks(mapped);
+        }
+      } catch (e) {
+        console.error('Failed to load PDFs in HomeworkEditor:', e);
+      }
+    };
+    loadPdfLinks();
+  }, [student?.academy_id]);
 
   const startRefs = useRef<Record<number, HTMLInputElement | null>>({});
   const endRefs = useRef<Record<number, HTMLInputElement | null>>({});
@@ -172,6 +203,15 @@ export default function HomeworkEditor({
     }
   };
 
+  const getEmbedUrl = (url: string) => {
+    if (!url) return '';
+    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    if (match && match[1]) {
+      return `https://drive.google.com/file/d/${match[1]}/preview`;
+    }
+    return url;
+  };
+
   return createPortal(
     <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-start pl-[5vw] md:pl-[10vw]">
       <motion.div 
@@ -182,22 +222,38 @@ export default function HomeworkEditor({
         animate={{ opacity: 1, scale: 1 }} 
         exit={{ opacity: 0, scale: 0.95 }}
         onClick={(e) => e.stopPropagation()} 
-        className="pointer-events-auto relative w-full max-w-[680px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-blue-500/30 rounded-sm shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] p-0 flex flex-col overflow-hidden"
+        className={`pointer-events-auto relative w-full max-w-[680px] border rounded-sm p-0 flex flex-col overflow-hidden ${
+          isLight 
+            ? 'bg-white border-blue-200 shadow-xl shadow-blue-900/5 text-gray-800' 
+            : 'bg-[#0a0a0a]/95 backdrop-blur-2xl border-blue-500/30 shadow-[0_40px_100px_rgba(0,0,0,0.9),0_0_50px_rgba(59,130,246,0.1)] text-white'
+        }`}
       >
-        <div className="relative cursor-move bg-gradient-to-r from-blue-600/20 to-indigo-600/10 px-4 py-3 flex items-center justify-between border-b border-white/5 active:from-blue-600/30 transition-all">
+        <div className={`relative cursor-move px-4 py-3 flex items-center justify-between border-b active:from-blue-600/30 transition-all ${
+          isLight 
+            ? 'bg-gradient-to-r from-blue-50 to-indigo-50/50 border-gray-200' 
+            : 'bg-gradient-to-r from-blue-600/20 to-indigo-600/10 border-white/5'
+        }`}>
           <div className="flex items-center gap-3 relative z-10">
-            <div className="w-7 h-7 rounded-[2px] bg-blue-600/30 flex items-center justify-center shadow-inner shadow-blue-400/20">
-              <ClipboardList size={14} className="text-blue-400" />
+            <div className={`w-7 h-7 rounded-[2px] flex items-center justify-center shadow-inner ${
+              isLight ? 'bg-blue-100/50 shadow-blue-200/50' : 'bg-blue-600/30 shadow-blue-400/20'
+            }`}>
+              <ClipboardList size={14} className={isLight ? 'text-blue-600' : 'text-blue-400'} />
             </div>
             <div>
-              <h4 className="font-black text-[12px] uppercase tracking-[0.2em] text-white/80">{title}</h4>
+              <h4 className={`font-black text-[12px] uppercase tracking-[0.2em] ${
+                isLight ? 'text-gray-600' : 'text-white/80'
+              }`}>{title}</h4>
             </div>
           </div>
 
           {student && (
             <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex items-baseline gap-2 pointer-events-none z-10">
-              <span className="text-[17px] font-black text-white tracking-wide">{student.name}</span>
-              <span className="text-[11px] text-blue-200/80 font-medium px-1.5 py-0.5 bg-blue-500/10 border border-blue-500/20 rounded-sm shadow-sm">{student.school} {student.grade}</span>
+              <span className={`text-[17px] font-black tracking-wide ${isLight ? 'text-gray-850' : 'text-white'}`}>{student.name}</span>
+              <span className={`text-[11px] font-medium px-1.5 py-0.5 border rounded-sm shadow-sm ${
+                isLight 
+                  ? 'bg-blue-50 border-blue-100 text-blue-700' 
+                  : 'bg-blue-500/10 border-blue-500/20 text-blue-200/80'
+              }`}>{student.school} {student.grade}</span>
             </div>
           )}
 
@@ -209,7 +265,7 @@ export default function HomeworkEditor({
                   setItems(resetHw);
                 }
               }}
-              className="px-3 py-1.5 rounded-[2px] bg-red-500/20 text-red-400 hover:text-red-300 hover:bg-red-500/30 transition-all text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-500/30"
+              className="px-3 py-1.5 rounded-[2px] bg-red-500/15 text-red-500 hover:text-red-600 hover:bg-red-500/25 transition-all text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 border border-red-500/25"
             >
               <RefreshCcw size={12} /> 전체 초기화
             </button>
@@ -230,6 +286,9 @@ export default function HomeworkEditor({
                 unitData={unitDataMap[hw.book_name] || []}
                 startRef={(el: any) => startRefs.current[idx] = el}
                 endRef={(el: any) => endRefs.current[idx] = el}
+                pdfLinks={pdfLinks}
+                isLight={isLight}
+                onOpenPdf={(url) => setActivePdfUrl(getEmbedUrl(url))}
                 onUpdate={(updated) => {
                   const newHw = [...items];
                   newHw[idx] = updated;
@@ -255,12 +314,18 @@ export default function HomeworkEditor({
           </div>
 
           {/* 💡 실시간 셀 미리보기 영역 */}
-          <div className="bg-blue-500/10 border border-blue-500/30 rounded-sm p-4 space-y-2">
+          <div className={`border rounded-sm p-4 space-y-2 ${
+            isLight ? 'bg-blue-50/50 border-blue-200' : 'bg-blue-500/10 border border-blue-500/30'
+          }`}>
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-black text-blue-300 uppercase tracking-widest flex items-center gap-1.5"><ClipboardList size={14} /> 실시간 미리보기</span>
+              <span className={`text-[11px] font-black uppercase tracking-widest flex items-center gap-1.5 ${
+                isLight ? 'text-blue-700' : 'text-blue-300'
+              }`}><ClipboardList size={14} /> 실시간 미리보기</span>
               <span className="text-[10px] font-bold text-gray-400 italic">데일리 시트에 연동될 결과</span>
             </div>
-            <div className="min-h-[40px] max-h-[80px] overflow-y-auto custom-scrollbar-v text-[13px] text-white font-black whitespace-pre-wrap leading-tight">
+            <div className={`min-h-[40px] max-h-[80px] overflow-y-auto custom-scrollbar-v text-[13px] font-black whitespace-pre-wrap leading-tight ${
+              isLight ? 'text-blue-950' : 'text-white'
+            }`}>
               {(() => {
                 const lines = items
                   .filter(h => h.range)
@@ -279,22 +344,64 @@ export default function HomeworkEditor({
           <div className="pt-1">
             <button 
               onClick={(e) => { e.stopPropagation(); onClose(items); }} 
-              className="w-full bg-blue-600 py-4 rounded-sm font-black text-[13px] uppercase tracking-[0.2em] shadow-2xl shadow-blue-600/40 hover:bg-blue-500 active:scale-[0.98] transition-all text-white border border-blue-400/20"
+              className={`w-full py-4 rounded-sm font-black text-[13px] uppercase tracking-[0.2em] shadow-2xl active:scale-[0.98] transition-all border ${
+                isLight 
+                  ? 'bg-blue-600 text-white border-blue-700 hover:bg-blue-700 shadow-blue-600/20' 
+                  : 'bg-blue-600 hover:bg-blue-500 text-white border-blue-400/20 shadow-blue-600/40'
+              }`}
             >
               확인 및 저장 (Ctrl+Enter)
             </button>
           </div>
         </div>
       </motion.div>
+
+      {/* 📖 인앱 PDF 뷰어 레이어 (구글 드라이브 연동) */}
+      <AnimatePresence>
+        {activePdfUrl && (
+          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm pointer-events-auto no-print">
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className={`relative w-full max-w-5xl h-[88vh] border rounded-lg overflow-hidden flex flex-col shadow-2xl ${
+                isLight ? 'bg-white border-gray-250' : 'bg-[#121212] border-white/10'
+              }`}
+            >
+              <div className={`px-4 py-3 flex items-center justify-between border-b ${
+                isLight ? 'bg-gray-50 border-gray-250 text-gray-800' : 'bg-[#1e1e1e] border-white/5 text-white/80'
+              }`}>
+                <span className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
+                  <FileText size={14} className="text-blue-500" />
+                  교재 PDF 뷰어 (구글 드라이브)
+                </span>
+                <button 
+                  onClick={() => setActivePdfUrl(null)} 
+                  className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-red-500 transition-all"
+                >
+                  <X size={18} />
+                </button>
+              </div>
+              <div className="flex-1 bg-black relative">
+                <iframe 
+                  src={activePdfUrl} 
+                  className="w-full h-full border-none" 
+                  allow="autoplay"
+                />
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>,
     document.body
   );
 }
 
 function HomeworkRow({ 
-  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, onDuplicate, startRef, endRef, onKeyDown 
+  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, onDuplicate, startRef, endRef, onKeyDown, pdfLinks = {}, isLight = false, onOpenPdf 
 }: { 
-  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void
+  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void, pdfLinks?: Record<string, string>, isLight?: boolean, onOpenPdf?: (url: string) => void
 }) {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
@@ -366,9 +473,15 @@ function HomeworkRow({
     }
   };
 
+  const pdfUrl = pdfLinks[hw.book_name];
+
   return (
     <div className="space-y-2">
-      <div className="flex items-center gap-1.5 p-1.5 bg-white/[0.02] hover:bg-white/[0.05] border border-white/5 rounded-[2px] transition-all group">
+      <div className={`flex items-center gap-1.5 p-1.5 border rounded-[2px] transition-all group ${
+        isLight 
+          ? 'bg-gray-50/50 hover:bg-gray-100/50 border-gray-250' 
+          : 'bg-white/[0.02] hover:bg-white/[0.05] border border-white/5'
+      }`}>
         <div className="flex-1 max-w-[220px] min-w-0 flex items-center gap-1.5 overflow-hidden">
           <BookOpen size={11} className="text-blue-500/40 shrink-0" />
           {hw.type === 'custom' ? (
@@ -377,12 +490,18 @@ function HomeworkRow({
               value={hw.book_name}
               placeholder="기타 과제"
               onChange={(e) => onUpdate({ ...hw, book_name: e.target.value })}
-              className="bg-transparent border-b border-white/30 text-[12px] font-bold text-blue-300 outline-none focus:border-blue-400 w-full placeholder:text-gray-500"
+              className={`bg-transparent border-b text-[12px] font-bold outline-none w-full placeholder:text-gray-400 ${
+                isLight 
+                  ? 'border-gray-300 text-blue-600 focus:border-blue-500' 
+                  : 'bg-transparent border-white/30 text-blue-300 focus:border-blue-400'
+              }`}
             />
           ) : (
             <span 
               onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}
-              className="text-[12px] font-black text-white truncate cursor-pointer hover:text-blue-300 transition-colors" 
+              className={`text-[12px] font-black truncate cursor-pointer hover:text-blue-600 transition-colors ${
+                isLight ? 'text-gray-800 font-bold' : 'text-white font-black'
+              }`} 
             >
               {masterTextbooks.find(m => m.bookcode === hw.book_name)?.title || hw.book_name}
             </span>
@@ -400,9 +519,13 @@ function HomeworkRow({
             onKeyDown={(e) => handleInputKeyDown(e, 'start')}
             onBlur={() => { isFocused.current = false; handleFinalize(); }}
             placeholder={hw.type === 'custom' ? "상세 내용" : "시작"}
-            className={`${hw.type === 'custom' ? 'w-40' : 'w-16'} bg-black/40 border border-white/40 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-300`}
+            className={`${hw.type === 'custom' ? 'w-40' : 'w-16'} border rounded-md py-1.5 text-[12px] outline-none text-center font-bold placeholder:text-gray-400 ${
+              isLight 
+                ? 'bg-white border-gray-250 text-gray-800 focus:border-blue-500 focus:bg-blue-50/10' 
+                : 'bg-black/40 border-white/40 text-white focus:border-blue-400 focus:bg-black/20'
+            }`}
           />
-          <span className="text-gray-200 text-[12px] font-bold">-</span>
+          <span className={`text-[12px] font-bold ${isLight ? 'text-gray-400' : 'text-gray-200'}`}>-</span>
           <input 
             ref={endRef}
             type="text" 
@@ -412,23 +535,49 @@ function HomeworkRow({
             onKeyDown={(e) => handleInputKeyDown(e, 'end')}
             onBlur={() => { isFocused.current = false; handleFinalize(); }}
             placeholder="끝"
-            className="w-16 bg-black/40 border border-white/40 rounded-md py-1.5 text-[12px] outline-none text-white focus:border-blue-400 text-center font-bold placeholder:text-gray-300"
+            className={`w-16 border rounded-md py-1.5 text-[12px] outline-none text-center font-bold placeholder:text-gray-400 ${
+              isLight 
+                ? 'bg-white border-gray-250 text-gray-800 focus:border-blue-500 focus:bg-blue-50/10' 
+                : 'bg-black/40 border-white/40 text-white focus:border-blue-400 focus:bg-black/20'
+            }`}
           />
         </div>
 
         {hw.type === 'book' && (
           <div className="flex-1 min-w-[60px] flex items-center gap-1 overflow-hidden" onClick={() => setIsUnitsExpanded(!isUnitsExpanded)}>
             <ChevronRight size={10} className="text-blue-500/50 shrink-0" />
-            <p className="text-[11px] font-bold text-gray-400 truncate italic cursor-pointer">
+            <p className={`text-[11px] font-bold truncate italic cursor-pointer ${
+              isLight ? 'text-gray-500' : 'text-gray-400'
+            }`}>
               {hw.range || '...'}
             </p>
           </div>
         )}
 
         <div className="flex items-center gap-1.5 ml-auto shrink-0">
+          {/* 📄 구글 드라이브 교재 뷰어 링크가 있으면 버튼 표시 */}
+          {hw.type === 'book' && pdfUrl && (
+            <button 
+              type="button"
+              onClick={() => onOpenPdf?.(pdfUrl)} 
+              className={`w-6 h-6 shrink-0 rounded-lg transition-all flex items-center justify-center border ${
+                isLight 
+                  ? 'text-indigo-600 hover:bg-indigo-50 border-indigo-200 hover:border-indigo-400' 
+                  : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 border-transparent hover:border-indigo-500/30'
+              }`}
+              title="이 교재의 PDF 보기"
+            >
+              <FileText size={13} />
+            </button>
+          )}
+
           <button 
             onClick={onReset} 
-            className="w-6 h-6 shrink-0 rounded-lg text-gray-400 hover:text-blue-400 hover:bg-blue-500/20 transition-all flex items-center justify-center bg-white/5 border border-transparent hover:border-blue-500/30"
+            className={`w-6 h-6 shrink-0 rounded-lg transition-all flex items-center justify-center border ${
+              isLight 
+                ? 'text-gray-500 hover:text-blue-600 hover:bg-blue-50 border-gray-250 hover:border-blue-300' 
+                : 'text-gray-400 hover:text-blue-400 hover:bg-blue-500/20 bg-white/5 border-transparent hover:border-blue-500/30'
+            }`}
             title="이 교재의 입력 내용 초기화"
           >
             <RefreshCcw size={14} />
@@ -437,7 +586,11 @@ function HomeworkRow({
           {hw.type === 'custom' && (
             <button 
               onClick={onDelete} 
-              className="w-6 h-6 shrink-0 rounded-lg text-red-400 hover:text-red-300 hover:bg-red-500/20 transition-all flex items-center justify-center bg-white/5 border border-transparent hover:border-red-500/30"
+              className={`w-6 h-6 shrink-0 rounded-lg transition-all flex items-center justify-center border ${
+                isLight 
+                  ? 'text-red-500 hover:bg-red-50 border-red-200' 
+                  : 'text-red-400 hover:text-red-300 hover:bg-red-500/20 bg-white/5 border-transparent hover:border-red-500/30'
+              }`}
             >
               <Trash2 size={14} />
             </button>
@@ -447,77 +600,115 @@ function HomeworkRow({
 
       <AnimatePresence>
         {isUnitsExpanded && hw.type === 'book' && (
-          <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }} className="overflow-hidden bg-white/[0.01] border-x border-b border-white/5 rounded-b-[2px] mx-2">
+          <motion.div 
+            initial={{ height: 0, opacity: 0 }} 
+            animate={{ height: 'auto', opacity: 1 }} 
+            exit={{ height: 0, opacity: 0 }} 
+            className={`overflow-hidden border-x border-b rounded-b-[2px] mx-2 ${
+              isLight ? 'bg-gray-50/50 border-gray-200' : 'bg-white/[0.01] border-white/5'
+            }`}
+          >
             <div className="p-3 grid grid-cols-1 gap-1">
               {unitData.map((u, i) => {
                 const isSelected = hw.units?.includes(u.unit);
                 const isInRange = parseInt(startPage) <= parseInt(u.end_page) && parseInt(endPage) >= parseInt(u.start_page);
                 return (
-                  <button key={i} onClick={(clickEvent) => {
-                    const currentUnits = hw.units || [];
-                    let newUnits: string[] = [];
+                  <button 
+                    key={i} 
+                    onClick={(clickEvent) => {
+                      const currentUnits = hw.units || [];
+                      let newUnits: string[] = [];
 
-                    if (clickEvent.shiftKey && lastClickedIndex !== null) {
-                      const startIdx = Math.min(lastClickedIndex, i);
-                      const endIdx = Math.max(lastClickedIndex, i);
-                      const rangeUnits = unitData.slice(startIdx, endIdx + 1).map(x => x.unit);
-                      const targetState = !currentUnits.includes(u.unit);
+                      if (clickEvent.shiftKey && lastClickedIndex !== null) {
+                        const startIdx = Math.min(lastClickedIndex, i);
+                        const endIdx = Math.max(lastClickedIndex, i);
+                        const rangeUnits = unitData.slice(startIdx, endIdx + 1).map(x => x.unit);
+                        const targetState = !currentUnits.includes(u.unit);
 
-                      if (targetState) {
-                        newUnits = Array.from(new Set([...currentUnits, ...rangeUnits]));
+                        if (targetState) {
+                          newUnits = Array.from(new Set([...currentUnits, ...rangeUnits]));
+                        } else {
+                          newUnits = currentUnits.filter(x => !rangeUnits.includes(x));
+                        }
                       } else {
-                        newUnits = currentUnits.filter(x => !rangeUnits.includes(x));
+                        newUnits = currentUnits.includes(u.unit)
+                          ? currentUnits.filter(x => x !== u.unit)
+                          : [...currentUnits, u.unit];
                       }
-                    } else {
-                      newUnits = currentUnits.includes(u.unit)
-                        ? currentUnits.filter(x => x !== u.unit)
-                        : [...currentUnits, u.unit];
-                    }
 
-                    setLastClickedIndex(i);
-                    
-                    // 💡 선택된 단원들의 전체 페이지 범위 산출 (최솟값 ~ 최댓값)
-                    let s = "";
-                    let e = "";
-                    if (newUnits.length > 0) {
-                      const selectedData = unitData.filter(x => newUnits.includes(x.unit));
-                      const startPages = selectedData.map(x => parseInt(String(x.start_page).replace(/\D/g, ''))).filter(n => !isNaN(n));
-                      const endPages = selectedData.map(x => parseInt(String(x.end_page).replace(/\D/g, ''))).filter(n => !isNaN(n));
+                      setLastClickedIndex(i);
                       
-                      if (startPages.length > 0) {
-                        s = String(Math.min(...startPages));
+                      // 💡 선택된 단원들의 전체 페이지 범위 산출 (최솟값 ~ 최댓값)
+                      let s = "";
+                      let e = "";
+                      if (newUnits.length > 0) {
+                        const selectedData = unitData.filter(x => newUnits.includes(x.unit));
+                        const startPages = selectedData.map(x => parseInt(String(x.start_page).replace(/\D/g, ''))).filter(n => !isNaN(n));
+                        const endPages = selectedData.map(x => parseInt(String(x.end_page).replace(/\D/g, ''))).filter(n => !isNaN(n));
+                        
+                        if (startPages.length > 0) {
+                          s = String(Math.min(...startPages));
+                        }
+                        if (endPages.length > 0) {
+                          e = String(Math.max(...endPages));
+                        }
                       }
-                      if (endPages.length > 0) {
-                        e = String(Math.max(...endPages));
+
+                      setStartPage(s);
+                      setEndPage(e);
+                      
+                      const unitText = unitData.filter(x => newUnits.includes(x.unit)).map(x => x.unit).join(', ');
+                      const activeNote = hw.note ? ` ${hw.note}` : '';
+                      
+                      let rangeText = "";
+                      if (s && e) {
+                        rangeText = (s === e) ? `p${s}` : `p${s}~${e}`;
+                      } else if (s) {
+                        rangeText = `p${s}`;
+                      } else if (e) {
+                        rangeText = `p${e}`;
                       }
-                    }
 
-                    setStartPage(s);
-                    setEndPage(e);
-                    
-                    const unitText = unitData.filter(x => newUnits.includes(x.unit)).map(x => x.unit).join(', ');
-                    const activeNote = hw.note ? ` ${hw.note}` : '';
-                    
-                    let rangeText = "";
-                    if (s && e) {
-                      rangeText = (s === e) ? `p${s}` : `p${s}~${e}`;
-                    } else if (s) {
-                      rangeText = `p${s}`;
-                    } else if (e) {
-                      rangeText = `p${e}`;
-                    }
-
-                    onUpdate({ 
-                      ...hw, 
-                      units: newUnits, 
-                      range: unitText ? `${unitText} ${rangeText}${activeNote}` : `${rangeText}${activeNote}`,
-                      start_page: s,
-                      end_page: e,
-                      note: hw.note
-                    });
-                  }} className={`flex items-center justify-between px-3 py-2.5 rounded-[2px] text-[15px] font-normal transition-all ${isSelected ? 'bg-blue-600/30 text-blue-300 border border-blue-500/40' : 'text-gray-200 hover:bg-white/10 border border-transparent'} ${isInRange && !isSelected ? 'text-emerald-300' : ''}`}>
-                    <div className="flex items-center gap-2.5"><div className={`w-2 h-2 rounded-full ${isSelected ? 'bg-blue-400' : isInRange ? 'bg-emerald-400' : 'bg-transparent border-2 border-white/30'}`} /><span className="truncate max-w-[400px]">{u.unit}</span></div>
-                    <span className="text-[15px] text-white opacity-100 tabular-nums tracking-wide font-normal">p{u.start_page}~{u.end_page}</span>
+                      onUpdate({ 
+                        ...hw, 
+                        units: newUnits, 
+                        range: unitText ? `${unitText} ${rangeText}${activeNote}` : `${rangeText}${activeNote}`,
+                        start_page: s,
+                        end_page: e,
+                        note: hw.note
+                      });
+                    }} 
+                    className={`flex items-center justify-between px-3 py-2.5 rounded-[2px] text-[14px] transition-all ${
+                      isSelected 
+                        ? isLight 
+                          ? 'bg-blue-100/70 text-blue-900 border border-blue-300 font-bold'
+                          : 'bg-blue-600/30 text-blue-300 border border-blue-500/40' 
+                        : isLight
+                          ? 'text-gray-800 hover:bg-gray-150/80 border border-transparent'
+                          : 'text-gray-200 hover:bg-white/10 border border-transparent'
+                    } ${
+                      isInRange && !isSelected 
+                        ? isLight
+                          ? 'text-emerald-700 bg-emerald-50/50'
+                          : 'text-emerald-300' 
+                        : ''
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5">
+                      <div className={`w-2 h-2 rounded-full ${
+                        isSelected 
+                          ? isLight ? 'bg-blue-600' : 'bg-blue-400' 
+                          : isInRange 
+                            ? isLight ? 'bg-emerald-600' : 'bg-emerald-400' 
+                            : isLight ? 'border border-gray-400' : 'border-2 border-white/30'
+                      }`} />
+                      <span className="truncate max-w-[400px] font-semibold">{u.unit}</span>
+                    </div>
+                    <span className={`text-[13px] tabular-nums tracking-wide ${
+                      isLight ? 'text-gray-600 font-bold' : 'text-white opacity-100 font-normal'
+                    }`}>
+                      p{u.start_page}~{u.end_page}
+                    </span>
                   </button>
                 );
               })}

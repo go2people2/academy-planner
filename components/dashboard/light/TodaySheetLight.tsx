@@ -905,7 +905,30 @@ export default function TodaySheet({
           return (order[a] || 0) - (order[b] || 0);
         }).join('');
         const teacherInitial = teacher?.initials || s.teacher_initial || '';
-        const combinedName = `${s.name}-${teacherInitial}-${sortedDays}`;
+
+        // 💡 [안정화] 오늘 날짜의 요일에 선택과목 수업이 배정되어 있는 경우, 반명을 해당 선택과목 전용 반명으로 변경합니다.
+        const daysKorean = ['일', '월', '화', '수', '목', '금', '토'];
+        const currentKoreanDay = daysKorean[new Date(selectedDate).getDay()];
+        
+        let electiveClassName = '';
+        const rawElective = s.book_courses?.['__elective_courses'];
+        if (rawElective) {
+          try {
+            const parsed = JSON.parse(rawElective);
+            if (Array.isArray(parsed)) {
+              const matched = parsed.find(item => (item.days || []).includes(currentKoreanDay));
+              if (matched) {
+                electiveClassName = matched.className?.trim() || `${s.name}-${teacherInitial}-${matched.subject}`;
+              }
+            }
+          } catch (e) {
+            console.error('Failed to parse elective courses during ACA export', e);
+          }
+        }
+
+        const combinedName = electiveClassName 
+          ? electiveClassName 
+          : `${s.name}-${teacherInitial}-${sortedDays}`;
         const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code).filter((title: any) => !!title).join(', ');
         const testDisplay = (() => {
           if (!session.test_id) return '';

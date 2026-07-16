@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // 💡 기존 operation_settings 조회하여 is_suspended 설정 병합
+    // 💡 기존 operation_settings 조회하여 is_suspended 및 AI 설정 병합
     const { data: currentAc } = await supabaseAdmin
       .from('ams_academies')
       .select('operation_settings')
@@ -53,7 +53,8 @@ export async function POST(req: NextRequest) {
     
     const nextSettings = {
       ...(currentAc?.operation_settings || {}),
-      is_suspended: body.isSuspended === true
+      is_suspended: body.isSuspended === true,
+      ai_settings: body.aiSettings || null
     };
 
     // 2. ams_academies 학원 테이블 업데이트

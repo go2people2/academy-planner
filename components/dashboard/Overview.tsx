@@ -37,6 +37,7 @@ interface OverviewProps {
   searchQuery?: string; // 💡 추가
   onSearchChange?: (val: string) => void; // 💡 추가
   currentUser?: any; // 💡 추가
+  showDuplicateWarning?: boolean; // 💡 추가 (중복 로그인 경보 노출 제어)
 }
 
 export default function Overview({ 
@@ -54,7 +55,8 @@ export default function Overview({
   academyInfo,
   searchQuery = '', // 💡 추가
   onSearchChange, // 💡 추가
-  currentUser // 💡 추가
+  currentUser, // 💡 추가
+  showDuplicateWarning = false // 💡 추가
 }: OverviewProps) {
   
   const [selectedForBatch, setSelectedForBatch] = useState<string[]>([]);
@@ -186,6 +188,13 @@ export default function Overview({
 
           const combinedPhone = parentPhoneVal ? `${studentPhoneVal} (부모: ${parentPhoneVal})` : studentPhoneVal;
           
+          // 💡 부모연락처(숫자만 남긴 것)에서 뒷 4자리를 추출하여 학부모 로그인 비밀번호 뒷자리(login_suffix)로 자동 매핑!
+          let loginSuffixVal = null;
+          const parentDigits = parentPhoneVal.replace(/[^0-9]/g, '');
+          if (parentDigits.length >= 4) {
+            loginSuffixVal = parentDigits.substring(parentDigits.length - 4);
+          }
+
           const rawTeacherName = teacherIdx !== -1 ? String(row[teacherIdx] || '').trim() : '';
           let matchedTeacherId = null;
           if (rawTeacherName && teachers && teachers.length > 0) {
@@ -199,6 +208,8 @@ export default function Overview({
             school: schoolIdx !== -1 ? String(row[schoolIdx] || '').trim() : '',
             class_name: classNameIdx !== -1 ? String(row[classNameIdx] || '').trim() : '',
             phone: combinedPhone,
+            login_suffix: loginSuffixVal,
+            teacher_id: matchedTeacherId,
             course: (courseIdx !== -1 && String(row[courseIdx]).trim()) ? String(row[courseIdx]).trim() : 'C',
             class_days: cleanedDays,
             day_schedules: daySchedules,
@@ -358,7 +369,7 @@ export default function Overview({
   return (
     <div className="p-2 space-y-6 relative">
       {/* ⚠️ 로그인 전화번호 중복 탐지 알림 배너 */}
-      {!isArchiveMode && duplicatePhoneStudents.length > 0 && (
+      {!isArchiveMode && showDuplicateWarning && duplicatePhoneStudents.length > 0 && (
         <div className="bg-amber-500/10 border border-amber-500/20 rounded-[4px] p-4 text-amber-200 text-xs space-y-2 shadow-lg animate-fade-in no-print">
           <div className="flex items-center gap-2 font-black text-amber-500 uppercase tracking-wider text-[10px]">
             <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-ping" />
