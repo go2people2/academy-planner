@@ -182,7 +182,6 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
             onUpdateAcademyInfo={onUpdateAcademyInfo} 
             noticeDrafts={noticeDrafts}
             onNoticeDraftChange={onNoticeDraftChange}
-            isLight={true}
           />
         )}
 
