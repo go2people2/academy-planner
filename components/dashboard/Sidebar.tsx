@@ -116,10 +116,10 @@ export default function Sidebar({
     <aside className="w-52 border-r border-white/5 bg-[#0a0a0a]/90 backdrop-blur-2xl flex flex-col p-3 sticky top-0 h-screen z-30">
       {/* 내비게이션 제어 */}
       <div className="flex items-stretch gap-1 mb-6">
-        <button onClick={() => window.history.back()} className="flex-1 py-1.5 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
+        <button onClick={() => window.history.back()} className="flex-1 py-1.5 rounded-[2px] bg-white/[0.05] border border-white/10 text-gray-300 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
           <ChevronLeft size={14} className="group-hover:-translate-x-1 transition-transform" />
         </button>
-        <button onClick={() => window.history.forward()} className="flex-1 py-1.5 rounded-[2px] bg-white/[0.03] border border-white/5 text-gray-500 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
+        <button onClick={() => window.history.forward()} className="flex-1 py-1.5 rounded-[2px] bg-white/[0.05] border border-white/10 text-gray-300 hover:text-white hover:bg-blue-600/20 hover:border-blue-500/30 transition-all active:scale-95 group flex items-center justify-center">
           <ChevronRight size={14} className="group-hover:translate-x-1 transition-transform" />
         </button>
       </div>
@@ -140,7 +140,7 @@ export default function Sidebar({
 
         {/* 2 & 3. 날짜 및 사용자 정보 */}
         <div className="flex items-stretch gap-1">
-          <div className="flex-[1.2] px-1.5 py-1 bg-white/[0.03] rounded-[2px] border border-white/5 flex items-center justify-center gap-1 min-w-0">
+          <div className="flex-[1.2] px-1.5 py-1 bg-white/[0.05] rounded-[2px] border border-white/10 flex items-center justify-center gap-1 min-w-0">
             <span className="text-[15px] font-black text-gray-100 tabular-nums leading-none">{new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
             <span className="text-[13px] font-bold text-blue-400 leading-none">({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})</span>
           </div>
@@ -149,7 +149,7 @@ export default function Sidebar({
               <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0"><UserCircle size={10} /></div>
               <div className="flex-1 min-w-0">
                 <p className="text-[12px] font-black text-white truncate leading-none">{user.name}</p>
-                <p className="text-[9px] font-bold text-gray-500 uppercase tracking-tighter mt-0.5">{user.role}</p>
+                <p className="text-[9px] font-bold text-gray-300 uppercase tracking-tighter mt-0.5">{user.role}</p>
               </div>
             </div>
           )}
@@ -158,12 +158,11 @@ export default function Sidebar({
 
       <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar-v">
         <nav className="space-y-1">
-          <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-widest mb-2 px-2">Menu</h3>
+          <h3 className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mb-2 px-2">Menu</h3>
           <SidebarLink icon={<Zap size={14} className={isClassroomModeOpen ? "text-amber-500 fill-current animate-pulse" : "text-amber-400"} />} label="수업 시작 (LIVE)" active={isClassroomModeOpen} onClick={() => { onStartClass(); }} variant="blue" />
-          <SidebarLink icon={<Bell size={14} className="text-rose-400" />} label="공지/건의/설문" active={viewMode === 'notifications'} onClick={() => { setViewMode('notifications'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<LayoutDashboard size={14} className="text-purple-400" />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<TableIcon size={14} className="text-sky-400" />} label="Daily Sheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} />
-          <SidebarLink icon={<ClipboardCheck size={14} className="text-pink-400" />} label="업무 및 보강 관리" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
+          <SidebarLink icon={<ClipboardCheck size={14} className="text-pink-400" />} label="업무/보강/설문" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<AlertTriangle size={14} className="text-orange-400" />} label="교재 오류 관리" active={viewMode === 'problemErrors'} onClick={() => { setViewMode('problemErrors'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Activity size={14} className="text-teal-400" />} label="교재별진도" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<FileText size={14} className="text-blue-400" />} label="기출문제 관리" active={viewMode === 'exams'} onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }} />
@@ -174,10 +173,10 @@ export default function Sidebar({
 
         <nav className="space-y-1">
           <div className="flex items-center justify-between mb-2 px-2">
-            <h3 className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">Filter</h3>
-            <div className="flex bg-white/5 rounded-[2px] p-0.5 border border-white/5">
+            <h3 className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Filter</h3>
+            <div className="flex bg-white/10 rounded-[2px] p-0.5 border border-white/10">
               {(['all', 'today', 'rest'] as const).map((t) => (
-                <button key={t} onClick={() => setFilterTarget(t)} className={`text-[7px] px-1.5 py-0.5 rounded-[1px] font-black uppercase transition-all ${filterTarget === t ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'}`}>
+                <button key={t} onClick={() => setFilterTarget(t)} className={`text-[7px] px-1.5 py-0.5 rounded-[1px] font-black uppercase transition-all ${filterTarget === t ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>
                   {t === 'all' ? 'All' : t === 'today' ? 'Top' : 'Btm'}
                 </button>
               ))}
@@ -201,10 +200,10 @@ export default function Sidebar({
                           setSelectedFilter(g.key);
                         }
                       }} 
-                      className={`flex-1 flex flex-col items-center py-1 rounded-[1px] transition-all ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'}`}
+                      className={`flex-1 flex flex-col items-center py-1 rounded-[1px] transition-all ${isActive ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}
                     >
                       <span className="text-[9px] font-black uppercase">{g.label}</span>
-                      <span className={`text-[7px] font-bold opacity-40 ${isActive ? 'text-white' : 'text-gray-500'}`}>
+                      <span className={`text-[7px] font-bold opacity-70 ${isActive ? 'text-white' : 'text-gray-300'}`}>
                         {g.key === 'All' ? students.filter(s => !s.is_deleted).length : students.filter(s => !s.is_deleted && s.grade.includes(g.key)).length}
                       </span>
                     </button>
@@ -233,7 +232,7 @@ export default function Sidebar({
                               className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
                                 isSubActive 
                                   ? 'bg-blue-600 text-white shadow-md' 
-                                  : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'
+                                  : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white'
                               }`}
                             >
                               {num}
@@ -254,7 +253,7 @@ export default function Sidebar({
                               className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
                                 isSubActive 
                                   ? 'bg-blue-600 text-white shadow-md' 
-                                  : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'
+                                  : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white'
                               }`}
                             >
                               {num}
@@ -275,7 +274,7 @@ export default function Sidebar({
                               className={`h-[20px] rounded-[2px] text-[8px] font-black transition-all ${
                                 isSubActive 
                                   ? 'bg-blue-600 text-white shadow-md' 
-                                  : 'bg-white/5 text-gray-500 hover:bg-white/10 hover:text-white'
+                                  : 'bg-white/10 text-gray-300 hover:bg-white/20 hover:text-white'
                               }`}
                             >
                               {num}
@@ -294,15 +293,15 @@ export default function Sidebar({
                 {DAYS_SHORT.map((day) => {
                   const isActive = selectedDays.includes(day);
                   return (
-                    <button key={day} onClick={() => toggleDay(day)} className={`flex-1 h-[22px] rounded-[2px] text-[9px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-gray-400'}`}>{day}</button>
+                    <button key={day} onClick={() => toggleDay(day)} className={`flex-1 h-[22px] rounded-[2px] text-[9px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/10 border-white/10 text-gray-300 hover:bg-white/20 hover:text-white'}`}>{day}</button>
                   );
                 })}
               </div>
               {selectedDays.length > 0 && (
                 <div className="flex items-center justify-between px-0.5">
                   <div className="flex items-center gap-0.5 bg-white/5 p-0.5 rounded-[2px] border border-white/5">
-                    <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'}`}>AND</button>
-                    <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-600 hover:text-gray-400'}`}>OR</button>
+                    <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>AND</button>
+                    <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>OR</button>
                   </div>
                   <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal text-[8px] px-1">reset</button>
                 </div>
@@ -312,7 +311,7 @@ export default function Sidebar({
             {isAdmin && (
               <div className="pt-1">
                 <div className="relative group">
-                  <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-400 outline-none appearance-none cursor-pointer hover:bg-white/10 hover:text-white hover:border-white/20 transition-all">
+                  <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-200 outline-none appearance-none cursor-pointer hover:bg-white/20 hover:text-white hover:border-white/30 transition-all">
                     <option value="All" className="bg-[#121212]">All Teachers (전체 교사)</option>
                     {(teachers || []).map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
                   </select>
@@ -324,7 +323,7 @@ export default function Sidebar({
             {/* 💡 시작 시간대 필터 추가 */}
             <div className="pt-1">
               <div className="relative group">
-                <select value={selectedHour} onChange={(e) => setSelectedHour(e.target.value)} className="w-full bg-white/5 border border-white/10 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-400 outline-none appearance-none cursor-pointer hover:bg-white/10 hover:text-white hover:border-white/20 transition-all">
+                <select value={selectedHour} onChange={(e) => setSelectedHour(e.target.value)} className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-200 outline-none appearance-none cursor-pointer hover:bg-white/20 hover:text-white hover:border-white/30 transition-all">
                   <option value="All" className="bg-[#121212]">All Times (전체 시간)</option>
                   {availableHours.map((h, idx) => <option key={h || idx} value={String(h)} className="bg-[#121212]">{formatHour(h)}</option>)}
                 </select>
@@ -341,7 +340,7 @@ export default function Sidebar({
 
       <div className="pt-4 border-t border-white/5 space-y-1">
         {/* 테마 토글 버튼 */}
-        <button onClick={toggleTheme} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-500 hover:bg-white/5 hover:text-gray-300 transition-all group font-bold" title="Light Mode로 전환">
+        <button onClick={toggleTheme} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-300 hover:bg-white/10 hover:text-white transition-all group font-bold" title="Light Mode로 전환">
           <Moon size={14} className="text-indigo-400 group-hover:animate-pulse" />
           <span className="text-[11px]">Dark Mode</span>
         </button>
@@ -350,7 +349,7 @@ export default function Sidebar({
         {isAdmin && (
           <SidebarLink icon={<Settings size={14} />} label="Settings" active={viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />
         )}
-        <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-500 hover:bg-red-500/10 hover:text-red-500 transition-all group font-bold">
+        <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-all group font-bold">
           <LogOut size={14} />
           <span className="text-[11px]">Log Out</span>
         </button>
@@ -369,7 +368,7 @@ function SidebarLink({ icon, label, active = false, onClick, badge, variant }: a
           ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' 
           : isBlueVariant
             ? 'bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white shadow-inner'
-            : 'text-gray-500 hover:bg-white/5 hover:text-gray-300'
+            : 'text-gray-200 hover:bg-white/10 hover:text-white'
       }`}
     >
       <span className={(active || isBlueVariant) ? 'text-white' : 'group-hover:text-blue-500 transition-colors'}>{icon}</span>

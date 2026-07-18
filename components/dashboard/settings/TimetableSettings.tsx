@@ -148,7 +148,9 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
           time_slot: s,
           row_index: currentRow,
           student_id: entry.studentId,
-          bg_color: sIdx === 0 ? 'green' : 'default'
+          bg_color: sIdx === 0 
+            ? (s.startsWith('4') ? 'green' : s.startsWith('5') ? 'orange' : s.startsWith('6') ? 'yellow' : 'blue') 
+            : 'default'
         };
       });
       currentRow++;
@@ -192,7 +194,7 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
             time_slot: s,
             row_index: targetRow,
             student_id: nightStudent.studentId,
-            bg_color: sIdx === 0 ? 'green' : 'default'
+            bg_color: sIdx === 0 ? 'blue' : 'default'
           };
         });
       }
@@ -204,11 +206,11 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
 
 // 🎨 색상 테마 매핑 테이블 (다크/라이트 지원)
 const COLOR_CLASSES: Record<string, { dark: string; light: string; label: string }> = {
-  default: { dark: 'bg-white/[0.02] text-white', light: 'bg-[#fafafa] text-gray-800', label: '기본색' },
-  green: { dark: 'bg-emerald-950/60 text-white', light: 'bg-[#D9EAD3] text-gray-800 font-extrabold', label: '초록색' },
-  yellow: { dark: 'bg-amber-950/40 text-white', light: 'bg-amber-50 text-gray-800 font-extrabold', label: '노란색' },
-  orange: { dark: 'bg-orange-500/20 text-orange-300 font-extrabold', light: 'bg-orange-200 text-orange-950 font-extrabold', label: '주황색' },
-  blue: { dark: 'bg-blue-950/40 text-white', light: 'bg-blue-50 text-gray-800 font-extrabold', label: '파란색' }
+  default: { dark: 'bg-zinc-900/50 border border-zinc-800/40 text-zinc-300', light: 'bg-[#fafafa] text-gray-800', label: '기본색' },
+  green: { dark: 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-black', light: 'bg-[#D9EAD3] text-gray-800 font-extrabold', label: '초록색' },
+  yellow: { dark: 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 font-black', light: 'bg-amber-50 text-gray-800 font-extrabold', label: '노란색' },
+  orange: { dark: 'bg-orange-500/10 border border-orange-500/20 text-orange-400 font-black', light: 'bg-orange-200 text-orange-950 font-extrabold', label: '주황색' },
+  blue: { dark: 'bg-sky-500/10 border border-sky-500/20 text-sky-400 font-black', light: 'bg-blue-100 border border-blue-200/60 text-blue-900 font-extrabold', label: '파란색' }
 };
 
 export default function TimetableSettings({ academyInfo, teachers = [], students = [], isLight = false }: TimetableSettingsProps) {
@@ -426,7 +428,35 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
     const bgColor = cell?.bg_color || 'default';
     
     const assignedStudent = localStudents.find(s => s.id === studentId);
-    const themeColor = COLOR_CLASSES[bgColor] || COLOR_CLASSES.default;
+    
+    // 🔒 [추가] 학생이 배정되어 있고 수동 색상 지정이 없을 때(default) 또는 기존 일괄 연두색(green)인 경우, 등원 시작 세션(첫 교시)인 경우에만 타임별 색상 자동 매칭
+    let displayBgColor = bgColor;
+    if (assignedStudent && (bgColor === 'default' || bgColor === 'green')) {
+      const currentSlotIdx = activeSlots.indexOf(slot);
+      let isFirstSession = true;
+
+      // 💡 현재 교시 이전의 시간대(동일 요일, 동일 행)에 동일한 학생이 배정되어 있는지 스캔
+      for (let i = 0; i < currentSlotIdx; i++) {
+        const prevSlot = activeSlots[i];
+        const prevCellKey = `${day}-${prevSlot}-${rowNum}`;
+        if (gridData[prevCellKey]?.student_id === studentId) {
+          isFirstSession = false;
+          break;
+        }
+      }
+
+      if (isFirstSession) {
+        if (slot.startsWith('4')) displayBgColor = 'green';        // 4시 타임: 초록색
+        else if (slot.startsWith('5')) displayBgColor = 'orange';       // 5시 타임: 주황색(호박색)
+        else if (slot.startsWith('6')) displayBgColor = 'yellow';   // 6시 타임: 노란색
+        else if (slot.startsWith('7')) displayBgColor = 'blue';     // 7시 타임: 파란색
+      } else {
+        // 첫 교시가 아님에도 green이나 다른 색이 칠해져 있다면 연장 수업이므로 기본색으로 강제 회귀
+        displayBgColor = 'default';
+      }
+    }
+
+    const themeColor = COLOR_CLASSES[displayBgColor] || COLOR_CLASSES.default;
     const colorClass = isLight ? themeColor.light : themeColor.dark;
 
     return (
@@ -435,7 +465,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
         onDoubleClick={() => handleCellDoubleClick(cellKey)}
         onContextMenu={(e) => handleCellContextMenu(e, cellKey)}
         className={`p-0 border-r border-b transition-all relative font-medium group/cell cell-color-${bgColor} ${
-          isLight ? 'border-gray-300' : 'border-white/10'
+          isLight ? 'border-gray-300' : 'border-zinc-800/70'
         } ${colorClass}`}
         title="더블클릭: 배정 | 우클릭: 배경색"
       >
@@ -882,30 +912,30 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
             <thead>
               {/* 1단 요일 구분 헤더 */}
               <tr className={`border-b text-[10px] font-black uppercase tracking-widest ${
-                isLight ? 'bg-gray-100 border-gray-300 text-gray-700' : 'bg-black/30 border-white/5 text-gray-400'
+                isLight ? 'bg-gray-100 border-gray-300 text-gray-700' : 'bg-zinc-900/90 border-zinc-800 text-zinc-200'
               }`}>
-                <th className={`py-1 px-1 w-[50px] border-r ${isLight ? 'border-gray-300 text-gray-800' : 'border-white/10'}`} rowSpan={2}>선생님</th>
+                <th className={`py-1 px-1 w-[50px] border-r ${isLight ? 'border-gray-300 text-gray-800' : 'border-zinc-800'}`} rowSpan={2}>선생님</th>
                 {DAYS.map(day => (
-                  <th key={day} colSpan={activeSlots.length + 1} className={`py-1 px-1 border-r last:border-r-0 ${isLight ? 'border-gray-300' : 'border-gray-200/20'}`}>
+                  <th key={day} colSpan={activeSlots.length + 1} className={`py-1 px-1 border-r last:border-r-0 ${isLight ? 'border-gray-300' : 'border-zinc-700'}`}>
                     {day}요일
                   </th>
                 ))}
               </tr>
               {/* 2단 교시/시간대 구분 헤더 */}
               <tr className={`border-b text-[9px] font-black ${
-                isLight ? 'bg-gray-50 border-gray-300 text-gray-700' : 'bg-black/20 text-gray-500'
+                isLight ? 'bg-gray-50 border-gray-300 text-gray-700' : 'bg-zinc-900/50 text-zinc-300'
               }`}>
                 {DAYS.map(day => (
-                  <th key={`subheader-${day}`} colSpan={activeSlots.length + 1} className={`p-0 border-r last:border-r-0 ${isLight ? 'border-gray-300' : 'border-white/10'}`}>
+                  <th key={`subheader-${day}`} colSpan={activeSlots.length + 1} className={`p-0 border-r last:border-r-0 ${isLight ? 'border-gray-300' : 'border-zinc-800'}`}>
                     <table className="w-full table-fixed border-collapse">
                       <thead>
                         <tr>
                           {/* 동적 활성 슬롯 배치 */}
                           {activeSlots.map(slot => (
-                            <th key={slot} className={`py-1 px-1 border-r font-bold ${isLight ? 'border-gray-300' : 'border-gray-200/10'}`}>{slot}</th>
+                            <th key={slot} className={`py-1 px-1 border-r font-bold ${isLight ? 'border-gray-300' : 'border-zinc-800/40'}`}>{slot}</th>
                           ))}
                           {/* 맨 오른쪽 번호 */}
-                          <th className={`py-1 px-1 w-[24px] ${isLight ? 'bg-black/5 text-gray-700' : 'bg-black/5 dark:bg-white/5'}`}>번호</th>
+                          <th className={`py-1 px-1 w-[24px] ${isLight ? 'bg-black/5 text-gray-700' : 'bg-zinc-800/60 text-zinc-300'}`}>번호</th>
                         </tr>
                       </thead>
                     </table>
@@ -930,7 +960,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
 
                     {/* 요일별 컬럼 */}
                     {DAYS.map(day => (
-                      <td key={`${day}-${rowNum}`} colSpan={activeSlots.length + 1} className={`p-0 border-r last:border-r-0 ${isLight ? 'border-gray-300' : 'border-white/10'}`}>
+                      <td key={`${day}-${rowNum}`} colSpan={activeSlots.length + 1} className={`p-0 border-r last:border-r-0 ${isLight ? 'border-gray-300' : 'border-zinc-800/70'}`}>
                         <table className="w-full h-full table-fixed border-collapse">
                           <tbody>
                             <tr className="h-[24px]">
@@ -961,7 +991,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
 
                                 return (
                                   <td className={`py-0 font-extrabold border-l border-b text-[10px] text-center w-[24px] select-none ${
-                                    isLight ? 'bg-gray-50/50 text-gray-800 border-gray-300' : 'bg-black/20 text-gray-500 border-white/10'
+                                    isLight ? 'bg-gray-50/50 text-gray-800 border-gray-300' : 'bg-black/20 text-zinc-300 border-zinc-800/70'
                                   }`}>
                                     {displayNum}
                                   </td>

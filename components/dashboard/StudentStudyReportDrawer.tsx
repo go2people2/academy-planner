@@ -199,6 +199,14 @@ function TabButton({ active, onClick, icon, label, isLight = false }: any) {
 }
 
 function SummaryTab({ student, stats, availableTextbooks, isLight }: any) {
+  // 💡 [원장님 기획] 학생의 전체 로그 중 '결석' 상태인 로그들만 추출하여 최신 날짜 순으로 정렬합니다.
+  const absenceLogs = useMemo(() => {
+    const logs = student.allLogs || [];
+    return logs
+      .filter((l: any) => l.attendance_status === '결석')
+      .sort((a: any, b: any) => new Date(b.date || b.session_date || 0).getTime() - new Date(a.date || a.session_date || 0).getTime());
+  }, [student.allLogs]);
+
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
       {/* 기본 주요 지표 */}
@@ -229,6 +237,49 @@ function SummaryTab({ student, stats, availableTextbooks, isLight }: any) {
             isLight={isLight}
           />
         </div>
+      </section>
+
+      {/* 💡 [원장님 특별 지침] 최근 결석 사유 및 날짜 리스트업 섹션 신설 */}
+      <section className="space-y-3 text-left">
+        <SectionTitle title="최근 결석 및 취소 히스토리" isLight={isLight} />
+        {absenceLogs.length > 0 ? (
+          <div className={`border rounded-[4px] p-4 ${
+            isLight ? 'bg-gray-50/50 border-gray-200' : 'bg-white/5 border-white/5'
+          }`}>
+            <div className="max-h-[180px] overflow-y-auto custom-scrollbar-v pr-1 space-y-2">
+              {absenceLogs.map((log: any, idx: number) => {
+                const displayDate = log.date || log.session_date || '';
+                const reason = log.attendance_reason || log.special_notes || '사유 미기재';
+                return (
+                  <div 
+                    key={`absence-${displayDate}-${idx}`} 
+                    className={`flex items-center justify-between p-2.5 rounded-[2px] border text-[12px] font-medium transition-all ${
+                      isLight 
+                        ? 'bg-white border-gray-200 hover:border-red-500/20 shadow-sm' 
+                        : 'bg-[#0f0f0f] border-white/5 hover:border-red-500/20'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-sm shadow-red-500/30 shrink-0" />
+                      <span className={`font-black shrink-0 ${isLight ? 'text-gray-700' : 'text-gray-300'}`}>
+                        {displayDate}
+                      </span>
+                    </div>
+                    <span className="font-bold italic text-[11px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 max-w-[280px] truncate shrink-0">
+                      {reason}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        ) : (
+          <div className={`border rounded-[4px] p-5 text-center text-[11px] font-bold ${
+            isLight ? 'bg-gray-50/50 border-gray-250 text-gray-500' : 'bg-white/5 border-white/5 text-gray-500'
+          }`}>
+            🎉 최근 누적된 결석 기록이 전혀 없는 성실한 학생입니다.
+          </div>
+        )}
       </section>
 
       {/* 💡 학생 관리 메모 (노란 삼각형 클릭 시 주요 확인 대상) */}

@@ -1,14 +1,23 @@
-import React, { useState, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare } from 'lucide-react';
+import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare, Square } from 'lucide-react';
 import ChecklistPrintPreviewModal from '../todaySheet/ChecklistPrintPreviewModal';
 
 interface ChecklistTabLightProps {
   students: any[];
+  allStudents?: any[];
   academyInfo: any;
+  selectedFilter?: string;
+  selectedTeacherId?: string;
 }
 
-export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ students, academyInfo }, ref) => {
+export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ 
+  students, 
+  allStudents = [], 
+  academyInfo, 
+  selectedFilter = 'All', 
+  selectedTeacherId = 'All' 
+}, ref) => {
   const [topics, setTopics] = useState<any[]>([]);
   const [items, setItems] = useState<Record<string, Record<string, any>>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -16,6 +25,145 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
   const [newTopicTitle, setNewTopicTitle] = useState('');
   
   const [isPrintOpen, setIsPrintOpen] = useState(false);
+
+  const [showAllDays, setShowAllDays] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ams_checklist_show_all_days');
+      return saved === 'true';
+    }
+    return false;
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ams_checklist_show_all_days', String(showAllDays));
+    }
+  }, [showAllDays]);
+
+  const [activeChecklistFilter, setActiveChecklistFilter] = useState<{
+    topicId: string | null;
+    status: string; // 'none' | 'checked' | 'hold' | 'na'
+  }>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ams_checklist_active_filter');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return { topicId: null, status: 'none' };
+  });
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ams_checklist_active_filter', JSON.stringify(activeChecklistFilter));
+    }
+  }, [activeChecklistFilter]);
+
+  // 실시간 화면 및 연산에 사용될 최종 학생 리스트
+  const displayStudents = useMemo(() => {
+    // 1) showAllDays가 false이면 부모가 넘겨준 오늘 요일 학생 목록(이미 정렬 완료) 사용
+    const baseList = showAllDays 
+      ? (allStudents && allStudents.length > 0 ? allStudents : students)
+      : students;
+    
+    let filtered = baseList.filter(s => !s.is_deleted);
+
+    // 2) 학년/반 필터 동기화
+    if (selectedFilter && selectedFilter !== 'All') {
+      if (selectedFilter.startsWith('Grade-')) {
+        const gradeTarget = selectedFilter.replace('Grade-', ''); // 예: "초", "중", "고"
+        filtered = filtered.filter(s => s.grade && s.grade.includes(gradeTarget));
+      } else if (selectedFilter.startsWith('Class-')) {
+        const classIdTarget = selectedFilter.replace('Class-', '');
+        filtered = filtered.filter(s => s.class_id === classIdTarget);
+      }
+    }
+
+    // 3) 담당 선생님 필터 동기화
+    if (selectedTeacherId && selectedTeacherId !== 'All') {
+      filtered = filtered.filter(s => s.teacher_id === selectedTeacherId);
+    }
+
+    // 4) 열 헤더에 지정된 "체크리스트 단일 열 필터" 적용!
+    if (activeChecklistFilter.topicId && activeChecklistFilter.status !== 'none') {
+      const targetTopicId = activeChecklistFilter.topicId;
+      const targetStatus = activeChecklistFilter.status;
+
+      filtered = filtered.filter(student => {
+        const cellData = items[student.id]?.[targetTopicId];
+        const studentStatus = cellData?.status || 'none';
+        
+        if (targetStatus === 'checked') {
+          return studentStatus === 'checked' || cellData?.is_checked === true;
+        }
+
+        // 'empty' 필터일 때는, studentStatus가 'none' 이거나 데이터가 없는 미체크 상태인 경우만 필터링!
+        if (targetStatus === 'empty') {
+          return studentStatus === 'none' && cellData?.is_checked !== true;
+        }
+
+        return studentStatus === targetStatus;
+      });
+    }
+
+    // 5) 가나다 순으로 깔끔하게 정렬 (showAllDays인 경우에만 정렬 혹은 항상 정렬도 좋지만 오늘 요일 리스트는 원래의 정렬 순서 유지)
+    if (showAllDays) {
+      return filtered.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    }
+    return filtered;
+  }, [students, allStudents, showAllDays, selectedFilter, selectedTeacherId, activeChecklistFilter, items]);
+
+  const handleCycleColumnFilter = (topicId: string) => {
+    setActiveChecklistFilter(prev => {
+      // 다른 항목을 필터하려는 경우, 새로 지정하고 'checked'부터 시작
+      if (prev.topicId !== topicId) {
+        return { topicId, status: 'checked' };
+      }
+      
+      // 같은 항목인 경우 5단 순환: none -> checked -> hold -> na -> empty -> none
+      let nextStatus = 'none';
+      if (prev.status === 'none') nextStatus = 'checked';
+      else if (prev.status === 'checked') nextStatus = 'hold';
+      else if (prev.status === 'hold') nextStatus = 'na';
+      else if (prev.status === 'na') nextStatus = 'empty';
+      else nextStatus = 'none';
+
+      return {
+        topicId: nextStatus === 'none' ? null : topicId,
+        status: nextStatus
+      };
+    });
+  };
+
+  // 열 필터 헤 roar 전용 아이콘 렌더링
+  const renderColumnFilterIcon = (topicId: string) => {
+    const isCurrent = activeChecklistFilter.topicId === topicId;
+    const filterStatus = isCurrent ? activeChecklistFilter.status : 'none';
+
+    switch (filterStatus) {
+      case 'checked':
+        return <CheckSquare className="text-green-600 fill-green-500/10 hover:opacity-80 transition-all cursor-pointer animate-pulse" size={14} strokeWidth={2.5} />;
+      case 'hold':
+        return <AlertTriangle className="text-amber-600 fill-amber-500/10 hover:opacity-80 transition-all cursor-pointer animate-pulse" size={14} strokeWidth={2.5} />;
+      case 'na':
+        return <MinusSquare className="text-gray-500 fill-gray-400/10 hover:opacity-80 transition-all cursor-pointer animate-pulse" size={14} strokeWidth={2.5} />;
+      case 'empty':
+        return <Square className="text-blue-500 fill-blue-500/5 border-blue-400 hover:opacity-80 transition-all cursor-pointer animate-pulse" size={14} strokeWidth={2.5} />;
+      default:
+        return (
+          <div 
+            className="w-3.5 h-3.5 rounded-[3px] border border-gray-300 hover:border-blue-500 hover:bg-blue-50 transition-all cursor-pointer flex items-center justify-center text-[8px] font-black text-gray-400 hover:text-blue-600" 
+            title="클릭하여 이 열 조건으로 학생 필터링"
+          >
+            F
+          </div>
+        );
+    }
+  };
 
   useImperativeHandle(ref, () => ({
     openPrintPreview() {
@@ -145,7 +293,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
   // 완료 인원수 집계 함수
   const getCheckedCount = (topicId: string) => {
     let count = 0;
-    students.forEach(student => {
+    displayStudents.forEach(student => {
       const cellData = items[student.id]?.[topicId];
       if (cellData?.status === 'checked' || cellData?.is_checked === true) {
         count++;
@@ -315,6 +463,31 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
           <p className="text-[9px] text-[#37352f]/50 font-bold">학생 개별로 기말고사, 오답노트, 안내문 수거 등의 완료 현황을 기록하세요.</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* 필터 전체 해제 버튼 */}
+          {activeChecklistFilter.topicId !== null && (
+            <button
+              onClick={() => setActiveChecklistFilter({ topicId: null, status: 'none' })}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-[2px] text-[10px] font-black border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all shadow-md cursor-pointer animate-fade-in"
+              title="활성화된 열 필터를 초기화합니다."
+            >
+              🧹 필터 해제
+            </button>
+          )}
+
+          {/* 다른 요일 포함 토글 스위치 단추 */}
+          <button
+            onClick={() => setShowAllDays(prev => !prev)}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[10px] font-black border transition-all shadow-md cursor-pointer ${
+              showAllDays 
+                ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white' 
+                : 'bg-white hover:bg-[#edece9] border-[#edece9] text-gray-500'
+            }`}
+            title="오늘 요일 외의 모든 학생들을 체크리스트 명단에 소환합니다."
+          >
+            <CheckSquare size={12} className={showAllDays ? "animate-pulse" : ""} />
+            다른 요일 학생 포함
+          </button>
+
           <input 
             type="text" 
             value={newTopicTitle}
@@ -365,7 +538,15 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
               </th>
               {topics.map(t => (
                 <th key={t.id} colSpan={2} className="py-2.5 px-3 border-r border-[#edece9] text-center group relative">
-                  <div className="flex items-center justify-center gap-1.5 mr-2">
+                  <div className="flex items-center justify-center gap-2 mr-2">
+                    {/* 전역 열 필터 버튼 */}
+                    <button
+                      onClick={() => handleCycleColumnFilter(t.id)}
+                      className="inline-flex items-center justify-center p-0.5 rounded hover:bg-gray-100 transition-all cursor-pointer"
+                      title="클릭하여 이 열의 체크 상태 기준 필터링 순환"
+                    >
+                      {renderColumnFilterIcon(t.id)}
+                    </button>
                     <span className="text-[#37352f] text-[11px] font-black text-center break-all leading-tight" title={t.title}>
                       {t.title}
                     </span>
@@ -398,24 +579,21 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
           </thead>
 
           <tbody>
-            {students.length === 0 ? (
+            {displayStudents.length === 0 ? (
               <tr>
                 <td colSpan={1 + topics.length * 2 + 1} className="py-12 text-center text-xs text-[#37352f]/40 font-bold italic">
                   필터링된 학생이 존재하지 않습니다.
                 </td>
               </tr>
             ) : (
-              students.map((student, idx) => {
+              displayStudents.map((student, idx) => {
                 const rowBg = idx % 2 === 0 ? "bg-white" : "bg-[#fbfbfa]";
                 return (
                   <tr key={student.id} className={`${rowBg} border-b border-[#edece9] hover:bg-[#f5f5f4] transition-colors align-middle text-[11px]`}>
                     {/* 1열 고정 학생명 */}
-                    <td className="py-2.5 px-1.5 border-r border-[#edece9] font-black text-[#37352f] sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
-                      <div className="flex flex-col gap-0.5 leading-tight">
-                        <span className="truncate max-w-[60px]" title={student.name}>{student.name}</span>
-                        <span className="text-[8px] text-[#37352f]/45 font-bold tracking-tight truncate max-w-[60px]" title={`${student.grade} · ${student.class}`}>
-                          {student.grade}·{student.class}
-                        </span>
+                    <td className="py-1 px-1.5 border-r border-[#edece9] font-black text-[#37352f] sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)]">
+                      <div className="leading-none py-1">
+                        <span className="truncate max-w-[60px] text-[11px]" title={student.name}>{student.name}</span>
                       </div>
                     </td>
 
@@ -425,17 +603,17 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
                       return (
                         <React.Fragment key={`${student.id}-${t.id}`}>
                           {/* 체크 상태 순환 셀 */}
-                          <td className="py-2.5 px-2 border-r border-[#edece9] text-center">
+                          <td className="py-1 px-2 border-r border-[#edece9] text-center">
                             <button 
                               onClick={() => handleCycleStatus(student.id, t.id, cellData)}
-                              className="inline-flex items-center justify-center p-0.5 rounded hover:bg-gray-100 transition-all cursor-pointer"
+                              className="inline-flex items-center justify-center p-0.5 rounded hover:bg-gray-100 transition-all cursor-pointer animate-fade-in"
                               title="클릭하여 상태 순환 (공란 -> 완료 -> 보류 -> 제외)"
                             >
                               {renderStatusIcon(cellData.status)}
                             </button>
                           </td>
                           {/* 메모 입력 셀 */}
-                          <td className="py-1.5 px-2.5 border-r border-[#edece9] align-middle">
+                          <td className="py-0.5 px-1.5 border-r border-[#edece9] align-middle">
                             <input 
                               type="text"
                               defaultValue={cellData.memo}
@@ -459,7 +637,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
               })
             )}
             {/* 맨 아래 합계 행 */}
-            {students.length > 0 && (
+            {displayStudents.length > 0 && (
               <tr className="bg-[#f8f8f7] border-t border-[#edece9] font-bold text-[11px] text-[#37352f]/70 align-middle sticky bottom-0 z-10 shadow-[0_-2px_5px_rgba(0,0,0,0.015)]">
                 <td className="py-2.5 px-1.5 border-r border-[#edece9] font-black sticky left-0 bg-[#f8f8f7] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.015)] text-center text-[#37352f]/50">
                   완료 인원
@@ -485,7 +663,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({ stud
       <ChecklistPrintPreviewModal
         isOpen={isPrintOpen}
         onClose={() => setIsPrintOpen(false)}
-        students={students}
+        students={displayStudents}
         selectedDate={academyInfo?.selectedDate || new Date().toISOString().split('T')[0]}
         academyInfo={academyInfo}
         topics={topics}

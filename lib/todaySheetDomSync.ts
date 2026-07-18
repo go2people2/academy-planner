@@ -20,6 +20,11 @@ export const syncTodaySheetDom = (
           return;
         }
 
+        // 🔒 [추가] clear 모드일지라도 newData에 해당 프로퍼티가 정의되지 않은 경우(스킵된 필드)는 DOM을 갱신하지 않음
+        if (isClearMode && u.newData[prop] === undefined) {
+          return;
+        }
+
         const selector = `[data-student-id="${u.studentId}"][data-col-id="${colId}"]`;
         const el = document.querySelector(selector) as HTMLTextAreaElement | HTMLInputElement;
         

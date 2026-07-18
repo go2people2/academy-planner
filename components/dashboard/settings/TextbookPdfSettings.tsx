@@ -16,6 +16,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
   const [isLoading, setIsLoading] = useState(true);
   const [submittingBook, setSubmittingBook] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeTab, setActiveTab] = useState<'all' | 'elementary' | 'middle' | 'high' | 'etc'>('all');
 
   // 1. 등록된 PDF 링크 데이터 로드
   const fetchPdfLinks = async () => {
@@ -138,48 +139,87 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
 
   // 5. 검색 및 정렬 필터링
   const filteredTextbooks = masterTextbooks.filter(b => {
+    // 1) 탭 필터링
+    const grade = b.grade || '';
+    if (activeTab === 'elementary') {
+      if (!grade.includes('초')) return false;
+    } else if (activeTab === 'middle') {
+      if (!grade.includes('중')) return false;
+    } else if (activeTab === 'high') {
+      if (!grade.includes('고')) return false;
+    } else if (activeTab === 'etc') {
+      if (grade.includes('초') || grade.includes('중') || grade.includes('고')) return false;
+    }
+
+    // 2) 검색어 필터링
     if (!searchQuery) return true;
     const query = searchQuery.toLowerCase();
-    return b.title?.toLowerCase().includes(query) || b.bookcode?.toLowerCase().includes(query);
+    return b.title?.toLowerCase().includes(query) || b.bookcode?.toLowerCase().includes(query) || grade.toLowerCase().includes(query);
   });
 
   return (
     <div className="space-y-6">
-      {/* 💡 구글 드라이브 저작권 및 사용법 안내 배너 */}
-      <div className={`p-4 border rounded-[4px] flex items-start gap-3 ${
-        isLight 
-          ? 'bg-blue-50/50 border-blue-200 text-blue-900 shadow-sm' 
-          : 'bg-blue-900/10 border-blue-500/20 text-blue-300'
-      }`}>
-        <AlertCircle className="shrink-0 mt-0.5" size={16} />
-        <div className="space-y-1.5 text-[11px] leading-relaxed">
-          <h4 className="font-black uppercase tracking-wider">구글 드라이브 교재 연동 가이드 및 저작권 안내</h4>
-          <p className="font-semibold text-gray-500">
-            시중 정식 출판 교재의 저작권을 보호하고 구글 계정의 비활성화를 예방하기 위해 아래 공유 방식을 강력히 권장합니다.
-          </p>
-          <ul className="list-disc pl-4 space-y-1 mt-1 font-medium">
-            <li><strong className={isLight ? 'text-blue-950 font-black' : 'text-white'}>저작권 자료 (출판사 문제집)</strong>: 구글 드라이브 공유 설정을 <code className="px-1 py-0.5 rounded bg-black/10 font-bold font-mono">제한됨</code>으로 유지한 채, 소속 선생님들의 구글 이메일만 개별 권한 지정하여 공유해 주세요. (선생님들의 구글 세션으로 안전하게 열람 가능)</li>
-            <li><strong className={isLight ? 'text-blue-950 font-black' : 'text-white'}>자체 제작 자료 (프린트, 기출 등)</strong>: 구글 드라이브 공유 옵션을 <code className="px-1 py-0.5 rounded bg-black/10 font-bold font-mono">링크가 있는 모든 사용자에게 뷰어로 공개</code>로 지정하시면 편리하게 즉시 열람할 수 있습니다.</li>
-          </ul>
+      {/* 🔍 검색 및 학교급 필터 바 */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
+        <div className="relative w-full max-w-md">
+          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500">
+            <Search size={14} />
+          </span>
+          <input 
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="교재명, 코드 또는 학년으로 검색..."
+            className={`w-full pl-9 pr-4 py-2 border rounded-[4px] text-xs outline-none font-bold ${
+              isLight 
+                ? 'bg-white border-gray-250 text-gray-800 placeholder:text-gray-400 focus:border-blue-500' 
+                : 'bg-black/40 border-white/10 text-white placeholder:text-gray-650 focus:border-blue-500/50'
+            }`}
+          />
         </div>
-      </div>
 
-      {/* 🔍 검색 바 */}
-      <div className="relative max-w-md no-print">
-        <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500">
-          <Search size={14} />
-        </span>
-        <input 
-          type="text"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          placeholder="교재명 또는 교재 코드로 검색..."
-          className={`w-full pl-9 pr-4 py-2 border rounded-[4px] text-xs outline-none font-bold ${
-            isLight 
-              ? 'bg-white border-gray-250 text-gray-800 placeholder:text-gray-400 focus:border-blue-500' 
-              : 'bg-black/40 border-white/10 text-white placeholder:text-gray-650 focus:border-blue-500/50'
-          }`}
-        />
+        {/* 🏷️ 학교급별 필터 탭 */}
+        <div className="flex flex-wrap items-center gap-1.5">
+          {[
+            { id: 'all', label: '전체 교재' },
+            { id: 'elementary', label: '초등' },
+            { id: 'middle', label: '중등' },
+            { id: 'high', label: '고등' },
+            { id: 'etc', label: '기타' }
+          ].map(tab => {
+            const isActive = activeTab === tab.id;
+            const count = tab.id === 'all' ? masterTextbooks.length :
+                          tab.id === 'elementary' ? masterTextbooks.filter(b => (b.grade || '').includes('초')).length :
+                          tab.id === 'middle' ? masterTextbooks.filter(b => (b.grade || '').includes('중')).length :
+                          tab.id === 'high' ? masterTextbooks.filter(b => (b.grade || '').includes('고')).length :
+                          masterTextbooks.filter(b => {
+                            const g = b.grade || '';
+                            return !g.includes('초') && !g.includes('중') && !g.includes('고');
+                          }).length;
+
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => setActiveTab(tab.id as any)}
+                className={`px-3 py-1.5 rounded-[4px] text-xs font-black transition-all flex items-center gap-1.5 border ${
+                  isActive
+                    ? isLight
+                      ? 'bg-blue-600 text-white border-blue-700 shadow-sm'
+                      : 'bg-blue-600/10 text-blue-400 border-blue-500/30'
+                    : isLight
+                      ? 'bg-gray-100 hover:bg-gray-200 text-gray-600 border-transparent'
+                      : 'bg-white/5 hover:bg-white/10 text-gray-400 border-transparent'
+                }`}
+              >
+                {tab.label}
+                <span className={`text-[10px] font-bold ${isActive ? (isLight ? 'text-blue-100' : 'text-blue-450') : 'text-gray-500'}`}>
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
       {/* 📋 교재 링크 매핑 리스트 테이블 */}

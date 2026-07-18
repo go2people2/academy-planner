@@ -9,7 +9,7 @@ import {
   LayoutGrid, Table as TableIcon, Share2, Percent, RotateCcw,
   Download, FileSpreadsheet, FileText as FileTextIcon, Copy,
   SortAsc, Clock as ClockIcon, X, Wand2, TrendingUp, ClipboardList, FileText, Zap,
-  Maximize2, Minimize2, ArrowLeft, ArrowRight, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer, ChevronDown, ChevronUp,
+  Maximize2, Minimize2, ArrowLeft, ArrowRight, AlertTriangle, ArrowUp, ArrowDown, Eye, EyeOff, Printer, ChevronDown, ChevronUp, ChevronLeft, ChevronRight,
   Megaphone
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
@@ -58,7 +58,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 // --- Sub-components ---
 
-function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onSelectAll, isAllSelected, onFocusColumn, focusColumn, onColumnReorder }: any) {
+function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onSelectAll, isAllSelected, onFocusColumn, focusColumn, onColumnReorder, showAllTools, setShowAllTools, isToolsEditMode, setIsToolsEditMode }: any) {
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
   const lastDataColumnId = React.useMemo(() => {
     const dataCols = activeColumns.filter((c: any) => c.id !== 'action');
@@ -218,6 +218,43 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
                         <span className="text-blue-200">{col.label}</span>
                         <span className="text-blue-500/80 font-black ml-0.5">"</span>
                       </>
+                    ) : col.id === 'tools' ? (
+                      <div className="flex items-center gap-1 select-none">
+                        <span>{col.label}</span>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowAllTools(!showAllTools);
+                            if (showAllTools && setIsToolsEditMode) {
+                              setIsToolsEditMode(false);
+                            }
+                          }}
+                          className={`p-0.5 rounded transition-all flex items-center justify-center ${
+                            showAllTools 
+                              ? 'bg-blue-600/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30' 
+                              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700'
+                          }`}
+                          title={showAllTools ? '7개 도구 접기' : '7개 도구 펼치기'}
+                        >
+                          {showAllTools ? <ChevronLeft size={10} strokeWidth={2.5} /> : <ChevronRight size={10} strokeWidth={2.5} />}
+                        </button>
+                        {showAllTools && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsToolsEditMode(!isToolsEditMode);
+                            }}
+                            className={`p-0.5 rounded transition-all flex items-center justify-center ${
+                              isToolsEditMode 
+                                ? 'bg-amber-500/30 text-amber-400 hover:bg-amber-600 hover:text-white border border-amber-500/30 shadow-[0_0_8px_rgba(245,158,11,0.4)]' 
+                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700'
+                            }`}
+                            title={isToolsEditMode ? '도구 편집 모드 종료' : '도구 순서 편집'}
+                          >
+                            <Settings2 size={10} strokeWidth={2.5} />
+                          </button>
+                        )}
+                      </div>
                     ) : (
                       col.label
                     )}
@@ -427,6 +464,36 @@ export default function TodaySheet({
   }, [setStudents, onSave, onUpdateStudentInfo]);
 
   // 1. States
+  const [showAllTools, setShowAllTools] = useState(false); // 💡 [추가] 7개 도구 일괄 접기/펼치기 상태
+  const [isToolsEditMode, setIsToolsEditMode] = useState(false); // 💡 도구 편집 모드 상태
+  const [toolsOrder, setToolsOrder] = useState<string[]>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ams_tools_order');
+      if (saved) {
+        try {
+          return JSON.parse(saved);
+        } catch (e) {
+          console.error(e);
+        }
+      }
+    }
+    return ['profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
+  });
+
+  const handleReorderTools = useCallback((draggedId: string, targetId: string) => {
+    setToolsOrder(prev => {
+      const newOrder = [...prev];
+      const draggedIdx = newOrder.indexOf(draggedId);
+      const targetIdx = newOrder.indexOf(targetId);
+      if (draggedIdx !== -1 && targetIdx !== -1) {
+        newOrder.splice(draggedIdx, 1);
+        newOrder.splice(targetIdx, 0, draggedId);
+        localStorage.setItem('ams_tools_order', JSON.stringify(newOrder));
+      }
+      return newOrder;
+    });
+  }, []);
+
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [activeTab, setActiveTab] = useState<'daily' | 'checklist'>('daily');
   const [historyLimit, setHistoryLimit] = useState(3);
@@ -495,11 +562,72 @@ export default function TodaySheet({
     setIsScrolled(e.currentTarget.scrollTop > 5);
   }, []);
 
+  const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
+  const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [expandedHistory, setExpandedHistory] = useState<Record<string, number>>({});
   const [isSendingReport, setIsSendingReport] = useState<string | null>(null);
   const [isReportVisible, setIsReportVisible] = useState(false);
+
+  // 💡 [추가] 다른 조교 기기로부터 저장 이벤트 수신 시, 로컬 상태 및 DOM을 즉시 갱신하는 핸들러
+  const handleRemoteCellSave = useCallback((studentId: string, colId: string, value: string) => {
+    const isEditingThis = editingCell?.studentId === studentId && editingCell?.columnId === colId;
+    if (isEditingThis) return; // 내가 편집 중이면 덮어쓰기 무시
+
+    const prop = mapColumnToProp(colId);
+    if (!prop) return;
+
+    // 1. 로컬 상태 업데이트
+    setStudents((prev: any[]) => prev.map(s => {
+      if (s.id === studentId) {
+        if (colId === 'mission') {
+          return { ...s, recent_mission: value };
+        }
+        if (colId === 'notes') {
+          return {
+            ...s,
+            todaySession: {
+              ...(s.todaySession || {}),
+              special_notes: value
+            }
+          };
+        }
+        return {
+          ...s,
+          todaySession: {
+            ...(s.todaySession || {}),
+            [prop]: value
+          }
+        };
+      }
+      return s;
+    }));
+
+    // 2. DOM에 직접 값 주입 (화면 딜레이 방지)
+    syncTodaySheetDom([{ studentId, newData: { [prop]: value } }], [colId]);
+  }, [editingCell, setStudents]);
+
   // 📝 [리팩토링] 다중 기기 실시간 편집 및 협업 상태 분리 훅 호출
-  const { cooperatingCells, sendCoopEvent } = useCoopCollaboration(academyInfo?.id);
+  const { cooperatingCells, sendCoopEvent, sendSaveEvent, myClientId } = useCoopCollaboration(academyInfo?.id, handleRemoteCellSave);
+
+  // 💡 [추가 1] 내가 편집 중일 때 락이 15초 가비지 컬렉터에 의해 풀리지 않도록 5초 주기 하트비트 전송
+  useEffect(() => {
+    if (!editingCell || !academyInfo?.id) return;
+    const interval = setInterval(() => {
+      sendCoopEvent('focus_in', editingCell.studentId, editingCell.columnId);
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [editingCell, academyInfo?.id, sendCoopEvent]);
+
+  // 💡 [추가 2] 다른 조교가 강제로 내 편집 권한을 뺏어갔는지 감시 (내 편집창 강제 종료)
+  useEffect(() => {
+    if (!editingCell || !myClientId) return;
+    const key = `${editingCell.studentId}_${editingCell.columnId}`;
+    const coop = cooperatingCells[key];
+    if (coop && coop.clientId !== myClientId) {
+      alert("다른 조교가 이 셀의 편집 권한을 강제로 가져갔습니다. 작성 중이던 내용이 취소됩니다.");
+      setEditingCell(null);
+    }
+  }, [cooperatingCells, editingCell, myClientId]);
 
   // 📝 편집 셀 상태 변경 및 브로드캐스트 전송 일괄 래퍼 함수
   const updateEditingCell = useCallback((next: { studentId: string, columnId: string } | null) => {
@@ -515,8 +643,6 @@ export default function TodaySheet({
   }, [sendCoopEvent]);
 
   const [isExportOpen, setIsExportOpen] = useState(false);
-  const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
-  const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [focusColumn, setFocusColumn] = useState<string | null>(null); // 💡 컬럼 포커스 모드 상태 추가
   const [isPrintPreviewOpen, setIsPrintPreviewOpen] = useState(false); // 💡 인쇄 미리보기 모달 상태 추가
   const [isCardPrintOpen, setIsCardPrintOpen] = useState(false); // 💡 학생별 안내장 인쇄 모달 상태 추가
@@ -524,17 +650,21 @@ export default function TodaySheet({
   const checklistRef = React.useRef<any>(null); // 💡 체크리스트 ref 추가
   const [isTagBatchMode, setIsTagBatchMode] = useState(false); // 💡 태그별 일괄입력 모달 상태 추가
 
-  const [hideAbsent, setHideAbsent] = useState<boolean>(() => {
+  const [hideAbsent, setHideAbsent] = useState<'all' | 'absent' | 'attend'>(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem(`todaySheetHideAbsent_${currentUser?.id || 'default'}`) === 'true';
+      const saved = localStorage.getItem(`todaySheetHideAbsentCycle_${currentUser?.id || 'default'}`);
+      return (saved as any) || 'all';
     }
-    return false;
+    return 'all';
   });
 
   const toggleHideAbsent = useCallback(() => {
     setHideAbsent(prev => {
-      const next = !prev;
-      localStorage.setItem(`todaySheetHideAbsent_${currentUser?.id || 'default'}`, String(next));
+      let next: 'all' | 'absent' | 'attend' = 'all';
+      if (prev === 'all') next = 'absent';
+      else if (prev === 'absent') next = 'attend';
+      else next = 'all';
+      localStorage.setItem(`todaySheetHideAbsentCycle_${currentUser?.id || 'default'}`, next);
       return next;
     });
   }, [currentUser?.id]);
@@ -616,6 +746,10 @@ export default function TodaySheet({
   const focusColWidths = useMemo(() => {
     const base = { ...colWidths };
     base['action'] = 8; // 💡 저장 컬럼 너비를 8px로 강제 고정
+    
+    // 💡 7개 도구 접고 펼칠 때 셀 폭 동적 반응형 조정
+    base['tools'] = showAllTools ? 206 : 110;
+
     if (focusColumn) {
       // 포커스된 컬럼은 화면의 상당 부분을 차지하도록 확장
       base[focusColumn] = 800;
@@ -624,12 +758,12 @@ export default function TodaySheet({
       base['attendance'] = 80;
     }
     return base;
-  }, [colWidths, focusColumn]);
+  }, [colWidths, focusColumn, showAllTools]);
 
   const totalWidth = useMemo(() => {
     if (focusColumn) return '100%'; // 포커스 모드에서는 테이블 너비를 100%로 설정
-    return activeColumns.reduce((acc, col) => acc + (colWidths[col.id] || col.minWidth), 0);
-  }, [activeColumns, colWidths, focusColumn]);
+    return activeColumns.reduce((acc, col) => acc + (focusColWidths[col.id] || col.minWidth), 0);
+  }, [activeColumns, focusColWidths, focusColumn]);
 
   // 💡 포커스 모드일 때 학생 필터링 및 전체 정렬 로직 적용
   const filteredStudents = useMemo(() => {
@@ -640,11 +774,19 @@ export default function TodaySheet({
       result = result.filter((s: any) => !hiddenStudentIds.includes(s.id));
     }
 
-    // 결석 접기: 결석 상태인 학생 숨김
-    if (hideAbsent) {
+    // 결석/출석 접기 순환 필터링
+    if (hideAbsent !== 'all') {
       result = result.filter((s: any) => {
         const status = normalizeAttendanceStatus(s.todaySession?.attendance_status);
-        return status !== ATTENDANCE_STATUS.ABSENT;
+        if (hideAbsent === 'absent') {
+          // 결석한 학생만 표시
+          return status === ATTENDANCE_STATUS.ABSENT;
+        }
+        if (hideAbsent === 'attend') {
+          // 출석한 학생(결석 아니면 다 포함)만 표시
+          return status !== ATTENDANCE_STATUS.ABSENT;
+        }
+        return true;
       });
     }
     
@@ -793,9 +935,11 @@ export default function TodaySheet({
     // 💡 [분기 저장] 
     if ('mission' in newData && onUpdateStudentInfo) {
       await onUpdateStudentInfo(studentId, 'recent_mission', newData.mission);
+      if (sendSaveEvent) sendSaveEvent(studentId, 'mission', newData.mission);
     }
     if ('management_notes' in newData && onUpdateStudentInfo) {
       await onUpdateStudentInfo(studentId, 'management_notes', newData.management_notes);
+      if (sendSaveEvent) sendSaveEvent(studentId, 'management_notes', newData.management_notes);
     }
 
     const savePayload = { ...newData };
@@ -803,10 +947,28 @@ export default function TodaySheet({
     delete savePayload.management_notes;
 
     if (Object.keys(savePayload).length > 0) {
-      return onSave(studentId, savePayload);
+      const success = await onSave(studentId, savePayload);
+      if (success && sendSaveEvent) {
+        const invMap: any = { 
+          'test_status': 'test_id', 
+          'test_score': 'test_score', 
+          'classwork_text': 'classwork', 
+          'completed_classwork_text': 'completed_classwork', 
+          'homework_text': 'assign', 
+          'next_quiz_text': 'next_quiz', 
+          'mission': 'mission', 
+          'special_notes': 'notes', 
+          'management_notes': 'management_notes' 
+        };
+        Object.keys(savePayload).forEach(key => {
+          const colId = invMap[key] || key;
+          sendSaveEvent(studentId, colId, savePayload[key]);
+        });
+      }
+      return success;
     }
     return true;
-  }, [onSave, onUpdateStudentInfo, students, pushToUndoStack, setStudents]);
+  }, [onSave, onUpdateStudentInfo, students, pushToUndoStack, setStudents, sendSaveEvent]);
 
   const handleBatchSave = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[]) => {
     if (updates.length === 0) return;
@@ -835,16 +997,34 @@ export default function TodaySheet({
     await Promise.all(updates.map(async (u) => {
       if ('mission' in u.newData && onUpdateStudentInfo) {
         await onUpdateStudentInfo(u.studentId, 'recent_mission', u.newData.mission);
+        if (sendSaveEvent) sendSaveEvent(u.studentId, 'mission', u.newData.mission);
       }
       
       const savePayload = { ...u.newData };
       delete savePayload.mission;
       
       if (Object.keys(savePayload).length > 0) {
-        await onSave(u.studentId, savePayload);
+        const success = await onSave(u.studentId, savePayload);
+        if (success && sendSaveEvent) {
+          const invMap: any = { 
+            'test_status': 'test_id', 
+            'test_score': 'test_score', 
+            'classwork_text': 'classwork', 
+            'completed_classwork_text': 'completed_classwork', 
+            'homework_text': 'assign', 
+            'next_quiz_text': 'next_quiz', 
+            'mission': 'mission', 
+            'special_notes': 'notes', 
+            'management_notes': 'management_notes' 
+          };
+          Object.keys(savePayload).forEach(key => {
+            const colId = invMap[key] || key;
+            sendSaveEvent(u.studentId, colId, savePayload[key]);
+          });
+        }
       }
     }));
-  }, [onSave, onUpdateStudentInfo, setStudents, pushToUndoStack]);
+  }, [onSave, onUpdateStudentInfo, setStudents, pushToUndoStack, sendSaveEvent]);
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     if (!activeCell) return;
@@ -1042,7 +1222,14 @@ export default function TodaySheet({
     toggleSecondRow,
     toggleHistory,
     handleUndo,
-    handleRedo
+    handleRedo,
+    toggleShowAllTools: () => {
+      setShowAllTools(prev => {
+        const next = !prev;
+        if (!next) setIsToolsEditMode(false);
+        return next;
+      });
+    }
   });
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
@@ -1108,13 +1295,13 @@ export default function TodaySheet({
           <div className="flex flex-col gap-0.5 items-start">
             <div className="flex items-center gap-3">
               <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
-              <div className="flex items-center bg-white/5 p-0.5 rounded-[4px] border border-white/10 shadow-inner">
+              <div className="flex items-center bg-zinc-950 p-0.5 rounded-[4px] border border-zinc-800 shadow-inner">
                 <button
                   onClick={() => setActiveTab('daily')}
                   className={`px-2.5 py-1 rounded-[3px] text-[10px] font-black tracking-tight transition-all cursor-pointer ${
                     activeTab === 'daily' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
-                      : 'text-gray-450 hover:text-gray-200'
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
                   }`}
                 >
                   📝 일지 작성
@@ -1123,8 +1310,8 @@ export default function TodaySheet({
                   onClick={() => setActiveTab('checklist')}
                   className={`px-2.5 py-1 rounded-[3px] text-[10px] font-black tracking-tight transition-all cursor-pointer ${
                     activeTab === 'checklist' 
-                      ? 'bg-blue-600 text-white shadow-sm' 
-                      : 'text-gray-450 hover:text-gray-200'
+                      ? 'bg-blue-600 text-white shadow-md' 
+                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
                   }`}
                 >
                   📋 체크리스트
@@ -1133,9 +1320,9 @@ export default function TodaySheet({
               <button
                 onClick={onOpenBriefing}
                 title="오늘의 브리핑 열기"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 rounded-[4px] text-[10px] font-black tracking-tight transition-all cursor-pointer shadow-md shadow-amber-950/20 ml-2"
+                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-[4px] text-[10px] font-black tracking-tight transition-all cursor-pointer shadow-md shadow-amber-950/20 ml-2"
               >
-                <Megaphone size={11} className="text-amber-400" />
+                <Megaphone size={11} className="text-amber-355" />
                 오늘의 브리핑
               </button>
             </div>
@@ -1178,8 +1365,8 @@ export default function TodaySheet({
                   disabled={!isNotToday}
                   className={`px-2.5 py-1.5 text-[10.5px] font-black uppercase tracking-wider rounded-[6px] transition-all border shadow-xl ${
                     isNotToday
-                      ? 'bg-blue-950/40 border-blue-500/30 text-blue-400 hover:bg-blue-600 hover:text-white cursor-pointer'
-                      : 'bg-[#121212] border-white/5 text-gray-600 cursor-not-allowed opacity-40'
+                      ? 'bg-blue-950/60 border-blue-500/40 text-blue-300 hover:bg-blue-600 hover:text-white cursor-pointer'
+                      : 'bg-[#121212] border-white/5 text-gray-655 cursor-not-allowed opacity-30'
                   }`}
                   title="오늘 날짜로 복귀"
                 >
@@ -1189,20 +1376,20 @@ export default function TodaySheet({
                 <div onClick={(e) => { const input = e.currentTarget.querySelector('input'); if (input && 'showPicker' in input) try { (input as any).showPicker(); } catch (err) { console.error(err); } }}
                   className={`flex items-center gap-1 border rounded-[6px] px-2 py-1.5 transition-all group cursor-pointer shadow-xl relative ${
                     isNotToday 
-                      ? 'bg-red-950/40 border-red-500/50 text-red-400 hover:bg-red-900/30' 
-                      : 'bg-amber-950/50 border-amber-500/60 text-amber-300 hover:bg-amber-900/40'
+                      ? 'bg-rose-950/30 border-rose-500/40 text-rose-300 hover:bg-rose-900/30' 
+                      : 'bg-amber-950/40 border-amber-500/50 text-amber-300 hover:bg-amber-900/40'
                   }`}>
-                  <CalendarIcon size={13} className={isNotToday ? 'text-red-500 animate-pulse' : 'text-amber-500 group-hover:text-amber-400'} />
-                  <span className={`text-[11.5px] font-black tracking-tight shrink-0 select-none ${isNotToday ? 'text-red-400' : 'text-amber-300'}`}>
+                  <CalendarIcon size={13} className={isNotToday ? 'text-rose-400 animate-pulse' : 'text-amber-400 group-hover:text-amber-300'} />
+                  <span className={`text-[11.5px] font-black tracking-tight shrink-0 select-none ${isNotToday ? 'text-rose-300' : 'text-amber-300'}`}>
                     {displayDate}
                   </span>
                   <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className="absolute opacity-0 w-0 h-0 pointer-events-none" />
                   {isNotToday ? (
-                    <div className="ml-0.5 px-1 py-0.5 bg-red-600/90 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(220,38,38,0.5)]">
+                    <div className="ml-0.5 px-1 py-0.5 bg-rose-600 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(244,63,94,0.4)]">
                       {selectedDayStr}
                     </div>
                   ) : (
-                    <div className="ml-0.5 px-1 py-0.5 bg-amber-600 text-black text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(245,158,11,0.3)]">
+                    <div className="ml-0.5 px-1 py-0.5 bg-amber-500 text-black text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(245,158,11,0.25)]">
                       {selectedDayStr}
                     </div>
                   )}
@@ -1211,15 +1398,15 @@ export default function TodaySheet({
             );
           })()}
 
-          <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-black border-white/20 text-gray-400 hover:text-white'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
+          <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-zinc-900 border-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-850'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
           
           {/* 💡 [변경] 전체 리포트 발송 버튼 (1행 안전 구역으로 이동) */}
-          <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-2 bg-blue-600/10 text-blue-500 border border-blue-500/20 rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-xl no-print">
+          <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-xl no-print">
             {isSendingReport === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} 전체 리포트 발송
           </button>
           
           <div className="relative">
-            <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-white/5 border border-white/10 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-white transition-all shadow-xl"><Download size={14} /> Download</button>
+            <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-zinc-200 hover:text-white hover:bg-zinc-800 transition-all shadow-xl"><Download size={14} /> Download</button>
             <AnimatePresence>
               {isExportOpen && (
                 <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute right-0 mt-2 w-56 bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-lg shadow-2xl p-2 z-[100] overflow-hidden">
@@ -1264,13 +1451,13 @@ export default function TodaySheet({
           {/* 2행 접기/펼치기 토글 버튼 */}
           <button 
             onClick={toggleSecondRow} 
-            className={`p-2 border rounded-[6px] transition-all shadow-xl ${showSecondRow ? 'bg-blue-600/20 border-blue-500/40 text-blue-400' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+            className={`p-2 border rounded-[6px] transition-all shadow-xl ${showSecondRow ? 'bg-blue-650/20 border-blue-500/40 text-blue-350' : 'bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800'}`}
             title={showSecondRow ? "상세 설정 도구 접기" : "상세 설정 도구 펼치기"}
           >
             {showSecondRow ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
 
-          <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-white/5 border border-white/10 rounded-[6px] text-gray-400 hover:text-white transition-all shadow-xl"><Settings2 size={18} /></button>
+          <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-zinc-900 border border-zinc-800 rounded-[6px] text-zinc-300 hover:text-white hover:bg-zinc-800 transition-all shadow-xl"><Settings2 size={18} /></button>
         </div>
       </div>
 
@@ -1287,14 +1474,14 @@ export default function TodaySheet({
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-1.5">
                 <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Set</span>
-                <div className="flex bg-white/5 p-0.5 rounded-md border border-white/10">
+                <div className="flex bg-zinc-950 p-0.5 rounded-md border border-zinc-800">
                   {['1', '2', '3', '4'].map((setId, idx) => {
                     const keys = ['Q', 'W', 'E', 'R'];
                     return (
                       <button 
                         key={setId} 
                         onClick={() => handleSetSwitch(setId)} 
-                        className={`w-7 py-1 rounded-[4px] text-[11px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-gray-500 hover:text-gray-300'}`} 
+                        className={`w-7 py-1 rounded-[4px] text-[11px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}`} 
                         title={`Alt + ${keys[idx]}`}
                       >
                         {setId}
@@ -1306,7 +1493,7 @@ export default function TodaySheet({
 
               <button 
                 onClick={() => setIsTagBatchMode(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500 hover:text-white rounded-[4px] text-[10px] font-black transition-all ml-2"
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 text-indigo-350 border border-indigo-500/30 hover:bg-indigo-650 hover:text-white rounded-[4px] text-[10px] font-black transition-all ml-2 shadow-sm"
                 title="태그별 일괄입력 모드 열기"
               >
                 <Wand2 size={12} />
@@ -1315,16 +1502,27 @@ export default function TodaySheet({
 
               <button
                 onClick={toggleHideAbsent}
-                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-[4px] text-[10px] font-black transition-all ml-1 ${
-                  hideAbsent
-                    ? 'bg-rose-500/30 text-rose-300 border-rose-500/50 hover:bg-rose-500/50'
-                    : 'bg-white/5 text-gray-500 border-white/10 hover:bg-white/10 hover:text-gray-300'
+                className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-[4px] text-[10px] font-black transition-all ml-1 shadow-sm ${
+                  hideAbsent === 'absent'
+                    ? 'bg-rose-500/20 text-rose-355 border-rose-500/30 hover:bg-rose-500/40 hover:text-white shadow-md'
+                    : hideAbsent === 'attend'
+                    ? 'bg-emerald-500/20 text-emerald-355 border-emerald-500/30 hover:bg-emerald-500/40 hover:text-white shadow-md'
+                    : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white shadow-sm'
                 }`}
-                title={hideAbsent ? '결석 학생 다시 표시' : '결석 학생 숨기기'}
+                title={
+                  hideAbsent === 'all' ? '전체 학생 표시 중 (클릭 시 결석생만 표시)' :
+                  hideAbsent === 'absent' ? '결석생만 표시 중 (클릭 시 출석생만 표시)' :
+                  '출석생(지각 포함)만 표시 중 (클릭 시 전체 표시)'
+                }
               >
-                <EyeOff size={12} />
-                결석 접기
+                {hideAbsent === 'all' && '전체'}
+                {hideAbsent === 'absent' && '결석'}
+                {hideAbsent === 'attend' && '출석'}
               </button>
+
+
+
+
 
               {isFullScreen && (
                 <>
@@ -1345,14 +1543,14 @@ export default function TodaySheet({
                   <div className="h-4 w-px bg-white/10" />
 
                   {/* 학년 필터 (라벨 제거 & 초/중/고 축소) */}
-                  <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+                  <div className="flex bg-zinc-950 rounded-[4px] p-0.5 border border-zinc-800">
                     {[
                       { label: 'ALL', key: 'All' }, { label: '초', key: '초' }, { label: '중', key: '중' }, { label: '고', key: '고' }
                     ].map((g) => (
                       <button 
                         key={g.key} 
                         onClick={() => setSelectedFilter(g.key)} 
-                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
                       >
                         {g.label}
                       </button>
@@ -1376,7 +1574,7 @@ export default function TodaySheet({
                                 setSelectedDays([...selectedDays, day]);
                               }
                             }} 
-                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-white/5 border-white/5 text-gray-500 hover:bg-white/10 hover:text-white'}`}
+                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
                           >
                             {day}
                           </button>
@@ -1386,7 +1584,7 @@ export default function TodaySheet({
                     {selectedDays.length > 0 && (
                       <button 
                         onClick={() => setIsAndFilter(!isAndFilter)} 
-                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-600/20 border-indigo-500/40 text-indigo-400' : 'bg-white/5 border-white/5 text-gray-500 hover:text-white'}`}
+                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-650/20 border-indigo-500/40 text-indigo-405 shadow-sm' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
                       >
                         {isAndFilter ? 'AND' : 'OR'}
                       </button>
@@ -1423,15 +1621,15 @@ export default function TodaySheet({
 
               {/* 정렬 방식 및 방향 필터 */}
               <div className="flex items-center gap-2">
-                <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">Sort</span>
-                <div className="flex bg-white/5 rounded-[4px] p-0.5 border border-white/5">
+                <span className="text-[9px] font-black text-gray-550 uppercase tracking-widest">Sort</span>
+                <div className="flex bg-zinc-950 rounded-[4px] p-0.5 border border-zinc-800">
                   {[
                     { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }, { label: '학교순', key: 'school' }
                   ].map((m) => (
                     <button 
                       key={m.key} 
                       onClick={() => onSortModeChange(m.key as any)} 
-                      className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-400 hover:text-white'}`}
+                      className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
                     >
                       {m.label}
                     </button>
@@ -1439,7 +1637,7 @@ export default function TodaySheet({
                 </div>
                 <button 
                   onClick={() => onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className="px-2 py-1 rounded-[4px] bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 transition-all flex items-center gap-1 text-[8px] font-black"
+                  className="px-2 py-1 rounded-[4px] bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-850 transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
                   title={sortDirection === 'asc' ? '오름차순 (Up)' : '내림차순 (Down)'}
                 >
                   {sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-purple-400" />}
@@ -1455,7 +1653,7 @@ export default function TodaySheet({
                         setHiddenStudentIds(prev => [...prev, ...selectedIds]);
                         setSelectedIds([]);
                       }}
-                      className="px-2 py-1 rounded-[4px] bg-red-500/10 border border-red-500/20 text-red-400 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black animate-pulse"
+                      className="px-2 py-1 rounded-[4px] bg-rose-500/10 border border-rose-500/30 text-rose-400 hover:bg-rose-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black animate-pulse"
                       title="선택한 학생들을 임시로 숨깁니다"
                     >
                       <EyeOff size={10} />
@@ -1465,7 +1663,7 @@ export default function TodaySheet({
                   {hiddenStudentIds.length > 0 && (
                     <button
                       onClick={() => setHiddenStudentIds([])}
-                      className="px-2 py-1 rounded-[4px] bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black"
+                      className="px-2 py-1 rounded-[4px] bg-blue-500/10 border border-blue-500/30 text-blue-400 hover:bg-blue-650 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
                       title="숨겨진 학생들을 모두 다시 표시합니다"
                     >
                       <Eye size={10} />
@@ -1547,7 +1745,7 @@ export default function TodaySheet({
           onScroll={handleScroll}
         >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} /></thead>
           <tbody className="divide-y divide-white/10">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
@@ -1616,6 +1814,10 @@ export default function TodaySheet({
                       timeSectionLabel={timeSectionLabel}
                       historyLimit={historyLimit}
                       isScrolled={isScrolled}
+                      showAllTools={showAllTools}
+                      isToolsEditMode={isToolsEditMode}
+                      toolsOrder={toolsOrder}
+                      onReorderTools={handleReorderTools}
                     />
                   </React.Fragment>
                 );

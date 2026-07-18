@@ -1,5 +1,7 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Check, CheckSquare, Square, XCircle } from 'lucide-react';
+import { parseInlineTests } from '@/lib/utils';
 
 export default function ApprovalModal({
   pendingStudents,
@@ -15,6 +17,12 @@ export default function ApprovalModal({
   const [selectedIds, setSelectedIds] = useState<string[]>(pendingStudents.map(s => s.id));
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
   const toggleAll = () => {
     if (selectedIds.length === pendingStudents.length) setSelectedIds([]);
@@ -41,8 +49,8 @@ export default function ApprovalModal({
     setIsProcessing(false);
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6">
+  const modalContent = (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 sm:p-6">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
       <div className="relative w-full max-w-2xl bg-[#111] border border-white/10 rounded-2xl shadow-2xl flex flex-col max-h-[90vh]">
         <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10">
@@ -110,20 +118,53 @@ export default function ApprovalModal({
                         <span className="text-gray-400 font-bold">테스트 결과</span>
                         {s.todaySession?.test_id ? (
                           <div className="mt-0.5">
-                            <p className="text-white font-bold truncate">{s.todaySession.test_id}</p>
-                            <p className="text-[11px] mt-0.5">
-                              {s.todaySession.test_score !== undefined && s.todaySession.test_score !== null ? (
-                                <span className={`font-black ${
-                                  s.todaySession.test_cut !== undefined && s.todaySession.test_score >= s.todaySession.test_cut 
-                                    ? 'text-blue-400' : 'text-rose-400'
-                                }`}>
-                                  {s.todaySession.test_score}점 
-                                  {s.todaySession.test_cut ? ` (커트라인 ${s.todaySession.test_cut}점)` : ''}
-                                </span>
-                              ) : (
-                                <span className="text-gray-500">결과 미입력</span>
-                              )}
-                            </p>
+                            {(() => {
+                              const parsed = parseInlineTests(s.todaySession.test_id);
+                              if (parsed && parsed.length > 0) {
+                                return parsed.map((t, idx) => {
+                                  const isPending = t.numericScore === null;
+                                  const scoreColor = isPending ? 'text-gray-500' : (t.isPass ? 'text-blue-400' : 'text-rose-400');
+                                  return (
+                                    <div key={idx} className="mt-1 first:mt-0">
+                                      <p className="text-white font-bold truncate">{t.name}</p>
+                                      <p className="text-[11px] mt-0.5">
+                                        {t.maxScore === 100 ? (
+                                          <span className={`font-black ${scoreColor}`}>
+                                            {isPending ? '채점 전' : `${t.numericScore}점`}
+                                            {t.explicitCut ? ` (커트라인 ${t.explicitCut}점)` : ''}
+                                          </span>
+                                        ) : (
+                                          <span className={`font-black ${scoreColor}`}>
+                                            {isPending ? '채점 전' : `${t.numericScore} / ${t.maxScore}`}
+                                            {t.explicitCut !== null ? ` (커트라인 ${t.explicitCut}개)` : ''}
+                                          </span>
+                                        )}
+                                      </p>
+                                    </div>
+                                  );
+                                });
+                              }
+
+                              // 인라인 포맷이 아닌 일반 입력일 경우 기존 로직 수행
+                              return (
+                                <>
+                                  <p className="text-white font-bold truncate">{s.todaySession.test_id}</p>
+                                  <p className="text-[11px] mt-0.5">
+                                    {s.todaySession.test_score !== undefined && s.todaySession.test_score !== null ? (
+                                      <span className={`font-black ${
+                                        s.todaySession.test_cut !== undefined && s.todaySession.test_score >= s.todaySession.test_cut 
+                                          ? 'text-blue-400' : 'text-rose-400'
+                                      }`}>
+                                        {s.todaySession.test_score}점 
+                                        {s.todaySession.test_cut ? ` (커트라인 ${s.todaySession.test_cut}점)` : ''}
+                                      </span>
+                                    ) : (
+                                      <span className="text-gray-500">결과 미입력</span>
+                                    )}
+                                  </p>
+                                </>
+                              );
+                            })()}
                           </div>
                         ) : (
                           <p className="text-gray-500 font-bold mt-0.5">배정된 테스트 없음</p>
@@ -158,4 +199,7 @@ export default function ApprovalModal({
       </div>
     </div>
   );
+
+  if (!mounted) return null;
+  return createPortal(modalContent, document.body);
 }

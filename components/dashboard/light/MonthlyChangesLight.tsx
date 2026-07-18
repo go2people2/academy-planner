@@ -7,6 +7,29 @@ import {
 } from 'lucide-react';
 import { Student } from '@/types/dashboard';
 
+// 💡 최초 등록일과 퇴원일 사이의 실제 재원 기간을 계산하는 헬퍼 함수
+const getMembershipPeriod = (createdVal: any, dischargedVal: any) => {
+  if (!createdVal) return '';
+  const start = new Date(createdVal);
+  const end = dischargedVal ? new Date(dischargedVal) : new Date();
+  
+  // 두 날짜 사이의 밀리초 차이를 일단 일(Day) 수로 변환
+  const diffTime = end.getTime() - start.getTime();
+  const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+  
+  if (diffDays <= 0) return '1일 미만';
+  if (diffDays < 30) {
+    return `${diffDays}일`;
+  }
+  
+  const diffMonths = Math.floor(diffDays / 30);
+  const remainingDays = diffDays % 30;
+  if (remainingDays >= 15) {
+    return `${diffMonths + 0.5}개월`;
+  }
+  return `${diffMonths}개월`;
+};
+
 interface MonthlyChangesProps {
   students: Student[];
   onSelectStudent?: (id: string) => void;
@@ -86,7 +109,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
               date: logDate,
               dateStr: log.date,
               type: log.attendance_status,
-              notes: log.attendance_reason || log.special_notes || '사유 미기재',
+              notes: log.attendance_reason || '사유 미기재',
               teacher: s.teacher_name || '미지정'
             });
           }
@@ -115,6 +138,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
         name: s.name,
         grade: s.grade || '미지정',
         date: deleteDate,
+        period: getMembershipPeriod(s.created_at, changeTime), // 💡 재원 기간 계산
         notes: lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
         teacher: s.teacher_name || '미지정'
       };
@@ -124,7 +148,8 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
   // 6. 누적 전체 퇴원생 명단 (아카이브)
   const dischargedAll = useMemo(() => {
     return students.filter(s => !!s.is_deleted).map(s => {
-      const changeTime = s.status_changed_at || (s as any).updated_at;
+      // status_changed_at -> updated_at -> created_at 순으로 최후의 날짜 폴백 확보!
+      const changeTime = s.status_changed_at || (s as any).updated_at || s.created_at;
       const deleteDate = changeTime ? new Date(changeTime) : null;
       const lastLog = (s.allLogs || []).find((l: any) => l.attendance_status === '수업제외' || (l.special_notes && l.special_notes.toLowerCase().includes('퇴원')));
       return {
@@ -132,6 +157,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
         name: s.name,
         grade: s.grade || '미지정',
         date: deleteDate,
+        period: getMembershipPeriod(s.created_at, changeTime), // 💡 재원 기간 계산
         notes: lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
         teacher: s.teacher_name || '미지정'
       };
@@ -298,7 +324,12 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
             {activeTab === 'dischargedMonth' && dischargedMonth.map((item) => (
               <RowTemplate 
                 key={item.id} 
-                date={item.date.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })} 
+                date={
+                  <div className="flex flex-col items-center justify-center gap-0.5">
+                    <span className="font-bold text-[#37352f]">{item.date.toLocaleDateString('ko-KR', { month: '2-digit', day: '2-digit' })}</span>
+                    {item.period && <span className="text-[9px] font-black text-red-500 whitespace-nowrap bg-red-50 px-1.5 py-0.5 rounded-[3px] border border-red-100">({item.period})</span>}
+                  </div>
+                }
                 badge={<span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-red-50 text-red-500 border border-red-200"><UserMinus size={10} /> 퇴원</span>}
                 name={item.name}
                 description={item.notes}
@@ -310,7 +341,12 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
             {activeTab === 'dischargedAll' && dischargedAll.map((item) => (
               <RowTemplate 
                 key={item.id} 
-                date={item.date ? item.date.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }) : '미기재'} 
+                date={
+                  <div className="flex flex-col items-center justify-center gap-0.5">
+                    <span className="font-bold text-[#37352f]">{item.date ? item.date.toLocaleDateString('ko-KR', { year: '2-digit', month: '2-digit', day: '2-digit' }) : '미기재'}</span>
+                    {item.period && <span className="text-[9px] font-black text-red-500 whitespace-nowrap bg-red-50 px-1.5 py-0.5 rounded-[3px] border border-red-100">({item.period})</span>}
+                  </div>
+                }
                 badge={<span className="inline-flex items-center gap-1 text-[9px] font-black px-2 py-0.5 rounded bg-gray-100 text-gray-500 border border-gray-200"><UserMinus size={10} /> 아카이브</span>}
                 name={item.name}
                 description={item.notes}

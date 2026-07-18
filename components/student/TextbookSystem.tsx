@@ -365,13 +365,13 @@ export default function TextbookSystem({
     }
 
     const fullText = `${type === 'wrong' ? '[오답] ' : ''}${displayTitle} ${unitText ? `${unitText} ` : ''}${rangeText}`;
-    const targetField = type === 'homework' ? 'homework' : 'classwork';
+    const targetField = type === 'homework' ? 'homework' : 'completed_classwork';
     const currentText = targetField === 'homework' ? localHomework : localCompletedClasswork;
     const trimmedCurrent = currentText ? currentText.trim() : "";
     const newText = trimmedCurrent ? `${trimmedCurrent}\n${fullText}` : fullText;
     
     if (targetField === 'homework') setLocalHomework(newText); else setLocalCompletedClasswork(newText);
-    await handleManualSave(targetField === 'classwork' ? 'completed_classwork' : 'homework', newText); 
+    await handleManualSave(targetField, newText); 
     setSelectedPages([]);
     setSelectedUnits([]); 
     setLastClickedUnitIdx(null); 

@@ -38,6 +38,10 @@ export const SimpleTextCell = React.forwardRef<HTMLTextAreaElement, SimpleTextCe
           defaultValue={currentText || ''} 
           data-student-id={student.id}
           data-col-id={colId}
+          onFocus={(e) => {
+            // 💡 포커스를 얻는 순간 (천천히 클릭하여 입력 모드 진입 포함) 락 브로드캐스트 활성화
+            handleCellInteraction(e as any, colId, 'dblclick');
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               onSave(colId, (e.target as HTMLTextAreaElement).value);

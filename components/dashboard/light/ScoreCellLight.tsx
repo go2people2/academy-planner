@@ -16,12 +16,14 @@ interface ScoreCellProps {
   handleLocalInput: (e: React.FormEvent<HTMLInputElement>, field: string) => void;
   handleCellInteraction: (e: React.MouseEvent, colId: string, type: 'click' | 'dblclick') => void;
   onTestScoreTypeToggle: () => void;
+  defaultScoreCut?: number;
+  defaultCountCut?: number;
 }
 
 export const ScoreCell = React.memo(function ScoreCell({
   student, colId, formData, isEditing, isActive, scoreInputRef,
   onSave, handleKeyDown, handleLocalInput, handleCellInteraction,
-  onTestScoreTypeToggle
+  onTestScoreTypeToggle, defaultScoreCut = 80, defaultCountCut = 2
 }: ScoreCellProps) {
   
   // 💡 로컬 Ref 신설하여 안전한 element 참조 보장 (prop이 함수일 경우 대응)
@@ -30,8 +32,8 @@ export const ScoreCell = React.memo(function ScoreCell({
 
   const isCountMode = formData.test_score_type === 'count';
 
-  // 💡 인라인 테스트 모드 감지 (하이픈 문법을 썼다면 점수칸은 요약 뱃지로 변신)
-  const parsedTests = parseInlineTests(formData.test_id);
+  // 💡 인라인 테스트 모드 감지 (하이픈 문법을 썼다면 점수칸은 요약 뱃지로 변신) - 학원 기준점 반영!
+  const parsedTests = parseInlineTests(formData.test_id, defaultScoreCut, defaultCountCut);
 
   if (parsedTests) {
     return (

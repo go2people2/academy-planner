@@ -200,6 +200,7 @@ const updateTimerPreset = async (index: number, value: number) => {
             onUpdateAcademyInfo={onUpdateAcademyInfo} 
             noticeDrafts={noticeDrafts}
             onNoticeDraftChange={onNoticeDraftChange}
+            isLight={false}
           />
         )}
 

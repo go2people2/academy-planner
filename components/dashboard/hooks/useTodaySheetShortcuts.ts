@@ -26,6 +26,7 @@ interface UseTodaySheetShortcutsProps {
   toggleHistory?: (studentId: string) => void; // 💡 히스토리 토글 함수 추가
   handleUndo?: () => void;
   handleRedo?: () => void;
+  toggleShowAllTools?: () => void; // 💡 툴박스 접기/펼치기 토글 함수 추가
 }
 
 /**
@@ -37,7 +38,8 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     students, setStudents,
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
     handleBatchSave, handleSetSwitch, setIsDragging, selectedIds,
-    toggleSecondRow, toggleHistory, handleUndo, handleRedo
+    toggleSecondRow, toggleHistory, handleUndo, handleRedo,
+    toggleShowAllTools
   } = props;
 
   // 1. 클립보드 로직 분리 (handleCopy, handlePaste, handleCut)
@@ -74,6 +76,28 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     
     if (targetColIds.length === 0) return;
     
+    // 🔒 [추가] 채워질 범위 중 승인 대기 중이고 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 작업 차단 및 알럿 노출
+    let hasLockedCell = false;
+    for (let r = rMin + 1; r <= rMax; r++) {
+      const targetStudent = filteredStudents[r];
+      if (!targetStudent) continue;
+      for (let c = cMin; c <= cMax; c++) {
+        const colId = activeColumns[c].id;
+        const isSubmitted = ['pending', 'submitted'].includes(targetStudent.todaySession?.approval_status || '');
+        const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
+        if (isSubmitted && isProtectedCol) {
+          hasLockedCell = true;
+          break;
+        }
+      }
+      if (hasLockedCell) break;
+    }
+
+    if (hasLockedCell) {
+      alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+      return;
+    }
+
     for (let r = rMin + 1; r <= rMax; r++) {
       const targetStudent = filteredStudents[r];
       const targetSession = targetStudent.todaySession || {};
@@ -227,9 +251,19 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         return;
       }
 
-      // Alt + T (Option + T) - 2행 상세 설정 바 토글
+      // Alt + T (Option + T) - 툴박스 접기/펼치기 토글
       const isTKey = e.key?.toLowerCase() === 't' || e.code === 'KeyT';
       if (e.altKey && isTKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+        if (toggleShowAllTools) {
+          e.preventDefault();
+          toggleShowAllTools();
+          return;
+        }
+      }
+
+      // Alt + U (Option + U) - 2행 상세 설정 바 토글
+      const isUKey = e.key?.toLowerCase() === 'u' || e.code === 'KeyU';
+      if (e.altKey && isUKey && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
         if (toggleSecondRow) {
           e.preventDefault();
           toggleSecondRow();
@@ -335,6 +369,16 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       if (!isInput && isCharacterKey && activeCell && !editingCell) {
         const readOnlyCols = ['select', 'name', 'action', 'attendance', 'review', 'date'];
         if (!readOnlyCols.includes(activeCell.columnId)) {
+          // 🔒 [추가] 승인 대기 중이고 보호 대상 컬럼이면 즉시 타이핑 덮어쓰기 방지
+          const activeStudent = filteredStudents.find(s => s.id === activeCell.studentId);
+          const isSubmitted = ['pending', 'submitted'].includes(activeStudent?.todaySession?.approval_status || '');
+          const isProtectedCol = ['completed_classwork', 'assign'].includes(activeCell.columnId);
+          if (isSubmitted && isProtectedCol) {
+            e.preventDefault();
+            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+            return;
+          }
+
           e.preventDefault();
           const colId = activeCell.columnId;
           const prop = mapColumnToProp(colId);
@@ -392,6 +436,29 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         if (sI !== -1 && eI !== -1 && sC !== -1 && eC !== -1) {
           const rMin = Math.min(sI, eI), rMax = Math.max(sI, eI);
           const cMin = Math.min(sC, eC), cMax = Math.max(sC, eC);
+
+          // 🔒 [추가] 삭제 대상 범위 내에 승인 대기 중이고 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 삭제를 차단하고 알럿 노출
+          let hasLockedCell = false;
+          for (let r = rMin; r <= rMax; r++) {
+            const st = filteredStudents[r];
+            if (!st) continue;
+            for (let c = cMin; c <= cMax; c++) {
+              const colId = activeColumns[c].id;
+              const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
+              const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
+              if (isSubmitted && isProtectedCol) {
+                hasLockedCell = true;
+                break;
+              }
+            }
+            if (hasLockedCell) break;
+          }
+
+          if (hasLockedCell) {
+            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+            return;
+          }
+
           const updates: any[] = [];
 
           // 💡 [수정] 삭제 대상 컬럼 ID들 미리 추출 (전수 순회 방지용)
@@ -442,6 +509,6 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     activeCell, setActiveCell, editingCell, setEditingCell, filteredStudents, activeColumns, 
     selectedRange, setSelectedRange, handleBatchSave, handleSetSwitch, 
     handleCopy, handlePaste, handleCut, setIsDragging, selectedIds, handleFillDown, toggleSecondRow,
-    handleUndo, handleRedo
+    handleUndo, handleRedo, toggleHistory, toggleShowAllTools
   ]);
 }

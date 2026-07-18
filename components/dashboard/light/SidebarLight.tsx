@@ -160,10 +160,9 @@ export default function Sidebar({
         <nav className="space-y-1">
           <h3 className="text-[9px] font-bold text-[#37352f]/45 uppercase tracking-widest mb-2 px-2">Menu</h3>
           <SidebarLink icon={<Zap size={14} className={isClassroomModeOpen ? "text-amber-500 fill-current animate-pulse" : "text-amber-500"} />} label="수업 시작 (LIVE)" active={isClassroomModeOpen} onClick={() => { onStartClass(); }} variant="blue" />
-          <SidebarLink icon={<Bell size={14} className="text-rose-500" />} label="공지/건의/설문" active={viewMode === 'notifications'} onClick={() => { setViewMode('notifications'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<LayoutDashboard size={14} className="text-purple-500" />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<TableIcon size={14} className="text-sky-500" />} label="Daily Sheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} />
-          <SidebarLink icon={<ClipboardCheck size={14} className="text-pink-500" />} label="업무 및 보강 관리" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
+          <SidebarLink icon={<ClipboardCheck size={14} className="text-pink-500" />} label="업무/보강/설문" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<AlertTriangle size={14} className="text-orange-500" />} label="교재 오류 관리" active={viewMode === 'problemErrors'} onClick={() => { setViewMode('problemErrors'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<Activity size={14} className="text-teal-500" />} label="교재별진도" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} />
           <SidebarLink icon={<FileText size={14} className="text-blue-500" />} label="기출문제 관리" active={viewMode === 'exams'} onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }} />

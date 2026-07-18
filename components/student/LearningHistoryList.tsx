@@ -211,15 +211,6 @@ export default function LearningHistoryList({ allLogs, isHistoryOpen, setIsHisto
                             </>
                           );
                         })()}
-                      </div>t-left mt-1">
-                                    <span className="text-indigo-400 font-bold mr-1.5 inline-block">🔮 다음TEST:</span>
-                                    <RenderTestText text={nextQuizText} className="inline text-[11px]" />
-                                  </div>
-                                )}
-                              </div>
-                            )}
-                          </div>
-                        </div>
                       </div>
                     </div>
                   );

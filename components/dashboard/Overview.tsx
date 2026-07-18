@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, StickyNote, Target, ExternalLink, Search, X, Download, Upload } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, StickyNote, Target, ExternalLink, Search, X, Download, Upload, Trash2 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
@@ -23,7 +23,7 @@ interface OverviewProps {
   isBatchMode: boolean;
   setIsBatchMode: (val: boolean) => void;
   onBatchAdd: (ids: string[], reasons: Record<string, string>, makeupHours: Record<string, number>) => Promise<void>;
-  onRemoveFromToday: (id: string, reason: string) => Promise<void>;
+  onRemoveFromToday: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
   onBatchAddStudents?: (newStudents: any[]) => Promise<boolean>; // 💡 추가
   masterTextbooks: TextbookOption[];
@@ -483,6 +483,7 @@ export default function Overview({
                   consultationCycle={consultationCycle}
                   onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)}
                   academyInfo={academyInfo}
+                  onRemoveFromToday={onRemoveFromToday}
                 />
               );
             })}
@@ -513,6 +514,7 @@ export default function Overview({
                 consultationCycle={consultationCycle}
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)}
                 academyInfo={academyInfo}
+                onRemoveFromToday={onRemoveFromToday}
               />
             ))}
           </div>
@@ -665,6 +667,8 @@ export default function Overview({
                 onViewProgress={onViewProgress}
                 consultationCycle={consultationCycle}
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)} 
+                academyInfo={academyInfo}
+                onRemoveFromToday={onRemoveFromToday}
               />
             );
           })}
@@ -811,9 +815,9 @@ export default function Overview({
 }
 
 function StudentRowItem({ 
-  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21, academyInfo
+  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21, academyInfo, onRemoveFromToday
 }: { 
-  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number, academyInfo?: any
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number, academyInfo?: any, onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   const isMakeup = student.todaySession?.attendance_status?.startsWith('보강');
@@ -874,18 +878,20 @@ function StudentRowItem({
               상담
             </span>
           )}
-          {!isBatchMode && onViewProgress && (
+          {!isBatchMode && (
             <div className="flex items-center gap-1">
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onViewProgress(student.id);
-                }}
-                className="p-1 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-all shadow-sm shadow-blue-900/20"
-                title="진도표 바로가기"
-              >
-                <TrendingUp size={10} />
-              </button>
+              {onViewProgress && (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onViewProgress(student.id);
+                  }}
+                  className="p-1 rounded bg-blue-500/10 text-blue-500 hover:bg-blue-500 hover:text-white transition-all shadow-sm shadow-blue-900/20"
+                  title="진도표 바로가기"
+                >
+                  <TrendingUp size={10} />
+                </button>
+              )}
               {/* 💡 학생 포털 바로가기 추가 */}
               <button 
                 onClick={(e) => {
@@ -897,6 +903,17 @@ function StudentRowItem({
                 title="학생 페이지 보기"
               >
                 <ExternalLink size={10} strokeWidth={3} />
+              </button>
+              {/* 💡 오늘 수업 제외/삭제 버튼 추가 */}
+              <button 
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemoveFromToday?.(student.id, '수업 취소', 'delete');
+                }}
+                className="p-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all shadow-sm shadow-red-900/20"
+                title="오늘 수업 제외/삭제"
+              >
+                <Trash2 size={10} />
               </button>
             </div>
           )}

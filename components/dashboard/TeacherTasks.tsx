@@ -5,12 +5,13 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, Calendar, Plus, Check, Trash2, Clock, 
   User, CheckCircle, AlertCircle, Search, Sparkles, Loader2, CalendarRange, X, EyeOff, ExternalLink,
-  Edit
+  Edit, Users, MessageSquare, CheckCircle2, Circle
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
 import { SessionLog, Student, Teacher } from '@/types/dashboard';
 import TaskLinksTab from './TaskLinksTab';
+import SurveyManagement from './SurveyManagement';
 
 interface TeacherTasksProps {
   academyInfo: any;
@@ -41,7 +42,7 @@ export default function TeacherTasks({
   currentUser,
   onRefreshStudents
 }: TeacherTasksProps) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'links'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>('tasks');
   const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
   const [makeups, setMakeups] = useState<any[]>([]);
   const [isTaskLoading, setIsTaskLoading] = useState(false);
@@ -571,24 +572,36 @@ export default function TeacherTasks({
           </div>
         </div>
 
-        <div className="flex bg-white/5 border border-white/10 p-0.5 rounded-lg">
+        <div className="flex bg-white/5 border border-white/10 p-0.5 rounded-lg flex-wrap gap-0.5">
           <button 
             onClick={() => setActiveTab('tasks')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'tasks' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'tasks' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
           >
-            <Sparkles size={14} /> 강사 업무 보드
+            <Sparkles size={14} /> 업무 목록
           </button>
           <button 
             onClick={() => setActiveTab('makeups')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'makeups' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'makeups' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
           >
-            <CalendarRange size={14} /> 보강 스케줄러
+            <CalendarRange size={14} /> 보강 관리
+          </button>
+          <button 
+            onClick={() => setActiveTab('suggestions')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'suggestions' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+          >
+            <MessageSquare size={14} /> 학생 건의
+          </button>
+          <button 
+            onClick={() => setActiveTab('surveys')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'surveys' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+          >
+            <Users size={14} /> 설문/수요조사
           </button>
           <button 
             onClick={() => setActiveTab('links')}
-            className={`flex items-center gap-2 px-4 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'links' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'links' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
           >
-            <ExternalLink size={14} /> 업무 링크
+            <ExternalLink size={14} /> 유용한 링크
           </button>
         </div>
       </div>
@@ -691,11 +704,11 @@ export default function TeacherTasks({
                               </button>
                             </div>
                           </div>
-                          <p className={`text-xs leading-relaxed ${task.is_completed ? 'text-gray-600' : 'text-gray-400'}`}>{task.content || '세부 설명이 없습니다.'}</p>
+                          <p className={`text-xs leading-relaxed whitespace-pre-wrap ${task.is_completed ? 'text-gray-500 line-through' : 'text-gray-100'}`}>{task.content || '세부 설명이 없습니다.'}</p>
                         </div>
 
                         <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] font-bold">
-                          <div className="flex items-center gap-1.5 text-gray-500">
+                          <div className="flex items-center gap-1.5 text-gray-400">
                             <User size={12} />
                             <span>{assignee?.nickname || assignee?.name || '지정되지 않음'}</span>
                           </div>
@@ -870,6 +883,37 @@ export default function TeacherTasks({
               currentUser={currentUser}
               onRefreshTasks={fetchTasks}
             />
+          )}
+
+          {/* TAB 4: Student Suggestions */}
+          {activeTab === 'suggestions' && (
+            <motion.div 
+              key="suggestions-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="absolute inset-0 flex flex-col space-y-4 overflow-hidden"
+            >
+              <SuggestionHistoryView 
+                tasks={tasks} 
+                toggleTask={(t: any) => handleToggleTask(t.id, t.is_completed)} 
+                deleteTask={handleDeleteTask} 
+                isAdmin={currentUser?.role === 'admin' || currentUser?.role === 'master'} 
+              />
+            </motion.div>
+          )}
+
+          {/* TAB 5: Surveys Management */}
+          {activeTab === 'surveys' && (
+            <motion.div 
+              key="surveys-tab"
+              initial={{ opacity: 0, y: 15 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -15 }}
+              className="absolute inset-0 flex flex-col overflow-y-auto custom-scrollbar-v"
+            >
+              <SurveyManagement academyInfo={academyInfo} students={students} currentUser={currentUser} />
+            </motion.div>
           )}
 
         </AnimatePresence>
@@ -1257,6 +1301,127 @@ export default function TeacherTasks({
         )}
       </AnimatePresence>
 
+    </div>
+  );
+}
+
+// --- Sub-component: SuggestionHistoryView ---
+function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin }: any) {
+  const [sugFilter, setSugFilter] = useState<'all' | 'pending' | 'completed'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const suggestions = useMemo(() => {
+    return tasks.filter((t: any) => t.title.startsWith('[건의]'));
+  }, [tasks]);
+
+  const filteredSuggestions = useMemo(() => {
+    let result = suggestions;
+    if (sugFilter === 'pending') {
+      result = result.filter((t: any) => !t.is_completed);
+    } else if (sugFilter === 'completed') {
+      result = result.filter((t: any) => t.is_completed);
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter((t: any) => 
+        t.title.toLowerCase().includes(q) || 
+        (t.content && t.content.toLowerCase().includes(q))
+      );
+    }
+    return result.sort((a: any, b: any) => new Date(b.target_date).getTime() - new Date(a.target_date).getTime());
+  }, [suggestions, sugFilter, searchQuery]);
+
+  return (
+    <div className="space-y-6 h-full flex flex-col overflow-hidden">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0f0f0f] border border-white/5 p-4 rounded-lg shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Filter:</span>
+          <div className="flex bg-white/5 rounded-full p-1 border border-white/5">
+            {[
+              { id: 'all', label: '전체' },
+              { id: 'pending', label: '미완료' },
+              { id: 'completed', label: '완료됨' }
+            ].map(f => (
+              <button 
+                key={f.id} 
+                onClick={() => setSugFilter(f.id as any)} 
+                className={`text-[10px] px-3.5 py-1.5 rounded-full font-black transition-all ${sugFilter === f.id ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        <div className="relative w-full sm:w-72">
+          <input
+            type="text"
+            placeholder="학생 이름이나 내용 검색..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full bg-black/40 border border-white/10 rounded-md py-2 px-3 text-[11px] text-white placeholder:text-gray-650 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+          />
+          {searchQuery && (
+            <button 
+              onClick={() => setSearchQuery('')} 
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+            >
+              <X size={14} />
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="flex-1 overflow-y-auto custom-scrollbar-v space-y-3 pr-1">
+        {filteredSuggestions.length === 0 ? (
+          <div className="py-20 border border-dashed border-white/5 rounded-[4px] text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest bg-black/20">
+            조회된 건의 사항이 없습니다.
+          </div>
+        ) : (
+          filteredSuggestions.map((task: any) => (
+            <motion.div 
+              layout 
+              key={task.id} 
+              className={`group bg-[#0f0f0f] border rounded-[4px] p-4 transition-all ${
+                task.is_completed ? 'border-white/5 opacity-80' : 'border-white/10 hover:border-blue-500/30'
+              }`}
+            >
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-start gap-4 flex-1 min-w-0">
+                  <button 
+                    onClick={() => toggleTask(task)} 
+                    className={`mt-1 transition-colors shrink-0 ${task.is_completed ? 'text-emerald-500' : 'text-gray-600 hover:text-blue-500'}`}
+                  >
+                    {task.is_completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
+                  </button>
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-center gap-3 flex-wrap">
+                      <h4 className={`text-sm font-black transition-all ${task.is_completed ? 'text-gray-400 line-through' : 'text-white'}`}>
+                        {task.title.replace('[건의] ', '')}
+                      </h4>
+                      <span className={`text-[9px] font-black text-gray-650 uppercase tabular-nums`}>
+                        {task.target_date.replace(/-/g, '.')}
+                      </span>
+                    </div>
+                    <p className={`text-[11px] leading-relaxed whitespace-pre-wrap ${task.is_completed ? 'text-gray-500 line-through' : 'text-gray-300'}`}>
+                      {task.content}
+                    </p>
+                  </div>
+                </div>
+                {isAdmin && (
+                  <button 
+                    onClick={() => deleteTask(task.id)} 
+                    className="opacity-0 group-hover:opacity-100 p-2 text-gray-600 hover:text-red-500 transition-all shrink-0"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </div>
+            </motion.div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

@@ -33,6 +33,7 @@ export default function StudentDetailDrawer({
   const [localBookCourses, setLocalBookCourses] = useState<Record<string, string>>(student.book_courses || {});
   const [localClass, setLocalClass] = useState(student.class);
   const [localStudentPhone, setLocalStudentPhone] = useState('');
+  const [localCreatedAt, setLocalCreatedAt] = useState(''); // 💡 최초 학원 등록일 상태 추가
   const [localParentPhone, setLocalParentPhone] = useState('');
   const [localLoginSuffix, setLocalLoginSuffix] = useState(''); // 💡 추가 (번호 중복 로그인 방지용)
   const [localTeacherId, setLocalTeacherId] = useState(student.teacher_id || '');
@@ -124,6 +125,12 @@ export default function StudentDetailDrawer({
     setLocalTeacherId(student.teacher_id || '');
     setLocalLoginSuffix(student.login_suffix || ''); // 💡 추가
 
+    if (student.created_at) {
+      setLocalCreatedAt(student.created_at.slice(0, 10));
+    } else {
+      setLocalCreatedAt('');
+    }
+
     // 💡 선택과목 정보 JSON 파싱 후 동기화
     const rawElective = student.book_courses?.['__elective_courses'];
     if (rawElective) {
@@ -135,7 +142,7 @@ export default function StudentDetailDrawer({
     } else {
       setElectiveCourses([]);
     }
-  }, [student.id, student.book_courses]);
+  }, [student.id, student.book_courses, student.created_at]);
 
   const handleSavePhone = (studentPhoneVal: string, parentPhoneVal: string) => {
     const sClean = studentPhoneVal.trim();
@@ -523,7 +530,27 @@ export default function StudentDetailDrawer({
 
 
           <div className="grid grid-cols-2 gap-2">
+            {/* 💡 최초 학원 등록일 (백데이팅 소급 수정 기능) */}
             <div className="relative group col-span-2">
+              <label className="block text-[10px] font-black text-[#565551] uppercase tracking-widest mb-1.5 px-1">최초 학원 등록일</label>
+              <input 
+                type="date" 
+                value={localCreatedAt} 
+                onChange={(e) => {
+                  const newDateVal = e.target.value;
+                  setLocalCreatedAt(newDateVal);
+                  if (newDateVal) {
+                    // 기입한 소급 날짜(YYYY-MM-DD)를 타임스탬프로 환산하여 즉시 저장!
+                    const isoString = new Date(`${newDateVal}T00:00:00`).toISOString();
+                    onUpdateInfo(student.id, 'created_at', isoString);
+                  }
+                }}
+                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" 
+              />
+            </div>
+
+            <div className="relative group col-span-2">
+              <label className="block text-[10px] font-black text-[#565551] uppercase tracking-widest mb-1.5 px-1">학교 정보</label>
               <input type="text" value={localSchool} placeholder="학교 이름" onChange={(e) => setLocalSchool(e.target.value)} onBlur={() => onUpdateInfo(student.id, 'school', localSchool)}
                 className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
@@ -877,7 +904,11 @@ export default function StudentDetailDrawer({
                 onClick={() => {
                   const reason = prompt(`${student.name} 학생의 퇴원 사유를 입력해주세요.`);
                   if (reason !== null) {
-                    onUpdateInfo(student.id, { is_deleted: true, phone: `${student.phone || ''} (퇴원: ${reason})` });
+                    onUpdateInfo(student.id, { 
+                      is_deleted: true, 
+                      status_changed_at: new Date().toISOString(),
+                      phone: `${student.phone || ''} (퇴원: ${reason})` 
+                    });
                     onClose();
                   }
                 }}

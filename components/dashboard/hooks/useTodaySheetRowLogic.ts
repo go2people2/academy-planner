@@ -163,23 +163,8 @@ export function useTodaySheetRowLogic({
       return;
     }
 
-    // 2. DOM 데이터 수집 및 병합 (Refs + Updates)
-    const lazyData: any = {};
-    const fieldRefs: any = { test_id: testRef, classwork: cwRef, completed_classwork: ccwRef, assign: hwRef, next_quiz: nqRef, notes: notesRef };
-    
-    Object.keys(fieldRefs).forEach(key => {
-      if (fieldRefs[key].current) {
-        const dbKey = key === 'test_id' ? 'test_id' : (key === 'notes' ? 'special_notes' : `${key}_text`);
-        if (!(dbKey in finalUpdates)) lazyData[dbKey] = fieldRefs[key].current.value;
-      }
-    });
-
-    const mergedUpdates = { ...lazyData, ...finalUpdates };
-    
-    // 점수 필드 보정
-    const scoreInput = tdRefs.current['test_score']?.querySelector('input');
-    if (scoreInput && !('test_score' in mergedUpdates)) mergedUpdates.test_score = scoreInput.value;
-    if (formData.test_total_count !== undefined && !('test_total_count' in mergedUpdates)) mergedUpdates.test_total_count = formData.test_total_count;
+    // 2. DOM 병합 배제 (Refs 수집을 걷어내고 오직 전달된 업데이트 정보만 단독 저장)
+    const mergedUpdates = { ...finalUpdates };
 
     // 💡 [정교화] 범위(range)나 유닛(units)이 비어있는 가짜/빈 교재 항목 필터링 제거
     const sanitizeBookJson = (jsonArr: any[] | undefined) => {
@@ -224,6 +209,19 @@ export function useTodaySheetRowLogic({
     if (!isBlurCall) skipBlurRef.current = true; // 키보드 저장 시 플래그 활성화
 
     setFormData(finalData);
+
+    // 💡 [원장님 특별 피드백 반영 - 실시간 DOM 밸류 수동 동기화]
+    // 비제어 컴포넌트 껍데기가 옛날 값을 고집하여 일치하지 않거나, 
+    // 나중에 포커스가 스쳐 나갈 때(onBlur) 옛날 값으로 DB가 다시 오염되는 역버그를 완벽 철통 수비합니다!
+    if ('completed_classwork_text' in mergedUpdates && ccwRef.current) {
+      ccwRef.current.value = mergedUpdates.completed_classwork_text || '';
+    }
+    if ('special_notes' in mergedUpdates && notesRef.current) {
+      notesRef.current.value = mergedUpdates.special_notes || '';
+    }
+    if ('classwork_text' in mergedUpdates && cwRef.current) {
+      cwRef.current.value = mergedUpdates.classwork_text || '';
+    }
 
     // 💡 [수정] 어떤 경우에도 전체 객체(finalData)를 보내지 않고, 
     // 오직 변경된 필드만 포함된 savePayload(Partial)만 전송하여 출석 필드를 보호

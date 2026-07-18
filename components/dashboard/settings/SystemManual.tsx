@@ -1,7 +1,14 @@
-import { motion } from 'framer-motion';
-import { LayoutDashboard, Bell, Table, ClipboardCheck, Activity, UserCog, ArrowLeftRight, Settings, Info, Keyboard, Sparkles } from 'lucide-react';
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  LayoutDashboard, Bell, Table, ClipboardCheck, Activity, 
+  UserCog, ArrowLeftRight, Settings, Info, Keyboard, 
+  Sparkles, ChevronDown 
+} from 'lucide-react';
 
 export default function SystemManual() {
+  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+
   const manuals = [
     {
       icon: <LayoutDashboard size={20} className="text-blue-400" />,
@@ -17,7 +24,7 @@ export default function SystemManual() {
       icon: <Table size={20} className="text-emerald-400" />,
       title: "Daily Sheet (오늘의 출결 및 기록표)",
       desc: (
-        <div className="space-y-3">
+        <div className="space-y-3 pt-2">
           <p>가장 핵심적인 메뉴입니다! 선생님이 오늘 등원한 학생들의 '학원 공부', '집에서 할 숙제', '오늘 할 일 목록'을 부여합니다. 학생들이 제출(Submit)한 학습 기록을 일괄 승인하거나 반려하여 진행률을 확정 짓는 공간입니다. (할 일을 번호나 기호로 작성하면 체크박스로 자동 변환됩니다!)</p>
           <div className="p-3 bg-[#0a0a0a] rounded-[4px] border border-white/10 shadow-inner leading-relaxed">
             <p className="text-amber-400 font-black mb-1.5 flex items-center gap-1.5 tracking-wide"><Table size={12}/> 오늘 테스트 초간단 입력 문법</p>
@@ -49,7 +56,7 @@ export default function SystemManual() {
       icon: <UserCog size={20} className="text-indigo-400" />,
       title: "학생 정보 관리 (추가/수정)",
       desc: (
-        <div className="space-y-1.5">
+        <div className="space-y-1.5 pt-2">
           <p>신규 학생을 등록하거나 기존 학생의 정보(수강 반, 등원 요일, 부여된 교재 목록, 앱 비밀번호 초기화)를 수정하고 퇴원 처리를 진행할 수 있습니다.</p>
           <div className="p-2 bg-black/25 rounded border border-amber-500/10 text-[11px] text-amber-300 font-bold leading-relaxed">
             ⚠️ <b>[전화번호 뒷 4자리 중복 해결 가이드]</b><br/>
@@ -77,7 +84,7 @@ export default function SystemManual() {
       icon: <Sparkles size={20} className="text-blue-400" />,
       title: "🤖 AI 상담 브리핑 연동 스펙 (프롬프트 명세)",
       desc: (
-        <div className="space-y-2">
+        <div className="space-y-2 pt-2">
           <p>AI 브리핑 생성 시 전달되는 정량/정성 데이터와 프롬프트 규칙 안내입니다. 가맹 학원 설명 또는 AI 조율 시 아래 명세를 활용하실 수 있습니다.</p>
           <div className="p-3 bg-[#0a0a0a] rounded-[4px] border border-white/10 shadow-inner space-y-2.5 text-[11px] leading-relaxed">
             <div>
@@ -116,39 +123,69 @@ export default function SystemManual() {
     }
   ];
 
+  const handleToggle = (index: number) => {
+    setExpandedIndex(prev => (prev === index ? null : index));
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
         <Info size={24} className="text-purple-400" />
         <div>
           <h3 className="text-xl font-black text-white">시스템 가이드북 (Manual)</h3>
-          <p className="text-sm text-gray-400">사이드바 메뉴별 기능과 활용 방법을 안내합니다.</p>
+          <p className="text-sm text-gray-400">사이드바 메뉴별 기능과 활용 방법을 아코디언으로 안내합니다.</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        {manuals.map((item, i) => (
-          <motion.div 
-            key={i}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: i * 0.05 }}
-            className="bg-white/[0.03] border border-white/10 rounded-xl p-5 hover:bg-white/[0.05] transition-colors"
-          >
-            <div className="flex items-center gap-3 mb-3">
-              <div className="p-2 bg-white/5 rounded-lg border border-white/10">
-                {item.icon}
-              </div>
-              <h4 className="text-[15px] font-black text-white tracking-wide">{item.title}</h4>
+      <div className="space-y-3">
+        {manuals.map((item, i) => {
+          const isOpen = expandedIndex === i;
+          return (
+            <div 
+              key={i}
+              className="bg-white/[0.02] border border-white/10 rounded-xl overflow-hidden transition-colors"
+            >
+              {/* Accordion Header */}
+              <button
+                onClick={() => handleToggle(i)}
+                className="w-full flex items-center justify-between p-4 hover:bg-white/[0.04] transition-colors text-left"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="p-1.5 bg-white/5 rounded-lg border border-white/10">
+                    {item.icon}
+                  </div>
+                  <h4 className="text-[14px] font-black text-white tracking-wide">{item.title}</h4>
+                </div>
+                <motion.div
+                  animate={{ rotate: isOpen ? 180 : 0 }}
+                  transition={{ duration: 0.2 }}
+                  className="text-gray-500"
+                >
+                  <ChevronDown size={16} />
+                </motion.div>
+              </button>
+
+              {/* Accordion Body */}
+              <AnimatePresence initial={false}>
+                {isOpen && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    transition={{ duration: 0.25, ease: 'easeInOut' }}
+                  >
+                    <div className="px-5 pb-5 pt-1 text-[13px] leading-relaxed text-gray-400 border-t border-white/[0.05] break-keep">
+                      {item.desc}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
-            <div className="text-[13px] leading-relaxed text-gray-400 break-keep">
-              {item.desc}
-            </div>
-          </motion.div>
-        ))}
+          );
+        })}
       </div>
 
-      {/* 💡 [추가] 단축키 가이드 섹션 */}
+      {/* 💡 단축키 가이드 섹션 */}
       <div className="mt-8 pt-6 border-t border-white/10 space-y-4">
         <div className="flex items-center gap-3">
           <Keyboard size={22} className="text-blue-400" />
@@ -163,7 +200,8 @@ export default function SystemManual() {
             <ul className="space-y-2 text-[11px] text-gray-300">
               <li className="flex items-center justify-between"><span className="text-gray-400">아래 방향 일괄 채우기</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Ctrl + D</kbd> 또는 <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + D</kbd></span></li>
               <li className="flex items-center justify-between"><span className="text-gray-400">단축어 보관함 세트 전환 (1~4번)</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + Q / W / E / R</kbd></span></li>
-              <li className="flex items-center justify-between"><span className="text-gray-400">하단 2행 상세 설정 바 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + T</kbd></span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">하단 2행 상세 설정 바 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + U</kbd></span></li>
+              <li className="flex items-center justify-between"><span className="text-gray-400">툴박스 접기/펼치기 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + T</kbd></span></li>
               <li className="flex items-center justify-between"><span className="text-gray-400">학생 학습/출결 히스토리 패널 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + H</kbd></span></li>
               <li className="flex items-center justify-between"><span className="text-gray-400">대형 텍스트 편집기 실행 (입력 중)</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Cmd + /</kbd> 또는 <kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-amber-300">Alt + Enter</kbd></span></li>
               <li className="flex items-center justify-between"><span className="text-gray-400">엑셀식 즉시 덮어쓰기 입력</span> <span className="text-gray-500 italic">셀 선택 후 즉시 타이핑</span></li>
@@ -177,6 +215,7 @@ export default function SystemManual() {
               <h5 className="text-[12px] font-black text-emerald-400 uppercase tracking-wider">전역 단축키</h5>
               <ul className="space-y-2 text-[11px] text-gray-300">
                 <li className="flex items-center justify-between"><span className="text-gray-400">LIVE 실시간 수업 현황판 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-emerald-300">Shift + Alt + L</kbd></span></li>
+                <li className="flex items-center justify-between"><span className="text-gray-400">시간표 전체화면 모달 토글</span> <span><kbd className="bg-white/10 px-1.5 py-0.5 rounded border border-white/20 font-mono text-[9px] text-emerald-300">Shift + Alt + T</kbd></span></li>
               </ul>
             </div>
             <div className="space-y-2 pt-2 border-t border-white/5">

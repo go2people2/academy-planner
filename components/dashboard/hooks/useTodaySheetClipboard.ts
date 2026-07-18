@@ -101,14 +101,54 @@ export function useTodaySheetClipboard({
         if (colId && !['select', 'name', 'action'].includes(colId)) {
           const prop = mapColumnToProp(colId);
           pastedColIds.add(colId); // 💡 대상 컬럼 추가
+
+          // 🔒 [추가] 붙여넣기 대상 범위 내 승인 대기 보호 셀이 있는지 검사
+          let hasLockedCell = false;
           selectedIds.forEach(id => {
             const st = filteredStudents.find(s => s.id === id);
-            if (st) updates.push({ studentId: id, newData: { [prop]: val }, prevData: { ...(st.todaySession || {}) } });
+            if (st) {
+              const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
+              const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
+              if (isSubmitted && isProtectedCol) hasLockedCell = true;
+            }
+          });
+
+          if (hasLockedCell) {
+            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+            return;
+          }
+
+          selectedIds.forEach(id => {
+            const st = filteredStudents.find(s => s.id === id);
+            if (st) {
+              updates.push({ studentId: id, newData: { [prop]: val }, prevData: { ...(st.todaySession || {}) } });
+            }
           });
         }
       } else {
         const startStudentIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
         if (startStudentIdx === -1 || startColIdx === -1) return;
+
+        // 🔒 [추가] 붙여넣기 대상 범위 내 승인 대기 보호 셀이 있는지 검사
+        let hasLockedCell = false;
+        dataMatrix.forEach((rowValues, rowOffset) => {
+          const targetRow = startStudentIdx + rowOffset;
+          const currentStudent = filteredStudents[targetRow];
+          if (!currentStudent) return;
+
+          rowValues.forEach((value, colOffset) => {
+            const colId = activeColumns[startColIdx + colOffset]?.id;
+            if (!colId || ['select', 'name', 'action', 'date', 'attendance'].includes(colId)) return;
+            const isSubmitted = ['pending', 'submitted'].includes(currentStudent.todaySession?.approval_status || '');
+            const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
+            if (isSubmitted && isProtectedCol) hasLockedCell = true;
+          });
+        });
+
+        if (hasLockedCell) {
+          alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+          return;
+        }
 
         dataMatrix.forEach((rowValues, rowOffset) => {
           const targetRow = startStudentIdx + rowOffset;
@@ -197,6 +237,28 @@ export function useTodaySheetClipboard({
       if (COLUMN_TO_FIELD_MAP[colId]) targetColIds.push(colId);
     }
     if (targetColIds.length === 0) return;
+
+    // 🔒 [추가] 잘라내기 대상 범위 내 승인 대기 보호 셀이 있는지 검사
+    let hasLockedCell = false;
+    for (let r = rStart; r <= rEnd; r++) {
+      const st = filteredStudents[r];
+      if (!st) continue;
+      for (let c = cStart; c <= cEnd; c++) {
+        const colId = activeColumns[c].id;
+        const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
+        const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
+        if (isSubmitted && isProtectedCol) {
+          hasLockedCell = true;
+          break;
+        }
+      }
+      if (hasLockedCell) break;
+    }
+
+    if (hasLockedCell) {
+      alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+      return;
+    }
 
     const updates: any[] = [];
     for (let r = rStart; r <= rEnd; r++) {

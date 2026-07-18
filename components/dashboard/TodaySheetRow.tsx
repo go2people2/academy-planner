@@ -42,6 +42,11 @@ interface TodaySheetRowProps {
   isScrolled?: boolean;
   historyLimit?: number;
   cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number }>; // 📝 [추가] 실시간 협업 셀 맵
+  onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
+  toolsOrder?: string[];
+  isToolsEditMode?: boolean;
+  showAllTools?: boolean;
+  onReorderTools?: (draggedId: string, targetId: string) => void;
 }
 
 /**
@@ -54,7 +59,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
     selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
     rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel,
-    cooperatingCells
+    cooperatingCells, onRemoveFromToday,
+    toolsOrder, isToolsEditMode, showAllTools, onReorderTools
   } = props;
 
   // 💡 단축어 및 트리거 기호 추출
@@ -205,6 +211,11 @@ useEffect(() => {
               onViewProgress={onViewProgress}
               onViewDetail={onSelectStudent}
               onUpdateStudentInfo={props.onUpdateStudentInfo}
+              onRemoveFromToday={onRemoveFromToday}
+              toolsOrder={toolsOrder}
+              isToolsEditMode={isToolsEditMode}
+              showAllTools={showAllTools}
+              onReorderTools={onReorderTools}
               onApplyTestPreset={(preset: any, cid: 'test_id' | 'next_quiz') => {
                 states.setFormData((prev: any) => {
                   const updates: any = {};
