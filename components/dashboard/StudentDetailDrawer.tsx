@@ -88,11 +88,11 @@ export default function StudentDetailDrawer({
     const decodeTimeVal = (val: number) => {
       if (!val || val === 999) return '';
       if (val < 100) {
-        const hour = val <= 12 ? val + 12 : val;
+        const hour = val < 12 ? val + 12 : val;
         return `${hour.toString().padStart(2, '0')}:00`;
       }
       let h = Math.floor(val / 100);
-      if (h <= 12) h += 12;
+      if (h < 12) h += 12;
       const m = (val % 100).toString().padStart(2, '0');
       return `${h.toString().padStart(2, '0')}:${m}`;
     };
@@ -291,15 +291,30 @@ export default function StudentDetailDrawer({
     saveElectiveCourses(electiveCourses.filter(c => c.id !== id));
   };
 
-  // 💡 선택과목 필드 변경 (과목명, 반명)
-  const handleElectiveFieldChange = (id: string, field: string, val: any) => {
+  // 💡 선택과목 필드 변경 (타이핑 시에는 로컬 상태만 즉시 업데이트하여 한글 조합 보호)
+  const handleElectiveFieldChangeLocal = (id: string, field: string, val: any) => {
     const updated = electiveCourses.map(c => {
       if (c.id === id) {
         return { ...c, [field]: val };
       }
       return c;
     });
-    saveElectiveCourses(updated);
+    setElectiveCourses(updated);
+    
+    const newBookCourses = { 
+      ...localBookCourses, 
+      '__elective_courses': JSON.stringify(updated) 
+    };
+    setLocalBookCourses(newBookCourses);
+  };
+
+  // 💡 선택과목 텍스트 입력 완료 후 최종 DB 저장 (onBlur 시 실행)
+  const handleElectiveFieldBlur = () => {
+    const newBookCourses = { 
+      ...localBookCourses, 
+      '__elective_courses': JSON.stringify(electiveCourses) 
+    };
+    onUpdateInfo(student.id, 'book_courses', newBookCourses);
   };
 
   // 💡 선택과목 요일 토글
@@ -663,11 +678,11 @@ export default function StudentDetailDrawer({
                 const formatTimeVal = (val: number) => {
                   if (!val || val === 999) return '';
                   if (val < 100) {
-                    const hour = val <= 12 ? val + 12 : val;
+                    const hour = val < 12 ? val + 12 : val;
                     return `${hour.toString().padStart(2, '0')}:00`;
                   }
                   let h = Math.floor(val / 100);
-                  if (h <= 12) h += 12; // 12시 이하의 값은 학원 특성상 오후(PM)로 보정
+                  if (h < 12) h += 12; // 12시 미만의 값은 학원 특성상 오후(PM)로 보정
                   const m = (val % 100).toString().padStart(2, '0');
                   return `${h.toString().padStart(2, '0')}:${m}`;
                 };
@@ -738,7 +753,7 @@ export default function StudentDetailDrawer({
                 const parseTimeStr = (val: number) => {
                   if (!val || val === 999) return '';
                   let h = Math.floor(val / 100);
-                  if (h <= 12) h += 12;
+                  if (h < 12) h += 12;
                   const m = (val % 100).toString().padStart(2, '0');
                   return `${h.toString().padStart(2, '0')}:${m}`;
                 };
@@ -763,7 +778,8 @@ export default function StudentDetailDrawer({
                           type="text"
                           value={c.subject || ''}
                           placeholder="예: 확통, 기하, 미적분2"
-                          onChange={(e) => handleElectiveFieldChange(c.id, 'subject', e.target.value)}
+                          onChange={(e) => handleElectiveFieldChangeLocal(c.id, 'subject', e.target.value)}
+                          onBlur={handleElectiveFieldBlur}
                           className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500 transition-all font-bold"
                         />
                       </div>
@@ -773,7 +789,8 @@ export default function StudentDetailDrawer({
                           type="text"
                           value={c.className || ''}
                           placeholder="비워두면 자동 매핑"
-                          onChange={(e) => handleElectiveFieldChange(c.id, 'className', e.target.value)}
+                          onChange={(e) => handleElectiveFieldChangeLocal(c.id, 'className', e.target.value)}
+                          onBlur={handleElectiveFieldBlur}
                           className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500 transition-all font-bold"
                         />
                       </div>
@@ -819,14 +836,20 @@ export default function StudentDetailDrawer({
                                   type="time"
                                   value={startTime}
                                   onChange={(e) => handleElectiveTimeChange(c.id, day, e.target.value, endTime)}
-                                  className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-emerald-500 transition-all font-bold w-[90px] cursor-pointer"
+                                  onClick={(e) => {
+                                    try { e.currentTarget.showPicker(); } catch (err) {}
+                                  }}
+                                  className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-emerald-500 transition-all font-bold w-[100px] cursor-pointer"
                                 />
                                 <span className="text-[9px] text-gray-600">~</span>
                                 <input
                                   type="time"
                                   value={endTime}
                                   onChange={(e) => handleElectiveTimeChange(c.id, day, startTime, e.target.value)}
-                                  className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-emerald-500 transition-all font-bold w-[90px] cursor-pointer"
+                                  onClick={(e) => {
+                                    try { e.currentTarget.showPicker(); } catch (err) {}
+                                  }}
+                                  className="bg-black/40 border border-white/10 rounded-[2px] px-1 py-0.5 text-[9px] text-gray-300 outline-none focus:border-emerald-500 transition-all font-bold w-[100px] cursor-pointer"
                                 />
                               </div>
                             </div>

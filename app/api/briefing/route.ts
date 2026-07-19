@@ -46,6 +46,19 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: '학생 정보를 불러오지 못했습니다.' }, { status: 404 });
     }
 
+    // 1-2. 학원 정보 및 operation_settings 조회 (커스텀 프롬프트 로드용)
+    let academySettings: any = null;
+    if (student.academy_id) {
+      const { data: academy } = await supabase
+        .from('ams_academies')
+        .select('operation_settings')
+        .eq('id', student.academy_id)
+        .maybeSingle();
+      if (academy?.operation_settings) {
+        academySettings = academy.operation_settings;
+      }
+    }
+
     // 2. 설정된 기간의 수업 일지 조회
     const { data: sessionLogs, error: logErr } = await supabase
       .from('ams_session_logs')
@@ -93,8 +106,11 @@ export async function POST(req: NextRequest) {
       return `- 시험명: [${paper?.year}년 ${paper?.semester || ''}] ${paper?.title || '정기 시험'} / 점수: ${sub.total_score}점 (총 ${paper?.question_count || 0}문항) / 틀린 문항 번호: ${Array.isArray(sub.wrong_questions) ? sub.wrong_questions.join(', ') : '없음'}`;
     }).join('\n');
 
-    // 5. 프롬프트 생성
-    const systemPrompt = `
+    // 5. 프롬프트 생성 (학원별 커스텀 프롬프트 우선 적용, 비어 있을 시 디폴트 탑재)
+    const customPrompt = academySettings?.ai_settings?.custom_prompt;
+    const systemPrompt = (customPrompt && customPrompt.trim()) 
+      ? customPrompt.trim()
+      : `
 당신은 수학 학원의 원장님과 담당 강사를 돕는 전문적인 인공지능 학습 컨설턴트 및 상담 분석가입니다.
 전달받은 학생의 기본 정보, 최근 10회 수업 일지 데이터(출결, 숙제 태도, 평소 테스트 점수, 특이사항), 그리고 최근에 수행한 OMR 정기 고사 시험 성적 정보를 종합 분석하여 **"학부모 상담용 고품질 리포트"**를 한국어로 작성해야 합니다.
 

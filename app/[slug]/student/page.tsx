@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle, ClipboardCheck } from 'lucide-react';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle, ClipboardCheck, Calendar, ChevronDown } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
@@ -77,6 +77,7 @@ export default function StudentPortal() {
     const offset = now.getTimezoneOffset() * 60000;
     return new Date(now.getTime() - offset).toISOString().split('T')[0];
   });
+  const [validClassDates, setValidClassDates] = useState<{ date: string; label: string }[]>([]);
 
   const matchedExam = useMemo(() => {
     if (!student || !examSchedules.length) return null;
@@ -300,8 +301,46 @@ export default function StudentPortal() {
       
       if (logs) {
         setAllLogs(logs);
-        const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(selectedDate).getDay()];
-        const todayLog = logs.find(l => l.session_date === selectedDate);
+
+        // 💡 유효 수업일 목록 실시간 계산
+        const holidays = acData?.operation_settings?.holidays || [];
+        const calculatedDates = getValidClassDates(stData, logs, holidays);
+        setValidClassDates(calculatedDates);
+
+        // 💡 오늘 날짜 문자열 구하기
+        const todayObj = new Date();
+        const offsetVal = todayObj.getTimezoneOffset() * 60000;
+        const todayStr = new Date(todayObj.getTime() - offsetVal).toISOString().split('T')[0];
+
+        // 💡 디폴트 매칭 날짜 추천
+        let defaultDate = todayStr;
+        if (calculatedDates.length > 0) {
+          const hasToday = calculatedDates.some(d => d.date === todayStr);
+          if (hasToday) {
+            defaultDate = todayStr;
+          } else {
+            // 오늘 이후 가장 가까운 미래 수업일 탐색
+            const futureDates = calculatedDates.filter(d => d.date > todayStr).sort((a, b) => a.date.localeCompare(b.date));
+            // 오늘 이전 가장 가까운 과거 수업일 탐색
+            const pastDates = calculatedDates.filter(d => d.date < todayStr).sort((a, b) => b.date.localeCompare(a.date)); // 최신 순 정렬됨
+            
+            if (futureDates.length > 0) {
+              defaultDate = futureDates[0].date;
+            } else if (pastDates.length > 0) {
+              defaultDate = pastDates[0].date;
+            }
+          }
+        }
+
+        // 💡 [무한루프 방지] 현재 selectedDate가 새로 보정된 defaultDate와 다를 때만 업데이트를 수행합니다.
+        let activeDate = selectedDate;
+        if (selectedDate !== defaultDate) {
+          setSelectedDate(defaultDate);
+          activeDate = defaultDate;
+        }
+
+        const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(activeDate).getDay()];
+        const todayLog = logs.find(l => l.session_date === activeDate);
         const isTodayClassDay = stData.class_days?.includes(dayName) || todayLog?.attendance_status?.startsWith('보강');
         const pastLogs = logs.filter(l => l.session_date < selectedDate).sort((a, b) => b.session_date.localeCompare(a.session_date));
         const lastValidSession = pastLogs.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || pastLogs[0];
@@ -889,6 +928,41 @@ export default function StudentPortal() {
             {/* ① 왼쪽 섹션: 대시보드 및 교재 시스템 */}
             <div className={`w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 relative lg:block ${activeTab === 'study' || activeTab === 'history' ? 'block' : 'hidden lg:block'}`}>
           <div className={activeTab === 'study' ? 'block space-y-4 md:space-y-8' : 'hidden lg:block lg:space-y-8'}>
+            {/* 💡 [대수술] 귀속 수업일 드롭다운 선택 UI 신설 */}
+            <div className="bg-gradient-to-r from-violet-950/20 to-indigo-950/20 border border-violet-500/20 rounded-2xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-violet-950/10 mb-2 animate-in fade-in slide-in-from-top-3 duration-500">
+              <div className="space-y-1">
+                <h4 className="text-sm font-black text-violet-300 flex items-center gap-1.5">
+                  <Calendar size={16} className="text-violet-400" />
+                  제출 대상 수업일 선택
+                </h4>
+                <p className="text-[11px] text-gray-400 leading-snug">
+                  제출한 일지와 숙제가 선생님 장부의 이 날짜 칸으로 쏙 들어갑니다.
+                </p>
+              </div>
+              <div className="relative w-full md:w-64">
+                <select
+                  value={selectedDate}
+                  onChange={(e) => setSelectedDate(e.target.value)}
+                  className="w-full bg-black/40 border border-white/10 hover:border-violet-500/40 text-xs font-bold text-white pl-4 pr-10 py-3 rounded-xl appearance-none focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all cursor-pointer"
+                >
+                  {validClassDates.length > 0 ? (
+                    validClassDates.map((d) => (
+                      <option key={d.date} value={d.date} className="bg-zinc-950 text-white font-semibold">
+                        {d.label}
+                      </option>
+                    ))
+                  ) : (
+                    <option value={selectedDate} className="bg-zinc-950 text-white font-semibold">
+                      {selectedDate} (기본 날짜)
+                    </option>
+                  )}
+                </select>
+                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
+                  <ChevronDown size={14} />
+                </div>
+              </div>
+            </div>
+
             <LearningDashboard 
               student={student} lastSession={lastSession} todaySession={todaySession} 
               selectedDate={selectedDate} currentSelfEval={currentSelfEval} 
@@ -1220,3 +1294,64 @@ export default function StudentPortal() {
     </div>
   );
 }
+
+// 💡 [추가] 학생의 공식 수업일(정규, 보강, 특강/선택수업) 목록만을 역산하는 초정밀 필터링 유틸리티
+const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = []) => {
+  if (!st) return [];
+  const validDatesMap: { [date: string]: { label: string; date: string } } = {};
+  
+  const today = new Date();
+  const offset = today.getTimezoneOffset() * 60000;
+  
+  // 오늘 기준 -7일 ~ +7일 범위 탐색
+  for (let i = -7; i <= 7; i++) {
+    const targetDate = new Date(today.getTime() - offset);
+    targetDate.setDate(targetDate.getDate() + i);
+    const dateStr = targetDate.toISOString().split('T')[0];
+    const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][targetDate.getDay()];
+    
+    // 1. 정규 수업일 여부
+    const isRegularClass = st.class_days?.includes(dayOfWeek);
+    
+    // 2. 선택/특강 수업일 여부
+    let isElectiveClass = false;
+    const rawElective = st.book_courses?.['__elective_courses'];
+    if (rawElective) {
+      try {
+        const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+        if (Array.isArray(courses)) {
+          for (const c of courses) {
+            if (c.days?.includes(dayOfWeek) && c.schedules?.[dayOfWeek]) {
+              isElectiveClass = true;
+              break;
+            }
+          }
+        }
+      } catch (e) {}
+    }
+    
+    // 3. 보강일 여부 (기존 로그 분석)
+    const matchingLog = logs?.find(l => l.session_date === dateStr);
+    const isMakeup = matchingLog?.attendance_status?.startsWith('보강');
+    
+    // 4. 휴일 여부 체크 (휴일인데 보강이 없으면 수업 제외)
+    const isHoliday = academyHolidays.some((h: any) => h.date === dateStr);
+    
+    if ((isRegularClass || isElectiveClass || isMakeup || matchingLog) && (!isHoliday || isMakeup)) {
+      let typeLabel = '';
+      if (isMakeup) typeLabel = '보강 수업';
+      else if (isElectiveClass) typeLabel = '방학특강/선택';
+      else if (isRegularClass) typeLabel = '정규 수업';
+      else typeLabel = '기존 수업';
+      
+      const displayLabel = `${dateStr.slice(5).replace('-', '.')} (${dayOfWeek}) - ${typeLabel}`;
+      validDatesMap[dateStr] = {
+        date: dateStr,
+        label: displayLabel
+      };
+    }
+  }
+  
+  // 날짜 역정렬 (최신 날짜가 목록 가장 앞으로 오도록 정렬)
+  return Object.values(validDatesMap).sort((a, b) => b.date.localeCompare(a.date));
+};

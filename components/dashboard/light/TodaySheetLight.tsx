@@ -304,7 +304,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
 // --- Main Component ---
 
 export default function TodaySheet({
-  students, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
+  students, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, onRemoveFromToday, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange,
   sortDirection = 'asc', onSortDirectionChange,
   onOpenBriefing, // 💡 추가
@@ -819,22 +819,59 @@ export default function TodaySheet({
 
     const dayKey = getDayOfWeek(selectedDate);
     const getStartTime = (st: any) => {
-      // 1. 시간 이동 필드 우선 사용
       if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-        return st.todaySession.moved_to_hour;
+        const mVal = st.todaySession.moved_to_hour;
+        let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+        if (h < 10) h += 12;
+        return h;
       }
-      
       const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
       if (stat.includes(':')) { 
         const parts = stat.split(':'); 
-        const val = parseInt(parts[parts.length - 1]); 
-        if (!isNaN(val) && val < 24) return val; 
+        let val = parseInt(parts[parts.length - 1]); 
+        if (!isNaN(val) && val < 24) {
+          if (val < 10) val += 12;
+          return val;
+        }
       }
+
+      // 오늘 요일에 해당하는 선택과목/방학특강 스케줄 우선 적용
+      let electiveHour = 999;
+      const rawElective = st.book_courses?.['__elective_courses'];
+      if (rawElective) {
+        try {
+          let courses = [];
+          if (typeof rawElective === 'string') {
+            courses = JSON.parse(rawElective);
+          } else if (Array.isArray(rawElective)) {
+            courses = rawElective;
+          }
+          if (Array.isArray(courses)) {
+            for (const c of courses) {
+              if (c.days?.includes(dayKey) && c.schedules?.[dayKey]) {
+                const sched = c.schedules[dayKey];
+                if (Array.isArray(sched) && sched.length > 0) {
+                  const firstVal = sched[0];
+                  let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                  if (h < 10) h += 12;
+                  electiveHour = h;
+                  break;
+                }
+              }
+            }
+          }
+        } catch (e) {
+          // Noop
+        }
+      }
+      if (electiveHour !== 999) return electiveHour;
+
+      // 정규 스케줄 적용
       const hours = st.day_schedules?.[dayKey] || [];
       if (hours.length > 0) {
         const firstVal = hours[0];
         let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-        if (h <= 12) h += 12;
+        if (h < 10) h += 12;
         return h;
       }
       return 999;
@@ -1347,11 +1384,11 @@ export default function TodaySheet({
                   </span>
                   <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className="absolute opacity-0 w-0 h-0 pointer-events-none" />
                   {isNotToday ? (
-                    <div className="ml-0.5 px-1 py-0.5 bg-red-655 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(220,38,38,0.15)]">
+                    <div className="ml-0.5 px-1.5 py-0.5 bg-red-600 text-white text-[9.5px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(220,38,38,0.15)]">
                       {selectedDayStr}
                     </div>
                   ) : (
-                    <div className="ml-0.5 px-1 py-0.5 bg-amber-600 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-sm">
+                    <div className="ml-0.5 px-1.5 py-0.5 bg-amber-400 text-amber-950 text-[9.5px] font-black rounded-sm whitespace-nowrap shadow-sm">
                       {selectedDayStr}
                     </div>
                   )}
@@ -1717,15 +1754,56 @@ export default function TodaySheet({
               return filteredStudents.map((s: any, idx: number) => {
                 const getStartTime = (st: any) => {
                   if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-                    return st.todaySession.moved_to_hour;
+                    const mVal = st.todaySession.moved_to_hour;
+                    let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+                    if (h < 10) h += 12;
+                    return h;
                   }
                   const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-                  if (stat.includes(':')) { const parts = stat.split(':'); const val = parseInt(parts[parts.length - 1]); if (!isNaN(val) && val < 24) return val; }
+                  if (stat.includes(':')) { 
+                    const parts = stat.split(':'); 
+                    let val = parseInt(parts[parts.length - 1]); 
+                    if (!isNaN(val) && val < 24) {
+                      if (val < 10) val += 12;
+                      return val;
+                    }
+                  }
+
+                  // 오늘 요일에 해당하는 선택과목/방학특강 스케줄 우선 적용
+                  let electiveHour = 999;
+                  const rawElective = st.book_courses?.['__elective_courses'];
+                  if (rawElective) {
+                    try {
+                      let courses = [];
+                      if (typeof rawElective === 'string') {
+                        courses = JSON.parse(rawElective);
+                      } else if (Array.isArray(rawElective)) {
+                        courses = rawElective;
+                      }
+                      if (Array.isArray(courses)) {
+                        for (const c of courses) {
+                          if (c.days?.includes(dayKey) && c.schedules?.[dayKey]) {
+                            const sched = c.schedules[dayKey];
+                            if (Array.isArray(sched) && sched.length > 0) {
+                              const firstVal = sched[0];
+                              let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                              if (h < 10) h += 12;
+                              electiveHour = h;
+                              break;
+                            }
+                          }
+                        }
+                      }
+                    } catch (e) {}
+                  }
+                  if (electiveHour !== 999) return electiveHour;
+
+                  // 정규 스케줄 적용
                   const hours = st.day_schedules?.[dayKey] || [];
                   if (hours.length > 0) {
                     const firstVal = hours[0];
                     let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-                    if (h <= 12) h += 12;
+                    if (h < 10) h += 12;
                     return h;
                   }
                   return 999;
@@ -1736,7 +1814,7 @@ export default function TodaySheet({
 
                 const timeSectionLabel = isNewSection 
                   ? (currentStartTime === 999 
-                      ? '기타 타임' 
+                      ? '기타 수업'
                       : (currentStartTime >= 12 
                           ? (currentStartTime === 12 ? `오후 12:${displayMinute}` : `오후 ${currentStartTime-12}:${displayMinute}`) 
                           : `오전 ${currentStartTime}:${displayMinute}`) + ' 수업'
@@ -1753,6 +1831,7 @@ export default function TodaySheet({
                       masterTextbooks={masterTextbooks}
                       onSave={handleSave}
                       onUpdateStudentInfo={onUpdateStudentInfo}
+                      onRemoveFromToday={onRemoveFromToday}
                       onViewProgress={onViewProgress}
                       onSelectStudent={onSelectStudent}
                       colWidths={focusColWidths}

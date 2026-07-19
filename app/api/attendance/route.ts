@@ -129,6 +129,24 @@ export async function POST(request: NextRequest) {
   const body = await request.json();
   const { slug, digits, action } = body;
 
+  // 💡 [시스템적 RLS 해결책] 세션 로그 완전 삭제 분기
+  if (action === 'delete_session') {
+    const { studentId, sessionDate } = body;
+    if (!studentId || !sessionDate) {
+      return Response.json({ error: 'studentId와 sessionDate가 필수입니다.' }, { status: 400 });
+    }
+    const supabase = getSupabase();
+    const { error } = await supabase
+      .from('ams_session_logs')
+      .delete()
+      .eq('student_id', studentId)
+      .eq('session_date', sessionDate);
+    if (error) {
+      return Response.json({ error: error.message }, { status: 500 });
+    }
+    return Response.json({ success: true, message: '세션 완전히 삭제 성공' });
+  }
+
   if (!slug || !digits || digits.length !== 4) {
     return Response.json({ error: '잘못된 요청입니다.' }, { status: 400 });
   }

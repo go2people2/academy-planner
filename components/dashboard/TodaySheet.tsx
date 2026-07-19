@@ -304,7 +304,7 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
 // --- Main Component ---
 
 export default function TodaySheet({
-  students, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
+  students, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, onRemoveFromToday, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange,
   sortDirection = 'asc', onSortDirectionChange,
   onOpenBriefing, // 💡 추가
@@ -819,25 +819,72 @@ export default function TodaySheet({
 
     const dayKey = getDayOfWeek(selectedDate);
     const getStartTime = (st: any) => {
-      // 1. 시간 이동 필드 우선 사용
+      // 1. 시간 이동 필드(moved_to_hour) 우선 사용
       if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-        return st.todaySession.moved_to_hour;
+        const mVal = st.todaySession.moved_to_hour;
+        let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+        let m = mVal >= 100 ? (mVal % 100) : 0;
+        if (h < 10) h += 12;
+        return h * 100 + m;
       }
-      
+
+      // 2. 출결 상태 내 기입된 시각 파싱
       const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
       if (stat.includes(':')) { 
         const parts = stat.split(':'); 
-        const val = parseInt(parts[parts.length - 1]); 
-        if (!isNaN(val) && val < 24) return val; 
+        let val = parseInt(parts[parts.length - 1]); 
+        if (!isNaN(val) && val < 24) {
+          if (val < 10) val += 12;
+          return val * 100;
+        }
       }
+
+      // 3. 오늘 요일에 해당하는 선택과목/방학특강 스케줄 적용
+      let electiveMinTimeVal = 99900;
+      const rawElective = st.book_courses?.['__elective_courses'];
+      if (rawElective) {
+        try {
+          let courses = [];
+          if (typeof rawElective === 'string') {
+            courses = JSON.parse(rawElective);
+          } else if (Array.isArray(rawElective)) {
+            courses = rawElective;
+          }
+          if (Array.isArray(courses)) {
+            courses.forEach((c: any) => {
+              if (c.days?.includes(dayKey) && c.schedules?.[dayKey]) {
+                const sched = c.schedules[dayKey];
+                if (Array.isArray(sched) && sched.length > 0) {
+                  const firstVal = sched[0];
+                  let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                  let m = firstVal >= 100 ? (firstVal % 100) : 0;
+                  if (h < 10) h += 12;
+                  const timeVal = h * 100 + m;
+                  if (timeVal < electiveMinTimeVal) {
+                    electiveMinTimeVal = timeVal;
+                  }
+                }
+              }
+            });
+          }
+        } catch (e) {}
+      }
+      if (electiveMinTimeVal !== 99900) {
+        return electiveMinTimeVal;
+      }
+
+      // 4. 정규 스케줄 시간 구하기
+      let regularTimeVal = 99900;
       const hours = st.day_schedules?.[dayKey] || [];
       if (hours.length > 0) {
         const firstVal = hours[0];
         let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-        if (h <= 12) h += 12;
-        return h;
+        let m = firstVal >= 100 ? (firstVal % 100) : 0;
+        if (h < 10) h += 12;
+        regularTimeVal = h * 100 + m;
       }
-      return 999;
+
+      return regularTimeVal;
     };
 
     return result.sort((a, b) => {
@@ -1754,30 +1801,87 @@ export default function TodaySheet({
 
               return filteredStudents.map((s: any, idx: number) => {
                 const getStartTime = (st: any) => {
+                  // 1. 시간 이동 필드(moved_to_hour) 우선 사용
                   if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-                    return st.todaySession.moved_to_hour;
+                    const mVal = st.todaySession.moved_to_hour;
+                    let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+                    let m = mVal >= 100 ? (mVal % 100) : 0;
+                    if (h < 10) h += 12;
+                    return h * 100 + m;
                   }
+
+                  // 2. 출결 상태 내 기입된 시각 파싱
                   const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-                  if (stat.includes(':')) { const parts = stat.split(':'); const val = parseInt(parts[parts.length - 1]); if (!isNaN(val) && val < 24) return val; }
+                  if (stat.includes(':')) { 
+                    const parts = stat.split(':'); 
+                    let val = parseInt(parts[parts.length - 1]); 
+                    if (!isNaN(val) && val < 24) {
+                      if (val < 10) val += 12;
+                      return val * 100;
+                    }
+                  }
+
+                  // 3. 오늘 요일에 해당하는 선택과목/방학특강 스케줄 적용
+                  let electiveMinTimeVal = 99900;
+                  const rawElective = st.book_courses?.['__elective_courses'];
+                  if (rawElective) {
+                    try {
+                      let courses = [];
+                      if (typeof rawElective === 'string') {
+                        courses = JSON.parse(rawElective);
+                      } else if (Array.isArray(rawElective)) {
+                        courses = rawElective;
+                      }
+                      if (Array.isArray(courses)) {
+                        courses.forEach((c: any) => {
+                          if (c.days?.includes(dayKey) && c.schedules?.[dayKey]) {
+                            const sched = c.schedules[dayKey];
+                            if (Array.isArray(sched) && sched.length > 0) {
+                              const firstVal = sched[0];
+                              let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                              let m = firstVal >= 100 ? (firstVal % 100) : 0;
+                              if (h < 10) h += 12;
+                              const timeVal = h * 100 + m;
+                              if (timeVal < electiveMinTimeVal) {
+                                electiveMinTimeVal = timeVal;
+                              }
+                            }
+                          }
+                        });
+                      }
+                    } catch (e) {}
+                  }
+                  if (electiveMinTimeVal !== 99900) {
+                    return electiveMinTimeVal;
+                  }
+
+                  // 4. 정규 스케줄 시간 구하기
+                  let regularTimeVal = 99900;
                   const hours = st.day_schedules?.[dayKey] || [];
                   if (hours.length > 0) {
                     const firstVal = hours[0];
                     let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-                    if (h <= 12) h += 12;
-                    return h;
+                    let m = firstVal >= 100 ? (firstVal % 100) : 0;
+                    if (h < 10) h += 12;
+                    regularTimeVal = h * 100 + m;
                   }
-                  return 999;
+
+                  return regularTimeVal;
                 };
                 const currentStartTime = getStartTime(s);
                 const prevStartTime = idx > 0 ? getStartTime(filteredStudents[idx - 1]) : null;
                 const isNewSection = sortMode === 'time' && currentStartTime !== prevStartTime && !focusColumn;
 
+                const currentHour = currentStartTime !== 99900 ? Math.floor(currentStartTime / 100) : 999;
+                const currentMin = currentStartTime !== 99900 ? (currentStartTime % 100) : 0;
+                const formattedMin = currentMin.toString().padStart(2, '0');
+
                 const timeSectionLabel = isNewSection 
-                  ? (currentStartTime === 999 
-                      ? '기타 타임' 
-                      : (currentStartTime >= 12 
-                          ? (currentStartTime === 12 ? `오후 12:${displayMinute}` : `오후 ${currentStartTime-12}:${displayMinute}`) 
-                          : `오전 ${currentStartTime}:${displayMinute}`) + ' 수업'
+                  ? (currentHour === 999 
+                      ? '기타 수업'
+                      : (currentHour >= 12 
+                          ? (currentHour === 12 ? `오후 12:${formattedMin}` : `오후 ${currentHour-12}:${formattedMin}`) 
+                          : `오전 ${currentHour}:${formattedMin}`) + ' 수업'
                     )
                   : undefined;
 
@@ -1791,6 +1895,7 @@ export default function TodaySheet({
                       masterTextbooks={masterTextbooks}
                       onSave={handleSave}
                       onUpdateStudentInfo={onUpdateStudentInfo}
+                      onRemoveFromToday={onRemoveFromToday}
                       onViewProgress={onViewProgress}
                       onSelectStudent={onSelectStudent}
                       colWidths={focusColWidths}

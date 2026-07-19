@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { Shield, Key, Clock, Globe, BookOpen, X, Upload, Trash2, FileImage } from 'lucide-react';
+import { Shield, Key, Clock, Globe, BookOpen, X, Upload, Trash2, FileImage, Sparkles } from 'lucide-react';
 
 interface AcademyProfileProps {
   academyInfo: any;
@@ -458,6 +458,59 @@ export default function AcademyProfileLight({
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* 3. 🤖 AI 상담 브리핑 프롬프트 설정 */}
+          <div className="bg-white border border-[#e3e2e0] rounded-lg p-5 space-y-4 shadow-sm">
+            <div className="flex items-center gap-3 pb-2 border-b border-[#e3e2e0]">
+              <Sparkles className="text-blue-600" size={18} />
+              <h3 className="text-xs font-bold text-[#37352f] uppercase tracking-widest">🤖 AI 브리핑 프롬프트 설정</h3>
+            </div>
+
+            <div className="space-y-2 text-left">
+              <label className="text-[10px] font-bold text-blue-700 tracking-widest ml-0.5 uppercase block">
+                상담 분석 지침 (System Prompt)
+              </label>
+              <p className="text-[11px] text-gray-500 leading-normal">
+                외부 전송용이 아닌, <strong>'선생님이 학부모 상담 전화를 걸기 전 1초 만에 현황을 파악하고 전략을 세우는 내부 상담 참고서'</strong> 목적에 최적화된 지침입니다. 원장님만의 상담 철학이나 클리닉 강조법을 지침에 녹여보세요.
+              </p>
+
+              {/* 💡 AI에게 제공되는 원천 자료 명세 리스트 표기 */}
+              <div className="bg-gray-50 border border-[#edece9] rounded-lg p-3 my-2.5 space-y-2 text-[11px] text-gray-600 font-bold leading-normal">
+                <div className="text-[10px] text-blue-700 font-black uppercase tracking-wider mb-1">📋 AI에게 분석용으로 실시간 제공되는 원천 자료 목록:</div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <div className="space-y-0.5">
+                    <span className="text-gray-800 block text-[10px]">1. 학생 인적 사항</span>
+                    <span className="text-gray-450 block text-[9px] font-medium">- 이름, 학년, 학교, 클래스 및 소속 코스</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-gray-800 block text-[10px]">2. 최근 10회 수업 일지</span>
+                    <span className="text-gray-450 block text-[9px] font-medium">- 수업 날짜, 출결, 숙제 수행 여부, 평소 퀴즈 성적, 특이사항 코멘트</span>
+                  </div>
+                  <div className="space-y-0.5">
+                    <span className="text-gray-800 block text-[10px]">3. 최근 OMR 정기 고사</span>
+                    <span className="text-gray-450 block text-[9px] font-medium">- 모의고사 타이틀, 획득 점수/총 문항수, 오답 문항 번호 목록</span>
+                  </div>
+                </div>
+              </div>
+              
+              <textarea
+                value={opSettings.ai_settings?.custom_prompt || ""}
+                placeholder={`[기본 분석 지침 예시]\n당신은 수학 학원의 원장님과 담당 강사를 돕는 전문적인 인공지능 학습 컨설턴트 및 상담 전략 분석가입니다. 학부모 상담 전화를 대비한 내부 전략 리포트를 작성해 주세요...\n\n(비워두시면 시스템 수학 전문 내부 가이드용 프롬프트가 기본 적용됩니다.)`}
+                onChange={(e) => {
+                  const currentAi = opSettings.ai_settings || { active_models: ['openai'], default_model: 'openai' };
+                  const nextAi = { ...currentAi, custom_prompt: e.target.value };
+                  setOpSettings((prev: any) => ({ ...prev, ai_settings: nextAi }));
+                }}
+                onBlur={(e) => {
+                  const currentAi = opSettings.ai_settings || { active_models: ['openai'], default_model: 'openai' };
+                  const nextAi = { ...currentAi, custom_prompt: e.target.value.trim() };
+                  updateOpSetting('ai_settings', nextAi);
+                }}
+                rows={11}
+                className="w-full bg-white border border-[#edece9] rounded px-3 py-2 text-[12px] text-gray-800 placeholder:text-gray-300 outline-none focus:border-blue-500 transition-all font-mono leading-relaxed resize-y focus:ring-1 focus:ring-blue-500/30"
+              />
             </div>
           </div>
         </div>

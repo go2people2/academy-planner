@@ -290,16 +290,26 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           );
         })();
       case 'delete':
+        const isDeleteDraggable = isToolsEditMode && showAllTools;
         return (
           <div 
             key="delete"
-            onClick={(e) => {
+            draggable={isDeleteDraggable}
+            onDragStart={isDeleteDraggable ? (e) => handleDragStart(e, 'delete') : undefined}
+            onDragEnter={isDeleteDraggable ? (e) => handleDragEnter(e, 'delete') : undefined}
+            onDragOver={isDeleteDraggable ? (e) => e.preventDefault() : undefined}
+            onDragEnd={isDeleteDraggable ? () => { delete (window as any)._draggedToolId; } : undefined}
+            onMouseDown={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               onRemoveFromToday?.(student.id, '수업 취소', 'delete');
             }}
-            className={`${itemClass} bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 hover:text-rose-800 shadow-sm flex items-center justify-center font-black`}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            className={`${itemClass} bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 hover:text-rose-800 shadow-sm flex items-center justify-center font-black cursor-pointer`}
             title="Reset & Remove (기록 리셋 / 보강 제외)"
-            {...dragHandlers}
           >
             <span className="text-[10px] tracking-tighter leading-none">R</span>
           </div>

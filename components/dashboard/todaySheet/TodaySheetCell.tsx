@@ -291,16 +291,26 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           );
         })();
       case 'delete':
+        const isDeleteDraggable = isToolsEditMode && showAllTools;
         return (
           <div 
             key="delete"
-            onClick={(e) => {
+            draggable={isDeleteDraggable}
+            onDragStart={isDeleteDraggable ? (e) => handleDragStart(e, 'delete') : undefined}
+            onDragEnter={isDeleteDraggable ? (e) => handleDragEnter(e, 'delete') : undefined}
+            onDragOver={isDeleteDraggable ? (e) => e.preventDefault() : undefined}
+            onDragEnd={isDeleteDraggable ? () => { delete (window as any)._draggedToolId; } : undefined}
+            onMouseDown={(e) => {
               e.stopPropagation();
+              e.preventDefault();
               onRemoveFromToday?.(student.id, '수업 취소', 'delete');
             }}
-            className={`${itemClass} bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 shadow-sm flex items-center justify-center font-black`}
+            onClick={(e) => {
+              e.stopPropagation();
+              e.preventDefault();
+            }}
+            className={`${itemClass} bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 shadow-sm flex items-center justify-center font-black cursor-pointer`}
             title="Reset & Remove (기록 리셋 / 보강 제외)"
-            {...dragHandlers}
           >
             <span className="text-[10px] tracking-tighter leading-none">R</span>
           </div>
@@ -634,7 +644,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         }
         if (wasAlreadyActive.current) {
           // 💡 이미 선택된 상태였던 셀을 천천히 다시 누른 것이 맞다면 편집 모드로 승격
-          handleCellInteraction(e, colId, 'dblclick');
+          if (isLockActive) {
+            handleLockedCellDoubleClick(e);
+          } else {
+            handleCellInteraction(e, colId, 'dblclick');
+          }
         } else {
           handleCellInteraction(e, colId, 'click');
         }
@@ -1109,15 +1123,21 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
             {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
             {(isEditing || isActive) && (
-              <textarea 
-                ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : nqRef} 
-                defaultValue={currentText || ''} 
-                data-student-id={student.id}
-                data-col-id={colId}
-                onFocus={(e) => {
-                  // 💡 포커스를 얻는 순간 (천천히 클릭하여 입력 모드 진입 포함) 락 브로드캐스트 활성화
-                  handleCellInteraction(e as any, colId, 'dblclick');
-                }}
+               <textarea 
+                 ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : nqRef} 
+                 defaultValue={currentText || ''} 
+                 data-student-id={student.id}
+                 data-col-id={colId}
+                 readOnly={isLockActive}
+                 onFocus={(e) => {
+                   if (isLockActive) {
+                     e.target.blur();
+                     handleLockedCellDoubleClick(e as any);
+                     return;
+                   }
+                   // 💡 포커스를 얻는 순간 (천천히 클릭하여 입력 모드 진입 포함) 락 브로드캐스트 활성화
+                   handleCellInteraction(e as any, colId, 'dblclick');
+                 }}
                 onKeyDown={(e) => {
                   if (((e.ctrlKey || e.metaKey) && e.key === '/') || (e.altKey && e.key === 'Enter')) {
                     e.preventDefault();

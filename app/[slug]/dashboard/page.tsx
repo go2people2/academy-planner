@@ -38,25 +38,58 @@ import { motion, AnimatePresence } from 'framer-motion';
  * 💡 [리팩토링] 파생 상태 계산 및 필터링 유틸리티
  */
 
-// 1. 학생의 오늘 수업 시작 시각 계산 (정렬용)
 const getStudentStartTime = (student: any, day: string) => {
   // 1. 시간 이동 필드(moved_to_hour) 우선 사용
   if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
-    return student.todaySession.moved_to_hour;
+    const mVal = student.todaySession.moved_to_hour;
+    let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+    if (h < 10) h += 12;
+    return h;
   }
 
   // 2. [호환성] attendance_status에 인코딩된 시간 정보 파싱
   const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
   if (status.includes(':')) { 
     const parts = status.split(':'); 
-    const val = parseInt(parts[parts.length - 1]); 
-    if (!isNaN(val) && val < 24) return val; 
+    let val = parseInt(parts[parts.length - 1]); 
+    if (!isNaN(val) && val < 24) {
+      if (val < 10) val += 12;
+      return val;
+    }
   }
 
-  // 3. 기본 스케줄 사용
+  // 3. 오늘 요일에 해당하는 선택과목/방학특강 스케줄이 있다면 최우선 적용
+  const rawElective = student.book_courses?.['__elective_courses'];
+  if (rawElective) {
+    try {
+      const courses = JSON.parse(rawElective);
+      if (Array.isArray(courses)) {
+        for (const c of courses) {
+          if (c.days?.includes(day) && c.schedules?.[day]) {
+            const sched = c.schedules[day];
+            if (Array.isArray(sched) && sched.length > 0) {
+              const firstVal = sched[0];
+              let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+              if (h < 10) h += 12;
+              return h;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      // ignore
+    }
+  }
+
+  // 4. 기본 정규 스케줄 사용
   const hours = student.day_schedules?.[day] || [];
   if (hours.length === 0) return 999; 
-  return Math.min(...hours.map((h: number) => h >= 100 ? Math.floor(h / 100) : h));
+  const parsedHours = hours.map((h: number) => {
+    let hourVal = h >= 100 ? Math.floor(h / 100) : h;
+    if (hourVal < 10) hourVal += 12;
+    return hourVal;
+  });
+  return Math.min(...parsedHours);
 };
 
 // 💡 [추가] 학생 정보 수정 모드 전용 최소 필터링 로직 (날짜 로직 완전 배제)
@@ -1109,7 +1142,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           setNoticeDrafts(prev => ({ ...prev, ...updates.announcements }));
         }
 
-        alert('학원 설정 저장 완료');
+        console.log('학원 설정 저장 완료');
       } else {
         alert('저장 실패: ' + (resData.error || '알 수 없는 오류'));
       }
@@ -1285,28 +1318,33 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
       return;
     }
-    const student = students.find(s => s.id === studentId); if (!student || !academy) return;
+    const student = students.find(s => s.id === studentId); 
+    if (!student || !academy) return;
     try {
       const logId = student.todaySession?.id;
       const hasLog = logId && logId !== 'temp';
 
       if (mode === 'delete') {
-        if (!hasLog) {
-          alert('삭제할 수업 기록이 없습니다.');
-          return;
-        }
         const confirmResult = confirm(
           `오늘 ${student.name} 학생의 수업 데이터를 데이터베이스에서 완전히 삭제하시겠습니까?\n\n` +
-          `※ 이 작업은 되돌릴 수 없으며, 출결 통계 및 명단에서 아예 지워집니다.`
+          `※ 이 작업은 되돌릴 수 없으며, 오늘 출결 통계 및 명단에서 아예 지워집니다.`
         );
         if (!confirmResult) return;
 
-        // 🗑️ 아예 완전히 데이터 삭제 (DELETE)
-        const { error } = await supabase
-          .from('ams_session_logs')
-          .delete()
-          .eq('id', logId);
-        if (error) throw error;
+        // 🗑️ RLS를 완벽히 돌파하는 백엔드 API 호출 방식으로 완전 삭제 (DELETE)
+        const res = await fetch('/api/attendance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'delete_session',
+            studentId,
+            sessionDate: selectedDate
+          })
+        });
+        const resData = await res.json();
+        if (!res.ok || !resData.success) {
+          throw new Error(resData.error || '백엔드 세션 삭제 실패');
+        }
       } else {
         // 📝 기존 결석/수업취소 이력 보존 방식 유지 (UPSERT)
         const payload: any = { 
@@ -1329,9 +1367,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       }
 
       await fetchAllData(false);
-    } catch (e) { 
+    } catch (e: any) { 
       console.error('Remove Student Error:', e); 
-      alert('학생 제외 중 오류가 발생했습니다.');
+      alert(`학생 제외 중 오류가 발생했습니다: ${e?.message || JSON.stringify(e)}`);
     }
   };
 

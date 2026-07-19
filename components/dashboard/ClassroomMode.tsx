@@ -95,14 +95,44 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     }
 
     const day = getDayOfWeek(selectedDate);
+
+    // 정규 스케줄 시간
+    let regularHour = 999;
     const hours = student.day_schedules?.[day] || [];
     if (hours.length > 0) {
       const firstVal = hours[0];
       let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-      if (h <= 12) h += 12;
-      return h;
+      if (h < 12) h += 12;
+      regularHour = h;
     }
-    return 999; 
+
+    // 선택과목 스케줄 중 오늘 가장 빠른 시간 구하기
+    let electiveMinHour = 999;
+    const rawElective = student.book_courses?.['__elective_courses'];
+    if (rawElective) {
+      try {
+        const courses = JSON.parse(rawElective);
+        if (Array.isArray(courses)) {
+          courses.forEach((c: any) => {
+            if (c.days?.includes(day) && c.schedules?.[day]) {
+              const sched = c.schedules[day];
+              if (Array.isArray(sched) && sched.length > 0) {
+                const firstVal = sched[0];
+                let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                if (h < 12) h += 12;
+                if (h < electiveMinHour) {
+                  electiveMinHour = h;
+                }
+              }
+            }
+          });
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    return Math.min(regularHour, electiveMinHour);
   };
 
   const getElapsedMinutesForHour = (hour: number) => {
@@ -150,12 +180,28 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       const day = getDayOfWeek(selectedDate);
       const hours = s.day_schedules?.[day] || [];
       const hasRegularSession = hours.length > 0;
+
+      // 오늘 선택과목 일정이 존재하는지 여부 확인
+      let hasElectiveSession = false;
+      const rawElective = s.book_courses?.['__elective_courses'];
+      if (rawElective) {
+        try {
+          const courses = JSON.parse(rawElective);
+          if (Array.isArray(courses)) {
+            hasElectiveSession = courses.some((c: any) => 
+              c.days?.includes(day) && c.schedules?.[day] && Array.isArray(c.schedules[day]) && c.schedules[day].length > 0
+            );
+          }
+        } catch (e) {
+          // ignore
+        }
+      }
       
       const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null);
       
       if (status.startsWith(ATTENDANCE_STATUS.EXCLUDED)) return false;
 
-      const isTarget = hasRegularSession || isMakeup;
+      const isTarget = hasRegularSession || hasElectiveSession || isMakeup;
       if (!isTarget) return false;
 
       if (selectedTeacherId && selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
