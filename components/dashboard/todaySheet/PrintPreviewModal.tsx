@@ -118,8 +118,8 @@ export default function PrintPreviewModal({
 
   const theme = PRINT_THEMES[selectedTheme];
 
-  // Filter columns to exclude interactive ones (checkbox, action buttons) and date column
-  const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action' && c.id !== 'date' && c.id !== 'tools');
+  // Filter columns to exclude interactive ones (checkbox, action buttons), date column, and management notes (for confidentiality)
+  const displayCols = activeColumns.filter(c => c.id !== 'select' && c.id !== 'action' && c.id !== 'date' && c.id !== 'tools' && c.id !== 'management_notes');
 
   // 화면상 설정된 너비 비율을 기반으로 각 열의 프린트 너비 비율(%) 계산
   const totalScreenWidth = displayCols.reduce((sum, col) => sum + (columnWidths?.[col.id] || col.minWidth || 100), 0);
