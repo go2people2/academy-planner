@@ -95,7 +95,9 @@ export function useTodaySheetClipboard({
       const pastedColIds = new Set<string>(); // 💡 실제 붙여넣기된 컬럼 ID 수집
       const startColIdx = activeColumns.findIndex(col => col.id === activeCell.columnId);
 
-      if (dataMatrix.length === 1 && dataMatrix[0].length === 1 && selectedIds.length > 1) {
+      // 💡 [안전 장치 추가] 1x1 단일 셀 일괄 붙여넣기는 오직 클릭(선택)한 셀의 학생이 좌측 체크박스 그룹(selectedIds)에 포함되어 있을 때만 실행되도록 보호합니다.
+      // 이외의 경우(다른 행들이 체크되어 있더라도 이 셀만 단독 복사/붙여넣기 하려는 경우 등)에는 단일 셀 개별 붙여넣기(else 분기)로 안전하게 통제됩니다.
+      if (dataMatrix.length === 1 && dataMatrix[0].length === 1 && selectedIds.length > 1 && selectedIds.includes(activeCell.studentId)) {
         const val = dataMatrix[0][0];
         const colId = activeColumns[startColIdx]?.id;
         if (colId && !['select', 'name', 'action'].includes(colId)) {
