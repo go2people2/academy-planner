@@ -88,6 +88,7 @@ export interface Student {
   isSpecialClass?: boolean; // 💡 추가 (방학특강 행 여부)
   originalId?: string; // 💡 추가 (원래 학생 ID)
   electiveCourse?: any; // 💡 추가 (방학특강 과목 정보)
+  courseName?: string; // 💡 추가 (과목명 - 정규 또는 특강과목명)
 }
 
 export interface Teacher {

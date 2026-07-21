@@ -777,7 +777,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   setStudents(prev => prev.map(s => {
     // 💡 학생 ID 및 과목명(정규 vs 특강)이 일치하는 특정 행만 개별 업데이트
     const isTargetStudent = s.id === studentId || s.originalId === studentId;
-    const isTargetCourse = s.courseName ? (s.courseName === targetCourseName || (targetCourseName === '정규' && s.courseName === '정규')) : (targetCourseName === '정규');
+    const cName = (s as any).courseName;
+    const isTargetCourse = cName ? (cName === targetCourseName || (targetCourseName === '정규' && cName === '정규')) : (targetCourseName === '정규');
 
     if (isTargetStudent && isTargetCourse) {
       const isTestCompleted = ('test_completed' in dataToSave) ? dataToSave.test_completed : s.todaySession?.test_completed;
