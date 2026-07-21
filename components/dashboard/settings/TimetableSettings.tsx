@@ -170,12 +170,12 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
       });
     });
 
-    // 💡 학생들을 등원 시작 시간에 따라 3가지 그룹으로 격리 분류
-    // 1. 방학 낮 그룹 (1~2, 2~3, 3~4 시작)
+    // 💡 학생들을 등원 시작 시간에 따라 분류
+    // 1. 1시 방학 특강생 (1~2, 2~3, 3~4 시작)
     const vacationGroup = studentsOnDay.filter(s => s.slots.length > 0 && ['1~2', '2~3', '3~4'].includes(s.slots[0]));
-    // 2. 오후 일반 그룹 (4~5, 5~6, 6~7 시작)
+    // 2. 4시/5시/6시 오후 그룹 (4~5, 5~6, 6~7 시작 정규 및 특강생)
     const normalGroup = studentsOnDay.filter(s => s.slots.length > 0 && ['4~5', '5~6', '6~7'].includes(s.slots[0]));
-    // 3. 야간 그룹 (7~8, 8~9, 9~10 시작)
+    // 3. 7시 야간 그룹 (7~8, 8~9, 9~10 시작 정규 및 특강생)
     const nightGroup = studentsOnDay.filter(s => s.slots.length > 0 && ['7~8', '8~9', '9~10'].includes(s.slots[0]));
 
     // 각 그룹별 정렬 (시작 교시 순 -> 가나다 순)
@@ -183,40 +183,18 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
     normalGroup.sort((a, b) => a.startSlotIdx !== b.startSlotIdx ? a.startSlotIdx - b.startSlotIdx : a.name.localeCompare(b.name, 'ko'));
     nightGroup.sort((a, b) => a.startSlotIdx !== b.startSlotIdx ? a.startSlotIdx - b.startSlotIdx : a.name.localeCompare(b.name, 'ko'));
 
-    // [Step 1] 오후 일반 그룹 배치 (1행부터 차례대로 누적)
-    let currentRow = 1;
-    normalGroup.forEach(entry => {
-      if (currentRow > ROW_COUNT) return;
-      entry.slots.forEach((s, sIdx) => {
-        if (!activeSlots.includes(s)) return;
-        const cellKey = `${day}-${s}-${currentRow}`;
-        newGrid[cellKey] = {
-          day_of_week: day,
-          time_slot: s,
-          row_index: currentRow,
-          student_id: entry.studentId,
-          bg_color: sIdx === 0 
-            ? (s.startsWith('4') ? 'green' : s.startsWith('5') ? 'orange' : s.startsWith('6') ? 'yellow' : 'blue') 
-            : 'default'
-        };
-      });
-      currentRow++;
-    });
+    // [Step 1] 상단 영역 (1시 방학 특강생 + 4/5/6시 등원생을 1행부터 가로 병렬 결합 배치)
+    const upperMaxCount = Math.max(vacationGroup.length, normalGroup.length);
+    let upperRowsUsed = 0;
 
-    // [Step 2] 하부 영역 (7시 야간생 및 1시 방학 특강생 합류 행) 시작 지점 설정
-    // 오후 학생들이 배정된 행의 다음 + 2행 여유를 줌 (최소 7행 이상 유지하여 가독성 넉넉하게 보장)
-    const lowerStartRow = Math.max(currentRow + 2, 7);
-
-    // [Step 3] 방학 낮생과 7시 야간생을 동일 행에 가로 결합하여 병렬 정렬 배치
-    const lowerMaxCount = Math.max(vacationGroup.length, nightGroup.length);
-    for (let i = 0; i < lowerMaxCount; i++) {
-      const targetRow = lowerStartRow + i;
+    for (let i = 0; i < upperMaxCount; i++) {
+      const targetRow = 1 + i;
       if (targetRow > ROW_COUNT) break;
 
       const vacStudent = vacationGroup[i];
-      const nightStudent = nightGroup[i];
+      const normStudent = normalGroup[i];
 
-      // 1. 방학 낮생 배치 (시작 시간 셀은 호박색 적용)
+      // 1-1. 1시 방학 특강생 배치 (1행부터 차례대로 1~2, 2~3, 3~4 영역에 채움)
       if (vacStudent) {
         vacStudent.slots.forEach((s, sIdx) => {
           if (!activeSlots.includes(s)) return;
@@ -231,21 +209,46 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
         });
       }
 
-      // 2. 7시 야간생 배치 (시작 시간 셀은 연두색 적용)
-      if (nightStudent) {
-        nightStudent.slots.forEach((s, sIdx) => {
+      // 1-2. 4/5/6시 등원 정규/특강생 배치 (1행부터 차례대로 4~5, 5~6, 6~7 영역에 채움)
+      if (normStudent) {
+        normStudent.slots.forEach((s, sIdx) => {
           if (!activeSlots.includes(s)) return;
           const cellKey = `${day}-${s}-${targetRow}`;
           newGrid[cellKey] = {
             day_of_week: day,
             time_slot: s,
             row_index: targetRow,
-            student_id: nightStudent.studentId,
-            bg_color: sIdx === 0 ? 'blue' : 'default'
+            student_id: normStudent.studentId,
+            bg_color: sIdx === 0 
+              ? (s.startsWith('4') ? 'green' : s.startsWith('5') ? 'orange' : s.startsWith('6') ? 'yellow' : 'blue') 
+              : 'default'
           };
         });
       }
+
+      upperRowsUsed++;
     }
+
+    // [Step 2] 하부 영역 (7시 야간 그룹) 시작 지점 설정 (상단 배치 행수 다음 + 2행 여유, 최소 7행 이상 유지)
+    const lowerStartRow = Math.max(upperRowsUsed + 2, 7);
+
+    // [Step 3] 7시 야간 그룹 정규/특강생 배치 (하부 영역 1행부터 차례대로 누적)
+    nightGroup.forEach((nightStudent, i) => {
+      const targetRow = lowerStartRow + i;
+      if (targetRow > ROW_COUNT) return;
+
+      nightStudent.slots.forEach((s, sIdx) => {
+        if (!activeSlots.includes(s)) return;
+        const cellKey = `${day}-${s}-${targetRow}`;
+        newGrid[cellKey] = {
+          day_of_week: day,
+          time_slot: s,
+          row_index: targetRow,
+          student_id: nightStudent.studentId,
+          bg_color: sIdx === 0 ? 'blue' : 'default'
+        };
+      });
+    });
   });
 
   return newGrid;
