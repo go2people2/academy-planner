@@ -94,31 +94,43 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
   const newGrid: Record<string, any> = {};
 
   DAYS.forEach(day => {
-    const studentsOnDay: { studentId: string; name: string; slots: string[]; startSlotIdx: number }[] = [];
+    const studentsOnDay: { studentId: string; name: string; slots: string[]; startSlotIdx: number; isSpecial: boolean }[] = [];
 
     targetStudents.forEach(student => {
-      let sched = student.day_schedules || {};
+      // 1. 정규 수업 스케줄 수집 (독립 항목)
+      let regSched = student.day_schedules || {};
       const classDays = student.class_days || [];
 
-      if ((!sched || Object.keys(sched).length === 0) && classDays.length > 0) {
-        const mock: Record<string, string[]> = {};
-        classDays.forEach((d: string) => { mock[d] = ['4~5', '5~6']; });
-        sched = mock;
-      }
+      const isRegularClassDay = classDays.some((d: string) => d === day || d === `${day}요일` || d.startsWith(day));
+      const rawRegVal = regSched[day] || regSched[`${day}요일`] || null;
+      let regSlots: string[] = [];
 
-      const rawVal = sched[day] || sched[`${day}요일`] || null;
-      let slots: string[] = [];
-      if (rawVal) {
-        if (Array.isArray(rawVal)) {
-          if (rawVal.length > 0 && typeof rawVal[0] === 'number') {
-            slots = convertTimeToSlots(rawVal[0], rawVal[1] || rawVal[0]);
+      if (rawRegVal || isRegularClassDay) {
+        if (Array.isArray(rawRegVal) && rawRegVal.length > 0) {
+          if (typeof rawRegVal[0] === 'number') {
+            regSlots = convertTimeToSlots(rawRegVal[0], rawRegVal[1] || rawRegVal[0]);
           } else {
-            slots = rawVal.map(String).filter((s: string) => activeSlots.includes(s));
+            regSlots = rawRegVal.map(String).filter((s: string) => activeSlots.includes(s));
           }
+        } else if (isRegularClassDay) {
+          // 정규 수업 기본 시간대 (4~5, 5~6)
+          regSlots = ['4~5', '5~6'].filter((s: string) => activeSlots.includes(s));
         }
       }
 
-      // 💡 방학 특강(선택과목) 스케줄 파싱 및 시간표 슬롯 추가
+      if (regSlots.length > 0) {
+        regSlots.sort((a, b) => ALL_SLOTS.indexOf(a) - ALL_SLOTS.indexOf(b));
+        const startSlotIdx = activeSlots.indexOf(regSlots[0]);
+        studentsOnDay.push({
+          studentId: student.id,
+          name: student.name || '',
+          slots: regSlots,
+          startSlotIdx: startSlotIdx === -1 ? 99 : startSlotIdx,
+          isSpecial: false
+        });
+      }
+
+      // 2. 방학 특강(선택과목) 스케줄 수집 (독립 항목으로 완전 분리)
       const rawElective = student.book_courses?.['__elective_courses'] ?? student.book_courses?.["'__elective_courses'"];
       if (rawElective) {
         try {
@@ -130,7 +142,11 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
               const isTargetDay = days.some((d: string) => d === day || d === `${day}요일` || d.startsWith(day));
               if (isTargetDay) {
                 let eSlots: string[] = [];
-                if (c.startTime && c.endTime) {
+                const schedArr = (c.schedules && (c.schedules[day] || c.schedules[`${day}요일`])) ? (c.schedules[day] || c.schedules[`${day}요일`]) : null;
+
+                if (Array.isArray(schedArr) && schedArr.length > 0) {
+                  eSlots = convertTimeToSlots(schedArr[0], schedArr[1] || schedArr[0]);
+                } else if (c.startTime && c.endTime) {
                   eSlots = convertTimeToSlots(c.startTime, c.endTime);
                 } else if (c.slots && Array.isArray(c.slots)) {
                   eSlots = c.slots.map(String);
@@ -138,16 +154,25 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
                   // 특강 기본 시간대 보정 (1시~4시 -> 1~2, 2~3, 3~4)
                   eSlots = ['1~2', '2~3', '3~4'];
                 }
+
                 // 💡 1시(13시) 시작 특강의 경우 3~4교시(3시~4시) 누락 방지 보정
-                const sStr = String(c.startTime || '').replace(':', '');
+                const sStr = String((Array.isArray(schedArr) && schedArr.length > 0) ? schedArr[0] : (c.startTime || '')).replace(':', '');
                 if (sStr === '13' || sStr === '1' || sStr === '1300' || sStr === '0100') {
                   if (!eSlots.includes('3~4')) eSlots.push('3~4');
                 }
-                eSlots.forEach(s => {
-                  if (activeSlots.includes(s) && !slots.includes(s)) {
-                    slots.push(s);
-                  }
-                });
+
+                const validESlots = eSlots.filter(s => activeSlots.includes(s));
+                if (validESlots.length > 0) {
+                  validESlots.sort((a, b) => ALL_SLOTS.indexOf(a) - ALL_SLOTS.indexOf(b));
+                  const startSlotIdx = activeSlots.indexOf(validESlots[0]);
+                  studentsOnDay.push({
+                    studentId: student.id,
+                    name: student.name || '',
+                    slots: validESlots,
+                    startSlotIdx: startSlotIdx === -1 ? 99 : startSlotIdx,
+                    isSpecial: true
+                  });
+                }
               }
             });
           }
@@ -155,19 +180,6 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
           console.error('Failed to parse elective courses in timetable', e);
         }
       }
-
-      if (slots.length === 0) return;
-
-      // 교시 순서대로 정렬 (1~2, 2~3, 3~4, 4~5...)
-      slots.sort((a, b) => ALL_SLOTS.indexOf(a) - ALL_SLOTS.indexOf(b));
-
-      const startSlotIdx = activeSlots.indexOf(slots[0]);
-      studentsOnDay.push({
-        studentId: student.id,
-        name: student.name || '',
-        slots,
-        startSlotIdx: startSlotIdx === -1 ? 99 : startSlotIdx
-      });
     });
 
     // 💡 학생들을 등원 시작 시간에 따라 분류
@@ -204,7 +216,7 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
             time_slot: s,
             row_index: targetRow,
             student_id: vacStudent.studentId,
-            bg_color: sIdx === 0 ? 'orange' : 'default'
+            bg_color: sIdx === 0 ? 'cyan' : 'default'
           };
         });
       }
@@ -220,7 +232,7 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
             row_index: targetRow,
             student_id: normStudent.studentId,
             bg_color: sIdx === 0 
-              ? (s.startsWith('4') ? 'green' : s.startsWith('5') ? 'orange' : s.startsWith('6') ? 'yellow' : 'blue') 
+              ? (normStudent.isSpecial ? 'cyan' : (s.startsWith('4') ? 'green' : s.startsWith('5') ? 'orange' : s.startsWith('6') ? 'yellow' : 'blue')) 
               : 'default'
           };
         });
@@ -245,7 +257,7 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
           time_slot: s,
           row_index: targetRow,
           student_id: nightStudent.studentId,
-          bg_color: sIdx === 0 ? 'blue' : 'default'
+          bg_color: sIdx === 0 ? (nightStudent.isSpecial ? 'cyan' : 'blue') : 'default'
         };
       });
     });
@@ -260,7 +272,8 @@ const COLOR_CLASSES: Record<string, { dark: string; light: string; label: string
   green: { dark: 'bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 font-black', light: 'bg-[#D9EAD3] text-gray-800 font-extrabold', label: '초록색' },
   yellow: { dark: 'bg-yellow-500/10 border border-yellow-500/20 text-yellow-400 font-black', light: 'bg-amber-50 text-gray-800 font-extrabold', label: '노란색' },
   orange: { dark: 'bg-orange-500/10 border border-orange-500/20 text-orange-400 font-black', light: 'bg-orange-200 text-orange-950 font-extrabold', label: '주황색' },
-  blue: { dark: 'bg-sky-500/10 border border-sky-500/20 text-sky-400 font-black', light: 'bg-blue-100 border border-blue-200/60 text-blue-900 font-extrabold', label: '파란색' }
+  blue: { dark: 'bg-sky-500/10 border border-sky-500/20 text-sky-400 font-black', light: 'bg-blue-100 border border-blue-200/60 text-blue-900 font-extrabold', label: '파란색' },
+  cyan: { dark: 'bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-black', light: 'bg-[#4CD5FF] text-gray-900 font-extrabold', label: '하늘색(특강)' }
 };
 
 export default function TimetableSettings({ academyInfo, teachers = [], students = [], isLight = false }: TimetableSettingsProps) {
@@ -303,16 +316,31 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
     }
   }, [activeTeachers, selectedTeacherId]);
 
-  // 💡 2-2. DB에서 로드된 시간표 데이터에 1시~4시 타임 배정이 존재하면 자동으로 방학 모드 활성화
+  // 💡 2-2. DB 또는 학생 데이터에 방학 특강(1시~4시 타임) 배정이 존재하면 자동으로 방학 모드 활성화
   useEffect(() => {
-    const hasVacationData = Object.keys(gridData).some(key => {
+    let hasVacationData = Object.keys(gridData).some(key => {
       const [, slot] = key.split('-');
       return ['1~2', '2~3', '3~4'].includes(slot) && gridData[key]?.student_id !== null;
     });
+
+    if (!hasVacationData && localStudents.length > 0) {
+      hasVacationData = localStudents.some(s => {
+        if (s.is_deleted) return false;
+        const rawElective = s.book_courses?.['__elective_courses'] ?? s.book_courses?.["'__elective_courses'"];
+        if (!rawElective) return false;
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          return Array.isArray(courses) && courses.length > 0;
+        } catch (e) {
+          return false;
+        }
+      });
+    }
+
     if (hasVacationData) {
       setIsVacationMode(true);
     }
-  }, [gridData]);
+  }, [gridData, localStudents]);
 
   // 💡 동적 행 개수 결정: 데이터가 있는 가장 큰 row_index를 구해서 맞춰 자름 (최소 15행)
   const dynamicRowCount = useMemo(() => {
@@ -498,10 +526,23 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
     setContextMenu(null);
   }, [selectedTeacherId, academyInfo?.id]);
 
-  // 4. 선택된 선생님 담당 학생 목록 필터링
+  // 4. 선택된 선생님 담당 학생 목록 필터링 (정규반 담임 교사 또는 특강 과목 교사가 일치하는 모든 원생 수집)
   const teacherStudents = useMemo(() => {
-    return localStudents.filter(s => !s.is_deleted && s.teacher_id === selectedTeacherId)
-      .sort((a, b) => a.name.localeCompare(b.name));
+    return localStudents.filter(s => {
+      if (s.is_deleted) return false;
+      if (s.teacher_id === selectedTeacherId) return true;
+
+      const rawElective = s.book_courses?.['__elective_courses'] ?? s.book_courses?.["'__elective_courses'"];
+      if (rawElective) {
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (Array.isArray(courses)) {
+            return courses.some((c: any) => c && (c.teacher_id === selectedTeacherId || (!c.teacher_id && s.teacher_id === selectedTeacherId)));
+          }
+        } catch (e) {}
+      }
+      return false;
+    }).sort((a, b) => a.name.localeCompare(b.name));
   }, [localStudents, selectedTeacherId]);
 
   // 💡 중복 제거용 셀 공통 렌더링 헬퍼 함수
@@ -516,7 +557,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
     
     // 🔒 [추가] 학생이 배정되어 있고 수동 색상 지정이 없을 때(default) 또는 기존 일괄 연두색(green)인 경우, 등원 시작 세션(첫 교시)인 경우에만 타임별 색상 자동 매칭
     let displayBgColor = bgColor;
-    if (assignedStudent && (bgColor === 'default' || bgColor === 'green')) {
+    if (assignedStudent && (bgColor === 'default' || bgColor === 'green' || bgColor === 'blue' || bgColor === 'orange' || bgColor === 'yellow')) {
       const currentSlotIdx = activeSlots.indexOf(slot);
       let isFirstSession = true;
 
@@ -530,11 +571,39 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
         }
       }
 
+      let isElectiveSession = false;
+      const rawElective = assignedStudent?.book_courses?.['__elective_courses'] ?? assignedStudent?.book_courses?.["'__elective_courses'"];
+      if (rawElective) {
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (Array.isArray(courses)) {
+            isElectiveSession = courses.some((c: any) => {
+              if (!c) return false;
+              const days = c.days || c.class_days || [];
+              const isDayMatch = days.some((d: string) => d === day || d === `${day}요일` || d.startsWith(day));
+              if (!isDayMatch) return false;
+
+              const schedArr = (c.schedules && (c.schedules[day] || c.schedules[`${day}요일`])) ? (c.schedules[day] || c.schedules[`${day}요일`]) : null;
+              let eSlots: string[] = [];
+              if (Array.isArray(schedArr) && schedArr.length > 0) {
+                eSlots = convertTimeToSlots(schedArr[0], schedArr[1] || schedArr[0]);
+              } else if (c.startTime && c.endTime) {
+                eSlots = convertTimeToSlots(c.startTime, c.endTime);
+              } else {
+                eSlots = ['1~2', '2~3', '3~4'];
+              }
+              return eSlots.includes(slot);
+            });
+          }
+        } catch (e) {}
+      }
+
       if (isFirstSession) {
-        if (slot.startsWith('4')) displayBgColor = 'green';        // 4시 타임: 초록색
-        else if (slot.startsWith('5')) displayBgColor = 'orange';       // 5시 타임: 주황색(호박색)
-        else if (slot.startsWith('6')) displayBgColor = 'yellow';   // 6시 타임: 노란색
-        else if (slot.startsWith('7')) displayBgColor = 'blue';     // 7시 타임: 파란색
+        if (isElectiveSession || slot.startsWith('1') || slot.startsWith('2') || slot.startsWith('3')) displayBgColor = 'cyan'; // 특강 교시: 스카이블루(하늘색)
+        else if (slot.startsWith('4')) displayBgColor = 'green';        // 4시 타임 정규: 초록색(연두색)
+        else if (slot.startsWith('5')) displayBgColor = 'orange';       // 5시 타임 정규: 주황색(호박색)
+        else if (slot.startsWith('6')) displayBgColor = 'yellow';   // 6시 타임 정규: 노란색
+        else if (slot.startsWith('7')) displayBgColor = 'blue';     // 7시 타임 정규: 파란색
       } else {
         // 첫 교시가 아님에도 green이나 다른 색이 칠해져 있다면 연장 수업이므로 기본색으로 강제 회귀
         displayBgColor = 'default';
