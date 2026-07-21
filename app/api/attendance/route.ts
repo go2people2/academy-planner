@@ -300,6 +300,7 @@ export async function POST(request: NextRequest) {
       .select('id, check_in_at, check_out_at')
       .eq('student_id', student.id)
       .eq('session_date', today)
+      .eq('course_name', '정규') // 💡 등원 UI는 정규 로그만 대상
       .maybeSingle();
 
     if (!log) {
@@ -331,12 +332,13 @@ export async function POST(request: NextRequest) {
 
   const ops = academy.operation_settings || {};
 
-  // (2) 오늘 기존 세션 확인
+  // (2) 오늘 기존 세션 확인 (정규 로그만)
   const { data: existing } = await supabase
     .from('ams_session_logs')
     .select('id, check_in_at, check_out_at, attendance_status')
     .eq('student_id', student.id)
     .eq('session_date', today)
+    .eq('course_name', '정규') // 💡 등원 UI는 정규 로그만 대상
     .maybeSingle();
 
   // 등원 처리
@@ -359,8 +361,8 @@ export async function POST(request: NextRequest) {
     const { error } = await supabase
       .from('ams_session_logs')
       .upsert(
-        [{ student_id: student.id, session_date: today, attendance_status: attendanceStatus, check_in_at: nowISO }],
-        { onConflict: 'student_id,session_date' }
+        [{ student_id: student.id, session_date: today, course_name: '정규', attendance_status: attendanceStatus, check_in_at: nowISO }],
+        { onConflict: 'student_id,session_date,course_name' }
       );
     if (error) return Response.json({ error: error.message }, { status: 500 });
 

@@ -15,7 +15,8 @@ export interface UseTodaySheetExportParams {
 
 /**
  * 📝 [리팩토링] useTodaySheetExport: 시트 명단 엑셀, CSV, ACA2000 가공 및 파일 제조 다운로드 전용 공용 훅
- * 메인 시트 컴포넌트들에서 무거운 XLSX 바인딩 로직을 분리해 내어 품질을 대폭 향상시킵니다.
+ * - students: filteredStudents (정규+특강 행이 이미 분리된 배열)를 받아 아카2000 행 생성 시 그대로 활용
+ * - isSpecialClass 행은 courseName, electiveCourse 필드로 반명/세션 분기
  */
 export function useTodaySheetExport({
   students,
@@ -38,57 +39,82 @@ export function useTodaySheetExport({
 
     if (type === 'aca2000') {
       headers = ['일자', '강사', '반명', '과목', '교재', '진도', '테스트', '과제', '기타'];
+
+      // 💡 테스트 표기 문자열 생성 헬퍼
+      const buildTestDisplay = (session: any): string => {
+        if (!session?.test_id) return '';
+        if (session.test_id.includes('(')) return session.test_id;
+        if (session.test_score === undefined || session.test_score === null || session.test_score === '') return session.test_id;
+        const scoreType = session.test_score_type || 'score';
+        if (scoreType === 'score') {
+          return `${session.test_id} (${session.test_score}점)`;
+        } else {
+          return session.test_total_count
+            ? `${session.test_id} (${session.test_score}개 / ${session.test_total_count}개)`
+            : `${session.test_id} (${session.test_score}개)`;
+        }
+      };
+
+      // 💡 filteredStudents(이미 정규/특강 행 분리 완료)를 그대로 순회
+      //    - isSpecialClass=false → 정규 행: 기존 반명 + 정규 todaySession
+      //    - isSpecialClass=true  → 특강 행: 특강 반명 + 특강 todaySession
       dataRows = students.map((s: any) => {
-        const session = s.todaySession || {}; 
         const teacher = teachers?.find((t: any) => t.id === s.teacher_id);
         const tName = teacher?.nickname || teacher?.name || '';
-        const sortedDays = (s.class_days || []).slice().sort((a: string, b: string) => {
-          const order: any = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-          return (order[a] || 0) - (order[b] || 0);
-        }).join('');
         const teacherInitial = teacher?.initials || s.teacher_initial || '';
+        const session = s.todaySession || {};
 
-        // 오늘 날짜의 요일에 선택과목 수업이 배정되어 있는 경우, 반명을 해당 선택과목 전용 반명으로 변경
-        const daysKorean = ['일', '월', '화', '수', '목', '금', '토'];
-        const currentKoreanDay = daysKorean[new Date(selectedDate).getDay()];
-        
-        let electiveClassName = '';
-        const rawElective = s.book_courses?.['__elective_courses'];
-        if (rawElective) {
-          try {
-            const parsed = JSON.parse(rawElective);
-            if (Array.isArray(parsed)) {
-              const matched = parsed.find(item => (item.days || []).includes(currentKoreanDay));
-              if (matched) {
-                electiveClassName = matched.className?.trim() || `${s.name}-${teacherInitial}-${matched.subject}`;
-              }
-            }
-          } catch (e) {
-            console.error('Failed to parse elective courses during ACA export', e);
-          }
+        // 💡 킵해둔 교재(-keep) 및 완료된 교재(-done)는 제외하고 현재 사용 중인 교재만 필터링
+        const books = (s.assigned_books || [])
+          .filter((code: string) => {
+            const status = String(s.book_courses?.[code] || '');
+            return !status.includes('-keep') && !status.includes('-done');
+          })
+          .map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code)
+          .filter((title: any) => !!title)
+          .join(', ');
+
+        let combinedName: string;
+
+        if (s.isSpecialClass) {
+          // 특강 행: 규격 반명 사용 (특강-[이름]-[강사이니셜]-[특강수업요일])
+          const elective = s.electiveCourse;
+          const daysArr = Array.isArray(elective?.days)
+            ? elective.days
+            : (Array.isArray(elective?.class_days) ? elective.class_days : []);
+
+          const sortedElectiveDays = daysArr
+            .map((d: any) => String(d).replace('요일', '').trim())
+            .sort((a: string, b: string) => {
+              const order: Record<string, number> = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+              return (order[a] || 0) - (order[b] || 0);
+            })
+            .join('');
+
+          const daysStr = sortedElectiveDays || (s.class_days || []).join('').replace(/요일/g, '') || '특강';
+          combinedName = `특강-${s.name}-${teacherInitial}-${daysStr}`;
+        } else {
+          // 정규 행: 기존 반명 (이름-강사이니셜-요일)
+          const sortedDays = (s.class_days || []).slice().sort((a: string, b: string) => {
+            const order: any = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+            return (order[a] || 0) - (order[b] || 0);
+          }).join('');
+          combinedName = `${s.name}-${teacherInitial}-${sortedDays}`;
         }
 
-        const combinedName = electiveClassName 
-          ? electiveClassName 
-          : `${s.name}-${teacherInitial}-${sortedDays}`;
-        const books = (s.assigned_books || []).map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code).filter((title: any) => !!title).join(', ');
-        
-        const testDisplay = (() => {
-          if (!session.test_id) return '';
-          if (session.test_id.includes('(')) return session.test_id;
-          if (session.test_score === undefined || session.test_score === null || session.test_score === '') return session.test_id;
-          
-          const scoreType = session.test_score_type || 'score';
-          if (scoreType === 'score') {
-            return `${session.test_id} (${session.test_score}점)`;
-          } else {
-            return session.test_total_count 
-              ? `${session.test_id} (${session.test_score}개 / ${session.test_total_count}개)`
-              : `${session.test_id} (${session.test_score}개)`;
-          }
-        })();
-        return [selectedDate, tName, combinedName, '개별수업', books, session.completed_classwork_text || '', testDisplay, session.homework_text || '', session.special_notes || ''];
+        return [
+          selectedDate,
+          tName,
+          combinedName,
+          '개별수업',
+          books,
+          session.completed_classwork_text || '',
+          buildTestDisplay(session),
+          session.homework_text || '',
+          session.special_notes || '',
+        ];
       });
+
       const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
       ws['!cols'] = [{ wch: 12 }, { wch: 10 }, { wch: 25 }, { wch: 10 }, { wch: 30 }, { wch: 40 }, { wch: 20 }, { wch: 40 }, { wch: 30 }];
       const wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, ws, "ACA2000_Upload");

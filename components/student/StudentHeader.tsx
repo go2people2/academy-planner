@@ -11,7 +11,9 @@ interface StudentHeaderProps {
   getRemainingClasses: (targetDate: string) => number | null;
   handleLogout: () => void;
   getInitial: (name: string) => string;
-  academy?: any; // 💡 추가
+  academy?: any;
+  selectedCourse?: string;
+  setSelectedCourse?: (course: string) => void;
 }
 
 export default function StudentHeader({
@@ -23,7 +25,9 @@ export default function StudentHeader({
   getRemainingClasses,
   handleLogout,
   getInitial,
-  academy // 💡 추가
+  academy,
+  selectedCourse = '정규',
+  setSelectedCourse,
 }: StudentHeaderProps) {
   const formatExternalLink = (url: string) => {
     if (!url) return '';
@@ -69,9 +73,20 @@ export default function StudentHeader({
               <div className={`w-10 h-10 md:w-11 md:h-11 bg-gradient-to-br ${badgeBg} rounded-[4px] flex items-center justify-center shadow-lg shrink-0`}>
                 <span className="text-[16px] md:text-[18px] font-black text-white leading-none">{grade}</span>
               </div>
-              <p className="text-lg md:text-xl font-black text-white truncate tracking-tight leading-none min-w-0">
-                {student.name}-{initial}-{days}
-              </p>
+              <div className="flex items-center gap-2 min-w-0 truncate">
+                <p className="text-lg md:text-xl font-black text-white truncate tracking-tight leading-none min-w-0">
+                  {student.name}-{initial}-{days}
+                </p>
+                {selectedCourse && selectedCourse !== '정규' ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] md:text-xs font-black bg-purple-600/30 text-purple-300 border border-purple-500/40 shrink-0">
+                    ✨ {selectedCourse}
+                  </span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded text-[10px] md:text-xs font-black bg-blue-600/30 text-blue-300 border border-blue-500/40 shrink-0">
+                    📚 정규
+                  </span>
+                )}
+              </div>
             </>
           );
         })()}

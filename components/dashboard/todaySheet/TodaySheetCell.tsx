@@ -8,7 +8,7 @@ import {
   Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
-import { getDayOfWeek } from '@/lib/utils';
+import { getDayOfWeek, getCoursePrefix } from '@/lib/utils';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { ScoreCell } from './cells/ScoreCell';
 import { SimpleTextCell } from './cells/SimpleTextCell';
@@ -773,14 +773,41 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div className="flex flex-col min-w-0 flex-1">
               <div className="flex items-center gap-1.5 min-w-0">
 
-                <span className="text-[13px] font-medium text-white truncate transition-colors">
-                  {student.name}-{student.teacher_initial || '?'}-{student.class_days 
-                    ? [...student.class_days].sort((a, b) => {
-                        const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-                        return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
-                      }).join('')
-                    : '무'}
-                </span>
+                {(() => {
+                  const teacherInitial = student.teacher_initial || '?';
+                  if (student.isSpecialClass) {
+                    const elective = student.electiveCourse;
+                    const daysArr = Array.isArray(elective?.days)
+                      ? elective.days
+                      : (Array.isArray(elective?.class_days) ? elective.class_days : []);
+
+                    const sortedElectiveDays = daysArr
+                      .map((d: any) => String(d).replace('요일', '').trim())
+                      .sort((a: string, b: string) => {
+                        const order: Record<string, number> = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                        return (order[a] || 0) - (order[b] || 0);
+                      })
+                      .join('');
+
+                    const daysStr = sortedElectiveDays || (student.class_days || []).join('').replace(/요일/g, '') || '무';
+                    return (
+                      <span className="text-[13px] font-medium text-white truncate transition-colors">
+                        <span className="text-amber-400">특강-</span>
+                        {student.name}-{teacherInitial}-{daysStr}
+                      </span>
+                    );
+                  } else {
+                    const sortedDays = (student.class_days || []).slice().sort((a: string, b: string) => {
+                      const order: Record<string, number> = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                      return (order[a] || 0) - (order[b] || 0);
+                    }).join('');
+                    return (
+                      <span className="text-[13px] font-medium text-white truncate transition-colors">
+                        {student.name}-{teacherInitial}-{sortedDays || '무'}
+                      </span>
+                    );
+                  }
+                })()}
               </div>
               <div className="flex items-center gap-1 text-[9px] font-normal uppercase tracking-tighter truncate">
                 <span className="text-pink-300">{student.school}</span>

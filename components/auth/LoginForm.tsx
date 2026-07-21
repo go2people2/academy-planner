@@ -15,6 +15,8 @@ export default function LoginForm({ academy }: { academy: any }) {
   const [candidateStudents, setCandidateStudents] = useState<any[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isLightTheme, setIsLightTheme] = useState(false);
+  const [courseSelectStudent, setCourseSelectStudent] = useState<any | null>(null);
+  const [activeTodayElectives, setActiveTodayElectives] = useState<any[]>([]);
   const router = useRouter();
 
   const toggleTheme = () => {
@@ -52,9 +54,49 @@ export default function LoginForm({ academy }: { academy: any }) {
     );
   }
 
-  const handleSelectStudent = (student: any) => {
-    localStorage.setItem('ams_student', JSON.stringify(student));
+  const getTodayKoreanDay = (): string => {
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    return days[new Date().getDay()];
+  };
+
+  const getActiveTodayElectives = (s: any): any[] => {
+    const todayDay = getTodayKoreanDay();
+    const rawElective = s.book_courses?.['\'__elective_courses\''];
+    const rawAlt = s.book_courses?.['__elective_courses'];
+    const raw = rawElective ?? rawAlt;
+    if (!raw) return [];
+    try {
+      const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      return Array.isArray(parsed)
+        ? parsed.filter((c: any) => Array.isArray(c.days) && c.days.some((d: string) => d.trim() === todayDay))
+        : [];
+    } catch { return []; }
+  };
+
+  const handleCourseSelect = (courseName: string) => {
+    if (!courseSelectStudent) return;
+    localStorage.setItem('ams_student', JSON.stringify({ ...courseSelectStudent, _selectedCourse: courseName }));
     router.push(`/${slug}/student`);
+  };
+
+  const handleSelectStudent = (s: any) => {
+    const todayDay = getTodayKoreanDay();
+    const isRegularDay = (s.class_days || []).some((d: string) => d.trim() === todayDay);
+    const electives = getActiveTodayElectives(s);
+    const courses: string[] = [];
+    if (isRegularDay) courses.push('정규');
+    electives.forEach((e: any) => courses.push(e.subject?.trim() || '특강'));
+
+    if (courses.length > 1) {
+      // 오늘 수업이 2개 이상 → 선택 화면 표시
+      setCourseSelectStudent(s);
+      setActiveTodayElectives(electives);
+    } else {
+      // 수업이 1개만 있으면 자동 선택
+      const courseName = courses.length === 1 ? courses[0] : '정규';
+      localStorage.setItem('ams_student', JSON.stringify({ ...s, _selectedCourse: courseName }));
+      router.push(`/${slug}/student`);
+    }
   };
 
   const handleLogin = async (e: React.FormEvent) => {
@@ -219,8 +261,7 @@ export default function LoginForm({ academy }: { academy: any }) {
           if (matchedList.length === 0) {
             alert('등록된 학생 정보를 찾을 수 없습니다.');
           } else if (matchedList.length === 1) {
-            localStorage.setItem('ams_student', JSON.stringify(matchedList[0]));
-            router.push(`/${slug}/student`);
+            handleSelectStudent(matchedList[0]);
           } else {
             // 중복 시 선택 리스트 생성
             setCandidateStudents(matchedList);
@@ -362,7 +403,56 @@ export default function LoginForm({ academy }: { academy: any }) {
             </>
           ) : (
             <>
-              {candidateStudents && candidateStudents.length > 0 ? (
+              {courseSelectStudent ? (
+                // 💡 수업 선택 화면: 오늘 정규 + 특강이 둘 다 있는 학생에게 표시
+                <div className="space-y-3">
+                  <div className={`text-center pb-3 border-b ${isLightTheme ? 'border-gray-200' : 'border-white/10'}`}>
+                    <p className={`text-xs font-bold uppercase tracking-widest ${isLightTheme ? 'text-gray-400' : 'text-gray-500'}`}>
+                      {courseSelectStudent.name} 학생
+                    </p>
+                    <h3 className={`text-sm font-black mt-1 ${isLightTheme ? 'text-[#37352f]' : 'text-white'}`}>
+                      오늘 어느 수업인가요?
+                    </h3>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    {(courseSelectStudent.class_days || []).some((d: string) => d.trim() === getTodayKoreanDay()) && (
+                      <button
+                        type="button"
+                        onClick={() => handleCourseSelect('정규')}
+                        className={`py-4 px-4 border rounded-[4px] text-left transition-all active:scale-[0.98] ${isLightTheme ? 'bg-white border-[#edece9] hover:bg-blue-50 hover:border-blue-300 text-[#37352f]' : 'bg-white/5 border-white/10 hover:bg-blue-600/20 hover:border-blue-500/50 text-white'}`}
+                      >
+                        <span className="font-black text-sm block">📚 정규수업</span>
+                        <span className={`text-[11px] mt-1 block font-bold ${isLightTheme ? 'text-gray-400' : 'text-gray-500'}`}>
+                          {(courseSelectStudent.class_days || []).join(' · ')} 수업
+                        </span>
+                      </button>
+                    )}
+                    {activeTodayElectives.map((e: any, i: number) => {
+                      const subject = e.subject?.trim() || '특강';
+                      return (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => handleCourseSelect(subject)}
+                          className={`py-4 px-4 border rounded-[4px] text-left transition-all active:scale-[0.98] ${isLightTheme ? 'bg-white border-[#edece9] hover:bg-purple-50 hover:border-purple-300 text-[#37352f]' : 'bg-white/5 border-white/10 hover:bg-purple-600/20 hover:border-purple-500/50 text-white'}`}
+                        >
+                          <span className="font-black text-sm block">✨ {subject}</span>
+                          <span className={`text-[11px] mt-1 block font-bold ${isLightTheme ? 'text-gray-400' : 'text-gray-500'}`}>
+                            {(e.days || []).join(' · ')} 특강수업
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => { setCourseSelectStudent(null); setCandidateStudents(null); }}
+                    className={`w-full py-3.5 border rounded-[4px] text-sm font-black tracking-tight transition-all ${isLightTheme ? 'bg-gray-100 border-[#edece9] text-gray-500 hover:text-black' : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'}`}
+                  >
+                    ← 뒤로 가기
+                  </button>
+                </div>
+              ) : candidateStudents && candidateStudents.length > 0 ? (
                 <div className="space-y-4 text-left">
                   <div className={`text-center pb-2 border-b ${
                     isLightTheme ? 'border-gray-200' : 'border-white/5'
@@ -373,7 +463,7 @@ export default function LoginForm({ academy }: { academy: any }) {
                       {phoneLast4 === (academy.student_passkey || '2324') ? '전체 학생 목록 (마스터)' : '본인 이름을 선택해 주세요'}
                     </h3>
                     <p className="text-gray-500 text-xs mt-1 font-bold">
-                      {phoneLast4 === (academy.student_passkey || '2324') ? '접속할 학생을 클릭하세요.' : '전화번호 뒷자리가 일치하는 학생 목록입니다.'}
+                      {phoneLast4 === (academy.student_passkey || '2324') ? '접속할 학생을 클릭하세요.' : '전화번호 듷자리가 일치하는 학생 목록입니다.'}
                     </p>
                   </div>
                   
@@ -437,7 +527,7 @@ export default function LoginForm({ academy }: { academy: any }) {
             </>
           )}
 
-          {!(loginType === 'student' && candidateStudents && candidateStudents.length > 0) && (
+          {!(loginType === 'student' && (courseSelectStudent || (candidateStudents && candidateStudents.length > 0))) && (
             <button
               type="submit"
               disabled={isLoading}

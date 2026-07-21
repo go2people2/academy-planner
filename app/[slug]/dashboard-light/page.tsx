@@ -709,7 +709,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   }
   const student = students.find(s => s.id === studentId);
   if (!student || !academy) return false;
-  let sessionId = student.todaySession?.id;
+
+  const targetCourseName = sessionData.course_name || '정규';
+  const existingLog = (student.allLogs || []).find((l: any) => 
+    (l.date || l.session_date) === selectedDate && 
+    (l.course_name === targetCourseName || (targetCourseName === '정규' && !l.course_name))
+  );
+  let sessionId = existingLog?.id || (targetCourseName === '정규' ? student.todaySession?.id : undefined);
+
+  // 💡 [독립 세션 참조] targetCourseName에 따른 특정 세션 객체 지정 (정규 vs 특강 세션 분리)
+  const targetSession = existingLog || (targetCourseName === '정규' ? student.todaySession : undefined);
 
   // 💡 [추가] 관리 주의점(management_notes) 수정 시, 학생 마스터 정보 테이블도 함께 연동 갱신
   if ('management_notes' in sessionData && sessionData.management_notes !== undefined) {
@@ -723,18 +732,18 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   // 1. 기본 필드 필터링
   const filteredData = getFilteredBaseFields(dataToSave);
 
-  // 💡 [안정화] 오늘 테스트 ID(test_status)가 저장 요청에 누락되어 있고, 현재 클라이언트에 임시 이월/입력된 값이 존재한다면 이를 유실 없이 포함하여 저장합니다.
-  if (!('test_id' in dataToSave) && student.todaySession?.test_id) {
-    filteredData.test_status = student.todaySession.test_id;
+  // 💡 [안정화] 오늘 테스트 ID(test_status)가 저장 요청에 누락되어 있고, 현재 세션에 존재한다면 포함
+  if (!('test_id' in dataToSave) && targetSession?.test_id) {
+    filteredData.test_status = targetSession.test_id;
   }
 
   // 💡 [개선] 출결 덮어쓰기 및 보강 정보 정리
   const newAttendanceStatus = filteredData.attendance_status;
   const isSupplementStatus = newAttendanceStatus?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
 
-  let existingMovedHour = student.todaySession?.moved_to_hour;
+  let existingMovedHour = targetSession?.moved_to_hour;
   if (existingMovedHour === undefined || existingMovedHour === null) {
-    const status = student.todaySession?.attendance_status || '';
+    const status = targetSession?.attendance_status || '';
     if (status.includes(':')) {
       const parts = status.split(':');
       const val = parseInt(parts[parts.length - 1]);
@@ -744,7 +753,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
   }
 
-  // 💡 [좀비 보강 박멸] 새로 지정된 출결 상태가 '보강'이 아니라면, 기존 보강 정보(moved_to_hour)를 null로 깨끗이 씻어내어 비요일 수업 재생성을 철두철미하게 방지합니다.
+  // 💡 [좀비 보강 박멸] 새로 지정된 출결 상태가 '보강'이 아니라면, 기존 보강 정보(moved_to_hour)를 null로 정리
   if (newAttendanceStatus && !isSupplementStatus) {
     filteredData.moved_to_hour = null;
   } else if (existingMovedHour !== undefined && existingMovedHour !== null) {
@@ -755,31 +764,35 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
   // 2. 예정 테스트 정보 가공 (homework_to)
   const nqObj = {
-    text: ('next_quiz_text' in dataToSave) ? dataToSave.next_quiz_text : (student.todaySession?.next_quiz_text ?? ''),
-    cut: ('next_quiz_cut' in dataToSave) ? dataToSave.next_quiz_cut : (student.todaySession?.next_quiz_cut ?? 0),
-    trial: ('next_quiz_trial' in dataToSave) ? dataToSave.next_quiz_trial : (student.todaySession?.next_quiz_trial ?? 1),
-    json: ('next_quiz_json' in dataToSave) ? dataToSave.next_quiz_json : (student.todaySession?.next_quiz_json ?? [])
+    text: ('next_quiz_text' in dataToSave) ? dataToSave.next_quiz_text : (targetSession?.next_quiz_text ?? ''),
+    cut: ('next_quiz_cut' in dataToSave) ? dataToSave.next_quiz_cut : (targetSession?.next_quiz_cut ?? 0),
+    trial: ('next_quiz_trial' in dataToSave) ? dataToSave.next_quiz_trial : (targetSession?.next_quiz_trial ?? 1),
+    json: ('next_quiz_json' in dataToSave) ? dataToSave.next_quiz_json : (targetSession?.next_quiz_json ?? [])
   };
   filteredData['homework_to'] = JSON.stringify(nqObj);
   
   // 3. 테스트 결과 정보 병합 (test_result)
   filteredData['test_result'] = buildMergedTestResult(
-    student.todaySession?.test_result, 
+    targetSession?.test_result, 
     dataToSave, 
     {
-      completed: student.todaySession?.test_completed,
+      completed: targetSession?.test_completed,
       mission: student.recent_mission ?? '',
-      cut: student.todaySession?.test_cut ?? 0,
-      achievement: student.todaySession?.todo_achievement ?? 0,
-      sType: student.todaySession?.test_score_type ?? 'score',
-      tTotal: student.todaySession?.test_total_count ?? 0,
-      hwCheckedToday: student.todaySession?.hw_checked_today ?? false,
-      hwPassedToday: student.todaySession?.hw_passed_today ?? false
+      cut: targetSession?.test_cut ?? 0,
+      achievement: targetSession?.todo_achievement ?? 0,
+      sType: targetSession?.test_score_type ?? 'score',
+      tTotal: targetSession?.test_total_count ?? 0,
+      hwCheckedToday: targetSession?.hw_checked_today ?? false,
+      hwPassedToday: targetSession?.hw_passed_today ?? false
     }
   );
 
   setStudents(prev => prev.map(s => {
-    if (s.id === studentId) {
+    // 💡 학생 ID 및 과목명(정규 vs 특강)이 일치하는 특정 행만 개별 업데이트
+    const isTargetStudent = s.id === studentId || s.originalId === studentId;
+    const isTargetCourse = s.courseName ? (s.courseName === targetCourseName || (targetCourseName === '정규' && s.courseName === '정규')) : (targetCourseName === '정규');
+
+    if (isTargetStudent && isTargetCourse) {
       const isTestCompleted = ('test_completed' in dataToSave) ? dataToSave.test_completed : s.todaySession?.test_completed;
       const targetRecentMission = ('mission' in dataToSave) ? (dataToSave.mission ?? '') : (s.recent_mission ?? '');
       
@@ -803,13 +816,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         hasTestResult: isTestCompleted !== undefined || ('test_cut' in dataToSave) || ('mission' in dataToSave) || ('todo_achievement' in dataToSave)
       };
 
-      // 💡 [동기화 특효처방] 일지 보관함(allLogs) 내 오늘 날짜의 로그도 함께 실시간 낙관적 갱신!
+      // 💡 [동기화 특효처방] 일지 보관함(allLogs) 내 오늘 날짜 & 해당 과목의 로그만 갱신!
       let updatedAllLogs = s.allLogs || [];
-      const logIndex = updatedAllLogs.findIndex(l => (l.date || l.session_date) === selectedDate);
+      const logIndex = updatedAllLogs.findIndex(l =>
+        (l.date || l.session_date) === selectedDate &&
+        (l.course_name === targetCourseName || (targetCourseName === '정규' && (!l.course_name || l.course_name === '정규')))
+      );
       if (logIndex !== -1) {
         updatedAllLogs = updatedAllLogs.map((l, i) => i === logIndex ? { ...l, ...updatedTodaySession } : l);
       } else {
-        updatedAllLogs = [updatedTodaySession, ...updatedAllLogs];
+        updatedAllLogs = [{ ...updatedTodaySession, course_name: targetCourseName }, ...updatedAllLogs];
       }
 
       return {
@@ -824,7 +840,14 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   }));
 
     try {
-      const payload: any = { student_id: studentId, student_name: student.name, academy_id: academy.id, session_date: selectedDate, ...filteredData };
+      const payload: any = { 
+        student_id: studentId, 
+        student_name: student.name, 
+        academy_id: academy.id, 
+        session_date: selectedDate, 
+        course_name: sessionData.course_name || '정규',
+        ...filteredData 
+      };
       if (sessionId && sessionId !== 'temp') {
         payload.id = sessionId;
       } else {
@@ -836,7 +859,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       // 💡 [개선] 전체 리페치 대신 서버에서 저장된 최신 데이터를 받아와서 로컬 상태에 직접 주입
       const { data: savedLog, error } = await supabase
         .from('ams_session_logs')
-        .upsert([payload], { onConflict: 'student_id,session_date' })
+        .upsert([payload], { onConflict: 'student_id,session_date,course_name' })
         .select()
         .maybeSingle();
 

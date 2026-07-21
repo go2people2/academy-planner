@@ -14,6 +14,7 @@ export interface SessionLog {
   id?: string;
   date: string;
   session_date?: string; // 💡 추가 (구형 스키마 하위 호환성용)
+  course_name?: string; // 💡 과목 구분 ('정규', '방학특강', '확통' 등)
   status: StudentStatus;
   attendance_status: string;
   special_notes: string;
@@ -84,6 +85,9 @@ export interface Student {
   teacher_name?: string; // 💡 추가
   level_tag?: string; // 💡 추가 (반/레벨 태그 정보)
   login_suffix?: string; // 💡 추가 (중복 원생 로그인 추가번호)
+  isSpecialClass?: boolean; // 💡 추가 (방학특강 행 여부)
+  originalId?: string; // 💡 추가 (원래 학생 ID)
+  electiveCourse?: any; // 💡 추가 (방학특강 과목 정보)
 }
 
 export interface Teacher {

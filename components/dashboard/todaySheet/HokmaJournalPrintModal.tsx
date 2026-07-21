@@ -16,52 +16,76 @@ interface HokmaJournalPrintModalProps {
   academyInfo?: any; // 💡 학원 정보 데이터 전달
 }
 
-// 🎨 다채로운 인쇄 테마 정의 (4가지 프리미엄 에디션)
+// 🎨 다채로운 인쇄 테마 정의
 const JOURNAL_THEMES = {
-  amber: {
-    name: '호박색 (Warm Amber)',
+  slateBlue: {
+    name: '슬레이트 인디고 블루 (추천)',
     bg: '#ffffff',
-    border: '#e7d7c1',
+    border: '#333333',
+    headerBg: '#7387A5',
+    headerText: '#ffffff',
+    titleColor: '#111827',
+    lineColor: '#111827',
+    descColor: '#374151',
+    metaTextColor: '#1f2937',
+    logoFilter: 'invert(52%) sepia(21%) saturate(718%) hue-rotate(177deg) brightness(91%) contrast(87%)',
+  },
+  indigo: {
+    name: '보라 인디고',
+    bg: '#ffffff',
+    border: '#333333',
+    headerBg: '#f3e8ff',
+    headerText: '#6b21a8',
+    titleColor: '#111827',
+    lineColor: '#111827',
+    descColor: '#7e22ce',
+    metaTextColor: '#1f2937',
+    logoFilter: 'invert(18%) sepia(85%) saturate(3000%) hue-rotate(260deg) brightness(85%) contrast(100%)', // 보라 인디고
+  },
+  amber: {
+    name: '호박색',
+    bg: '#ffffff',
+    border: '#333333',
     headerBg: '#fef3e2',
     headerText: '#9a3412',
-    titleColor: '#9a3412',
-    lineColor: '#d97706',
+    titleColor: '#111827',
+    lineColor: '#111827',
     descColor: '#c2410c',
     metaTextColor: '#27272a',
     logoFilter: 'invert(12%) sepia(85%) saturate(1600%) hue-rotate(350deg) brightness(85%) contrast(110%)', // 짙은 초콜릿 앰버
   },
   rose: {
-    name: '핑크 로즈 (Rose Pink)',
+    name: '핑크 로즈',
     bg: '#ffffff',
-    border: '#fda4af',
+    border: '#333333',
     headerBg: '#fff0f2',
     headerText: '#9f1239',
-    titleColor: '#9f1239',
-    lineColor: '#f43f5e',
+    titleColor: '#111827',
+    lineColor: '#111827',
     descColor: '#be123c',
     metaTextColor: '#1f2937',
     logoFilter: 'invert(13%) sepia(85%) saturate(4000%) hue-rotate(335deg) brightness(85%) contrast(100%)', // 짙은 로즈 핑크
   },
   sage: {
-    name: '포레스트 세이지 (Sage Green)',
+    name: '포레스트 세이지',
     bg: '#ffffff',
-    border: '#c8d3c8',
+    border: '#333333',
     headerBg: '#f0f4f0',
     headerText: '#166534',
-    titleColor: '#166534',
-    lineColor: '#22c55e',
+    titleColor: '#111827',
+    lineColor: '#111827',
     descColor: '#15803d',
     metaTextColor: '#27272a',
     logoFilter: 'invert(22%) sepia(80%) saturate(1200%) hue-rotate(110deg) brightness(80%) contrast(100%)', // 짙은 세이지 포레스트 그린
   },
   classic: {
-    name: '클래식 그레이 (Classic Gray)',
+    name: '클래식 그레이',
     bg: '#ffffff',
-    border: '#d1d5db',
+    border: '#333333',
     headerBg: '#f3f4f6',
     headerText: '#1f2937',
-    titleColor: '#1f2937',
-    lineColor: '#4b5563',
+    titleColor: '#111827',
+    lineColor: '#111827',
     descColor: '#4b5563',
     metaTextColor: '#1f2937',
     logoFilter: 'grayscale(1) brightness(0.6) contrast(1.2)', // 원본 무채색 그레이스케일
@@ -98,7 +122,8 @@ export default function HokmaJournalPrintModal({
   }, [initialMonth]);
 
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
-  const [selectedTheme, setSelectedTheme] = useState<ThemeKey>('amber'); // 기본 테마: 호박색
+  const [regularTheme, setRegularTheme] = useState<ThemeKey>('amber'); // 💡 정규수업 기본 테마 (호박색)
+  const [specialTheme, setSpecialTheme] = useState<ThemeKey>('slateBlue'); // 💡 선택과목/특강 기본 테마 (슬레이트 인디고 블루)
   const [selectedPenColor, setSelectedPenColor] = useState<string>('#1e3a8a'); // 기본 펜색상: 청색 볼펜
   const [showAllStudents, setShowAllStudents] = useState(false); // 💡 모든학생 일괄인쇄 토글 상태
 
@@ -147,8 +172,6 @@ export default function HokmaJournalPrintModal({
 
   if (!isOpen || targetStudents.length === 0) return null;
 
-  const currentThemeConfig = JOURNAL_THEMES[selectedTheme];
-
   return createPortal(
     <div className="hokma-journal-print-root fixed inset-0 z-[9999] flex flex-col bg-slate-900/95 text-white overflow-hidden">
       {/* 스타일 태그 주입 - 선택된 테마 및 펜 색상에 맞춰 CSS 변수 동적 생성 */}
@@ -156,13 +179,6 @@ export default function HokmaJournalPrintModal({
         @import url('https://fonts.googleapis.com/css2?family=Nanum+Pen+Script&display=swap');
 
         :root {
-          --theme-bg: ${currentThemeConfig.bg};
-          --theme-border: ${currentThemeConfig.border};
-          --theme-header-bg: ${currentThemeConfig.headerBg};
-          --theme-header-text: ${currentThemeConfig.headerText};
-          --theme-title-color: ${currentThemeConfig.titleColor};
-          --theme-line-color: ${currentThemeConfig.lineColor};
-          --theme-desc-color: ${currentThemeConfig.descColor};
           --theme-pen-color: ${selectedPenColor}; /* 🖊️ 선택된 펜글씨 색상 바인딩 */
         }
 
@@ -258,12 +274,12 @@ export default function HokmaJournalPrintModal({
           background: #ffffff;
         }
         .hj-sign-table th, .hj-sign-table td {
-          border: 1.5px solid var(--theme-border);
+          border: 1px solid #64748b;
           padding: 0;
         }
         .hj-sign-table th {
-          background-color: var(--theme-header-bg);
-          color: var(--theme-header-text);
+          background-color: #ffffff;
+          color: #1f2937;
           font-weight: bold;
           width: 58px;
           height: 22px;
@@ -273,8 +289,8 @@ export default function HokmaJournalPrintModal({
         }
         .hj-sign-title-cell {
           width: 24px;
-          background-color: var(--theme-header-bg);
-          color: var(--theme-header-text);
+          background-color: #ffffff;
+          color: #1f2937;
           font-weight: bold;
           font-size: 10px;
           padding: 2px !important;
@@ -291,7 +307,7 @@ export default function HokmaJournalPrintModal({
           font-size: 14px;
           font-weight: 500;
           margin-bottom: 5mm;
-          border-bottom: 2.5px solid var(--theme-line-color);
+          border-bottom: 2px solid #64748b;
           padding-bottom: 2mm;
           color: #4b5563;
         }
@@ -304,7 +320,7 @@ export default function HokmaJournalPrintModal({
           display: flex;
           align-items: center;
           gap: 6px;
-          color: var(--theme-title-color);
+          color: #1f2937;
         }
 
         /* 💡 메인 테이블 스타일 */
@@ -316,19 +332,25 @@ export default function HokmaJournalPrintModal({
           background: #ffffff;
         }
         .hj-table th, .hj-table td {
-          border: 1.5px solid var(--theme-border);
+          border: 1px solid #64748b;
           height: 38px;
           padding: 2px 4px;
           box-sizing: border-box;
         }
         .hj-table th {
-          background-color: var(--theme-header-bg);
-          color: var(--theme-header-text);
+          background-color: #ffffff;
+          color: #1f2937;
+          font-weight: bold;
+        }
+        /* ★ 첫 번째 열 헤더(수업 날짜, 출석 체크, 숙제 완성도) & 테스트 결과 표 전용 테마 헤더 ★ */
+        .hj-first-col, .hj-test-table th {
+          background-color: var(--theme-header-bg) !important;
+          color: var(--theme-header-text) !important;
           font-weight: bold;
         }
         .hj-desc-text {
           font-size: 10px;
-          color: var(--theme-desc-color);
+          color: #dc2626; /* 5.jpg 실물과 동일한 빨간색 안내 문구 */
           margin-top: 1.5mm;
           margin-bottom: 3mm;
           font-weight: bold;
@@ -355,12 +377,12 @@ export default function HokmaJournalPrintModal({
         /* 4. 한달을 돌아보며 레이아웃 */
         .hj-feedback-box {
           width: 100%;
-          border: 1.5px solid var(--theme-border);
+          border: 1px solid #64748b;
           border-collapse: collapse;
           background: #ffffff;
         }
         .hj-feedback-box td {
-          border: 1.5px solid var(--theme-border);
+          border: 1px solid #64748b;
           padding: 8px;
           font-size: 12px;
         }
@@ -373,7 +395,7 @@ export default function HokmaJournalPrintModal({
         }
         .hj-feedback-sub-title {
           font-weight: bold;
-          background-color: var(--theme-bg);
+          background-color: var(--theme-header-bg);
           color: var(--theme-header-text);
           text-align: center;
           height: 24px;
@@ -412,13 +434,30 @@ export default function HokmaJournalPrintModal({
               </select>
             </div>
 
-            {/* 🎨 디자인 테마 선택 */}
+            {/* 🎨 정규수업 테마 선택 */}
             <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
               <Palette size={14} className="text-amber-400" />
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">디자인 테마</span>
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">정규 테마</span>
               <select
-                value={selectedTheme}
-                onChange={(e) => setSelectedTheme(e.target.value as ThemeKey)}
+                value={regularTheme}
+                onChange={(e) => setRegularTheme(e.target.value as ThemeKey)}
+                className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
+              >
+                {Object.entries(JOURNAL_THEMES).map(([key, config]) => (
+                  <option key={key} value={key} className="bg-slate-800 text-white">
+                    {config.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* 💜 선택과목(특강) 테마 선택 */}
+            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
+              <Palette size={14} className="text-purple-400" />
+              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">특강 테마</span>
+              <select
+                value={specialTheme}
+                onChange={(e) => setSpecialTheme(e.target.value as ThemeKey)}
                 className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
               >
                 {Object.entries(JOURNAL_THEMES).map(([key, config]) => (
@@ -448,37 +487,37 @@ export default function HokmaJournalPrintModal({
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap">
           {/* 총 선택된 인원수 표시 */}
-          <span className="text-xs text-slate-300 font-bold bg-slate-900 border border-slate-700 px-3 py-2 rounded shrink-0">
-            총 <span className="text-amber-500 font-extrabold">{targetStudents.length}</span>명 선택됨
+          <span className="text-xs text-slate-300 font-bold bg-slate-900 border border-slate-700 px-3 py-2 rounded shrink-0 whitespace-nowrap flex items-center gap-1">
+            총 <span className="text-amber-400 font-black">{targetStudents.length}</span>명 선택
           </span>
 
           {/* 모든학생 토글 버튼 */}
           {allStudents.length > 0 && (
             <button
               onClick={() => setShowAllStudents(prev => !prev)}
-              className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-black transition-all ${
+              className={`px-3.5 py-2 rounded text-xs font-black transition-all shrink-0 whitespace-nowrap ${
                 showAllStudents 
                   ? 'bg-blue-600 border border-blue-500 text-white shadow-lg' 
                   : 'bg-slate-700 hover:bg-slate-650 border border-slate-600 text-slate-300'
               }`}
             >
-              모든학생
+              {showAllStudents ? '✓ 전체학생' : '전체학생 선택'}
             </button>
           )}
 
           <button
             onClick={handlePrint}
-            className="flex items-center gap-2 px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white text-sm font-black rounded shadow transition-all"
+            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-black rounded shadow transition-all shrink-0 whitespace-nowrap cursor-pointer"
           >
-            <Printer size={16} /> 인쇄
+            <Printer size={14} /> 인쇄하기
           </button>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors"
+            className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors shrink-0"
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -492,16 +531,21 @@ export default function HokmaJournalPrintModal({
           const startOfMonth = new Date(targetYear, targetMonth - 1, 1);
           const endOfMonth = new Date(targetYear, targetMonth, 0);
 
+          const targetCourse = student.courseName || '정규';
           const allSessionLogs = [...(student.allLogs || [])];
           if (student.todaySession) {
-            const exists = allSessionLogs.some(l => l.date === student.todaySession?.date);
+            const exists = allSessionLogs.some(l => 
+              (l.date || l.session_date) === (student.todaySession?.date || student.todaySession?.session_date) &&
+              (l.course_name || '정규') === targetCourse
+            );
             if (!exists) allSessionLogs.push(student.todaySession);
           }
 
           const monthLogs = allSessionLogs
             .filter((log) => {
               const logDate = new Date(log.date || log.session_date || '');
-              return logDate >= startOfMonth && logDate <= endOfMonth;
+              const logCourse = log.course_name || '정규';
+              return logDate >= startOfMonth && logDate <= endOfMonth && logCourse === targetCourse;
             })
             .sort((a, b) => {
               return new Date(a.date || a.session_date || '').getTime() - new Date(b.date || b.session_date || '').getTime();
@@ -568,7 +612,7 @@ export default function HokmaJournalPrintModal({
 
                 let hwScore = '';
                 if (attStatus.includes('결석')) {
-                  hwScore = '-'; // 💡 결석인 날은 숙제 기록에 0점이 적히지 않고 하이픈(-)으로 대체
+                  hwScore = '-';
                 } else if (log.hw_checked_today === true || log.hw_passed_today === true) {
                   hwScore = '10점';
                 } else if (log.todo_achievement !== undefined) {
@@ -585,11 +629,11 @@ export default function HokmaJournalPrintModal({
                 if (attStatus.includes('결석')) {
                   const reason = log.attendance_reason ? ` (${log.attendance_reason})` : '';
                   classworkText = `결석${reason}`;
-                  homeworkText = '-'; // 💡 숙제란도 하이픈(-)으로 정돈
+                  homeworkText = '-';
                 } else if (attStatus.includes('수업제외') || attStatus.includes('수업취소')) {
                   const reason = log.attendance_reason ? ` (${log.attendance_reason})` : '';
                   classworkText = `${attStatus}${reason}`;
-                  homeworkText = '-'; // 💡 숙제란도 하이픈(-)으로 정돈
+                  homeworkText = '-';
                 }
 
                 return {
@@ -620,7 +664,6 @@ export default function HokmaJournalPrintModal({
                 let scoreText = '';
                 let testName = log.test_id || '';
 
-                // 💡 [안정화] test_score가 비어있고 test_id에 콜론(:)이 포함된 인라인 채점 기록의 경우, 쪼개서 분배합니다.
                 const hasScoreField = log.test_score !== undefined && log.test_score !== null && log.test_score !== '';
                 const hasInlineScore = testName.includes(':');
 
@@ -636,12 +679,10 @@ export default function HokmaJournalPrintModal({
                   scoreText = parts.slice(1).join(':').trim();
                 }
 
-                // 💡 [안정화] 쉼표 2개(,,) 뒤에 붙은 메모 텍스트는 인쇄용 점수 컬럼에서 제외하고 순수 점수/개수만 남깁니다.
                 if (scoreText.includes(',,')) {
                   scoreText = scoreText.split(',,')[0].trim();
                 }
 
-                // 💡 [개선] 6/8/2 나 7/8/1 처럼 커트라인 개수까지 적힌 인라인 채점 결과의 경우, 마지막 커트라인(2, 1 등) 정보는 지우고 6/8, 7/8 형태로만 출력합니다.
                 if (scoreText.includes('/')) {
                   const slashParts = scoreText.split('/');
                   if (slashParts.length >= 3) {
@@ -665,18 +706,41 @@ export default function HokmaJournalPrintModal({
               };
             });
 
+            const isSpecial = student.isSpecialClass || (student.courseName && student.courseName !== '정규');
+            const currentThemeKey = isSpecial ? specialTheme : regularTheme;
+            const currentThemeConfig = JOURNAL_THEMES[currentThemeKey];
+
             const pageSuffix = totalSheets > 1 ? ` (${sheetIdx + 1}/${totalSheets})` : '';
 
             return (
               <React.Fragment key={`${student.id}-sheet-${sheetIdx}`}>
                 {/* PAGE 1: 앞면 */}
-                <div className="hokma-page">
+                <div 
+                  className="hokma-page"
+                  style={{
+                    '--theme-bg': currentThemeConfig.bg,
+                    '--theme-border': currentThemeConfig.border,
+                    '--theme-header-bg': currentThemeConfig.headerBg,
+                    '--theme-header-text': currentThemeConfig.headerText,
+                    '--theme-title-color': currentThemeConfig.titleColor,
+                    '--theme-line-color': currentThemeConfig.lineColor,
+                    '--theme-desc-color': currentThemeConfig.descColor,
+                  } as React.CSSProperties}
+                >
                   {/* 상단 콘텐츠 그룹 */}
                   <div>
                     {/* 1. 헤더 */}
                     <div className="hj-title-container">
                       <h1 className="hj-main-title">
-                        〈 나의 {targetMonth}월 {academyName} 일지{pageSuffix} 〉
+                        {(() => {
+                          const isSpecial = student.isSpecialClass || (student.courseName && student.courseName !== '정규');
+                          const courseSubject = student.courseName && student.courseName !== '정규'
+                            ? student.courseName
+                            : (student.electiveCourse?.subject || '선택과목');
+                          return isSpecial
+                            ? `〈 ${courseSubject} ${academyName} 일지${pageSuffix} 〉`
+                            : `〈 나의 ${targetMonth}월 ${academyName} 일지${pageSuffix} 〉`;
+                        })()}
                       </h1>
                       {logoSrc && (
                         <img 
@@ -724,12 +788,12 @@ export default function HokmaJournalPrintModal({
                     <table className="hj-table">
                       <thead>
                         <tr>
-                          <th style={{ width: '15.5%' }}>수업 날짜</th>
+                          <th className="hj-first-col" style={{ width: '15.5%' }}>수업 날짜</th>
                           {rows.map((r, i) => {
                             const globalNum = startIdx + i + 1;
                             return (
                               <th key={i} style={{ width: '6.5%' }} className="relative">
-                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: currentThemeConfig.headerText, display: 'block', marginBottom: '1px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1f2937', display: 'block', marginBottom: '1px' }}>
                                   {globalNum}회
                                 </span>
                                 {r.dateText && (
@@ -744,7 +808,7 @@ export default function HokmaJournalPrintModal({
                       </thead>
                       <tbody>
                         <tr>
-                          <th>출석 체크</th>
+                          <th className="hj-first-col">출석 체크</th>
                           {rows.map((r, i) => (
                             <td key={i} className="hj-handwriting" style={{ fontSize: r.attendanceSign === '▲' ? '17px' : '24px' }}>
                               {r.dateText ? r.attendanceSign : ''}
@@ -762,12 +826,12 @@ export default function HokmaJournalPrintModal({
                     <table className="hj-table">
                       <thead>
                         <tr>
-                          <th style={{ width: '15.5%' }}>수업 날짜</th>
+                          <th className="hj-first-col" style={{ width: '15.5%' }}>수업 날짜</th>
                           {rows.map((r, i) => {
                             const globalNum = startIdx + i + 1;
                             return (
                               <th key={i} style={{ width: '6.5%' }} className="relative">
-                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: currentThemeConfig.headerText, display: 'block', marginBottom: '1px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1f2937', display: 'block', marginBottom: '1px' }}>
                                   {globalNum}회
                                 </span>
                                 {r.dateText && (
@@ -782,7 +846,7 @@ export default function HokmaJournalPrintModal({
                       </thead>
                       <tbody>
                         <tr>
-                          <th>숙제 완성도</th>
+                          <th className="hj-first-col">숙제 완성도</th>
                           {rows.map((r, i) => (
                             <td key={i} className="hj-handwriting" style={{ fontSize: '20px' }}>
                               {r.dateText ? r.hwScore : ''}
@@ -800,7 +864,7 @@ export default function HokmaJournalPrintModal({
                   <div style={{ marginBottom: '2mm' }}>
                     {/* 5. 테스트 결과 */}
                     <h3 className="hj-section-title">3. 테스트 결과</h3>
-                    <table className="hj-table" style={{ fontSize: '11px' }}>
+                    <table className="hj-table hj-test-table" style={{ fontSize: '11px' }}>
                       <thead>
                         <tr>
                           <th style={{ width: '15%', height: '30px' }}>날 짜</th>
@@ -828,7 +892,18 @@ export default function HokmaJournalPrintModal({
                 </div>
 
                 {/* PAGE 2: 뒷면 */}
-                <div className="hokma-page">
+                <div 
+                  className="hokma-page"
+                  style={{
+                    '--theme-bg': currentThemeConfig.bg,
+                    '--theme-border': currentThemeConfig.border,
+                    '--theme-header-bg': currentThemeConfig.headerBg,
+                    '--theme-header-text': currentThemeConfig.headerText,
+                    '--theme-title-color': currentThemeConfig.titleColor,
+                    '--theme-line-color': currentThemeConfig.lineColor,
+                    '--theme-desc-color': currentThemeConfig.descColor,
+                  } as React.CSSProperties}
+                >
                   {/* 상단 그룹: 일일 진도 기록 표 */}
                   <div>
                     <h3 className="hj-section-title" style={{ fontSize: '18px', marginTop: '0', marginBottom: '3mm' }}>
@@ -837,9 +912,9 @@ export default function HokmaJournalPrintModal({
                     <table className="hj-table" style={{ fontSize: '11px' }}>
                       <thead>
                         <tr>
-                          <th style={{ width: '12%', height: '34px' }}>날 짜</th>
-                          <th style={{ width: '44%' }}>오늘의 진도 (교재, 페이지)</th>
-                          <th style={{ width: '44%' }}>오늘의 숙제</th>
+                          <th style={{ width: '12%', height: '34px' }} className="hj-first-col">날 짜</th>
+                          <th style={{ width: '44%' }} className="hj-first-col">오늘의 진도 (교재, 페이지)</th>
+                          <th style={{ width: '44%' }} className="hj-first-col">오늘의 숙제</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -848,7 +923,7 @@ export default function HokmaJournalPrintModal({
                           return (
                             <tr key={i}>
                               <td style={{ height: '52px' }} className="relative">
-                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: currentThemeConfig.headerText, display: 'block', marginBottom: '2px' }}>
+                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1f2937', display: 'block', marginBottom: '2px' }}>
                                   {globalNum}회
                                 </span>
                                 {r.dateText && (

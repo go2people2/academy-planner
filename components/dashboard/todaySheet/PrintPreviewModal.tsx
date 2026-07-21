@@ -174,6 +174,82 @@ export default function PrintPreviewModal({
       : `오전 ${time}:${displayMinute}`) + ' 수업';
   };
 
+  // Expand students into special and regular class entries if they have both on dayKey
+  const expandedStudents: any[] = [];
+  (students || []).forEach((s: any) => {
+    const regularHours = s.day_schedules?.[dayKey] || [];
+    const rawElective = s.book_courses?.['__elective_courses'];
+    const activeElectives: any[] = [];
+
+    if (rawElective) {
+      try {
+        let courses = [];
+        if (typeof rawElective === 'string') {
+          courses = JSON.parse(rawElective);
+        } else if (Array.isArray(rawElective)) {
+          courses = rawElective;
+        }
+        if (Array.isArray(courses)) {
+          courses.forEach((c: any) => {
+            if (c.days?.includes(dayKey) && c.schedules?.[dayKey] && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0) {
+              activeElectives.push(c);
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    activeElectives.forEach((c: any, cIdx: number) => {
+      const courseId = c.id || c.subject || `course_${cIdx}`;
+      const rawSessions = s?.book_courses?.['__elective_sessions'];
+      let electiveSession: any = {
+        attendance_status: '수업전',
+        test_id: '',
+        test_score: '',
+        classwork_text: '',
+        completed_classwork_text: '',
+        homework_text: '',
+        special_notes: '',
+        next_quiz_text: '',
+        mission: ''
+      };
+      if (rawSessions) {
+        try {
+          const sessionsMap = typeof rawSessions === 'string' ? JSON.parse(rawSessions) : rawSessions;
+          const key = `${selectedDate}_${courseId}`;
+          if (sessionsMap && sessionsMap[key]) {
+            electiveSession = { ...electiveSession, ...sessionsMap[key] };
+          }
+        } catch (e) {}
+      }
+
+      expandedStudents.push({
+        ...s,
+        id: `${s.id}_special_${courseId}_${cIdx}`,
+        originalId: s.id,
+        isSpecialClass: true,
+        day_schedules: {
+          ...s.day_schedules,
+          [dayKey]: c.schedules[dayKey]
+        },
+        electiveCourse: c,
+        todaySession: electiveSession
+      });
+    });
+
+    if (regularHours.length > 0 || activeElectives.length === 0) {
+      expandedStudents.push({
+        ...s,
+        originalId: s.id,
+        isSpecialClass: false,
+        day_schedules: {
+          ...s.day_schedules,
+          [dayKey]: regularHours
+        }
+      });
+    }
+  });
+
   // 1. Group students by start time
   interface TimeGroup {
     time: number;
@@ -182,7 +258,7 @@ export default function PrintPreviewModal({
   }
 
   const groups: TimeGroup[] = [];
-  students.forEach((s: any) => {
+  expandedStudents.forEach((s: any) => {
     const time = getStartTime(s);
     const label = getTimeLabel(time);
     let group = groups.find(g => g.time === time);
@@ -197,7 +273,6 @@ export default function PrintPreviewModal({
   groups.sort((a, b) => a.time - b.time);
 
   // 2. Distribute groups into pages using smart logic (MAX_ROWS_PER_PAGE = 20)
-  // Threshold: if a group has < 3 students, it is merged with the previous page to save paper
   const MAX_ROWS_PER_PAGE = 20;
   const MIN_STUDENTS_FOR_NEW_PAGE = 3;
   const pages: any[][] = [];
@@ -215,15 +290,11 @@ export default function PrintPreviewModal({
     const currentLength = currentPage.length;
     const willExceedLimit = currentLength + groupRows.length > MAX_ROWS_PER_PAGE;
 
-    // Split page if:
-    // 1) Current page is not empty
-    // 2) Group is NOT a small group (>= 3 students) OR merging would exceed page limit (20 rows)
     if (currentLength > 0 && (!isSmallGroup || willExceedLimit)) {
       pages.push(currentPage);
       currentPage = [];
     }
 
-    // Distribute group rows (splitting within group if group itself exceeds MAX_ROWS_PER_PAGE)
     let remainingRows = groupRows;
     while (remainingRows.length > 0) {
       const spaceLeft = MAX_ROWS_PER_PAGE - currentPage.length;
@@ -246,7 +317,6 @@ export default function PrintPreviewModal({
     pages.push(currentPage);
   }
 
-  // Fallback for empty list
   if (pages.length === 0) {
     pages.push([]);
   }
@@ -268,7 +338,6 @@ export default function PrintPreviewModal({
         </div>
 
         <div className="flex items-center gap-3">
-          {/* 🎨 테마 선택 */}
           <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
             <Palette size={13} className="text-indigo-400" />
             <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">테마</span>
@@ -393,7 +462,12 @@ export default function PrintPreviewModal({
                               cellContent = (
                                 <div className="flex flex-col gap-0.5 mt-0.5 relative pl-3">
                                   <span className="absolute -left-0.5 top-0 text-[7.5px] text-gray-400 font-bold tracking-tighter">{printIndex}.</span>
-                                  <span className="font-medium text-[9.5px] text-gray-900 leading-none tracking-tight">{s.name}-{s.teacher_initial || '?'}-{classDays}</span>
+                                  <span className="font-medium text-[9.5px] text-gray-900 leading-none tracking-tight">{(() => {
+                                    if (!s.isSpecialClass) return '';
+                                    const subj = s.electiveCourse?.subject?.trim();
+                                    if (!subj || subj === '특강' || subj === '방학특강') return '특강-';
+                                    return `${subj}-`;
+                                  })()}{s.name}-{s.teacher_initial || '?'}-{classDays}</span>
                                   <span className="text-[7px] text-gray-500 font-bold uppercase tracking-tighter leading-none">{s.school} · {s.grade}</span>
                                 </div>
                               );

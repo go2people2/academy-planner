@@ -593,7 +593,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                     {/* 1열 고정 학생명 */}
                     <td className="py-1 px-1.5 border-r border-white/5 font-black text-gray-200 sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.2)]">
                       <div className="leading-none py-1">
-                        <span className="truncate max-w-[60px] text-[11px]" title={student.name}>{student.name}</span>
+                        <span className="truncate max-w-[80px] text-[11px]" title={student.name}>{student.isSpecialClass ? `${student.electiveCourse?.subject?.trim() || '특강'}-` : ''}{student.name}</span>
                       </div>
                     </td>
 

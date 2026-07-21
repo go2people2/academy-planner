@@ -67,7 +67,7 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
   const tr = parseTestResult(l.test_result, l.test_status);
 
   return {
-    id: l.id, date: l.session_date, status: (l.status || 'none') as StudentStatus,
+    id: l.id, date: l.session_date, course_name: l.course_name || '정규', status: (l.status || 'none') as StudentStatus,
     attendance_status: normalizeAttendanceStatus(l.attendance_status), 
     special_notes: translateBookCodes(l.special_notes || '', textbooks),
     classwork_text: translateBookCodes(l.classwork_text || '', textbooks), classwork_json: l.classwork_json || [],
@@ -227,8 +227,16 @@ export const calculateStudentHistory = (logs: SessionLog[], targetDate: string):
 };
 
 // 9. 오늘 수업 계획의 모태가 될 과거 세션(베이스 세션) 선택
-export const selectBaseSession = (logs: SessionLog[], targetDate: string, holidays: any[]): SessionLog | undefined => {
-  const pastLogs = logs.filter(l => l.date < targetDate).sort((a, b) => b.date.localeCompare(a.date));
+// 💡 courseName 파라미터: 정규/특강 로그를 구분하여 이월 기준을 혼용하지 않도록 방지
+export const selectBaseSession = (logs: SessionLog[], targetDate: string, holidays: any[], courseName = '정규'): SessionLog | undefined => {
+  const pastLogs = logs
+    .filter(l => l.date < targetDate)
+    .filter(l =>
+      courseName === '정규'
+        ? (!l.course_name || l.course_name === '정규')  // 레거시 로그(course_name 없음) 포함
+        : l.course_name === courseName
+    )
+    .sort((a, b) => b.date.localeCompare(a.date));
   return pastLogs.find(l => {
     const isLogHoliday = (holidays || []).some((h: any) => h.date === l.date);
     const isMakeup = l.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
@@ -262,8 +270,8 @@ export const getEnrichedStudentData = (
   const logs = (logsData || []).map(l => buildSessionLog(l, availableTextbooks));
   
   const history = calculateStudentHistory(logs, selectedDate);
-  const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays);
-  const todayLog = logs.find(l => String(l.date) === String(selectedDate));
+  const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays, '정규');
+  const todayLog = logs.find(l => String(l.date) === String(selectedDate) && (l.course_name === '정규' || !l.course_name));
   
   let electiveDays: string[] = [];
   const rawElective = s.book_courses?.['__elective_courses'];

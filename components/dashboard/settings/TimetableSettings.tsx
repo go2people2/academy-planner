@@ -64,6 +64,11 @@ const convertTimeToSlots = (startVal: any, endVal: any): string[] => {
     }
   });
 
+  // 💡 13시(1시) 시작 특강 수강 시 15시(3시)/16시(4시) 하원 지정에 맞춰 1~2, 2~3, 3~4 3개 슬롯이 모두 확보되도록 유연 보정
+  if (sH === 13 && (eH === 15 || eH === 16 || eH === 1530)) {
+    if (!slots.includes('3~4')) slots.push('3~4');
+  }
+
   // 💡 [초강력 방어막] 범위 파싱 어긋남으로 인해 단 하나의 슬롯도 확보하지 못한 경우, 등원 시작 시각(sH)을 기준으로 1교시를 강제 배치
   if (slots.length === 0) {
     if (sH === 13) slots.push('1~2');
@@ -102,17 +107,59 @@ const buildAutoGrid = (targetStudents: any[], activeSlots: string[]): Record<str
       }
 
       const rawVal = sched[day] || sched[`${day}요일`] || null;
-      if (!rawVal) return;
-
       let slots: string[] = [];
-      if (Array.isArray(rawVal)) {
-        if (rawVal.length > 0 && typeof rawVal[0] === 'number') {
-          slots = convertTimeToSlots(rawVal[0], rawVal[1] || rawVal[0]);
-        } else {
-          slots = rawVal.map(String).filter((s: string) => activeSlots.includes(s));
+      if (rawVal) {
+        if (Array.isArray(rawVal)) {
+          if (rawVal.length > 0 && typeof rawVal[0] === 'number') {
+            slots = convertTimeToSlots(rawVal[0], rawVal[1] || rawVal[0]);
+          } else {
+            slots = rawVal.map(String).filter((s: string) => activeSlots.includes(s));
+          }
         }
       }
+
+      // 💡 방학 특강(선택과목) 스케줄 파싱 및 시간표 슬롯 추가
+      const rawElective = student.book_courses?.['__elective_courses'] ?? student.book_courses?.["'__elective_courses'"];
+      if (rawElective) {
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (Array.isArray(courses)) {
+            courses.forEach((c: any) => {
+              if (!c) return;
+              const days = c.days || c.class_days || [];
+              const isTargetDay = days.some((d: string) => d === day || d === `${day}요일` || d.startsWith(day));
+              if (isTargetDay) {
+                let eSlots: string[] = [];
+                if (c.startTime && c.endTime) {
+                  eSlots = convertTimeToSlots(c.startTime, c.endTime);
+                } else if (c.slots && Array.isArray(c.slots)) {
+                  eSlots = c.slots.map(String);
+                } else {
+                  // 특강 기본 시간대 보정 (1시~4시 -> 1~2, 2~3, 3~4)
+                  eSlots = ['1~2', '2~3', '3~4'];
+                }
+                // 💡 1시(13시) 시작 특강의 경우 3~4교시(3시~4시) 누락 방지 보정
+                const sStr = String(c.startTime || '').replace(':', '');
+                if (sStr === '13' || sStr === '1' || sStr === '1300' || sStr === '0100') {
+                  if (!eSlots.includes('3~4')) eSlots.push('3~4');
+                }
+                eSlots.forEach(s => {
+                  if (activeSlots.includes(s) && !slots.includes(s)) {
+                    slots.push(s);
+                  }
+                });
+              }
+            });
+          }
+        } catch (e) {
+          console.error('Failed to parse elective courses in timetable', e);
+        }
+      }
+
       if (slots.length === 0) return;
+
+      // 교시 순서대로 정렬 (1~2, 2~3, 3~4, 4~5...)
+      slots.sort((a, b) => ALL_SLOTS.indexOf(a) - ALL_SLOTS.indexOf(b));
 
       const startSlotIdx = activeSlots.indexOf(slots[0]);
       studentsOnDay.push({
@@ -323,6 +370,41 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
     });
     return rows;
   }, [gridData, activeSlots]);
+
+  // 💡 요일별/행별 정확한 학생 순번(번호) 매핑 연산
+  // - 상단 5타임 그룹: 학생이 배치된 행 순서대로 1, 2, 3...
+  // - 하단 7타임 그룹: 7시 타임 시작 행부터 첫 학생부터 다시 1, 2, 3...
+  const studentDisplayNumbers = useMemo(() => {
+    const numbers: Record<string, string> = {}; // 키: "day-rowNum"
+
+    DAYS.forEach(day => {
+      const lowerStartRow = lowerStartRows[day] || 99;
+      let upperCount = 0;
+      let lowerCount = 0;
+
+      for (let r = 1; r <= ROW_COUNT; r++) {
+        // 해당 요일의 이 행에 학생이 배치되어 있는지 확인
+        const hasStudent = activeSlots.some(slot => {
+          const cellKey = `${day}-${slot}-${r}`;
+          return gridData[cellKey]?.student_id;
+        });
+
+        if (hasStudent) {
+          if (r < lowerStartRow) {
+            upperCount++;
+            numbers[`${day}-${r}`] = String(upperCount);
+          } else {
+            lowerCount++;
+            numbers[`${day}-${r}`] = String(lowerCount);
+          }
+        } else {
+          numbers[`${day}-${r}`] = '';
+        }
+      }
+    });
+
+    return numbers;
+  }, [gridData, lowerStartRows, activeSlots]);
 
   // 3. 시간표 데이터 불러오기
   const fetchTimetable = async () => {
@@ -970,25 +1052,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
 
                               {/* 3. 맨 오른쪽 번호 (7시 타임 시작 시 1부터 재카운트) */}
                               {(() => {
-                                const lowerStartRow = lowerStartRows[day];
-                                let displayNum = '';
-
-                                // 💡 [안정화] 해당 요일의 이 행에 배치된 학생이 단 한 명이라도 있는 경우에만 번호를 출력합니다.
-                                const hasStudentInRow = activeSlots.some(slot => {
-                                  const cellKey = `${day}-${slot}-${rowNum}`;
-                                  return gridData[cellKey]?.student_id;
-                                });
-
-                                if (hasStudentInRow) {
-                                  if (rowNum === lowerStartRow - 1) {
-                                    displayNum = ''; // 빈 칸은 번호 없음
-                                  } else if (rowNum >= lowerStartRow) {
-                                    displayNum = String(rowNum - lowerStartRow + 1); // 7시 타임 1번부터 시작
-                                  } else {
-                                    displayNum = String(rowNum); // 4시/5시 타임
-                                  }
-                                }
-
+                                const displayNum = studentDisplayNumbers[`${day}-${rowNum}`] || '';
                                 return (
                                   <td className={`py-0 font-extrabold border-l border-b text-[10px] text-center w-[24px] select-none ${
                                     isLight ? 'bg-gray-50/50 text-gray-800 border-gray-300' : 'bg-black/20 text-zinc-300 border-zinc-800/70'

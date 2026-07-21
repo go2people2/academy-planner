@@ -78,6 +78,7 @@ export default function StudentPortal() {
     return new Date(now.getTime() - offset).toISOString().split('T')[0];
   });
   const [validClassDates, setValidClassDates] = useState<{ date: string; label: string }[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<string>('정규');
 
   const matchedExam = useMemo(() => {
     if (!student || !examSchedules.length) return null;
@@ -192,8 +193,9 @@ export default function StudentPortal() {
       .sort((a, b) => a.session_date.localeCompare(b.session_date));
   }, [allLogs]);
 
-  const fetchAllStudentData = useCallback(async (studentId: string) => {
+  const fetchAllStudentData = useCallback(async (studentId: string, courseParam?: string) => {
     setIsLoading(true);
+    const activeCourse = courseParam || selectedCourse;
     try {
       const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
       const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
@@ -229,7 +231,6 @@ export default function StudentPortal() {
           .limit(5);
         if (suggData) setMySuggestions(suggData);
 
-        // 💡 [추가] 오답노트용 지점 및 학생 정보 조회 (이름 및 슬러그 기준 백그라운드 매핑)
         try {
           const { data: waAcData } = await supabase
             .from('academies')
@@ -242,7 +243,6 @@ export default function StudentPortal() {
             const themeObj = WRONG_ANSWER_THEMES[waAcData.theme] || WRONG_ANSWER_THEMES.default;
             setWrongAnswerTheme(themeObj);
 
-            // 💡 [동명이인 방지] 플래너 교사 이름 검색 -> 오답노트 교사 ID 조회 -> 3중 매핑
             let waTeacherId = null;
             const amsTeacher = currentTeachers?.find((t: any) => t.id === stData.teacher_id);
             if (amsTeacher?.name) {
@@ -263,7 +263,6 @@ export default function StudentPortal() {
               .eq('name', stData.name)
               .eq('academy_id', waAcData.id);
 
-            // 오답노트 교사 ID를 찾은 경우 필터 추가 (동명이인 혼선 방지)
             if (waTeacherId) {
               query = query.eq('teacher_id', waTeacherId);
             }
@@ -282,7 +281,6 @@ export default function StudentPortal() {
       const textbooks: TextbookOption[] = tbRes.ok ? await tbRes.json() : [];
       if (tbRes.ok) setAvailableTextbooks(textbooks);
 
-      // 💡 [추가] 교재 코드를 실제 이름으로 변환하는 내부 유틸리티
       const translateBookCodes = (text: string) => {
         if (!text || !textbooks || textbooks.length === 0) return text;
         let result = text;
@@ -290,7 +288,7 @@ export default function StudentPortal() {
         sortedMaster.forEach(m => {
           if (m.bookcode && m.title) {
             const escapedCode = m.bookcode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(escapedCode, 'gi'); // 💡 'gi' 플래그 적용
+            const regex = new RegExp(escapedCode, 'gi');
             result = result.replace(regex, m.title);
           }
         });
@@ -302,9 +300,11 @@ export default function StudentPortal() {
       if (logs) {
         setAllLogs(logs);
 
-        // 💡 유효 수업일 목록 실시간 계산
+        // 💡 선택된 과목(정규/특강) 로그만 분리 필터링
+        const courseLogs = logs.filter(l => (l.course_name || '정규') === activeCourse);
+
         const holidays = acData?.operation_settings?.holidays || [];
-        const calculatedDates = getValidClassDates(stData, logs, holidays);
+        const calculatedDates = getValidClassDates(stData, courseLogs, holidays);
         setValidClassDates(calculatedDates);
 
         // 💡 오늘 날짜 문자열 구하기
@@ -340,9 +340,9 @@ export default function StudentPortal() {
         }
 
         const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(activeDate).getDay()];
-        const todayLog = logs.find(l => l.session_date === activeDate);
+        const todayLog = courseLogs.find(l => l.session_date === activeDate);
         const isTodayClassDay = stData.class_days?.includes(dayName) || todayLog?.attendance_status?.startsWith('보강');
-        const pastLogs = logs.filter(l => l.session_date < selectedDate).sort((a, b) => b.session_date.localeCompare(a.session_date));
+        const pastLogs = courseLogs.filter(l => l.session_date < selectedDate).sort((a, b) => b.session_date.localeCompare(a.session_date));
         const lastValidSession = pastLogs.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || pastLogs[0];
         
         let autoTodayTest = "";
@@ -452,7 +452,9 @@ export default function StudentPortal() {
     if (!studentJson) { router.push(`/${slug}/login`); return; }
     const parsedStudent = JSON.parse(studentJson);
     setStudent(parsedStudent);
-    fetchAllStudentData(parsedStudent.id);
+    const courseName = parsedStudent._selectedCourse || '정규';
+    setSelectedCourse(courseName);
+    fetchAllStudentData(parsedStudent.id, courseName);
   }, [slug, router, fetchAllStudentData]);
 
   // 💡 실시간 데이터 동기화 (타이머 중단 등 반영)
@@ -502,12 +504,11 @@ export default function StudentPortal() {
     setIsSaving(true);
     try {
       let finalValue = value;
-      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, [dbField]: finalValue };
+      const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, course_name: selectedCourse, [dbField]: finalValue };
       
-      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -532,13 +533,13 @@ export default function StudentPortal() {
         student_id: student.id, 
         session_date: selectedDate, 
         academy_id: academy.id, 
+        course_name: selectedCourse,
         test_result: JSON.stringify(newResult)
       };
       
-      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -626,14 +627,14 @@ export default function StudentPortal() {
         student_id: student.id, 
         session_date: selectedDate, 
         academy_id: academy.id, 
+        course_name: selectedCourse,
         test_result: JSON.stringify(newResult),
         completed_classwork_text: currentClasswork
       };
       
-      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -669,14 +670,14 @@ export default function StudentPortal() {
         student_id: student.id, 
         session_date: selectedDate, 
         academy_id: academy.id, 
+        course_name: selectedCourse,
         approval_status: status,
         completed_classwork_text: localCompletedClasswork || '',
         homework_text: localHomework || ''
       };
-      // 💡 [안정화] insert/update 분기 대신 student_id와 session_date 기준의 upsert를 사용하여 과거 날짜 제출 시 중복 제약 조건 에러를 예방합니다.
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -712,6 +713,7 @@ export default function StudentPortal() {
         student_id: student.id, 
         session_date: selectedDate, 
         academy_id: academy.id, 
+        course_name: selectedCourse,
         test_result: JSON.stringify(currentResult) 
       };
       let savedLog: any = null;
@@ -720,7 +722,7 @@ export default function StudentPortal() {
         if (error) throw error;
         if (data && data[0]) savedLog = data[0];
       } else { 
-        const { data, error } = await supabase.from('ams_session_logs').insert([updateData]).select(); 
+        const { data, error } = await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name' }).select(); 
         if (error) throw error;
         if (data && data[0]) savedLog = data[0];
       }
@@ -749,10 +751,10 @@ export default function StudentPortal() {
     setIsSaving(true);
     try {
       const { answers, calculatedScore, testId } = result;
-      const updateData: any = { student_id: student.id, session_date: selectedDate, test_status: testId || todaySession?.test_status };
+      const updateData: any = { student_id: student.id, session_date: selectedDate, course_name: selectedCourse, test_status: testId || todaySession?.test_status };
       if (calculatedScore !== undefined) updateData.test_score = calculatedScore;
       if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
-      else { await supabase.from('ams_session_logs').insert([updateData]); }
+      else { await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name' }); }
       alert('테스트 답안이 제출되었습니다.'); setIsTestModalOpen(false); fetchAllStudentData(student.id);
     } catch (e) { console.error(e); alert('제출 중 오류 발생'); } finally { setIsSaving(false); }
   };
@@ -854,7 +856,7 @@ export default function StudentPortal() {
         student={student} teachers={teachers} selectedDate={selectedDate} 
         setSelectedDate={setSelectedDate} matchedExam={matchedExam} 
         getRemainingClasses={getRemainingClasses} handleLogout={handleLogout} getInitial={getInitial}
-        academy={academy}
+        academy={academy} selectedCourse={selectedCourse} setSelectedCourse={setSelectedCourse}
       />
 
       {/* 💡 데스크톱 전용 상단 탭 바 (오답노트 전환용) */}

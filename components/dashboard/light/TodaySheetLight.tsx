@@ -28,6 +28,7 @@ import { useTodaySheetShortcuts } from '../hooks/useTodaySheetShortcuts';
 import { useCoopCollaboration } from '@/hooks/useCoopCollaboration';
 import { useTodaySheetExport } from '@/hooks/useTodaySheetExport';
 import { useTodaySheetImport } from '@/hooks/useTodaySheetImport';
+import { selectBaseSession, determineTodaySession } from '@/lib/studentDataEnricher';
 
 interface ColumnConfig {
   id: string;
@@ -818,6 +819,103 @@ export default function TodaySheet({
     };
 
     const dayKey = getDayOfWeek(selectedDate);
+
+    // 💡 선택과목(방학특강, 확통 등) 및 정규 수업 분리 (여러 선택과목 및 정규 수업 개별 행으로 확장)
+    const expandedResult: any[] = [];
+    result.forEach((s: any) => {
+      const regularHours = s.day_schedules?.[dayKey] || [];
+      const rawElective = s.book_courses?.['__elective_courses'];
+      const activeElectives: any[] = [];
+
+      if (rawElective) {
+        try {
+          let courses = [];
+          if (typeof rawElective === 'string') {
+            courses = JSON.parse(rawElective);
+          } else if (Array.isArray(rawElective)) {
+            courses = rawElective;
+          }
+          if (Array.isArray(courses)) {
+            courses.forEach((c: any) => {
+              const hasDay = c.days && (
+                Array.isArray(c.days) 
+                  ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
+                  : (typeof c.days === 'string' && c.days.includes(dayKey))
+              );
+              if (hasDay) {
+                activeElectives.push(c);
+              }
+            });
+          }
+        } catch (e) {}
+      }
+
+      // 1. 선택과목 각각 독립 행으로 추가
+      activeElectives.forEach((c: any, cIdx: number) => {
+        const courseSubject = c.subject?.trim() || '특강';
+        const electiveLog = (s.allLogs || []).find((l: any) => 
+          (l.date || l.session_date) === selectedDate && l.course_name === courseSubject
+        );
+        const specialHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
+          ? c.schedules[dayKey]
+          : [1300, 1600];
+
+        // 💡 [독립 세션 보장] 특강 전용 지난 세션 로그(lastSession) 및 baseSession 추출
+        const pastElectiveLogs = (s.allLogs || [])
+          .filter((l: any) => (l.date || l.session_date) < selectedDate && l.course_name === courseSubject && (l.homework_text || l.completed_classwork_text))
+          .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
+
+        const electiveLastSession = pastElectiveLogs.length > 0 ? pastElectiveLogs[0] : undefined;
+        const electiveBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, courseSubject);
+        const electiveTodaySession = determineTodaySession(s, electiveLog, electiveBaseSession, true, selectedDate, academyInfo);
+
+        expandedResult.push({
+          ...s,
+          id: `${s.id}_special_${c.id || 'course'}_${cIdx}`,
+          originalId: s.id,
+          isSpecialClass: true,
+          courseName: courseSubject,
+          day_schedules: {
+            ...s.day_schedules,
+            [dayKey]: specialHours
+          },
+          electiveCourse: {
+            ...c,
+            subject: courseSubject
+          },
+          lastSession: electiveLastSession,
+          todaySession: electiveTodaySession
+        });
+      });
+
+      // 2. 정규 수업 행 추가 (정규 스케줄이 있거나 선택과목이 아예 없는 경우)
+      if (regularHours.length > 0 || activeElectives.length === 0) {
+        const regularLog = (s.allLogs || []).find((l: any) => 
+          (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
+        );
+
+        const pastRegularLogs = (s.allLogs || [])
+          .filter((l: any) => (l.date || l.session_date) < selectedDate && (l.course_name === '정규' || !l.course_name) && (l.homework_text || l.completed_classwork_text))
+          .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
+
+        const regularLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
+
+        expandedResult.push({
+          ...s,
+          originalId: s.id,
+          isSpecialClass: false,
+          courseName: '정규',
+          day_schedules: {
+            ...s.day_schedules,
+            [dayKey]: regularHours
+          },
+          lastSession: regularLastSession,
+          todaySession: regularLog || s.todaySession
+        });
+      }
+    });
+    result = expandedResult;
+
     const getStartTime = (st: any) => {
       if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
         const mVal = st.todaySession.moved_to_hour;
@@ -835,38 +933,7 @@ export default function TodaySheet({
         }
       }
 
-      // 오늘 요일에 해당하는 선택과목/방학특강 스케줄 우선 적용
-      let electiveHour = 999;
-      const rawElective = st.book_courses?.['__elective_courses'];
-      if (rawElective) {
-        try {
-          let courses = [];
-          if (typeof rawElective === 'string') {
-            courses = JSON.parse(rawElective);
-          } else if (Array.isArray(rawElective)) {
-            courses = rawElective;
-          }
-          if (Array.isArray(courses)) {
-            for (const c of courses) {
-              if (c.days?.includes(dayKey) && c.schedules?.[dayKey]) {
-                const sched = c.schedules[dayKey];
-                if (Array.isArray(sched) && sched.length > 0) {
-                  const firstVal = sched[0];
-                  let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-                  if (h < 10) h += 12;
-                  electiveHour = h;
-                  break;
-                }
-              }
-            }
-          }
-        } catch (e) {
-          // Noop
-        }
-      }
-      if (electiveHour !== 999) return electiveHour;
-
-      // 정규 스케줄 적용
+      // 스케줄 적용 (특강/정규 개별 적용)
       const hours = st.day_schedules?.[dayKey] || [];
       if (hours.length > 0) {
         const firstVal = hours[0];
@@ -895,7 +962,7 @@ export default function TodaySheet({
         }
       } else if (sortMode === 'school') {
         const schoolCmp = (a.school || '').localeCompare(b.school || '', 'ko');
-        if (schoolCmp !== 0) return sortDirection === 'asc' ? schoolCmp : -schoolCmp;
+        if (schoolCmp !== 0) return sortDirection === 'asc' ? schoolCmp : -sortDirection;
         const gradeA = getGradeWeight(a.grade);
         const gradeB = getGradeWeight(b.grade);
         if (gradeA !== gradeB) {
@@ -924,9 +991,12 @@ export default function TodaySheet({
   }, [selectedRange, filteredStudents, activeColumns]);
 
   const handleSave = useCallback(async (studentId: string, newData: any) => {
-    // 💡 단일 셀 변경 내용도 Undo 히스토리에 추가
-    const student = students.find((s: any) => s.id === studentId);
-    const session = student?.todaySession || {};
+    const rowStudent = filteredStudents.find((s: any) => s.id === studentId);
+    const realId = rowStudent?.originalId || studentId.replace(/_special.*$/, '');
+    const courseName = rowStudent?.courseName || '정규';
+
+    const student = students.find((s: any) => s.id === realId);
+    const session = rowStudent?.todaySession || student?.todaySession || {};
     
     const prevData: any = {};
     const filteredNewData: any = {};
@@ -948,7 +1018,46 @@ export default function TodaySheet({
       prevData
     }]);
 
-    const success = await onSave(studentId, newData);
+    // 💡 [낙관적 업데이트] 상태 즉시 변경 (정규 세션과 특강 세션을 엄격히 구분하여 대상 행만 업데이트)
+    setStudents((prev: any[]) => prev.map(s => {
+      const isTargetStudent = s.id === realId || s.id === studentId || s.originalId === realId;
+      const isTargetCourse = s.courseName ? (s.courseName === courseName || (courseName === '정규' && s.courseName === '정규')) : (courseName === '정규');
+
+      if (isTargetStudent && isTargetCourse) {
+        const hasMission = 'mission' in newData;
+
+        let updatedAllLogs = s.allLogs || [];
+        const logIdx = updatedAllLogs.findIndex((l: any) =>
+          (l.date || l.session_date) === selectedDate &&
+          (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규')))
+        );
+
+        const newSess = {
+          ...(s.todaySession || {}),
+          ...newData,
+          course_name: courseName
+        };
+
+        if (logIdx !== -1) {
+          updatedAllLogs = updatedAllLogs.map((l: any, i: number) => i === logIdx ? { ...l, ...newSess } : l);
+        } else {
+          updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
+        }
+
+        return {
+          ...s,
+          ...(hasMission ? { recent_mission: newData.mission } : {}),
+          todaySession: newSess,
+          allLogs: updatedAllLogs
+        };
+      }
+      return s;
+    }));
+
+    const savePayload = { ...newData, course_name: courseName };
+    delete savePayload.mission;
+
+    const success = await onSave(realId, savePayload);
     if (success && sendSaveEvent) {
       const invMap: any = { 
         'test_status': 'test_id', 
@@ -967,43 +1076,28 @@ export default function TodaySheet({
       });
     }
     return success;
-  }, [onSave, students, pushToUndoStack, sendSaveEvent]);
+  }, [onSave, students, filteredStudents, pushToUndoStack, sendSaveEvent]);
 
   const handleBatchSave = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[]) => {
     if (updates.length === 0) return;
 
-    // 💡 Undo 스택에 저장
     pushToUndoStack(updates);
-    
-    // 💡 [낙관적 업데이트] DB 저장 전에 로컬 상태를 즉시 업데이트하여 UI 반응성 확보
-    setStudents((prev: any[]) => prev.map(s => {
-      const update = updates.find(u => u.studentId === s.id);
-      if (update) {
-        const hasMission = 'mission' in update.newData;
-        return {
-          ...s,
-          ...(hasMission ? { recent_mission: update.newData.mission } : {}),
-          todaySession: {
-            ...(s.todaySession || {}),
-            ...update.newData
-          }
-        };
-      }
-      return s;
-    }));
-    
-    // 💡 [수정] mission 필드와 일반 세션 로그 필드를 분기 처리하여 알맞은 API로 전송
+
     await Promise.all(updates.map(async (u) => {
+      const rowStudent = filteredStudents.find((s: any) => s.id === u.studentId);
+      const realId = rowStudent?.originalId || u.studentId.replace(/_special.*$/, '');
+      const courseName = rowStudent?.courseName || '정규';
+
       if ('mission' in u.newData && onUpdateStudentInfo) {
-        await onUpdateStudentInfo(u.studentId, 'recent_mission', u.newData.mission);
+        await onUpdateStudentInfo(realId, 'recent_mission', u.newData.mission);
         if (sendSaveEvent) sendSaveEvent(u.studentId, 'mission', u.newData.mission);
       }
       
-      const savePayload = { ...u.newData };
+      const savePayload = { ...u.newData, course_name: courseName };
       delete savePayload.mission;
       
-      if (Object.keys(savePayload).length > 0) {
-        const success = await onSave(u.studentId, savePayload);
+      if (Object.keys(savePayload).length > 1) {
+        const success = await onSave(realId, savePayload);
         if (success && sendSaveEvent) {
           const invMap: any = { 
             'test_status': 'test_id', 
@@ -1017,13 +1111,14 @@ export default function TodaySheet({
             'management_notes': 'management_notes' 
           };
           Object.keys(savePayload).forEach(key => {
+            if (key === 'course_name') return;
             const colId = invMap[key] || key;
             sendSaveEvent(u.studentId, colId, savePayload[key]);
           });
         }
       }
     }));
-  }, [onSave, onUpdateStudentInfo, setStudents, pushToUndoStack, sendSaveEvent]);
+  }, [onSave, onUpdateStudentInfo, filteredStudents, pushToUndoStack, sendSaveEvent]);
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     if (!activeCell) return;
@@ -1122,8 +1217,9 @@ export default function TodaySheet({
   }, [activeCell, editingCell, activeColumns, selectedIds, students, handleBatchSave]);
 
   // 📝 [리팩토링] 엑셀 및 ACA2000 가공/다운로드 전용 분리 훅 호출
+  // 💡 filteredStudents: 정규/특강 행이 이미 분리된 배열 → 아카2000 export 시 각각 별도 행 출력
   const { handleExport } = useTodaySheetExport({
-    students,
+    students: filteredStudents,
     teachers,
     currentUser,
     academyInfo,
@@ -1769,36 +1865,7 @@ export default function TodaySheet({
                     }
                   }
 
-                  // 오늘 요일에 해당하는 선택과목/방학특강 스케줄 우선 적용
-                  let electiveHour = 999;
-                  const rawElective = st.book_courses?.['__elective_courses'];
-                  if (rawElective) {
-                    try {
-                      let courses = [];
-                      if (typeof rawElective === 'string') {
-                        courses = JSON.parse(rawElective);
-                      } else if (Array.isArray(rawElective)) {
-                        courses = rawElective;
-                      }
-                      if (Array.isArray(courses)) {
-                        for (const c of courses) {
-                          if (c.days?.includes(dayKey) && c.schedules?.[dayKey]) {
-                            const sched = c.schedules[dayKey];
-                            if (Array.isArray(sched) && sched.length > 0) {
-                              const firstVal = sched[0];
-                              let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-                              if (h < 10) h += 12;
-                              electiveHour = h;
-                              break;
-                            }
-                          }
-                        }
-                      }
-                    } catch (e) {}
-                  }
-                  if (electiveHour !== 999) return electiveHour;
-
-                  // 정규 스케줄 적용
+                  // 현재 행 스케줄 적용 (특강/정규 개별 적용)
                   const hours = st.day_schedules?.[dayKey] || [];
                   if (hours.length > 0) {
                     const firstVal = hours[0];

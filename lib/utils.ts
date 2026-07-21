@@ -35,6 +35,22 @@ export function getInitial(name: string): string {
 }
 
 /**
+ * 💡 수업 구분에 따른 이름 접두어 반환
+ * 예: 정규수업 -> ''
+ *     선택과목(확통) -> '확통-'
+ *     선택과목(미적분2) -> '미적분2-'
+ *     선택과목(방학특강/특강/미지정) -> '특강-'
+ */
+export function getCoursePrefix(isSpecialClass?: boolean, electiveCourse?: any): string {
+  if (!isSpecialClass) return '';
+  const subj = electiveCourse?.subject?.trim();
+  if (!subj || subj === '특강' || subj === '방학특강') {
+    return '특강-';
+  }
+  return `${subj}-`;
+}
+
+/**
  * 💡 인라인 테스트 파싱 함수
  * "- [제목] : [점수] , [메모]" 형식을 파싱합니다.
  * 쉼표 이후의 모든 텍스트(줄바꿈 포함)는 다음 하이픈('-')이 나타나기 전까지 메모로 간주합니다.

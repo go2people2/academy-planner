@@ -543,7 +543,7 @@ export default function ChecklistPrintPreviewModal({
                       <tr key={student.id} className="border-b border-black">
                         {/* 학생 이름 */}
                         <td className="py-2 px-2.5 border-r border-black font-bold text-left text-[11px]">
-                          {student.name}
+                          {student.isSpecialClass ? `${student.electiveCourse?.subject?.trim() || '특강'}-` : ''}{student.name}
                         </td>
                         {/* 주제별 완료/메모 */}
                         {displayTopics.map(t => {
