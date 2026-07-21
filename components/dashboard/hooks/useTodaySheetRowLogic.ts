@@ -104,8 +104,8 @@ export function useTodaySheetRowLogic({
       test_completed: session?.test_completed,
       hw_checked_today: session?.hw_checked_today ?? false,
       hw_passed_today: session?.hw_passed_today ?? false,
-      mission: translateBookCodes(student.recent_mission || ''),
-      management_notes: translateBookCodes(student.management_notes || ''),
+      mission: translateBookCodes(session?.mission || student.recent_mission || ''),
+      management_notes: translateBookCodes(session?.management_notes || student.management_notes || ''),
       moved_to_hour: session?.moved_to_hour, // 💡 추가
       isTodayClassDay
     };
@@ -115,7 +115,7 @@ export function useTodaySheetRowLogic({
 
   // 4. Sync Effects
   useEffect(() => {
-    const isUserTyping = editingCell?.studentId === student.id;
+    const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
     const isDateChanged = rowDate !== selectedDate;
 
     if (isDateChanged) {

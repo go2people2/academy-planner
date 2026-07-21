@@ -788,6 +788,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         ...(s.todaySession || { id: 'temp', student_id: studentId, academy_id: academy.id, date: selectedDate, session_date: selectedDate }),
         ...filteredData,
         date: selectedDate, status: filteredData.status || 'none',
+        management_notes: ('management_notes' in dataToSave) ? dataToSave.management_notes : (s.todaySession?.management_notes ?? s.management_notes),
         test_id: ('test_id' in dataToSave) ? dataToSave.test_id : s.todaySession?.test_id,
         test_completed: isTestCompleted,
         test_cut: ('test_cut' in dataToSave) ? dataToSave.test_cut : (s.todaySession?.test_cut ?? 0),
@@ -836,15 +837,29 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         course_name: sessionData.course_name || '정규',
         ...filteredData 
       };
-      if (sessionId && sessionId !== 'temp') {
-        payload.id = sessionId;
+      let targetId = (sessionId && sessionId !== 'temp') ? sessionId : undefined;
+      if (!targetId) {
+        const { data: existingDbLog } = await supabase
+          .from('ams_session_logs')
+          .select('id')
+          .eq('student_id', studentId)
+          .eq('session_date', selectedDate)
+          .eq('course_name', targetCourseName)
+          .maybeSingle();
+        if (existingDbLog?.id) {
+          targetId = existingDbLog.id;
+        }
+      }
+
+      if (targetId) {
+        payload.id = targetId;
       } else {
         if (!('attendance_status' in filteredData)) {
           payload.attendance_status = null;
         }
       }
 
-      // 💡 [개선] 전체 리페치 대신 서버에서 저장된 최신 데이터를 받아와서 로컬 상태에 직접 주입
+      // 💡 [개선] PKEY 충돌 방지 및 안전한 upsert 갱신
       const { data: savedLog, error } = await supabase
         .from('ams_session_logs')
         .upsert([payload], { onConflict: 'student_id,session_date,course_name' })

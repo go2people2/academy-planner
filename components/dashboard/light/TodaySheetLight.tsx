@@ -619,16 +619,26 @@ export default function TodaySheet({
     return () => clearInterval(interval);
   }, [editingCell, academyInfo?.id, sendCoopEvent]);
 
-  // 💡 [추가 2] 다른 조교가 강제로 내 편집 권한을 뺏어갔는지 감시 (내 편집창 강제 종료)
+  // 💡 [추가 2] 다른 선생님이 이 셀을 작업 중인지 감시 (무한 팝업 방지 및 포커스 완전 해제)
+  const lastCoopAlertKeyRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!editingCell || !myClientId) return;
     const key = `${editingCell.studentId}_${editingCell.columnId}`;
     const coop = cooperatingCells[key];
     if (coop && coop.clientId !== myClientId) {
-      alert("다른 조교가 이 셀의 편집 권한을 강제로 가져갔습니다. 작성 중이던 내용이 취소됩니다.");
+      if (lastCoopAlertKeyRef.current !== key) {
+        lastCoopAlertKeyRef.current = key;
+        alert("다른 선생님이 이 셀을 작업 중입니다.");
+      }
       setEditingCell(null);
+      setActiveCell(null);
+    } else {
+      if (lastCoopAlertKeyRef.current === key && !coop) {
+        lastCoopAlertKeyRef.current = null;
+      }
     }
-  }, [cooperatingCells, editingCell, myClientId]);
+  }, [cooperatingCells, editingCell, myClientId, setActiveCell]);
 
   // 📝 편집 셀 상태 변경 및 브로드캐스트 전송 일괄 래퍼 함수
   const updateEditingCell = useCallback((next: { studentId: string, columnId: string } | null) => {
@@ -871,8 +881,8 @@ export default function TodaySheet({
 
         expandedResult.push({
           ...s,
-          id: `${s.id}_special_${c.id || 'course'}_${cIdx}`,
-          originalId: s.id,
+          id: `${s.originalId || s.id}_special_${c.id || courseSubject}_${cIdx}`,
+          originalId: s.originalId || s.id,
           isSpecialClass: true,
           courseName: courseSubject,
           day_schedules: {
@@ -1044,9 +1054,12 @@ export default function TodaySheet({
           updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
         }
 
+        const hasNotes = 'management_notes' in newData;
+
         return {
           ...s,
           ...(hasMission ? { recent_mission: newData.mission } : {}),
+          ...(hasNotes ? { management_notes: newData.management_notes } : {}),
           todaySession: newSess,
           allLogs: updatedAllLogs
         };
