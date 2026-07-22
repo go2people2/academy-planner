@@ -983,7 +983,7 @@ export default function TodaySheet({
       });
     }
 
-    return result.sort((a, b) => {
+    return result.sort((a: any, b: any) => {
       let comparison = 0;
       if (sortMode === 'grade') {
         const gradeA = getGradeWeight(a.grade);
@@ -1095,6 +1095,16 @@ export default function TodaySheet({
         allLogs: updatedAllLogs
       };
     }));
+
+    // 💡 [분기 저장] 
+    if ('mission' in newData && onUpdateStudentInfo) {
+      await onUpdateStudentInfo(realId, 'recent_mission', newData.mission);
+      if (sendSaveEvent) sendSaveEvent(studentId, 'mission', newData.mission);
+    }
+    if ('management_notes' in newData && onUpdateStudentInfo) {
+      await onUpdateStudentInfo(realId, 'management_notes', newData.management_notes);
+      if (sendSaveEvent) sendSaveEvent(studentId, 'management_notes', newData.management_notes);
+    }
 
     const savePayload = { ...newData, course_name: courseName };
     delete savePayload.mission;
@@ -1334,8 +1344,8 @@ export default function TodaySheet({
         const idsInRange = filteredStudents.slice(start, end + 1).map((s: any) => s.id);
         setSelectedIds(prev => {
           const newSet = new Set(prev);
-          if (checked) { idsInRange.forEach(i => newSet.add(i)); }
-          else { idsInRange.forEach(i => newSet.delete(i)); }
+          if (checked) { idsInRange.forEach((i: any) => newSet.add(i)); }
+          else { idsInRange.forEach((i: any) => newSet.delete(i)); }
           return Array.from(newSet);
         });
         setLastSelectedId(id);

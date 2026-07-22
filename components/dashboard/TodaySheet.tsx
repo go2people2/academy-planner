@@ -991,7 +991,7 @@ export default function TodaySheet({
       });
     }
 
-    return result.sort((a, b) => {
+    return result.sort((a: any, b: any) => {
       let comparison = 0;
       if (sortMode === 'grade') {
         const gradeA = getGradeWeight(a.grade);
@@ -1359,8 +1359,8 @@ export default function TodaySheet({
         const idsInRange = filteredStudents.slice(start, end + 1).map((s: any) => s.id);
         setSelectedIds(prev => {
           const newSet = new Set(prev);
-          if (checked) { idsInRange.forEach(i => newSet.add(i)); }
-          else { idsInRange.forEach(i => newSet.delete(i)); }
+          if (checked) { idsInRange.forEach((i: any) => newSet.add(i)); }
+          else { idsInRange.forEach((i: any) => newSet.delete(i)); }
           return Array.from(newSet);
         });
         setLastSelectedId(id);

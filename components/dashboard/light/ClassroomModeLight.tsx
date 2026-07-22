@@ -36,7 +36,7 @@ const getTimerTheme = (index: number) => TIMER_THEMES[index % TIMER_THEMES.lengt
 export default function ClassroomModeLight({ students, onSave, onClose, selectedDate, academyInfo, selectedTeacherId }: ClassroomModeProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState<'attendance' | 'timer'>('attendance');
-  const [activeStudentId, setActiveStudentId] = useState<string | null>(null);
+  const [activeStudent, setActiveStudent] = useState<any | null>(null);
   const [isTimeShiftOpen, setIsTimeShiftOpen] = useState(false);
   const [collapsedHours, setCollapsedHours] = useState<Record<number, boolean>>({});
 
@@ -78,9 +78,13 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
-  const getStudentHour = (student: Student) => {
+  // 💡 학생의 수업 시간(시) 추출 함수 (가상 분할 카드 타입에 맞춰 고유 시간 반환)
+  const getStudentHour = (student: any) => {
     if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
-      return student.todaySession.moved_to_hour;
+      const mVal = student.todaySession.moved_to_hour;
+      let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+      if (h < 10) h += 12;
+      return h;
     }
 
     const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
@@ -91,14 +95,80 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     }
 
     const day = getDayOfWeek(selectedDate);
+
+    // 1. 정규 코스 카드로 쪼개진 원생인 경우 정규 교시만 검출
+    if (student.__courseType === 'regular') {
+      const hours = student.day_schedules?.[day] || [];
+      if (hours.length > 0) {
+        const firstVal = hours[0];
+        let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+        if (h < 10) h += 12;
+        return h;
+      }
+      return 999;
+    }
+
+    // 2. 특강 코스 카드로 쪼개진 원생인 경우 특강 스케줄만 검출
+    if (student.__courseType === 'elective') {
+      let electiveMinHour = 999;
+      const rawElective = student.book_courses?.['__elective_courses'];
+      if (rawElective) {
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (Array.isArray(courses)) {
+            courses.forEach((c: any) => {
+              if (c.days?.includes(day) && c.schedules?.[day]) {
+                const sched = c.schedules[day];
+                if (Array.isArray(sched) && sched.length > 0) {
+                  const firstVal = sched[0];
+                  let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                  if (h < 10) h += 12;
+                  if (h < electiveMinHour) {
+                    electiveMinHour = h;
+                  }
+                }
+              }
+            });
+          }
+        } catch (e) {}
+      }
+      return electiveMinHour;
+    }
+
+    // [폴백] 기본 스케줄 검출
+    let regularHour = 999;
     const hours = student.day_schedules?.[day] || [];
     if (hours.length > 0) {
       const firstVal = hours[0];
       let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-      if (h <= 12) h += 12;
-      return h;
+      if (h < 10) h += 12;
+      regularHour = h;
     }
-    return 999; 
+
+    let electiveMinHour = 999;
+    const rawElective = student.book_courses?.['__elective_courses'];
+    if (rawElective) {
+      try {
+        const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+        if (Array.isArray(courses)) {
+          courses.forEach((c: any) => {
+            if (c.days?.includes(day) && c.schedules?.[day]) {
+              const sched = c.schedules[day];
+              if (Array.isArray(sched) && sched.length > 0) {
+                const firstVal = sched[0];
+                let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+                if (h < 10) h += 12;
+                if (h < electiveMinHour) {
+                  electiveMinHour = h;
+                }
+              }
+            }
+          });
+        }
+      } catch (e) {}
+    }
+
+    return Math.min(regularHour, electiveMinHour);
   };
 
   const getElapsedMinutesForHour = (hour: number) => {
@@ -108,6 +178,16 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     targetDate.setHours(targetHour, baseM || 0, 0, 0);
     const diff = currentTime.getTime() - targetDate.getTime();
     return Math.floor(diff / (1000 * 60));
+  };
+
+  // 💡 [코스 세션 분리형 로컬 저장 래퍼] 학생의 courseType 속성에 따라 정확한 세션 로그를 분기 저장합니다.
+  const localSave = async (student: any, data: any) => {
+    const isElective = student.__courseType === 'elective';
+    const payload = {
+      ...data,
+      course_name: isElective ? '방학특강' : '정규'
+    };
+    return await onSave(student.id, payload);
   };
 
   const handleFinishHour = async (hour: number) => {
@@ -120,7 +200,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     const confirmMsg = `${hour === 999 ? '보강/기타' : (hour >= 12 ? (hour === 12 ? '오후 12' : `오후 ${hour-12}`) : `오전 ${hour}`)}시 수업 미출석 학생 ${studentsToMark.length}명을 결석 처리하시겠습니까?`;
     if (confirm(confirmMsg)) {
       for (const s of studentsToMark) {
-        await onSave(s.id, { attendance_status: ATTENDANCE_STATUS.ABSENT });
+        await localSave(s, { attendance_status: ATTENDANCE_STATUS.ABSENT });
       }
       setCollapsedHours(prev => ({ ...prev, [hour]: true }));
     }
@@ -130,24 +210,27 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     const studentsToReset = allTodayStudents.filter(s => getStudentHour(s) === hour);
     if (studentsToReset.length === 0) return;
     const confirmMsg = `${hour === 999 ? '보강/기타' : (hour >= 12 ? (hour === 12 ? '오후 12' : `오후 ${hour-12}`) : `오전 ${hour}`)}시 수업 모든 학생(${studentsToReset.length}명)의 출결 상태를 초기화하시겠습니까?`;
-    if (confirm(confirmMsg)) { for (const s of studentsToReset) { await onSave(s.id, { attendance_status: ATTENDANCE_STATUS.BEFORE }); } }
+    if (confirm(confirmMsg)) { for (const s of studentsToReset) { await localSave(s, { attendance_status: ATTENDANCE_STATUS.BEFORE }); } }
   };
 
   const allTodayStudents = useMemo(() => {
-    return students.filter(s => {
-      if (s.is_deleted) return false;
+    const day = getDayOfWeek(selectedDate);
+    const expandedResult: any[] = [];
+
+    students.forEach(s => {
+      if (s.is_deleted) return;
       const session = s.todaySession;
       if (session) {
         const sDate = session.date || session.session_date;
-        if (sDate && sDate !== selectedDate) return false;
+        if (sDate && sDate !== selectedDate) return;
       }
       
       const status = session?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-      const day = getDayOfWeek(selectedDate);
-      const hours = s.day_schedules?.[day] || [];
-      const hasRegularSession = hours.length > 0;
-      
-      // 오늘 선택과목/방학특강 일정이 존재하는지 여부 확인 (안전한 타입 체크 적용)
+      if (status.startsWith(ATTENDANCE_STATUS.EXCLUDED)) return;
+
+      const regHours = s.day_schedules?.[day] || [];
+      const hasRegularSession = regHours.length > 0;
+
       let hasElectiveSession = false;
       const rawElective = s.book_courses?.['__elective_courses'];
       if (rawElective) {
@@ -160,18 +243,42 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
           }
         } catch (e) {}
       }
-      
+
       const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null);
-      const hasTodaySessionLog = !!session; // 오늘자 일지(세션)가 개설된 상태라면 오늘 출석 대상자이므로 합류시킵니다.
-      
-      if (status.startsWith(ATTENDANCE_STATUS.EXCLUDED)) return false;
 
-      const isTarget = hasRegularSession || hasElectiveSession || isMakeup || hasTodaySessionLog;
-      if (!isTarget) return false;
+      // 💡 [이중 가드 가상 팽창] 정규와 특강 수강 일정이 동시에 잡힌 복수 수강생은 분할 출력합니다.
+      if (hasRegularSession) {
+        expandedResult.push({
+          ...s,
+          __courseType: 'regular',
+          todaySession: session?.course_name === '방학특강' ? null : session
+        });
+      }
 
+      if (hasElectiveSession) {
+        expandedResult.push({
+          ...s,
+          __courseType: 'elective',
+          todaySession: session?.course_name === '방학특강' ? session : null
+        });
+      }
+
+      if (!hasRegularSession && !hasElectiveSession && isMakeup) {
+        expandedResult.push({
+          ...s,
+          __courseType: 'regular',
+          todaySession: session
+        });
+      }
+    });
+
+    return expandedResult.filter(s => {
       if (selectedTeacherId && selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
       const studentHour = getStudentHour(s);
-      if (baseH !== null && studentHour !== 999 && studentHour < baseH && !isMakeup) return false;
+      
+      // 스케줄이 아예 없는 학생은 라이브 방에 들어가지 않습니다.
+      if (studentHour === 999) return false;
+
       return true;
     }).sort((a, b) => {
       if (activeTab === 'timer') {
@@ -210,20 +317,20 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     };
   }, [allTodayStudents, currentTime, settings.alert_threshold]);
 
-  const handleCardClick = async (student: Student) => {
+  const handleCardClick = async (student: any) => {
     const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
     
     const isPendingMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
     if (status === ATTENDANCE_STATUS.BEFORE || isPendingMakeup) {
-      await onSave(student.id, { attendance_status: ATTENDANCE_STATUS.PRESENT });
+      await localSave(student, { attendance_status: ATTENDANCE_STATUS.PRESENT });
       return;
     }
  
-    if (activeStudentId === student.id) { 
-      setActiveStudentId(null); 
+    if (activeStudent?.id === student.id && activeStudent?.__courseType === student.__courseType) { 
+      setActiveStudent(null); 
       return; 
     }
-    setActiveStudentId(student.id);
+    setActiveStudent(student);
     setIsTimeShiftOpen(false);
   };
  
@@ -231,29 +338,28 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
  
-  const handleQuickAction = async (studentId: string, status: string | null) => {
+  const handleQuickAction = async (student: any, status: string | null) => {
     let finalStatus = status || ATTENDANCE_STATUS.BEFORE;
     
     if (finalStatus === ATTENDANCE_STATUS.BEFORE) {
-      const sObj = students.find(s => s.id === studentId);
-      const mHour = sObj?.todaySession?.moved_to_hour;
+      const mHour = student.todaySession?.moved_to_hour;
 
       if (mHour !== undefined && mHour !== null) {
         const day = getDayOfWeek(selectedDate);
-        const regularHours = sObj?.day_schedules?.[day] || [];
-        const isOriginalRegularHour = regularHours.some(val => {
+        const regularHours = student.day_schedules?.[day] || [];
+        const isOriginalRegularHour = regularHours.some((val: any) => {
           let h = val >= 100 ? Math.floor(val / 100) : val;
           if (h <= 12) h += 12;
           return h === mHour;
         });
 
         if (isOriginalRegularHour) {
-          await onSave(studentId, { 
+          await localSave(student, { 
             attendance_status: ATTENDANCE_STATUS.BEFORE, 
             moved_to_hour: null,
             attendance_reason: null
           });
-          setActiveStudentId(null);
+          setActiveStudent(null);
           setIsTimeShiftOpen(false);
           return;
         } else {
@@ -262,18 +368,15 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       }
     }
     
-    await onSave(studentId, { attendance_status: finalStatus });
-    setActiveStudentId(null);
+    await localSave(student, { attendance_status: finalStatus });
+    setActiveStudent(null);
     setIsTimeShiftOpen(false);
   };
 
-  const handleTimeShift = async (studentId: string, hour: number) => {
-    const student = students.find(s => s.id === studentId);
-    if (!student) return;
-
+  const handleTimeShift = async (student: any, hour: number) => {
     const day = getDayOfWeek(selectedDate);
     const regularHours = student.day_schedules?.[day] || [];
-    const isOriginalRegularHour = regularHours.some(val => {
+    const isOriginalRegularHour = regularHours.some((val: any) => {
       let h = val >= 100 ? Math.floor(val / 100) : val;
       if (h <= 12) h += 12;
       return h === hour;
@@ -284,15 +387,15 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:')) 
         ? ATTENDANCE_STATUS.BEFORE 
         : currentStatus;
-      await onSave(studentId, { 
+      await localSave(student, { 
         moved_to_hour: null, 
         attendance_status: finalStatus,
         attendance_reason: null
       });
     } else {
-      await onSave(studentId, { moved_to_hour: hour });
+      await localSave(student, { moved_to_hour: hour });
     }
-    setActiveStudentId(null);
+    setActiveStudent(null);
     setIsTimeShiftOpen(false);
   };
 
@@ -504,10 +607,10 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
               isTimerExpired = remainingSec <= 0;
             }
             const displayMinute = (baseM || 0).toString().padStart(2, '0');
-            const isActive = activeStudentId === s.id;
+            const isActive = activeStudent?.id === s.id && activeStudent?.__courseType === s.__courseType;
 
             return (
-              <React.Fragment key={s.id || idx}>
+              <React.Fragment key={`${s.id}-${s.__courseType || 'regular'}`}>
                 {showTimerDivider && assignedTimerId && (
                   (() => {
                     const timerIdx = activeTimers.findIndex(t => t.id === assignedTimerId);
@@ -629,34 +732,63 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
                           </div>
                           <div className="text-center px-1 relative z-10">
                             <h3 className="text-2xl font-black tracking-tighter leading-none text-[#37352f] drop-shadow-sm">{s.name}</h3>
-                            <p 
-                              className={`mt-2 text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
-                                sharedTimer 
-                                  ? (() => {
-                                      const theme = getTimerTheme(activeTimerIdx);
-                                      return `${theme.border} ${theme.text}`;
-                                    })()
-                                  : s.grade.includes('초') 
-                                  ? 'text-emerald-600 border-emerald-250 bg-emerald-50' 
-                                  : s.grade.includes('고') 
-                                  ? 'text-amber-600 border-amber-250 bg-amber-50' 
-                                  : 'text-blue-600 border-blue-250 bg-blue-50'
-                              }`}
-                            >
-                              {sharedTimer ? `Timer #${activeTimerIdx + 1}` : s.grade}
-                            </p>
+                            <div className="flex flex-row items-center gap-1 justify-center mt-2">
+                              <p 
+                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                  sharedTimer 
+                                    ? (() => {
+                                        const theme = getTimerTheme(activeTimerIdx);
+                                        return `${theme.border} ${theme.text}`;
+                                      })()
+                                    : s.grade.includes('초') 
+                                    ? 'text-emerald-600 border-emerald-250 bg-emerald-50' 
+                                    : s.grade.includes('고') 
+                                    ? 'text-amber-600 border-amber-250 bg-amber-50' 
+                                    : 'text-blue-600 border-blue-250 bg-blue-50'
+                                }`}
+                              >
+                                {sharedTimer ? `Timer #${activeTimerIdx + 1}` : s.grade}
+                              </p>
+                              {!sharedTimer && (
+                                <p className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                  s.__courseType === 'elective' 
+                                    ? 'text-fuchsia-600 border-fuchsia-200 bg-fuchsia-50' 
+                                    : 'text-gray-500 border-[#edece9] bg-gray-50'
+                                }`}>
+                                  {s.__courseType === 'elective' ? '특강' : '정규'}
+                                </p>
+                              )}
+                            </div>
                           </div>
                         </>
                       ) : (
                         <>
                           <div className="absolute top-1.5 left-1.5 flex items-center gap-1 opacity-45"><div className={`w-1 h-1 rounded-full ${studentHour === 999 ? 'bg-indigo-500' : (studentHour < currentHour ? 'bg-gray-400' : studentHour === currentHour ? 'bg-emerald-500' : 'bg-blue-550')}`} /><span className="text-[6px] font-black uppercase text-gray-500">{studentHour === 999 ? 'SUP' : (studentHour >= 12 ? (studentHour === 12 ? '12p' : `${studentHour-12}p`) : `${studentHour}a`)}</span></div>
-                          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1"><div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isPureAttend ? 'bg-[#edece9] text-[#37352f]' : isMakeupActive ? 'bg-blue-500 text-white' : isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isCriticalWarning ? 'bg-red-500 text-white' : isLateWarning ? 'bg-amber-555 text-white' : isSupplementPending ? 'bg-indigo-100 text-indigo-650 border border-indigo-200' : 'bg-blue-600 text-white'}`}>{isPureAttend ? <Check size={10} strokeWidth={4} /> : isAbsent ? <LogOut size={10} /> : isLate ? <Clock size={10} strokeWidth={3} /> : isMakeupActive ? <CalendarClock size={10} /> : isSupplementPending ? <Plus size={10} strokeWidth={4} /> : <User size={10} />}</div><button onClick={(e) => { e.stopPropagation(); setActiveStudentId(s.id); setIsTimeShiftOpen(false); }} className="p-1 hover:bg-[#edece9]/55 rounded transition-colors text-gray-400 hover:text-[#37352f]"><MoreHorizontal size={12} /></button></div>
+                          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1"><div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isPureAttend ? 'bg-[#edece9] text-[#37352f]' : isMakeupActive ? 'bg-blue-500 text-white' : isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isCriticalWarning ? 'bg-red-500 text-white' : isLateWarning ? 'bg-amber-555 text-white' : isSupplementPending ? 'bg-indigo-100 text-indigo-650 border border-indigo-200' : 'bg-blue-600 text-white'}`}>{isPureAttend ? <Check size={10} strokeWidth={4} /> : isAbsent ? <LogOut size={10} /> : isLate ? <Clock size={10} strokeWidth={3} /> : isMakeupActive ? <CalendarClock size={10} /> : isSupplementPending ? <Plus size={10} strokeWidth={4} /> : <User size={10} />}</div><button onClick={(e) => { e.stopPropagation(); setActiveStudent(s); setIsTimeShiftOpen(false); }} className="p-1 hover:bg-[#edece9]/55 rounded transition-colors text-gray-400 hover:text-[#37352f]"><MoreHorizontal size={12} /></button></div>
                           <div className="text-center px-1"><h3 className={`text-2xl font-black tracking-tighter leading-none ${isPureAttend ? 'text-[#37352f]/45 font-normal' : 'text-[#37352f]'}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
-                            {(() => { const isES = s.grade.includes('초'); const isHS = s.grade.includes('고'); const colorClass = isES ? 'text-emerald-600 border-emerald-200 bg-emerald-50' : isHS ? 'text-amber-600 border-amber-250 bg-amber-50' : 'text-blue-600 border-blue-205 bg-blue-50'; return <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${isPureAttend ? 'text-[#37352f]/40 border-[#edece9] bg-white opacity-50' : colorClass}`}>{s.grade}</p>; })()}
- 
+                            {(() => { 
+                              const isES = s.grade.includes('초'); 
+                              const isHS = s.grade.includes('고'); 
+                              const colorClass = isES ? 'text-emerald-600 border-emerald-200 bg-emerald-50' : isHS ? 'text-amber-600 border-amber-250 bg-amber-50' : 'text-blue-600 border-blue-205 bg-blue-50'; 
+                              return (
+                                <div className="flex flex-row items-center gap-1 justify-center">
+                                  <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${isPureAttend ? 'text-[#37352f]/40 border-[#edece9] bg-white opacity-50' : colorClass}`}>{s.grade}</p>
+                                  <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                    isPureAttend
+                                      ? 'text-gray-400 border-[#edece9] bg-gray-50 opacity-40'
+                                      : s.__courseType === 'elective' 
+                                        ? 'text-fuchsia-600 border-fuchsia-200 bg-fuchsia-50' 
+                                        : 'text-gray-500 border-[#edece9] bg-gray-50'
+                                  }`}>
+                                    {s.__courseType === 'elective' ? '특강' : '정규'}
+                                  </p>
+                                </div>
+                              ); 
+                            })()}
+  
                           </div></div>
                           {isAnyMarked && <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isMakeupActive ? 'bg-blue-100 text-blue-700' : 'bg-gray-100 text-gray-500'}`}>{isMakeupActive ? (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null ? `${s.todaySession?.moved_to_hour}시` : (s.isScheduledToday ? '이동' : '보강')) : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status)}</div>}
-                          {isBeforeClass && <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-50 text-blue-600 border border-blue-200">수업전</div>}
+                          {isBeforeClass && <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-5 text-blue-600 border border-blue-200">수업전</div>}
                           {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isCriticalWarning ? 'bg-red-550 text-white animate-pulse' : 'bg-amber-50 border border-amber-300 text-amber-700'}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
                         </>
                       )}
@@ -666,9 +798,9 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
                             {!isTimeShiftOpen ? (
                               <div className="flex flex-col gap-1 w-full h-full p-0.5">
                                 <div className="grid grid-cols-2 gap-1 flex-1 min-h-0">
-                                  <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.BEFORE)} className="flex flex-col items-center justify-center bg-white border border-[#edece9] rounded hover:bg-[#edece9]/50 transition-all group p-1"><RotateCcw size={16} className="text-[#37352f]/60 group-hover:text-[#37352f]" /><span className="text-[10px] font-black uppercase mt-1 text-[#37352f]/70">초기화</span></button>
-                                  <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.LATE)} className="flex flex-col items-center justify-center bg-amber-50 border border-amber-200 rounded hover:bg-[#edece9]/50 transition-all group p-1"><Clock size={16} className="text-amber-600 group-hover:text-amber-700" /><span className="text-[10px] font-black uppercase mt-1 text-amber-700">지각</span></button>
-                                  <button onClick={() => handleQuickAction(s.id, ATTENDANCE_STATUS.ABSENT)} className="flex flex-col items-center justify-center bg-red-50 border border-red-200 rounded hover:bg-[#edece9]/50 transition-all group p-1"><X size={16} className="text-red-500 group-hover:text-red-650" /><span className="text-[10px] font-black uppercase mt-1 text-red-600">결석</span></button>
+                                  <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.BEFORE)} className="flex flex-col items-center justify-center bg-white border border-[#edece9] rounded hover:bg-[#edece9]/50 transition-all group p-1"><RotateCcw size={16} className="text-[#37352f]/60 group-hover:text-[#37352f]" /><span className="text-[10px] font-black uppercase mt-1 text-[#37352f]/70">초기화</span></button>
+                                  <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.LATE)} className="flex flex-col items-center justify-center bg-amber-50 border border-amber-200 rounded hover:bg-[#edece9]/50 transition-all group p-1"><Clock size={16} className="text-amber-600 group-hover:text-amber-700" /><span className="text-[10px] font-black uppercase mt-1 text-amber-700">지각</span></button>
+                                  <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.ABSENT)} className="flex flex-col items-center justify-center bg-red-50 border border-red-200 rounded hover:bg-[#edece9]/50 transition-all group p-1"><X size={16} className="text-red-500 group-hover:text-red-650" /><span className="text-[10px] font-black uppercase mt-1 text-red-600">결석</span></button>
                                   <button onClick={() => setIsTimeShiftOpen(true)} className="flex flex-col items-center justify-center bg-blue-50 border border-blue-200 rounded hover:bg-[#edece9]/50 transition-all group p-1"><CalendarClock size={16} className="text-blue-600 group-hover:text-blue-700" /><span className="text-[10px] font-black uppercase mt-1 text-blue-600">시간 이동</span></button>
                                 </div>
                               </div>
@@ -676,7 +808,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
                               <div className="flex flex-col w-full h-full p-1">
                                 <button onClick={() => setIsTimeShiftOpen(false)} className="flex items-center gap-1 text-[7px] font-black text-gray-500 hover:text-[#37352f] mb-1 uppercase"><ArrowLeft size={6} /> 뒤로</button>
                                 <div className="grid grid-cols-4 gap-0.5 overflow-y-auto pr-1 custom-scrollbar-v flex-1">
-                                  {[13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map(h => (<button key={h} onClick={() => handleTimeShift(s.id, h)} className="py-1 rounded bg-white border border-[#edece9] text-[8px] font-black hover:bg-blue-600 hover:text-white transition-all">{h >= 12 ? (h === 12 ? '12p' : `${h-12}p`) : `${h}a`}</button>))}
+                                  {[13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map(h => (<button key={h} onClick={() => handleTimeShift(s, h)} className="py-1 rounded bg-white border border-[#edece9] text-[8px] font-black hover:bg-blue-600 hover:text-white transition-all">{h >= 12 ? (h === 12 ? '12p' : `${h-12}p`) : `${h}a`}</button>))}
                                 </div>
                               </div>
                             )}

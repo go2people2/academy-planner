@@ -296,6 +296,38 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             handleFillDown();
           }
           return;
+        } else if (isInput && activeCell) {
+          // 💡 [원장님 초간편 단축키 피드백 반영] 
+          // 입력창 내부에서 단일 Ctrl+D 클릭 시, 바로 윗행 학생의 동일 컬럼 값을 즉각 긁어옵니다!
+          e.preventDefault();
+          const rIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
+          if (rIdx > 0) {
+            const prevStudent = filteredStudents[rIdx - 1];
+            const colId = activeCell.columnId;
+            const prop = mapColumnToProp(colId);
+            
+            let prevVal = '';
+            if (colId === 'mission') {
+              prevVal = prevStudent.recent_mission || '';
+            } else if (colId === 'management_notes') {
+              prevVal = prevStudent.management_notes || '';
+            } else if (prop) {
+              const prevSession = prevStudent.todaySession || {};
+              prevVal = prevSession[prop] || '';
+            }
+            
+            // 현재 입력 포커스된 textarea / input 의 밸류를 즉각 교체
+            if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+              target.value = prevVal;
+              // React onChange / onInput 바인딩이 이를 캐치할 수 있도록 이벤트 브로드캐스트 트리거
+              target.dispatchEvent(new Event('input', { bubbles: true }));
+              
+              // 추가적으로 textarea 높이 자동 조절 유도
+              target.style.height = 'auto';
+              target.style.height = `${target.scrollHeight}px`;
+            }
+          }
+          return;
         }
       }
 

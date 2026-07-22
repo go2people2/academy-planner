@@ -125,19 +125,22 @@ export function useTodaySheetRowLogic({
       return;
     }
 
-    if (!isUserTyping && !isSaving) {
+    // 💡 [초정밀 타이밍 보호] 사용자가 타이핑 중이거나, 저장이 진행 중이거나, 동기 저장 직후 찰나인 경우에는 외부 옛날 데이터로 덮어쓰기를 전면 차단합니다!
+    if (!isUserTyping && !isSaving && !recentlySavedRef.current) {
       const newData = getInitialFormData(selectedDate);
       setFormData(newData);
     }
-  }, [selectedDate, student.todaySession, student.id, isSaving, activeCell?.studentId, editingCell?.studentId, getInitialFormData, rowDate]);
+  }, [selectedDate, student.todaySession, student.id, isSaving, activeCell?.studentId, editingCell?.studentId, getInitialFormData, rowDate, student.recent_mission, student.management_notes]);
 
   // 💡 [추가] Tab/Enter 저장 직후 발생하는 Blur를 명시적으로 무시하는 플래그
   const skipBlurRef = useRef(false);
+  const recentlySavedRef = useRef(false);
 
   // 5. Handlers
   // 💡 [하이브리드 계약] handleSave(updatesOrField, valueOrOptions?, maybeOptions?)
   const handleSave = useCallback(async (updatesOrField: Record<string, any> | string, valueOrOptions?: any, maybeOptions?: any) => {
     if (isSaving) return;
+    recentlySavedRef.current = true;
 
     // 0. 계약 분석 및 데이터 정규화
     let finalUpdates: Record<string, any> = {};
@@ -231,6 +234,7 @@ export function useTodaySheetRowLogic({
     
     const success = await onSave(student.id, savePayload);
     setIsSaving(false);
+    recentlySavedRef.current = false;
     setSaveStatus(success ? 'success' : 'error');
     setTimeout(() => setSaveStatus('idle'), 2000);
     return success;
