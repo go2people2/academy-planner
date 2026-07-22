@@ -147,11 +147,26 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       const hours = s.day_schedules?.[day] || [];
       const hasRegularSession = hours.length > 0;
       
+      // 오늘 선택과목/방학특강 일정이 존재하는지 여부 확인 (안전한 타입 체크 적용)
+      let hasElectiveSession = false;
+      const rawElective = s.book_courses?.['__elective_courses'];
+      if (rawElective) {
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (Array.isArray(courses)) {
+            hasElectiveSession = courses.some((c: any) => 
+              c.days?.includes(day) && c.schedules?.[day] && Array.isArray(c.schedules[day]) && c.schedules[day].length > 0
+            );
+          }
+        } catch (e) {}
+      }
+      
       const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null);
+      const hasTodaySessionLog = !!session; // 오늘자 일지(세션)가 개설된 상태라면 오늘 출석 대상자이므로 합류시킵니다.
       
       if (status.startsWith(ATTENDANCE_STATUS.EXCLUDED)) return false;
 
-      const isTarget = hasRegularSession || isMakeup;
+      const isTarget = hasRegularSession || hasElectiveSession || isMakeup || hasTodaySessionLog;
       if (!isTarget) return false;
 
       if (selectedTeacherId && selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
