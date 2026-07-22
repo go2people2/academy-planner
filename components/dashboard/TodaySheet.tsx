@@ -1069,7 +1069,7 @@ export default function TodaySheet({
     }]);
 
     // 💡 [낙관적 업데이트] 상태 즉시 변경
-    setStudents((prev: any[]) => (prev || []).filter((s: any) => !s.isSpecialClass).map(s => {
+    setStudents((prev: any[]) => (prev || []).map(s => {
       const isTargetStudent = s.id === realId || s.id === studentId || s.originalId === realId;
       if (!isTargetStudent) return s;
 
@@ -1151,7 +1151,7 @@ export default function TodaySheet({
     pushToUndoStack(updates);
 
     // 💡 낙관적 업데이트: 화면에 즉시 반영
-    setStudents((prev: any[]) => (prev || []).filter((s: any) => !s.isSpecialClass).map((s: any) => {
+    setStudents((prev: any[]) => (prev || []).map((s: any) => {
       const match = updates.find(u => {
         const realId = u.studentId.replace(/_special.*$/, '');
         return s.id === realId || s.id === u.studentId || s.originalId === realId;
