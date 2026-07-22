@@ -119,27 +119,39 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
     return list.sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [students, currentMonth, currentYear]);
 
+  // 5. 퇴원일 추출 헬퍼 함수 (관리 메모의 [퇴원일: YYYY-MM-DD] 태그 최우선)
+  const getDischargeDate = (s: any): Date => {
+    const notes = s.management_notes || '';
+    const match = notes.match(/\[퇴원일:\s*(\d{4}-\d{2}-\d{2})\]/);
+    if (match && match[1]) {
+      const d = new Date(match[1]);
+      if (!isNaN(d.getTime())) return d;
+    }
+    const rawTime = s.status_changed_at || (s as any).updated_at;
+    if (rawTime) {
+      const d = new Date(rawTime);
+      if (!isNaN(d.getTime())) return d;
+    }
+    // 💡 [핵심 보정] 등록일(created_at)만 있고 퇴원시각이 없던 원생은 오늘/현재 시점으로 보정하여 누락 차단
+    return new Date();
+  };
+
   // 5. 이번 달 퇴원생 내역
   const dischargedMonth = useMemo(() => {
     return students.filter(s => {
       if (!s.is_deleted) return false;
-      // status_changed_at 우선, 없으면 updated_at 사용
-      const changeTime = s.status_changed_at || (s as any).updated_at;
-      if (!changeTime) return false;
-      // UTC ISO 문자열 파싱 후 로컬 기준 연·월 비교
-      const d = new Date(changeTime);
+      const d = getDischargeDate(s);
       return d.getFullYear() === currentYear && d.getMonth() === currentMonth;
     }).map(s => {
-      const changeTime = s.status_changed_at || (s as any).updated_at;
-      const deleteDate = new Date(changeTime);
+      const deleteDate = getDischargeDate(s);
       const lastLog = (s.allLogs || []).find((l: any) => l.attendance_status === '수업제외' || (l.special_notes && l.special_notes.toLowerCase().includes('퇴원')));
       return {
         id: s.id,
         name: s.name,
         grade: s.grade || '미지정',
         date: deleteDate,
-        period: getMembershipPeriod(s.created_at, changeTime), // 💡 재원 기간 계산
-        notes: lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
+        period: getMembershipPeriod(s.created_at, deleteDate.toISOString()),
+        notes: s.management_notes || lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
         teacher: s.teacher_name || '미지정'
       };
     }).sort((a, b) => b.date.getTime() - a.date.getTime());
@@ -148,17 +160,15 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
   // 6. 누적 전체 퇴원생 명단 (아카이브)
   const dischargedAll = useMemo(() => {
     return students.filter(s => !!s.is_deleted).map(s => {
-      // status_changed_at -> updated_at -> created_at 순으로 최후의 날짜 폴백 확보!
-      const changeTime = s.status_changed_at || (s as any).updated_at || s.created_at;
-      const deleteDate = changeTime ? new Date(changeTime) : null;
+      const deleteDate = getDischargeDate(s);
       const lastLog = (s.allLogs || []).find((l: any) => l.attendance_status === '수업제외' || (l.special_notes && l.special_notes.toLowerCase().includes('퇴원')));
       return {
         id: s.id,
         name: s.name,
         grade: s.grade || '미지정',
         date: deleteDate,
-        period: getMembershipPeriod(s.created_at, changeTime), // 💡 재원 기간 계산
-        notes: lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
+        period: getMembershipPeriod(s.created_at, deleteDate.toISOString()),
+        notes: s.management_notes || lastLog?.attendance_reason || lastLog?.special_notes || '퇴원 처리됨 (사유 미기재)',
         teacher: s.teacher_name || '미지정'
       };
     }).sort((a, b) => {

@@ -127,16 +127,24 @@ export default function HokmaJournalPrintModal({
   const [selectedPenColor, setSelectedPenColor] = useState<string>('#1e3a8a'); // 기본 펜색상: 청색 볼펜
   const [showAllStudents, setShowAllStudents] = useState(false); // 💡 모든학생 일괄인쇄 토글 상태
 
-  // 💡 인쇄 대상 학생 리스트 연산
+  // 💡 인쇄 대상 학생 리스트 연산 (학생 ID 기준 100% 중복 제거)
   const targetStudents = useMemo(() => {
-    if (showAllStudents && allStudents.length > 0) {
+    let rawList = selectedStudents;
+    if (showAllStudents && selectedStudents.length > 0) {
       if (selectedTeacherId === 'All') {
-        return allStudents.filter(s => !s.is_deleted);
+        rawList = selectedStudents.filter(s => !s.is_deleted);
+      } else {
+        rawList = selectedStudents.filter(s => !s.is_deleted && s.teacher_id === selectedTeacherId);
       }
-      return allStudents.filter(s => !s.is_deleted && s.teacher_id === selectedTeacherId);
     }
-    return selectedStudents;
-  }, [showAllStudents, allStudents, selectedTeacherId, selectedStudents]);
+    const uniqueMap = new Map<string, any>();
+    (rawList || []).forEach(s => {
+      if (s && s.id && !uniqueMap.has(s.id)) {
+        uniqueMap.set(s.id, s);
+      }
+    });
+    return Array.from(uniqueMap.values());
+  }, [showAllStudents, selectedTeacherId, selectedStudents]);
 
   // 💡 글자 수가 20자를 초과하면 15px로 축소, 그렇지 않으면 기본 크기(18px/19px) 유지하는 유틸
   const getHandwritingFontSize = (text: string, baseSize = 18) => {
@@ -523,7 +531,7 @@ export default function HokmaJournalPrintModal({
       </div>
 
       <div className="flex-1 bg-slate-950 overflow-y-auto journal-preview-container">
-        {targetStudents.map((student) => {
+        {targetStudents.map((student, stIdx) => {
           const [yearStr, monthStr] = selectedMonth.split('-');
           const targetYear = parseInt(yearStr, 10);
           const targetMonth = parseInt(monthStr, 10);
@@ -713,7 +721,7 @@ export default function HokmaJournalPrintModal({
             const pageSuffix = totalSheets > 1 ? ` (${sheetIdx + 1}/${totalSheets})` : '';
 
             return (
-              <React.Fragment key={`${student.id}-sheet-${sheetIdx}`}>
+              <React.Fragment key={`${student.id}-sheet-${sheetIdx}-${stIdx}`}>
                 {/* PAGE 1: 앞면 */}
                 <div 
                   className="hokma-page"
@@ -780,7 +788,7 @@ export default function HokmaJournalPrintModal({
                     <div className="hj-meta-info">
                       <div>학교 : <span style={{ color: currentThemeConfig.metaTextColor, fontWeight: 600 }}>{student.school || '　　　　'}</span></div>
                       <div>학년 : <span style={{ color: currentThemeConfig.metaTextColor, fontWeight: 600 }}>{student.grade || '　　　'}</span></div>
-                      <div>이름 : <span style={{ color: currentThemeConfig.metaTextColor, fontWeight: 600 }}>{student.name}</span></div>
+                      <div>이름 : <span style={{ color: currentThemeConfig.metaTextColor, fontWeight: 600 }}>{isSpecial ? `특강-${student.name}` : student.name}</span></div>
                     </div>
 
                     {/* 3. 출석 영역 */}

@@ -174,80 +174,16 @@ export default function PrintPreviewModal({
       : `오전 ${time}:${displayMinute}`) + ' 수업';
   };
 
-  // Expand students into special and regular class entries if they have both on dayKey
+  // 💡 students prop은 TodaySheet의 filteredStudents로, 이미 정규/특강 행이 분리 확장된 상태.
+  // 내부에서 재확장하지 않고 그대로 사용하여 중복 key 발생을 원천 차단.
+  const seenIds = new Set<string>();
   const expandedStudents: any[] = [];
   (students || []).forEach((s: any) => {
-    const regularHours = s.day_schedules?.[dayKey] || [];
-    const rawElective = s.book_courses?.['__elective_courses'];
-    const activeElectives: any[] = [];
-
-    if (rawElective) {
-      try {
-        let courses = [];
-        if (typeof rawElective === 'string') {
-          courses = JSON.parse(rawElective);
-        } else if (Array.isArray(rawElective)) {
-          courses = rawElective;
-        }
-        if (Array.isArray(courses)) {
-          courses.forEach((c: any) => {
-            if (c.days?.includes(dayKey) && c.schedules?.[dayKey] && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0) {
-              activeElectives.push(c);
-            }
-          });
-        }
-      } catch (e) {}
-    }
-
-    activeElectives.forEach((c: any, cIdx: number) => {
-      const courseId = c.id || c.subject || `course_${cIdx}`;
-      const rawSessions = s?.book_courses?.['__elective_sessions'];
-      let electiveSession: any = {
-        attendance_status: '수업전',
-        test_id: '',
-        test_score: '',
-        classwork_text: '',
-        completed_classwork_text: '',
-        homework_text: '',
-        special_notes: '',
-        next_quiz_text: '',
-        mission: ''
-      };
-      if (rawSessions) {
-        try {
-          const sessionsMap = typeof rawSessions === 'string' ? JSON.parse(rawSessions) : rawSessions;
-          const key = `${selectedDate}_${courseId}`;
-          if (sessionsMap && sessionsMap[key]) {
-            electiveSession = { ...electiveSession, ...sessionsMap[key] };
-          }
-        } catch (e) {}
-      }
-
-      expandedStudents.push({
-        ...s,
-        id: `${s.id}_special_${courseId}_${cIdx}`,
-        originalId: s.id,
-        isSpecialClass: true,
-        day_schedules: {
-          ...s.day_schedules,
-          [dayKey]: c.schedules[dayKey]
-        },
-        electiveCourse: c,
-        todaySession: electiveSession
-      });
-    });
-
-    if (regularHours.length > 0 || activeElectives.length === 0) {
-      expandedStudents.push({
-        ...s,
-        originalId: s.id,
-        isSpecialClass: false,
-        day_schedules: {
-          ...s.day_schedules,
-          [dayKey]: regularHours
-        }
-      });
-    }
+    if (!s) return;
+    const sid = s.id;
+    if (sid && seenIds.has(sid)) return;
+    if (sid) seenIds.add(sid);
+    expandedStudents.push(s);
   });
 
   // 1. Group students by start time
@@ -445,7 +381,7 @@ export default function PrintPreviewModal({
 
                       return (
                         <tr 
-                          key={s.id} 
+                          key={`row-${rIdx}`}
                           className={`border-b border-gray-200 transition-colors ${rIdx % 2 === 1 ? 'bg-gray-50/20' : 'bg-white'}`}
                         >
                           {displayCols.map(col => {

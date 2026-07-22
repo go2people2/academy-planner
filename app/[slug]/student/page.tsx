@@ -711,6 +711,7 @@ export default function StudentPortal() {
     try {
       const updateData: any = { 
         student_id: student.id, 
+        student_name: student.name,
         session_date: selectedDate, 
         academy_id: academy.id, 
         course_name: selectedCourse,
@@ -751,7 +752,7 @@ export default function StudentPortal() {
     setIsSaving(true);
     try {
       const { answers, calculatedScore, testId } = result;
-      const updateData: any = { student_id: student.id, session_date: selectedDate, course_name: selectedCourse, test_status: testId || todaySession?.test_status };
+      const updateData: any = { student_id: student.id, student_name: student.name, session_date: selectedDate, course_name: selectedCourse, test_status: testId || todaySession?.test_status };
       if (calculatedScore !== undefined) updateData.test_score = calculatedScore;
       if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
       else { await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name' }); }

@@ -315,7 +315,8 @@ export default function TodaySheet({
   isAndFilter, setIsAndFilter,
   teachers = [],
   isFullScreen = false,
-  onToggleFullScreen
+  onToggleFullScreen,
+  selectedHour = 'All' // 💡 시작 시간대 필터 추가
 }: any) {
 
   // Undo/Redo stacks
@@ -778,7 +779,7 @@ export default function TodaySheet({
 
   // 💡 포커스 모드일 때 학생 필터링 및 전체 정렬 로직 적용
   const filteredStudents = useMemo(() => {
-    let result = [...students];
+    let result = students.filter((s: any) => !s.isSpecialClass && !s.originalId);
     
     // 숨김 처리된 학생 필터링
     if (hiddenStudentIds.length > 0) {
@@ -831,11 +832,20 @@ export default function TodaySheet({
     const dayKey = getDayOfWeek(selectedDate);
 
     // 💡 선택과목(방학특강, 확통 등) 및 정규 수업 분리 (여러 선택과목 및 정규 수업 개별 행으로 확장)
-    const expandedResult: any[] = [];
+    const uniqueOriginalStudents = new Map<string, any>();
     result.forEach((s: any) => {
+      const realId = s.originalId || s.id;
+      if (!uniqueOriginalStudents.has(realId) || !s.isSpecialClass) {
+        uniqueOriginalStudents.set(realId, s);
+      }
+    });
+
+    const expandedResult: any[] = [];
+    Array.from(uniqueOriginalStudents.values()).forEach((s: any) => {
       const regularHours = s.day_schedules?.[dayKey] || [];
       const rawElective = s.book_courses?.['__elective_courses'];
       const activeElectives: any[] = [];
+      const seenCourseKeys = new Set<string>();
 
       if (rawElective) {
         try {
@@ -847,12 +857,17 @@ export default function TodaySheet({
           }
           if (Array.isArray(courses)) {
             courses.forEach((c: any) => {
+              if (!c) return;
+              const cKey = c.id || c.subject?.trim() || JSON.stringify(c);
+              if (seenCourseKeys.has(cKey)) return;
+
               const hasDay = c.days && (
                 Array.isArray(c.days) 
                   ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
                   : (typeof c.days === 'string' && c.days.includes(dayKey))
               );
               if (hasDay) {
+                seenCourseKeys.add(cKey);
                 activeElectives.push(c);
               }
             });
@@ -879,23 +894,26 @@ export default function TodaySheet({
         const electiveBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, courseSubject);
         const electiveTodaySession = determineTodaySession(s, electiveLog, electiveBaseSession, true, selectedDate, academyInfo);
 
-        expandedResult.push({
-          ...s,
-          id: `${s.originalId || s.id}_special_${c.id || courseSubject}_${cIdx}`,
-          originalId: s.originalId || s.id,
-          isSpecialClass: true,
-          courseName: courseSubject,
-          day_schedules: {
-            ...s.day_schedules,
-            [dayKey]: specialHours
-          },
-          electiveCourse: {
-            ...c,
-            subject: courseSubject
-          },
-          lastSession: electiveLastSession,
-          todaySession: electiveTodaySession
-        });
+        const specialId = `${s.originalId || s.id}_special_${c.id || courseSubject}_${cIdx}`;
+        if (!expandedResult.some(item => item.id === specialId)) {
+          expandedResult.push({
+            ...s,
+            id: specialId,
+            originalId: s.originalId || s.id,
+            isSpecialClass: true,
+            courseName: courseSubject,
+            day_schedules: {
+              ...s.day_schedules,
+              [dayKey]: specialHours
+            },
+            electiveCourse: {
+              ...c,
+              subject: courseSubject
+            },
+            lastSession: electiveLastSession,
+            todaySession: electiveTodaySession
+          });
+        }
       });
 
       // 2. 정규 수업 행 추가 (정규 스케줄이 있거나 선택과목이 아예 없는 경우)
@@ -909,10 +927,12 @@ export default function TodaySheet({
           .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
 
         const regularLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
+        const realId = s.originalId || s.id;
 
         expandedResult.push({
           ...s,
-          originalId: s.id,
+          id: realId,
+          originalId: realId,
           isSpecialClass: false,
           courseName: '정규',
           day_schedules: {
@@ -954,6 +974,15 @@ export default function TodaySheet({
       return 999;
     };
 
+    // 💡 [시간 정밀 필터] 확장된 독립 가상 행 단위로 선택 시간대와 불일치하는 행만 정밀 여과합니다.
+    if (selectedFilter !== 'Discharged' && selectedHour && selectedHour !== 'All') {
+      const matchHour = parseInt(selectedHour, 10);
+      result = result.filter((st: any) => {
+        const stHour = getStartTime(st);
+        return stHour === matchHour;
+      });
+    }
+
     return result.sort((a, b) => {
       let comparison = 0;
       if (sortMode === 'grade') {
@@ -983,7 +1012,7 @@ export default function TodaySheet({
       comparison = a.name.localeCompare(b.name, 'ko');
       return sortDirection === 'asc' ? comparison : -comparison;
     });
-  }, [students, focusColumn, sortMode, sortDirection, selectedDate, hiddenStudentIds, hideAbsent]);
+  }, [students, focusColumn, sortMode, sortDirection, selectedDate, hiddenStudentIds, hideAbsent, selectedHour, selectedFilter]);
 
   // 3. Callbacks
   const isCellInRange = useCallback((studentId: string, colId: string) => {
@@ -1028,43 +1057,43 @@ export default function TodaySheet({
       prevData
     }]);
 
-    // 💡 [낙관적 업데이트] 상태 즉시 변경 (정규 세션과 특강 세션을 엄격히 구분하여 대상 행만 업데이트)
-    setStudents((prev: any[]) => prev.map(s => {
+    // 💡 [낙관적 업데이트] 상태 즉시 변경
+    setStudents((prev: any[]) => (prev || []).filter((s: any) => !s.isSpecialClass).map(s => {
       const isTargetStudent = s.id === realId || s.id === studentId || s.originalId === realId;
-      const isTargetCourse = s.courseName ? (s.courseName === courseName || (courseName === '정규' && s.courseName === '정규')) : (courseName === '정규');
+      if (!isTargetStudent) return s;
 
-      if (isTargetStudent && isTargetCourse) {
-        const hasMission = 'mission' in newData;
+      const hasMission = 'mission' in newData;
+      const hasNotes = 'management_notes' in newData;
 
-        let updatedAllLogs = s.allLogs || [];
-        const logIdx = updatedAllLogs.findIndex((l: any) =>
-          (l.date || l.session_date) === selectedDate &&
-          (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규')))
-        );
+      // allLogs는 항상 course_name 기준으로 업데이트 (정규/특강 무관)
+      let updatedAllLogs = s.allLogs || [];
+      const logIdx = updatedAllLogs.findIndex((l: any) =>
+        (l.date || l.session_date) === selectedDate &&
+        (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규')))
+      );
 
-        const newSess = {
-          ...(s.todaySession || {}),
-          ...newData,
-          course_name: courseName
-        };
+      const newSess = {
+        ...(logIdx !== -1 ? updatedAllLogs[logIdx] : {}),
+        ...newData,
+        course_name: courseName
+      };
 
-        if (logIdx !== -1) {
-          updatedAllLogs = updatedAllLogs.map((l: any, i: number) => i === logIdx ? { ...l, ...newSess } : l);
-        } else {
-          updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
-        }
-
-        const hasNotes = 'management_notes' in newData;
-
-        return {
-          ...s,
-          ...(hasMission ? { recent_mission: newData.mission } : {}),
-          ...(hasNotes ? { management_notes: newData.management_notes } : {}),
-          todaySession: newSess,
-          allLogs: updatedAllLogs
-        };
+      if (logIdx !== -1) {
+        updatedAllLogs = updatedAllLogs.map((l: any, i: number) => i === logIdx ? { ...l, ...newSess } : l);
+      } else {
+        updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
       }
-      return s;
+
+      // todaySession은 정규 수업 저장 시에만 반영 (특강 세션은 allLogs로만 관리)
+      const isRegularCourse = courseName === '정규' || !courseName;
+
+      return {
+        ...s,
+        ...(hasMission ? { recent_mission: newData.mission } : {}),
+        ...(hasNotes ? { management_notes: newData.management_notes } : {}),
+        ...(isRegularCourse ? { todaySession: newSess } : {}),
+        allLogs: updatedAllLogs
+      };
     }));
 
     const savePayload = { ...newData, course_name: courseName };
@@ -1096,6 +1125,48 @@ export default function TodaySheet({
 
     pushToUndoStack(updates);
 
+    // 💡 낙관적 업데이트: 화면에 즉시 반영
+    setStudents((prev: any[]) => (prev || []).filter((s: any) => !s.isSpecialClass).map((s: any) => {
+      const match = updates.find(u => {
+        const realId = u.studentId.replace(/_special.*$/, '');
+        return s.id === realId || s.id === u.studentId || s.originalId === realId;
+      });
+      if (!match) return s;
+      
+      const hasMission = 'mission' in match.newData;
+      const hasNotes = 'management_notes' in match.newData;
+      const rowStudent = filteredStudents.find((fs: any) => fs.id === match.studentId);
+      const courseName = rowStudent?.courseName || '정규';
+      
+      let updatedAllLogs = s.allLogs || [];
+      const logIdx = updatedAllLogs.findIndex((l: any) =>
+        (l.date || l.session_date) === selectedDate &&
+        (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규')))
+      );
+
+      const newSess = {
+        ...(logIdx !== -1 ? updatedAllLogs[logIdx] : {}),
+        ...match.newData,
+        course_name: courseName
+      };
+
+      if (logIdx !== -1) {
+        updatedAllLogs = updatedAllLogs.map((l: any, i: number) => i === logIdx ? { ...l, ...newSess } : l);
+      } else {
+        updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
+      }
+
+      const isRegularCourse = courseName === '정규' || !courseName;
+
+      return {
+        ...s,
+        ...(hasMission ? { recent_mission: match.newData.mission } : {}),
+        ...(hasNotes ? { management_notes: match.newData.management_notes } : {}),
+        ...(isRegularCourse ? { todaySession: newSess } : {}),
+        allLogs: updatedAllLogs
+      };
+    }));
+
     await Promise.all(updates.map(async (u) => {
       const rowStudent = filteredStudents.find((s: any) => s.id === u.studentId);
       const realId = rowStudent?.originalId || u.studentId.replace(/_special.*$/, '');
@@ -1104,6 +1175,10 @@ export default function TodaySheet({
       if ('mission' in u.newData && onUpdateStudentInfo) {
         await onUpdateStudentInfo(realId, 'recent_mission', u.newData.mission);
         if (sendSaveEvent) sendSaveEvent(u.studentId, 'mission', u.newData.mission);
+      }
+      if ('management_notes' in u.newData && onUpdateStudentInfo) {
+        await onUpdateStudentInfo(realId, 'management_notes', u.newData.management_notes);
+        if (sendSaveEvent) sendSaveEvent(u.studentId, 'management_notes', u.newData.management_notes);
       }
       
       const savePayload = { ...u.newData, course_name: courseName };
@@ -1131,7 +1206,7 @@ export default function TodaySheet({
         }
       }
     }));
-  }, [onSave, onUpdateStudentInfo, filteredStudents, pushToUndoStack, sendSaveEvent]);
+  }, [onSave, onUpdateStudentInfo, filteredStudents, selectedDate, pushToUndoStack, sendSaveEvent, setStudents]);
 
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
     if (!activeCell) return;
@@ -1902,7 +1977,7 @@ export default function TodaySheet({
                   : undefined;
 
                 return (
-                  <React.Fragment key={s.id}>
+                  <React.Fragment key={`${s.id}_row_${idx}`}>
                     <TodaySheetRow
                       key={`${s.id}-${selectedDate}`}
                       student={s}

@@ -927,10 +927,14 @@ export default function StudentDetailDrawer({
                 onClick={() => {
                   const reason = prompt(`${student.name} 학생의 퇴원 사유를 입력해주세요.`);
                   if (reason !== null) {
+                    const todayStr = new Date().toISOString().split('T')[0];
+                    const dischargeTag = `[퇴원일: ${todayStr}] [퇴원 사유: ${reason || '사유 미기재'}]`;
+                    const updatedNotes = student.management_notes 
+                      ? `${student.management_notes}\n${dischargeTag}`
+                      : dischargeTag;
                     onUpdateInfo(student.id, { 
-                      is_deleted: true, 
-                      status_changed_at: new Date().toISOString(),
-                      phone: `${student.phone || ''} (퇴원: ${reason})` 
+                      is_deleted: true,
+                      management_notes: updatedNotes
                     });
                     onClose();
                   }

@@ -162,10 +162,41 @@ const filterStudentList = (params: {
     // 담당 선생님 필터
     if (selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
 
-    // 💡 시작 시간대 필터링 (오늘 수업 대상자에게만 적용)
+    // 💡 [이중 가드] 정규 또는 특강 시간 중 단 하나라도 선택한 시간대와 맞물리면 통과시킵니다.
     if (filterTarget === 'today' && selectedHour !== 'All') {
-      const sHour = getStudentStartTime(s, selectedDayKey);
-      if (String(sHour) !== selectedHour) return false;
+      const matchHour = parseInt(selectedHour, 10);
+      
+      const regHours = s.day_schedules?.[selectedDayKey] || [];
+      const hasRegMatch = regHours.some((hVal: number) => {
+        let hourVal = hVal >= 100 ? Math.floor(hVal / 100) : hVal;
+        if (hourVal < 10) hourVal += 12;
+        return hourVal === matchHour;
+      });
+
+      let hasElectiveMatch = false;
+      const rawElective = s.book_courses?.['__elective_courses'];
+      if (rawElective) {
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (Array.isArray(courses)) {
+            for (const c of courses) {
+              if (c.days?.includes(selectedDayKey) && c.schedules?.[selectedDayKey]) {
+                const sched = c.schedules[selectedDayKey];
+                if (Array.isArray(sched)) {
+                  hasElectiveMatch = sched.some((hVal: number) => {
+                    let hourVal = hVal >= 100 ? Math.floor(hVal / 100) : hVal;
+                    if (hourVal < 10) hourVal += 12;
+                    return hourVal === matchHour;
+                  });
+                  if (hasElectiveMatch) break;
+                }
+              }
+            }
+          }
+        } catch (e) {}
+      }
+
+      if (!hasRegMatch && !hasElectiveMatch) return false;
     }
 
     const isTodayTarget = filterTarget === 'today';
@@ -874,15 +905,18 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
             const nextQuiz = savedLog.homework_to ? (typeof savedLog.homework_to === 'string' ? JSON.parse(savedLog.homework_to) : savedLog.homework_to) : {};
             const testRes = savedLog.test_result ? (typeof savedLog.test_result === 'string' ? JSON.parse(savedLog.test_result) : savedLog.test_result) : {};
             
+            const savedCourseName = savedLog.course_name || '정규';
+            const isRegularCourse = savedCourseName === '정규' || !savedCourseName;
+
             const finalSavedTodaySession = {
               ...savedLog,
               // 💡 [지연 상태 덮어쓰기 방지] DB 비동기 저장이 지연되어 완료되었을 때, 
-              // 그 사이 사용자가 수정/복구해 둔 로컬 상태 텍스트 필드가 존재한다면 이를 최우선 보존
-              ...(s.todaySession?.classwork_text !== undefined ? { classwork_text: s.todaySession.classwork_text } : {}),
-              ...(s.todaySession?.completed_classwork_text !== undefined ? { completed_classwork_text: s.todaySession.completed_classwork_text } : {}),
-              ...(s.todaySession?.homework_text !== undefined ? { homework_text: s.todaySession.homework_text } : {}),
-              ...(s.todaySession?.special_notes !== undefined ? { special_notes: s.todaySession.special_notes } : {}),
-              ...(s.todaySession?.test_score !== undefined ? { test_score: s.todaySession.test_score } : {}),
+              // 그 사이 사용자가 수정/복구해 둔 로컬 상태 텍스트 필드가 존재한다면 이를 최우선 보존 (정규 과목만 적용)
+              ...(isRegularCourse && s.todaySession?.classwork_text !== undefined ? { classwork_text: s.todaySession.classwork_text } : {}),
+              ...(isRegularCourse && s.todaySession?.completed_classwork_text !== undefined ? { completed_classwork_text: s.todaySession.completed_classwork_text } : {}),
+              ...(isRegularCourse && s.todaySession?.homework_text !== undefined ? { homework_text: s.todaySession.homework_text } : {}),
+              ...(isRegularCourse && s.todaySession?.special_notes !== undefined ? { special_notes: s.todaySession.special_notes } : {}),
+              ...(isRegularCourse && s.todaySession?.test_score !== undefined ? { test_score: s.todaySession.test_score } : {}),
               
               date: savedLog.session_date,
               status: savedLog.status || 'none',
@@ -906,7 +940,6 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
             // 💡 [동기화 특효처방] DB 서버 반영 완료된 최종 일지를 allLogs 에도 일관성 있게 주입!
             let updatedAllLogs = s.allLogs || [];
-            const savedCourseName = savedLog.course_name || '정규';
             const logIndex = updatedAllLogs.findIndex(l =>
               (l.date || l.session_date) === selectedDate &&
               (l.course_name === savedCourseName || (savedCourseName === '정규' && !l.course_name))
@@ -919,7 +952,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
             return {
               ...s,
-              todaySession: finalSavedTodaySession,
+              ...(isRegularCourse ? { todaySession: finalSavedTodaySession } : {}),
               allLogs: updatedAllLogs
             };
           }
@@ -1428,7 +1461,15 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         await supabase.from('ams_students').delete().eq('id', studentId); setSelectedStudentId(null);
       } else {
         let updateData: any = (typeof fieldOrUpdates === 'string') ? { [fieldOrUpdates]: value } : { ...fieldOrUpdates };
-        await supabase.from('ams_students').update(updateData).eq('id', studentId);
+        
+        // 💡 [낙관적 업데이트] 로컬 상태 즉시 갱신
+        setStudents(prev => prev.map(s => (s.id === studentId || s.originalId === studentId) ? { ...s, ...updateData } : s));
+
+        const { error } = await supabase.from('ams_students').update(updateData).eq('id', studentId);
+        if (error) {
+          console.error('Failed to update student info:', error);
+          alert(`학생 정보 수정 중 오류가 발생했습니다: ${error.message}`);
+        }
 
         // 💡 [추가] 관리 주의점(management_notes) 수정 시 히스토리 로그 테이블에 적재
         if (updateData.management_notes !== undefined && academy) {
@@ -1443,7 +1484,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         }
       }
       await fetchAllData(false);
-    } catch (e: any) { console.error(e); }
+    } catch (e: any) { 
+      console.error(e);
+      alert('학생 정보 수정 처리 중 오류가 발생했습니다.');
+    }
   };
 
 
@@ -1731,6 +1775,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                  teachers={teachers}
                  isFullScreen={isFullScreen}
                  onToggleFullScreen={() => setIsFullScreen(!isFullScreen)}
+                 selectedHour={selectedHour}
                />
              )}
  
