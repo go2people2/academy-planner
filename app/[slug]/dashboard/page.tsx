@@ -1364,7 +1364,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           attendance_status: isScheduledToday ? ATTENDANCE_STATUS.BEFORE : '보강', 
           status: null, 
           moved_to_hour: isScheduledToday ? null : hour,
-          attendance_reason: isScheduledToday ? null : reason
+          attendance_reason: isScheduledToday ? null : reason,
+          course_name: '정규'
         };
 
         const exist = s.todaySession?.special_notes || ''; 
@@ -1378,7 +1379,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         return;
       }
 
-      const { error } = await supabase.from('ams_session_logs').upsert(newLogs, { onConflict: 'student_id,session_date' });
+      const { error } = await supabase.from('ams_session_logs').upsert(newLogs, { onConflict: 'student_id,session_date,course_name' });
       if (error) throw error;
       await fetchAllData(false); 
       setIsBatchMode(false);
@@ -1432,14 +1433,15 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           attendance_status: '결석', 
           status: null,
           attendance_reason: reason || '결석 공지',
-          moved_to_hour: null 
+          moved_to_hour: null,
+          course_name: student.courseName || '정규'
         };
 
         const exist = student.todaySession?.special_notes || ''; 
         payload.special_notes = (exist && !exist.includes('[temp]')) ? exist : '';
 
         if (hasLog) payload.id = logId;
-        const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date' });
+        const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date,course_name' });
         if (error) throw error;
       }
 

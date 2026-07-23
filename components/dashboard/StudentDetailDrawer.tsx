@@ -171,11 +171,14 @@ export default function StudentDetailDrawer({
       const newSchedules = { ...localSchedules };
       delete newSchedules[day];
       setLocalSchedules(newSchedules);
-      onUpdateInfo(student.id, 'day_schedules', newSchedules);
       
       const newDays = localDays.filter(d => d !== day);
       setLocalDays(newDays);
-      onUpdateInfo(student.id, 'class_days', newDays);
+
+      onUpdateInfo(student.id, {
+        day_schedules: newSchedules,
+        class_days: newDays
+      });
       return;
     }
 
@@ -194,14 +197,19 @@ export default function StudentDetailDrawer({
       const newSchedules = { ...localSchedules, [day]: [finalStartVal, finalEndVal] };
       setLocalSchedules(newSchedules);
       
+      const updates: any = {};
       if (isStartValid || isEndValid) {
-        onUpdateInfo(student.id, 'day_schedules', newSchedules);
+        updates.day_schedules = newSchedules;
       }
 
       if (!localDays.includes(day)) {
         const newDays = [...localDays, day];
         setLocalDays(newDays);
-        onUpdateInfo(student.id, 'class_days', newDays);
+        updates.class_days = newDays;
+      }
+
+      if (Object.keys(updates).length > 0) {
+        onUpdateInfo(student.id, updates);
       }
     }
   };
@@ -210,24 +218,24 @@ export default function StudentDetailDrawer({
     const isSelected = localDays.includes(day);
     const newDays = isSelected ? localDays.filter(d => d !== day) : [...localDays, day];
     setLocalDays(newDays);
-    onUpdateInfo(student.id, 'class_days', newDays);
     
+    let newSchedules = { ...localSchedules };
     if (isSelected) {
-      const newSchedules = { ...localSchedules };
       delete newSchedules[day];
       setLocalSchedules(newSchedules);
-      onUpdateInfo(student.id, 'day_schedules', newSchedules);
-      
       setStartTimes(prev => ({ ...prev, [day]: '' }));
       setEndTimes(prev => ({ ...prev, [day]: '' }));
     } else {
-      const newSchedules = { ...localSchedules, [day]: [1600, 1900] };
+      newSchedules = { ...localSchedules, [day]: [1600, 1900] };
       setLocalSchedules(newSchedules);
-      onUpdateInfo(student.id, 'day_schedules', newSchedules);
-      
       setStartTimes(prev => ({ ...prev, [day]: '16:00' }));
       setEndTimes(prev => ({ ...prev, [day]: '19:00' }));
     }
+
+    onUpdateInfo(student.id, {
+      class_days: newDays,
+      day_schedules: newSchedules
+    });
   };
 
   const handleApplyTimeToAllDays = () => {

@@ -253,14 +253,15 @@ export default function TeacherTasks({
               attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
               moved_to_hour: hour,
               status: 'none',
-              special_notes: `[${makeupType}]`
+              special_notes: `[${makeupType}]`,
+              course_name: '정규'
             };
           });
 
           insertPromise = (async () => {
             const { error } = await supabase
               .from('ams_session_logs')
-              .upsert(payloads, { onConflict: 'student_id,session_date' });
+              .upsert(payloads, { onConflict: 'student_id,session_date,course_name' });
             if (error) throw error;
           })();
         }
@@ -296,13 +297,14 @@ export default function TeacherTasks({
             attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
             moved_to_hour: hour,
             status: 'none',
-            special_notes: `[${makeupType}]`
+            special_notes: `[${makeupType}]`,
+            course_name: '정규'
           };
         });
 
         const { error } = await supabase
           .from('ams_session_logs')
-          .upsert(payloads, { onConflict: 'student_id,session_date' });
+          .upsert(payloads, { onConflict: 'student_id,session_date,course_name' });
 
         if (error) throw error;
 

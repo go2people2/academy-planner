@@ -110,6 +110,15 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
 
     // 2. 특강 코스 카드로 쪼개진 원생인 경우 특강 스케줄만 검출
     if (student.__courseType === 'elective') {
+      if (student.electiveCourse?.schedules?.[day]) {
+        const sched = student.electiveCourse.schedules[day];
+        if (Array.isArray(sched) && sched.length > 0) {
+          const firstVal = sched[0];
+          let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+          if (h < 10) h += 12;
+          return h;
+        }
+      }
       let electiveMinHour = 999;
       const rawElective = student.book_courses?.['__elective_courses'];
       if (rawElective) {
@@ -183,11 +192,13 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
   // 💡 [코스 세션 분리형 로컬 저장 래퍼] 학생의 courseType 속성에 따라 정확한 세션 로그를 분기 저장합니다.
   const localSave = async (student: any, data: any) => {
     const isElective = student.__courseType === 'elective';
+    const courseName = isElective ? (student.__courseSubject || '특강') : '정규';
+    const realId = student.originalId || student.id;
     const payload = {
       ...data,
-      course_name: isElective ? '방학특강' : '정규'
+      course_name: courseName
     };
-    return await onSave(student.id, payload);
+    return await onSave(realId, payload);
   };
 
   const handleFinishHour = async (hour: number) => {
@@ -231,15 +242,34 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       const regHours = s.day_schedules?.[day] || [];
       const hasRegularSession = regHours.length > 0;
 
-      let hasElectiveSession = false;
       const rawElective = s.book_courses?.['__elective_courses'];
+      const activeElectives: any[] = [];
+      const seenCourseKeys = new Set<string>();
+
       if (rawElective) {
         try {
-          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          let courses = [];
+          if (typeof rawElective === 'string') {
+            courses = JSON.parse(rawElective);
+          } else if (Array.isArray(rawElective)) {
+            courses = rawElective;
+          }
           if (Array.isArray(courses)) {
-            hasElectiveSession = courses.some((c: any) => 
-              c.days?.includes(day) && c.schedules?.[day] && Array.isArray(c.schedules[day]) && c.schedules[day].length > 0
-            );
+            courses.forEach((c: any) => {
+              if (!c) return;
+              const cKey = c.id || c.subject?.trim() || JSON.stringify(c);
+              if (seenCourseKeys.has(cKey)) return;
+
+              const hasDay = c.days && (
+                Array.isArray(c.days) 
+                  ? c.days.some((d: any) => typeof d === 'string' && d.trim() === day)
+                  : (typeof c.days === 'string' && c.days.includes(day))
+              );
+              if (hasDay) {
+                seenCourseKeys.add(cKey);
+                activeElectives.push(c);
+              }
+            });
           }
         } catch (e) {}
       }
@@ -251,19 +281,31 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
         expandedResult.push({
           ...s,
           __courseType: 'regular',
-          todaySession: session?.course_name === '방학특강' ? null : session
+          todaySession: (s.allLogs || []).find((l: any) => 
+            (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
+          ) || (session?.course_name === '정규' || !session?.course_name ? session : null)
         });
       }
 
-      if (hasElectiveSession) {
+      activeElectives.forEach((c: any, cIdx: number) => {
+        const courseSubject = c.subject?.trim() || '특강';
+        const electiveLog = (s.allLogs || []).find((l: any) => 
+          (l.date || l.session_date) === selectedDate && l.course_name === courseSubject
+        );
+        const specialId = `${s.id}_special_${c.id || courseSubject}_${cIdx}`;
+        
         expandedResult.push({
           ...s,
+          id: specialId,
+          originalId: s.id,
           __courseType: 'elective',
-          todaySession: session?.course_name === '방학특강' ? session : null
+          __courseSubject: courseSubject,
+          electiveCourse: c,
+          todaySession: electiveLog || null
         });
-      }
+      });
 
-      if (!hasRegularSession && !hasElectiveSession && isMakeup) {
+      if (!hasRegularSession && activeElectives.length === 0 && isMakeup) {
         expandedResult.push({
           ...s,
           __courseType: 'regular',

@@ -80,7 +80,42 @@ export function useTodaySheetRowLogic({
     };
 
     const dayName = getDayOfWeek(date);
-    const isTodayClassDay = student.class_days?.map(d => d.trim()).includes(dayName);
+    const isTodayClassDay = student.isSpecialClass
+      ? (
+          Array.isArray(student.electiveCourse?.days)
+            ? student.electiveCourse.days.some((d: any) => typeof d === 'string' && d.trim() === dayName)
+            : (typeof student.electiveCourse?.days === 'string' && student.electiveCourse.days.includes(dayName))
+        )
+      : student.class_days?.map(d => d.trim()).includes(dayName);
+
+    // 💡 [과거 가장 최신 로그 역추적 수혈 유틸]
+    const getPastMostRecentValue = (field: 'mission' | 'management_notes') => {
+      const logs = student.allLogs || [];
+      const pastLogs = logs
+        .filter((l: any) => {
+          const lDate = l.date || l.session_date || '';
+          return lDate !== '' && lDate < date;
+        })
+        .sort((a: any, b: any) => {
+          const dateA = a.date || a.session_date || '';
+          const dateB = b.date || b.session_date || '';
+          return dateB.localeCompare(dateA);
+        });
+      
+      const foundLog = pastLogs.find((l: any) => l[field] && String(l[field]).trim() !== '');
+      return foundLog ? String(foundLog[field]) : '';
+    };
+
+    const sessionMission = session?.mission;
+    const sessionNotes = session?.management_notes;
+
+    const initialMission = (sessionMission !== undefined && sessionMission !== null && String(sessionMission).trim() !== '')
+      ? sessionMission
+      : getPastMostRecentValue('mission');
+
+    const initialNotes = (sessionNotes !== undefined && sessionNotes !== null && String(sessionNotes).trim() !== '')
+      ? sessionNotes
+      : getPastMostRecentValue('management_notes');
     
     return {
       attendance_status: normalizeAttendanceStatus(session?.attendance_status),
@@ -104,8 +139,8 @@ export function useTodaySheetRowLogic({
       test_completed: session?.test_completed,
       hw_checked_today: session?.hw_checked_today ?? false,
       hw_passed_today: session?.hw_passed_today ?? false,
-      mission: translateBookCodes(session?.mission || student.recent_mission || ''),
-      management_notes: translateBookCodes(session?.management_notes || student.management_notes || ''),
+      mission: translateBookCodes(initialMission),
+      management_notes: translateBookCodes(initialNotes),
       moved_to_hour: session?.moved_to_hour, // 💡 추가
       isTodayClassDay
     };

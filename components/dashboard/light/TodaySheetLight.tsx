@@ -786,25 +786,7 @@ export default function TodaySheet({
       result = result.filter((s: any) => !hiddenStudentIds.includes(s.id));
     }
 
-    // 결석/출석 접기 순환 필터링
-    if (hideAbsent !== 'all') {
-      result = result.filter((s: any) => {
-        const status = normalizeAttendanceStatus(s.todaySession?.attendance_status);
-        if (hideAbsent === 'absent') {
-          // 결석한 학생만 표시
-          return status === ATTENDANCE_STATUS.ABSENT;
-        }
-        if (hideAbsent === 'attend') {
-          // 출석한 학생(결석 아니면 다 포함)만 표시
-          return status !== ATTENDANCE_STATUS.ABSENT;
-        }
-        return true;
-      });
-    }
-    
-    if (focusColumn === 'test_id') {
-      result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
-    }
+
 
     const getGradeWeight = (grade: string): number => {
       if (!grade) return 999;
@@ -916,11 +898,12 @@ export default function TodaySheet({
         }
       });
 
-      // 2. 정규 수업 행 추가 (정규 스케줄이 있거나 선택과목이 아예 없는 경우)
-      if (regularHours.length > 0 || activeElectives.length === 0) {
-        const regularLog = (s.allLogs || []).find((l: any) => 
-          (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
-        );
+      const regularLog = (s.allLogs || []).find((l: any) => 
+        (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
+      );
+
+      // 2. 정규 수업 행 추가 (정규 스케줄이 있거나, 이미 정규 일지가 있거나, 선택과목이 아예 없는 경우)
+      if (regularHours.length > 0 || !!regularLog || activeElectives.length === 0) {
 
         const pastRegularLogs = (s.allLogs || [])
           .filter((l: any) => (l.date || l.session_date) < selectedDate && (l.course_name === '정규' || !l.course_name) && (l.homework_text || l.completed_classwork_text))
@@ -945,6 +928,26 @@ export default function TodaySheet({
       }
     });
     result = expandedResult;
+
+    // 💡 [안정화] 결석/출석 접기 순환 필터링을 특강 분할 팽창 이후로 이동하여 특강생 결석 여부도 완벽 감지
+    if (hideAbsent !== 'all') {
+      result = result.filter((s: any) => {
+        const status = normalizeAttendanceStatus(s.todaySession?.attendance_status);
+        if (hideAbsent === 'absent') {
+          // 결석한 학생만 표시
+          return status === ATTENDANCE_STATUS.ABSENT;
+        }
+        if (hideAbsent === 'attend') {
+          // 출석한 학생(결석 아니면 다 포함)만 표시
+          return status !== ATTENDANCE_STATUS.ABSENT;
+        }
+        return true;
+      });
+    }
+    
+    if (focusColumn === 'test_id') {
+      result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
+    }
 
     const getStartTime = (st: any) => {
       if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
@@ -1035,7 +1038,9 @@ export default function TodaySheet({
     const courseName = rowStudent?.courseName || '정규';
 
     const student = students.find((s: any) => s.id === realId);
-    const session = rowStudent?.todaySession || student?.todaySession || {};
+    // 💡 [버그 완치] 특강 행일 때는 정규 수업 세션(student?.todaySession)을 절대 함부로 도용하지 않습니다!
+    // 오직 해당 행의 고유 세션(rowStudent?.todaySession)만을 철저히 고수하여 크로스 오버를 완벽 차단합니다.
+    const session = rowStudent?.todaySession || {};
     
     const prevData: any = {};
     const filteredNewData: any = {};
@@ -1096,18 +1101,9 @@ export default function TodaySheet({
       };
     }));
 
-    // 💡 [분기 저장] 
-    if ('mission' in newData && onUpdateStudentInfo) {
-      await onUpdateStudentInfo(realId, 'recent_mission', newData.mission);
-      if (sendSaveEvent) sendSaveEvent(studentId, 'mission', newData.mission);
-    }
-    if ('management_notes' in newData && onUpdateStudentInfo) {
-      await onUpdateStudentInfo(realId, 'management_notes', newData.management_notes);
-      if (sendSaveEvent) sendSaveEvent(studentId, 'management_notes', newData.management_notes);
-    }
-
+    // 💡 이제 학생미션(mission)과 관리주의점(management_notes)도 분기 우회하지 않고,
+    // 온전히 하나의 일지 저장 API(onSave)를 타고 ams_session_logs 테이블에 안전하게 하루하루 박제 보존됩니다!
     const savePayload = { ...newData, course_name: courseName };
-    delete savePayload.mission;
 
     const success = await onSave(realId, savePayload);
     if (success && sendSaveEvent) {
@@ -1182,19 +1178,10 @@ export default function TodaySheet({
       const realId = rowStudent?.originalId || u.studentId.replace(/_special.*$/, '');
       const courseName = rowStudent?.courseName || '정규';
 
-      if ('mission' in u.newData && onUpdateStudentInfo) {
-        await onUpdateStudentInfo(realId, 'recent_mission', u.newData.mission);
-        if (sendSaveEvent) sendSaveEvent(u.studentId, 'mission', u.newData.mission);
-      }
-      if ('management_notes' in u.newData && onUpdateStudentInfo) {
-        await onUpdateStudentInfo(realId, 'management_notes', u.newData.management_notes);
-        if (sendSaveEvent) sendSaveEvent(u.studentId, 'management_notes', u.newData.management_notes);
-      }
-      
+      // 💡 이제 벌크 저장 시에도 미션/주의점을 일지 테이블에 다이렉트 저장하여 하루하루 온전히 관리합니다.
       const savePayload = { ...u.newData, course_name: courseName };
-      delete savePayload.mission;
       
-      if (Object.keys(savePayload).length > 1) {
+      if (Object.keys(savePayload).length > 1 || 'mission' in savePayload || 'management_notes' in savePayload) {
         const success = await onSave(realId, savePayload);
         if (success && sendSaveEvent) {
           const invMap: any = { 

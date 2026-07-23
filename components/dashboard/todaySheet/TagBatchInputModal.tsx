@@ -35,11 +35,31 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
     setMounted(true);
   }, []);
 
-  // 💡 선택된 학생들
+  // 💡 중복 제거한 고유 학생 목록 (실제 학생 기준)
+  const uniqueStudents = useMemo(() => {
+    const seen = new Set<string>();
+    const list: Student[] = [];
+    students.forEach(s => {
+      const realId = s.originalId || s.id;
+      if (!seen.has(realId)) {
+        seen.add(realId);
+        list.push(s);
+      }
+    });
+    return list;
+  }, [students]);
+
+  // 💡 선택된 학생들 (중복 없는 고유 목록)
   const selectedStudents = useMemo(() => {
     if (!selectedIds || selectedIds.length === 0) return [];
-    return students.filter(s => selectedIds.includes(s.id));
-  }, [students, selectedIds]);
+    return uniqueStudents.filter(s => {
+      const realId = s.originalId || s.id;
+      const studentSessionIds = students
+        .filter(os => (os.originalId || os.id) === realId)
+        .map(os => os.id);
+      return studentSessionIds.some(id => selectedIds.includes(id));
+    });
+  }, [uniqueStudents, students, selectedIds]);
 
   // 화면에 띄울 태그 그룹들 계산 (선택된 학생들은 제외)
   const tagGroups = useMemo(() => {
@@ -51,9 +71,11 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
       '라': [],
     };
     
-    students.forEach(s => {
-      // 💡 선택된 학생이 있는 경우, 태그 그룹 분류에서 제외하여 상단 "선택됨"에만 들어가게 함
-      if (selectedIds && selectedIds.includes(s.id)) return;
+    const selectedRealIds = new Set(selectedStudents.map(s => s.originalId || s.id));
+
+    uniqueStudents.forEach(s => {
+      const realId = s.originalId || s.id;
+      if (selectedRealIds.has(realId)) return;
 
       const tag = s.level_tag || '미지정';
       if (!groups[tag]) groups[tag] = [];
@@ -80,7 +102,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
       tag,
       students: groups[tag],
     }));
-  }, [students, selectedIds]);
+  }, [uniqueStudents, selectedStudents]);
 
   // 모달 열릴 때마다 입력창 초기화 및 ESC 이벤트 등록
   useEffect(() => {
@@ -104,29 +126,37 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
     try {
       const updates: { studentId: string, newData: any, prevData: any }[] = [];
       
-      // 💡 1. 선택된 학생들 일괄 업데이트
+      // 💡 1. 선택된 학생들 일괄 업데이트 (해당 학생의 모든 세션에 일괄 반영)
       if (selectedStudents.length > 0) {
         const text = inputs['__selected__']?.trim() || '';
         if (text) {
           selectedStudents.forEach(s => {
-            updates.push({
-              studentId: s.id,
-              newData: { [targetCol]: text },
-              prevData: s.todaySession || {}
+            const realId = s.originalId || s.id;
+            const allSessions = students.filter(os => (os.originalId || os.id) === realId);
+            allSessions.forEach(sess => {
+              updates.push({
+                studentId: sess.id,
+                newData: { [targetCol]: text },
+                prevData: sess.todaySession || {}
+              });
             });
           });
         }
       }
 
-      // 2. 태그 그룹별 업데이트 (선택되지 않은 학생들 대상)
+      // 2. 태그 그룹별 업데이트 (해당 학생의 모든 세션에 일괄 반영)
       tagGroups.forEach(group => {
         const text = inputs[group.tag]?.trim() || '';
         if (text) {
           group.students.forEach(s => {
-            updates.push({
-              studentId: s.id,
-              newData: { [targetCol]: text },
-              prevData: s.todaySession || {}
+            const realId = s.originalId || s.id;
+            const allSessions = students.filter(os => (os.originalId || os.id) === realId);
+            allSessions.forEach(sess => {
+              updates.push({
+                studentId: sess.id,
+                newData: { [targetCol]: text },
+                prevData: sess.todaySession || {}
+              });
             });
           });
         }
