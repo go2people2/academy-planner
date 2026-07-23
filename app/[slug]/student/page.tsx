@@ -479,10 +479,17 @@ export default function StudentPortal() {
               ...newData
             }));
             
-            // 💡 텍스트 필드들도 동기화 (선생님이 수정했을 때 바로 보이도록)
+            // 💡 [안정화] 텍스트 필드들도 동기화 (선생님이 수정했을 때 바로 보이도록)
+            // 단, 학생이 입력창에 포커스를 둔 채 열심히 타이핑 중인 경우(activeElement가 textarea/input인 경우)
+            // 실시간 동기화로 인한 입력값 강제 유실을 막기 위해 텍스트 덮어쓰기를 제한합니다!
+            const activeTag = typeof document !== 'undefined' ? document.activeElement?.tagName?.toLowerCase() : '';
+            const isEditing = activeTag === 'textarea' || activeTag === 'input';
+
             setTodayPlan(newData.classwork_text || '');
-            setLocalCompletedClasswork(newData.completed_classwork_text || '');
-            setLocalHomework(newData.homework_text || '');
+            if (!isEditing) {
+              setLocalCompletedClasswork(newData.completed_classwork_text || '');
+              setLocalHomework(newData.homework_text || '');
+            }
           }
         }
       )
