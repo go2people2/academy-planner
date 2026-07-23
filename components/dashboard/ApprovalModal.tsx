@@ -103,23 +103,23 @@ export default function ApprovalModal({
                   <div className="p-4 bg-black/40 border border-white/5 rounded-xl ml-8 animate-in slide-in-from-top-2 text-[12px] space-y-3">
                     <div>
                       <span className="text-emerald-400 font-bold">학원공부 / 오답고치기</span>
-                      <p className="text-gray-300 mt-1 whitespace-pre-wrap">{s.todaySession?.completed_classwork_text || '-'}</p>
+                      <p className="text-gray-300 mt-1 whitespace-pre-wrap">{s.completed_classwork_text || '-'}</p>
                     </div>
                     <div>
                       <span className="text-blue-400 font-bold">집에서 할 숙제</span>
-                      <p className="text-gray-300 mt-1 whitespace-pre-wrap">{s.todaySession?.homework_text || '-'}</p>
+                      <p className="text-gray-300 mt-1 whitespace-pre-wrap">{s.homework_text || '-'}</p>
                     </div>
                     <div className="flex flex-wrap gap-6 border-t border-white/10 pt-3">
                       <div>
                         <span className="text-gray-400 font-bold">오늘 달성률</span>
-                        <p className="text-white font-black mt-0.5">{s.todaySession?.todo_achievement || 0}%</p>
+                        <p className="text-white font-black mt-0.5">{s.todo_achievement || 0}%</p>
                       </div>
                       <div className="flex-1 min-w-[150px]">
                         <span className="text-gray-400 font-bold">테스트 결과</span>
-                        {s.todaySession?.test_id ? (
+                        {s.test_id ? (
                           <div className="mt-0.5">
                             {(() => {
-                              const parsed = parseInlineTests(s.todaySession.test_id);
+                              const parsed = parseInlineTests(s.test_id);
                               if (parsed && parsed.length > 0) {
                                 return parsed.map((t, idx) => {
                                   const isPending = t.numericScore === null;
@@ -148,15 +148,15 @@ export default function ApprovalModal({
                               // 인라인 포맷이 아닌 일반 입력일 경우 기존 로직 수행
                               return (
                                 <>
-                                  <p className="text-white font-bold truncate">{s.todaySession.test_id}</p>
+                                  <p className="text-white font-bold truncate">{s.test_id}</p>
                                   <p className="text-[11px] mt-0.5">
-                                    {s.todaySession.test_score !== undefined && s.todaySession.test_score !== null ? (
+                                    {s.test_score !== undefined && s.test_score !== null ? (
                                       <span className={`font-black ${
-                                        s.todaySession.test_cut !== undefined && s.todaySession.test_score >= s.todaySession.test_cut 
+                                        s.test_cut !== undefined && s.test_score >= s.test_cut 
                                           ? 'text-blue-400' : 'text-rose-400'
                                       }`}>
-                                        {s.todaySession.test_score}점 
-                                        {s.todaySession.test_cut ? ` (커트라인 ${s.todaySession.test_cut}점)` : ''}
+                                        {s.test_score}점 
+                                        {s.test_cut ? ` (커트라인 ${s.test_cut}점)` : ''}
                                       </span>
                                     ) : (
                                       <span className="text-gray-500">결과 미입력</span>

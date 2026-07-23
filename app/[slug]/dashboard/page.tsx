@@ -1585,16 +1585,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     } catch (e) { console.error(e); } 
   };
 
-  // 💡 [추가] 제출 승인/반려 핸들러
-  const handleApproveSubmissions = async (studentIds: string[]) => {
+  // 💡 [추가] 제출 승인/반려 핸들러 (세션 로그 ID 기준)
+  const handleApproveSubmissions = async (logIds: string[]) => {
     if (!academy) return;
     try {
-      const updates = studentIds.map(id => {
-        const s = students.find(x => x.id === id);
-        if (!s || !s.todaySession?.id || s.todaySession.id === 'temp') return null;
+      const updates = logIds.map(logId => {
+        const idVal = parseInt(logId, 10);
+        if (isNaN(idVal)) return null;
         return supabase.from('ams_session_logs').update({
           approval_status: 'approved'
-        }).eq('id', s.todaySession.id);
+        }).eq('id', idVal);
       }).filter(Boolean);
       
       if (updates.length > 0) {
@@ -1607,15 +1607,15 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
   };
 
-  const handleRejectSubmissions = async (studentIds: string[]) => {
+  const handleRejectSubmissions = async (logIds: string[]) => {
     if (!academy) return;
     try {
-      const updates = studentIds.map(id => {
-        const s = students.find(x => x.id === id);
-        if (!s || !s.todaySession?.id || s.todaySession.id === 'temp') return null;
+      const updates = logIds.map(logId => {
+        const idVal = parseInt(logId, 10);
+        if (isNaN(idVal)) return null;
         return supabase.from('ams_session_logs').update({
           approval_status: 'none'
-        }).eq('id', s.todaySession.id);
+        }).eq('id', idVal);
       }).filter(Boolean);
       
       if (updates.length > 0) {
@@ -1630,6 +1630,33 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
   const selectedDayKey = getDayOfWeek(selectedDate);
   const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
+
+  // 💡 [추가] 오늘 제출(submitted)한 모든 활성 원생의 일지(정규/특강 모두 포함)를 수집
+  const pendingSubmissions = useMemo(() => {
+    const list: any[] = [];
+    students.forEach((s: any) => {
+      if (s.is_deleted) return;
+      (s.allLogs || []).forEach((l: any) => {
+        if ((l.date || l.session_date) === selectedDate && l.approval_status === 'submitted') {
+          list.push({
+            id: l.id.toString(),
+            studentId: s.id,
+            name: s.name,
+            school: s.school || '',
+            course: l.course_name || '정규',
+            completed_classwork_text: l.completed_classwork_text,
+            homework_text: l.homework_text,
+            todo_achievement: l.todo_achievement,
+            test_id: l.test_status || l.test_id,
+            test_score: l.test_score,
+            test_cut: l.test_cut,
+            logId: l.id
+          });
+        }
+      });
+    });
+    return list;
+  }, [students, selectedDate]);
 
   // 💡 오늘 등원하는 학생들의 실제 시간대 목록 동적 추출 (사이드바 드롭다운용)
   const availableHours = useMemo(() => {
@@ -1725,16 +1752,14 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       )}
       <main className="flex-1 h-screen overflow-y-auto bg-[#080808] relative">
         {(() => {
-          // 💡 [안정화] 오늘 수업일 여부와 관계없이 오늘 제출(submitted)한 모든 활성 학생을 검사 대기 대상에 포함시킵니다.
-          const pendingStudents = students.filter(s => !s.is_deleted && s.todaySession?.approval_status === 'submitted');
-          
-          return pendingStudents.length > 0 ? (
+          // 💡 [안정화] 정규/특강 포함 오늘 제출(submitted)한 모든 활성 세션을 승인 대기 목록에 바인딩
+          return pendingSubmissions.length > 0 ? (
             <div className="sticky top-0 z-40 flex justify-center py-3 bg-[#080808]/90 backdrop-blur-sm">
               <button 
                 onClick={() => setIsApprovalModalOpen(true)}
                 className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-black rounded-full shadow-2xl shadow-blue-900/50 flex items-center gap-3 transition-all animate-bounce"
               >
-                <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center text-[12px]">{pendingStudents.length}</div>
+                <div className="w-6 h-6 bg-white/20 rounded-full flex items-center justify-center text-[12px]">{pendingSubmissions.length}</div>
                 명 제출 검사 대기 중! 클릭해서 확인
               </button>
             </div>
@@ -1831,7 +1856,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       <AnimatePresence>{selectedStudentId && !isBatchMode && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedStudentId(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />)}</AnimatePresence>
       {isApprovalModalOpen && (
         <ApprovalModal 
-          pendingStudents={students.filter(s => !s.is_deleted && s.todaySession?.approval_status === 'submitted')}
+          pendingStudents={pendingSubmissions}
           onClose={() => setIsApprovalModalOpen(false)}
           onApprove={async (ids) => {
             await handleApproveSubmissions(ids);
