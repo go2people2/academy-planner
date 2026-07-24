@@ -751,8 +751,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   // 1. 기본 필드 필터링
   const filteredData = getFilteredBaseFields(dataToSave);
 
-  // 💡 [안정화] 오늘 테스트 ID(test_status)가 저장 요청에 누락되어 있고, 현재 세션에 존재한다면 포함
-  if (!('test_id' in dataToSave) && targetSession?.test_id) {
+  // 💡 [안정화] 오늘 테스트 ID(test_status / test_id)가 저장 요청에 아예 전달되지 않았고, 현재 세션에 존재한다면 포함
+  const hasTestKey = ('test_id' in dataToSave) || ('test_status' in dataToSave);
+  if (!hasTestKey && targetSession?.test_id) {
     filteredData.test_status = targetSession.test_id;
   }
 
@@ -841,7 +842,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         ...filteredData,
         date: selectedDate, status: filteredData.status || 'none',
         management_notes: ('management_notes' in dataToSave) ? dataToSave.management_notes : (s.todaySession?.management_notes ?? s.management_notes),
-        test_id: ('test_id' in dataToSave) ? dataToSave.test_id : s.todaySession?.test_id,
+        test_id: ('test_id' in dataToSave) ? dataToSave.test_id : (('test_status' in dataToSave) ? dataToSave.test_status : s.todaySession?.test_id),
         test_completed: isTestCompleted,
         test_cut: ('test_cut' in dataToSave) ? dataToSave.test_cut : (s.todaySession?.test_cut ?? 0),
         mission: targetRecentMission,
