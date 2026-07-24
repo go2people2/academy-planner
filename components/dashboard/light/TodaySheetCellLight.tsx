@@ -409,18 +409,18 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     alert("아직 승인되지 않은 학생 제출본이 있습니다. 우측 알림창이나 툴박스에서 승인 버튼을 누르시면 학생이 쓴 내용이 일지에 자동으로 입력되며, 입력이 완료된 후에 직접 내용을 확인하고 수정하실 수 있습니다.");
   };
 
-  // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 포커스 지연 제거
+  // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 DOM value 동기화
   React.useLayoutEffect(() => {
-    const refs = [testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, managementNotesRef];
-    refs.forEach(ref => {
-      if (ref?.current && (isEditing || isActive)) {
-        ref.current.style.height = 'auto';
-        ref.current.style.height = `${ref.current.scrollHeight}px`;
-        // 💡 편집 모드일 때만 즉시 포커스 (속도 향상 핵심)
-        if (isEditing) ref.current.focus();
+    const targetRef = colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : null;
+    if (targetRef?.current && (isEditing || isActive)) {
+      if (document.activeElement !== targetRef.current) {
+        targetRef.current.value = currentText || '';
       }
-    });
-  }, [isEditing, isActive, currentText]);
+      targetRef.current.style.height = 'auto';
+      targetRef.current.style.height = `${targetRef.current.scrollHeight}px`;
+      if (isEditing && document.activeElement !== targetRef.current) targetRef.current.focus();
+    }
+  }, [isEditing, isActive, currentText, colId]);
 
   // 💡 [추가] 포탈형 툴팁 상태
   const [activeTooltip, setActiveTooltip] = useState<'note' | 'suggestion' | null>(null);
