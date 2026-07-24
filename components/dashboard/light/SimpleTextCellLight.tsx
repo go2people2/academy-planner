@@ -24,9 +24,12 @@ export const SimpleTextCell = React.forwardRef<HTMLTextAreaElement, SimpleTextCe
   // 💡 [이식] 해당 컬럼의 자동 높이 조절 및 포커스 로직
   useLayoutEffect(() => {
     if (ref && typeof ref !== 'function' && ref.current && (isEditing || isActive)) {
+      if (document.activeElement !== ref.current) {
+        ref.current.value = currentText || '';
+      }
       ref.current.style.height = 'auto';
       ref.current.style.height = `${ref.current.scrollHeight}px`;
-      if (isEditing) ref.current.focus();
+      if (isEditing && document.activeElement !== ref.current) ref.current.focus();
     }
   }, [isEditing, isActive, currentText, ref]);
 

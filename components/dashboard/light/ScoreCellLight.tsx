@@ -32,6 +32,15 @@ export const ScoreCell = React.memo(function ScoreCell({
 
   const isCountMode = formData.test_score_type === 'count';
 
+  // 💡 [동기화] 외부 formData.test_score 변경 시 DOM input value 정밀 동기화
+  React.useLayoutEffect(() => {
+    if (numeratorInputRef.current && (isEditing || isActive)) {
+      if (document.activeElement !== numeratorInputRef.current) {
+        numeratorInputRef.current.value = formData.test_score || '';
+      }
+    }
+  }, [isEditing, isActive, formData.test_score]);
+
   // 💡 인라인 테스트 모드 감지 (하이픈 문법을 썼다면 점수칸은 요약 뱃지로 변신) - 학원 기준점 반영!
   const parsedTests = parseInlineTests(formData.test_id, defaultScoreCut, defaultCountCut);
 

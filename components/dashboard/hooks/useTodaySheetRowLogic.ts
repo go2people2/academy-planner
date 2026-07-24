@@ -219,6 +219,19 @@ export function useTodaySheetRowLogic({
     }
   }, [selectedDate, student.todaySession, student.id, isSaving, activeCell?.studentId, editingCell?.studentId, getInitialFormData, rowDate, student.recent_mission, student.management_notes]);
 
+  // 💡 [배치 저장/삭제 종료 후 동기화] 전역 배치 저장 락이 해제되는 시점, 부모의 최신 Props 데이터로 formData를 100% 깔끔하게 재동기화합니다.
+  useEffect(() => {
+    const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
+    const timer = setTimeout(() => {
+      const isBatchSaving = typeof window !== 'undefined' && (window as any).__ams_batch_saving === true;
+      if (!isBatchSaving && !isUserTyping && !isSaving && !recentlySavedRef.current) {
+        const newData = getInitialFormData(selectedDate);
+        setFormData(newData);
+      }
+    }, 180);
+    return () => clearTimeout(timer);
+  }, [student.todaySession, selectedDate, getInitialFormData, isSaving, editingCell?.studentId, student.id, student.originalId]);
+
   // 💡 [추가] Tab/Enter 저장 직후 발생하는 Blur를 명시적으로 무시하는 플래그
   const skipBlurRef = useRef(false);
   const recentlySavedRef = useRef(false);
