@@ -35,6 +35,7 @@ export interface SessionLog {
   test_score_type?: 'score' | 'count'; // 💡 추가
   test_total_count?: number; // 💡 신규 추가
   test_result?: string;
+  homework_to?: string;
   test_cut?: string | number; // 💡 오늘 테스트 커트라인 추가
   test_completed?: boolean; // 💡 추가 (테스트 완료 여부)
   approval_status?: string;
