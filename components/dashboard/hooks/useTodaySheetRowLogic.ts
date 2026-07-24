@@ -106,7 +106,57 @@ export function useTodaySheetRowLogic({
       return foundLog ? String(foundLog[field]) : '';
     };
 
-    const sessionMission = session?.mission;
+    // 💡 [안정화] session.next_quiz_text 가 없더라도 homework_to JSON 데이터가 있으면 역파싱하여 복원합니다.
+    let resolvedNextQuizText = session?.next_quiz_text || '';
+    let resolvedNextQuizJson = session?.next_quiz_json || [];
+    let resolvedNextQuizCut = session?.next_quiz_cut || 0;
+    let resolvedNextQuizTrial = session?.next_quiz_trial || 1;
+    
+    if (!resolvedNextQuizText && session?.homework_to) {
+      try {
+        const raw = session.homework_to;
+        if (typeof raw === 'string' && raw.startsWith('{')) {
+          const parsed = JSON.parse(raw);
+          resolvedNextQuizText = parsed.text || '';
+          resolvedNextQuizJson = parsed.json || [];
+          resolvedNextQuizCut = parsed.cut || 0;
+          resolvedNextQuizTrial = parsed.trial || 1;
+        } else if (raw && typeof raw === 'string') {
+          resolvedNextQuizText = raw;
+        }
+      } catch (e) {}
+    }
+
+    // 💡 [안정화] session.test_completed 등이 없더라도 test_result JSON 데이터가 있으면 역파싱하여 복원합니다.
+    let resolvedTestCompleted = session?.test_completed;
+    let resolvedTestCut = session?.test_cut || 0;
+    let resolvedTodoAchievement = session?.todo_achievement || 0;
+    let resolvedMission = session?.mission || '';
+    let resolvedHwChecked = session?.hw_checked_today ?? false;
+    let resolvedHwPassed = session?.hw_passed_today ?? false;
+    let resolvedTestScoreType = session?.test_score_type || 'score';
+    let resolvedTestTotalCount = session?.test_total_count || 0;
+
+    if (session?.test_result) {
+      try {
+        const raw = session.test_result;
+        if (typeof raw === 'string' && raw.startsWith('{')) {
+          const parsed = JSON.parse(raw);
+          if (resolvedTestCompleted === undefined && parsed.completed !== undefined) {
+            resolvedTestCompleted = parsed.completed === true;
+          }
+          if (!resolvedTestCut && parsed.cut) resolvedTestCut = parsed.cut;
+          if (!resolvedTodoAchievement && parsed.todo_achievement) resolvedTodoAchievement = parsed.todo_achievement;
+          if (!resolvedMission && parsed.mission) resolvedMission = parsed.mission;
+          if (parsed.hw_checked_today !== undefined) resolvedHwChecked = parsed.hw_checked_today === true;
+          if (parsed.hw_passed_today !== undefined) resolvedHwPassed = parsed.hw_passed_today === true;
+          if (parsed.score_type) resolvedTestScoreType = parsed.score_type;
+          if (parsed.total_count) resolvedTestTotalCount = parsed.total_count;
+        }
+      } catch (e) {}
+    }
+
+    const sessionMission = resolvedMission || session?.mission;
     const sessionNotes = session?.management_notes;
 
     const initialMission = (sessionMission !== undefined && sessionMission !== null && String(sessionMission).trim() !== '')
@@ -127,21 +177,21 @@ export function useTodaySheetRowLogic({
       completed_classwork_json: mergeBooks(session?.completed_classwork_json),
       homework_text: translateBookCodes(session?.homework_text || ''),
       homework_json: mergeBooks(session?.homework_json),
-      next_quiz_text: translateBookCodes(session?.next_quiz_text || ''),
-      next_quiz_json: mergeBooks(session?.next_quiz_json),
-      next_quiz_cut: session?.next_quiz_cut || 0,
-      next_quiz_trial: session?.next_quiz_trial || 1,
+      next_quiz_text: translateBookCodes(resolvedNextQuizText || ''),
+      next_quiz_json: mergeBooks(resolvedNextQuizJson),
+      next_quiz_cut: resolvedNextQuizText ? resolvedNextQuizCut : 0,
+      next_quiz_trial: resolvedNextQuizText ? resolvedNextQuizTrial : 1,
       test_id: translateBookCodes(session?.test_id || ''),
       test_score: session?.test_score || '',
-      test_score_type: session?.test_score_type || 'score',
-      test_cut: session?.test_cut || 0,
-      test_total_count: session?.test_total_count || 0,
-      test_completed: session?.test_completed,
-      hw_checked_today: session?.hw_checked_today ?? false,
-      hw_passed_today: session?.hw_passed_today ?? false,
+      test_score_type: resolvedTestScoreType,
+      test_cut: resolvedTestCut,
+      test_total_count: resolvedTestTotalCount,
+      test_completed: resolvedTestCompleted,
+      hw_checked_today: resolvedHwChecked,
+      hw_passed_today: resolvedHwPassed,
       mission: translateBookCodes(initialMission),
       management_notes: translateBookCodes(initialNotes),
-      moved_to_hour: session?.moved_to_hour, // 💡 추가
+      moved_to_hour: session?.moved_to_hour,
       isTodayClassDay
     };
   }, [student.allLogs, student.assigned_books, student.todaySession, student.management_notes, student.recent_mission, student.class_days, selectedDate, translateBookCodes]);
@@ -160,8 +210,10 @@ export function useTodaySheetRowLogic({
       return;
     }
 
-    // 💡 [초정밀 타이밍 보호] 사용자가 타이핑 중이거나, 저장이 진행 중이거나, 동기 저장 직후 찰나인 경우에는 외부 옛날 데이터로 덮어쓰기를 전면 차단합니다!
-    if (!isUserTyping && !isSaving && !recentlySavedRef.current) {
+    const isBatchSaving = typeof window !== 'undefined' && (window as any).__ams_batch_saving === true;
+
+    // 💡 [초정밀 타이밍 보호] 사용자가 타이핑 중이거나, 저장이 진행 중이거나, 동기 저장 직후 찰나, 혹은 전역 배치 저장 중인 경우에는 외부 옛날 데이터로 덮어쓰기를 전면 차단합니다!
+    if (!isUserTyping && !isSaving && !recentlySavedRef.current && !isBatchSaving) {
       const newData = getInitialFormData(selectedDate);
       setFormData(newData);
     }
@@ -260,6 +312,21 @@ export function useTodaySheetRowLogic({
     if ('classwork_text' in mergedUpdates && cwRef.current) {
       cwRef.current.value = mergedUpdates.classwork_text || '';
     }
+    if ('homework_text' in mergedUpdates && hwRef.current) {
+      hwRef.current.value = mergedUpdates.homework_text || '';
+    }
+    if ('next_quiz_text' in mergedUpdates && nqRef.current) {
+      nqRef.current.value = mergedUpdates.next_quiz_text || '';
+    }
+    if ('test_id' in mergedUpdates && testRef.current) {
+      testRef.current.value = mergedUpdates.test_id || '';
+    }
+    if ('mission' in mergedUpdates && missionRef.current) {
+      missionRef.current.value = mergedUpdates.mission || '';
+    }
+    if ('management_notes' in mergedUpdates && managementNotesRef.current) {
+      managementNotesRef.current.value = mergedUpdates.management_notes || '';
+    }
 
     // 💡 [수정] 어떤 경우에도 전체 객체(finalData)를 보내지 않고, 
     // 오직 변경된 필드만 포함된 savePayload(Partial)만 전송하여 출석 필드를 보호
@@ -269,7 +336,11 @@ export function useTodaySheetRowLogic({
     
     const success = await onSave(student.id, savePayload);
     setIsSaving(false);
-    recentlySavedRef.current = false;
+    // 💡 [안정화] 저장이 완료된 후, 부모의 Props(학생 정보)가 자식 컴포넌트에 정상 도달할 때까지 
+    // 로컬 상태가 옛날 데이터로 덮어씌워지는 현상을 방지하기 위해 락(recentlySavedRef) 해제 시점을 한 프레임 지연시킵니다!
+    requestAnimationFrame(() => {
+      recentlySavedRef.current = false;
+    });
     setSaveStatus(success ? 'success' : 'error');
     setTimeout(() => setSaveStatus('idle'), 2000);
     return success;

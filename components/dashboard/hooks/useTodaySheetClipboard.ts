@@ -60,7 +60,21 @@ export function useTodaySheetClipboard({
         if (col.id === 'name') val = st.name;
         else if (col.id === 'date') val = selectedDate;
         else if (col.id === 'review') val = st.lastSession?.homework_text || '';
-        else if (col.id === 'mission') val = st.recent_mission || '';
+        else if (col.id === 'mission') val = st.recent_mission || session.mission || '';
+        else if (col.id === 'management_notes') val = st.management_notes || session.management_notes || '';
+        else if (col.id === 'next_quiz') {
+          val = session.next_quiz_text || '';
+          if (!val && session.homework_to) {
+            try {
+              const raw = session.homework_to;
+              if (typeof raw === 'string' && raw.startsWith('{')) {
+                val = JSON.parse(raw).text || '';
+              } else if (typeof raw === 'string') {
+                val = raw;
+              }
+            } catch (e) {}
+          }
+        }
         else val = session[mapColumnToProp(col.id)] || '';
         
         const sVal = String(val || '');
@@ -174,6 +188,9 @@ export function useTodaySheetClipboard({
       }
 
       if (updates.length > 0) {
+        if (typeof window !== 'undefined') {
+          (window as any).__ams_batch_saving = true;
+        }
         setStudents((prev: any[]) => prev.map(s => {
           const update = updates.find(u => u.studentId === s.id);
           return update ? { ...s, todaySession: { ...(s.todaySession || {}), ...update.newData } } : s;
@@ -181,7 +198,13 @@ export function useTodaySheetClipboard({
 
         syncTodaySheetDom(updates, Array.from(pastedColIds));
         setEditingCell(null);
-        await handleBatchSave(updates);
+        handleBatchSave(updates).finally(() => {
+          setTimeout(() => {
+            if (typeof window !== 'undefined') {
+              (window as any).__ams_batch_saving = false;
+            }
+          }, 150);
+        });
       }
     } catch (err) { console.error('Paste error:', err); }
   }, [activeCell, editingCell, activeColumns, selectedIds, filteredStudents, handleBatchSave, setStudents, setEditingCell]);
@@ -276,12 +299,21 @@ export function useTodaySheetClipboard({
     }
 
     if (updates.length > 0) {
+      if (typeof window !== 'undefined') {
+        (window as any).__ams_batch_saving = true;
+      }
       setStudents((prev: any[]) => prev.map(s => {
         const update = updates.find(u => u.studentId === s.id);
         return update ? { ...s, todaySession: { ...(s.todaySession || {}), ...update.newData } } : s;
       }));
       syncTodaySheetDom(updates, targetColIds, true);
-      handleBatchSave(updates);
+      handleBatchSave(updates).finally(() => {
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            (window as any).__ams_batch_saving = false;
+          }
+        }, 150);
+      });
     }
   }, [selectedRange, filteredStudents, activeColumns, setStudents, handleBatchSave]);
 

@@ -98,6 +98,51 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       return;
     }
 
+    // 💡 [안정화] 학생 객체 또는 세션에서 특정 컬럼의 텍스트 값 및 연관 데이터를 추출하는 함수
+    const extractColumnValue = (st: any, colId: string) => {
+      if (!st) return { textVal: '', extraData: {} };
+      const sess = st.todaySession || {};
+      const prop = mapColumnToProp(colId);
+
+      if (colId === 'mission') {
+        return { textVal: st.recent_mission || sess.mission || '', extraData: {} };
+      }
+      if (colId === 'management_notes') {
+        return { textVal: st.management_notes || sess.management_notes || '', extraData: {} };
+      }
+      if (colId === 'next_quiz') {
+        let nqText = sess.next_quiz_text || '';
+        let nqJson = sess.next_quiz_json || [];
+        let nqCut = sess.next_quiz_cut || 0;
+        let nqTrial = sess.next_quiz_trial || 1;
+
+        if (!nqText && sess.homework_to) {
+          try {
+            const raw = sess.homework_to;
+            if (typeof raw === 'string' && raw.startsWith('{')) {
+              const parsed = JSON.parse(raw);
+              nqText = parsed.text || '';
+              nqJson = parsed.json || [];
+              nqCut = parsed.cut || 0;
+              nqTrial = parsed.trial || 1;
+            } else if (typeof raw === 'string') {
+              nqText = raw;
+            }
+          } catch (e) {}
+        }
+        return {
+          textVal: nqText,
+          extraData: {
+            next_quiz_json: nqJson,
+            next_quiz_cut: nqCut,
+            next_quiz_trial: nqTrial
+          }
+        };
+      }
+
+      return { textVal: sess[prop] || '', extraData: {} };
+    };
+
     for (let r = rMin + 1; r <= rMax; r++) {
       const targetStudent = filteredStudents[r];
       const targetSession = targetStudent.todaySession || {};
@@ -106,19 +151,15 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       
       targetColIds.forEach(colId => {
         const prop = mapColumnToProp(colId);
-        let val = '';
-        if (colId === 'mission') {
-          val = sourceStudent.recent_mission || '';
-          if ((targetStudent.recent_mission || '') !== val) {
-            newData[prop] = val;
-            changed = true;
+        const sourceValInfo = extractColumnValue(sourceStudent, colId);
+        const targetValInfo = extractColumnValue(targetStudent, colId);
+
+        if (sourceValInfo.textVal !== targetValInfo.textVal) {
+          newData[prop] = sourceValInfo.textVal;
+          if (sourceValInfo.extraData) {
+            Object.assign(newData, sourceValInfo.extraData);
           }
-        } else {
-          val = sourceSession[prop] || '';
-          if ((targetSession[prop] || '') !== val) {
-            newData[prop] = val;
-            changed = true;
-          }
+          changed = true;
         }
       });
       
@@ -132,13 +173,19 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     }
     
     if (updates.length > 0) {
+      if (typeof window !== 'undefined') {
+        (window as any).__ams_batch_saving = true;
+      }
+
       setStudents((prev: any[]) => prev.map(s => {
         const update = updates.find(u => u.studentId === s.id);
         if (update) {
           const hasMission = 'mission' in update.newData;
+          const hasNotes = 'management_notes' in update.newData;
           return {
             ...s,
             ...(hasMission ? { recent_mission: update.newData.mission } : {}),
+            ...(hasNotes ? { management_notes: update.newData.management_notes } : {}),
             todaySession: {
               ...(s.todaySession || {}),
               ...update.newData
@@ -149,7 +196,13 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       }));
       
       syncTodaySheetDom(updates, targetColIds);
-      handleBatchSave(updates);
+      handleBatchSave(updates).finally(() => {
+        setTimeout(() => {
+          if (typeof window !== 'undefined') {
+            (window as any).__ams_batch_saving = false;
+          }
+        }, 150);
+      });
     }
   }, [filteredStudents, activeColumns, selectedRange, setStudents, handleBatchSave]);
 
@@ -311,6 +364,19 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
               prevVal = prevStudent.recent_mission || '';
             } else if (colId === 'management_notes') {
               prevVal = prevStudent.management_notes || '';
+            } else if (colId === 'next_quiz') {
+              const sess = prevStudent.todaySession || {};
+              prevVal = sess.next_quiz_text || '';
+              if (!prevVal && sess.homework_to) {
+                try {
+                  const raw = sess.homework_to;
+                  if (typeof raw === 'string' && raw.startsWith('{')) {
+                    prevVal = JSON.parse(raw).text || '';
+                  } else if (typeof raw === 'string') {
+                    prevVal = raw;
+                  }
+                } catch (e) {}
+              }
             } else if (prop) {
               const prevSession = prevStudent.todaySession || {};
               prevVal = prevSession[prop] || '';
@@ -511,8 +577,17 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
           }
           
           if (updates.length > 0) { 
+            if (typeof window !== 'undefined') {
+              (window as any).__ams_batch_saving = true;
+            }
             syncTodaySheetDom(updates, targetColIds, true); 
-            handleBatchSave(updates); 
+            handleBatchSave(updates).finally(() => {
+              setTimeout(() => {
+                if (typeof window !== 'undefined') {
+                  (window as any).__ams_batch_saving = false;
+                }
+              }, 150);
+            }); 
           }
         }
       }

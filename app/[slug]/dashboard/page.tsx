@@ -725,7 +725,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
     return false;
   }
-  const student = students.find(s => s.id === studentId);
+  const realStudentId = studentId.replace(/_special.*$/, '');
+  const student = students.find(s => s.id === realStudentId);
   if (!student || !academy) return false;
 
   const targetCourseName = sessionData.course_name || '정규';
@@ -771,8 +772,30 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
   }
 
-  // 💡 [좀비 보강 박멸] 새로 지정된 출결 상태가 '보강'이 아니라면, 기존 보강 정보(moved_to_hour)를 null로 정리
-  if (newAttendanceStatus && !isSupplementStatus) {
+  // 💡 오늘 정규 혹은 특강(선택과목) 스케줄이 존재하는지 감지
+  const dayKey = getDayOfWeek(selectedDate);
+  const regularHours = student.day_schedules?.[dayKey] || [];
+  const rawElective = student.book_courses?.['__elective_courses'];
+  let hasElectiveToday = false;
+  if (rawElective) {
+    try {
+      const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+      if (Array.isArray(courses)) {
+        hasElectiveToday = courses.some((c: any) => 
+          c && c.days && (
+            Array.isArray(c.days) 
+              ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
+              : (typeof c.days === 'string' && c.days.includes(dayKey))
+          )
+        );
+      }
+    } catch(e) {}
+  }
+  const hasAnyScheduleToday = regularHours.length > 0 || hasElectiveToday;
+
+  // 💡 [좀비 보강 박멸] 새로 지정된 출결 상태가 '보강'이 아니고, 오늘 실제로 기본 등원 시간표(스케줄)가 존재하는 학생인 경우에만 기존 보강 정보(moved_to_hour)를 null로 정리합니다.
+  // 오늘 아무 스케줄도 없이 보강으로 수동 등원한 학생인 경우에는 출결 처리가 되더라도 등원 교시 정보를 유지해야 라이브 모드 명단에서 사라지지 않습니다.
+  if (newAttendanceStatus && !isSupplementStatus && hasAnyScheduleToday) {
     filteredData.moved_to_hour = null;
   } else if (existingMovedHour !== undefined && existingMovedHour !== null) {
     if (filteredData.moved_to_hour === undefined) {
@@ -806,13 +829,11 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   );
 
   setStudents(prev => prev.map(s => {
-    // 💡 학생 ID 및 과목명(정규 vs 특강)이 일치하는 특정 행만 개별 업데이트
+    // 💡 학생 ID가 일치하는 특정 행 검출
     const isTargetStudent = s.id === studentId || s.originalId === studentId;
-    const cName = (s as any).courseName;
-    const isTargetCourse = cName ? (cName === targetCourseName || (targetCourseName === '정규' && cName === '정규')) : (targetCourseName === '정규');
 
-    if (isTargetStudent && isTargetCourse) {
-      const isTestCompleted = ('test_completed' in dataToSave) ? dataToSave.test_completed : s.todaySession?.test_completed;
+    if (isTargetStudent) {
+      const isTestCompleted = ('test_completed' in dataToSave) ? dataToSave.test_completed : (targetCourseName === '정규' ? s.todaySession?.test_completed : undefined);
       const targetRecentMission = ('mission' in dataToSave) ? (dataToSave.mission ?? '') : (s.recent_mission ?? '');
       
       const updatedTodaySession = {
@@ -836,23 +857,46 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         hasTestResult: isTestCompleted !== undefined || ('test_cut' in dataToSave) || ('mission' in dataToSave) || ('todo_achievement' in dataToSave)
       };
 
-      // 💡 [동기화 특효처방] 일지 보관함(allLogs) 내 오늘 날짜 & 해당 과목의 로그만 갱신!
+      // 💡 [동기화 특효처방] 일지 보관함(allLogs) 내 오늘 날짜 & 해당 과목의 로그만 정밀 갱신!
       let updatedAllLogs = s.allLogs || [];
       const logIndex = updatedAllLogs.findIndex(l =>
         (l.date || l.session_date) === selectedDate &&
         (l.course_name === targetCourseName || (targetCourseName === '정규' && (!l.course_name || l.course_name === '정규')))
       );
+      
+      const logToPut = {
+        ...(logIndex !== -1 ? updatedAllLogs[logIndex] : { id: 'temp', student_id: studentId, academy_id: academy.id, date: selectedDate, session_date: selectedDate }),
+        ...filteredData,
+        date: selectedDate,
+        status: filteredData.status || 'none',
+        management_notes: ('management_notes' in dataToSave) ? dataToSave.management_notes : (logIndex !== -1 ? updatedAllLogs[logIndex].management_notes : s.management_notes),
+        test_id: ('test_id' in dataToSave) ? dataToSave.test_id : (logIndex !== -1 ? updatedAllLogs[logIndex].test_id : undefined),
+        test_completed: isTestCompleted,
+        test_cut: ('test_cut' in dataToSave) ? dataToSave.test_cut : (logIndex !== -1 ? updatedAllLogs[logIndex].test_cut : 0),
+        mission: targetRecentMission,
+        todo_achievement: ('todo_achievement' in dataToSave) ? dataToSave.todo_achievement : (logIndex !== -1 ? updatedAllLogs[logIndex].todo_achievement : 0),
+        test_answers: ('test_answers' in dataToSave) ? dataToSave.test_answers : (logIndex !== -1 ? updatedAllLogs[logIndex].test_answers : undefined),
+        next_quiz_text: nqObj.text,
+        next_quiz_cut: nqObj.cut,
+        next_quiz_trial: nqObj.trial,
+        next_quiz_json: nqObj.json,
+        hasHwTo: !!nqObj.text,
+        hw_checked_today: ('hw_checked_today' in dataToSave) ? dataToSave.hw_checked_today : (logIndex !== -1 ? updatedAllLogs[logIndex].hw_checked_today : false),
+        hw_passed_today: ('hw_passed_today' in dataToSave) ? dataToSave.hw_passed_today : (logIndex !== -1 ? updatedAllLogs[logIndex].hw_passed_today : false)
+      };
+
       if (logIndex !== -1) {
-        updatedAllLogs = updatedAllLogs.map((l, i) => i === logIndex ? { ...l, ...updatedTodaySession } : l);
+        updatedAllLogs = updatedAllLogs.map((l, i) => i === logIndex ? logToPut : l);
       } else {
-        updatedAllLogs = [{ ...updatedTodaySession, course_name: targetCourseName }, ...updatedAllLogs];
+        updatedAllLogs = [{ ...logToPut, course_name: targetCourseName }, ...updatedAllLogs];
       }
 
       return {
         ...s,
         management_notes: ('management_notes' in dataToSave) ? (dataToSave.management_notes ?? '') : s.management_notes,
         recent_mission: targetRecentMission,
-        todaySession: updatedTodaySession,
+        // 💡 정규 수업일 때만 s.todaySession을 교체하고, 특강일 때는 정규 todaySession 데이터 보존
+        todaySession: targetCourseName === '정규' ? updatedTodaySession : s.todaySession,
         allLogs: updatedAllLogs
       };
     }

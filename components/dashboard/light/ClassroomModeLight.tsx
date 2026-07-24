@@ -389,11 +389,13 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       if (mHour !== undefined && mHour !== null) {
         const day = getDayOfWeek(selectedDate);
         const regularHours = student.day_schedules?.[day] || [];
-        const isOriginalRegularHour = regularHours.some((val: any) => {
-          let h = val >= 100 ? Math.floor(val / 100) : val;
+        const isOriginalRegularHour = (() => {
+          if (regularHours.length === 0) return false;
+          const firstVal = regularHours[0];
+          let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
           if (h <= 12) h += 12;
           return h === mHour;
-        });
+        })();
 
         if (isOriginalRegularHour) {
           await localSave(student, { 
@@ -418,11 +420,13 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
   const handleTimeShift = async (student: any, hour: number) => {
     const day = getDayOfWeek(selectedDate);
     const regularHours = student.day_schedules?.[day] || [];
-    const isOriginalRegularHour = regularHours.some((val: any) => {
-      let h = val >= 100 ? Math.floor(val / 100) : val;
+    const isOriginalRegularHour = (() => {
+      if (regularHours.length === 0) return false;
+      const firstVal = regularHours[0];
+      let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
       if (h <= 12) h += 12;
       return h === hour;
-    });
+    })();
 
     if (isOriginalRegularHour) {
       const currentStatus = student.todaySession?.attendance_status || '';
