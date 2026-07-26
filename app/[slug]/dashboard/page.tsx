@@ -743,7 +743,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   if ('management_notes' in sessionData && sessionData.management_notes !== undefined) {
     await supabase.from('ams_students').update({ 
       management_notes: sessionData.management_notes 
-    }).eq('id', studentId);
+    }).eq('id', realStudentId);
   }
 
   const dataToSave = { ...sessionData };
@@ -906,7 +906,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
     try {
       const payload: any = { 
-        student_id: studentId, 
+        student_id: realStudentId, 
         student_name: student.name, 
         academy_id: academy.id, 
         session_date: selectedDate, 
@@ -918,7 +918,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         const { data: existingDbLog } = await supabase
           .from('ams_session_logs')
           .select('id')
-          .eq('student_id', studentId)
+          .eq('student_id', realStudentId)
           .eq('session_date', selectedDate)
           .eq('course_name', targetCourseName)
           .maybeSingle();
