@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { HomeworkItem, StudentStatus, Student, TextbookOption, SessionLog } from '@/types/dashboard';
-import { getDayOfWeek } from '@/lib/utils';
+import { getDayOfWeek, parseBookCourseValue } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 
 interface UseTodaySheetRowLogicProps {
@@ -68,11 +68,21 @@ export function useTodaySheetRowLogic({
       const assigned = student.assigned_books || [];
       const current = existingJson || [];
       const merged = [...current];
+      const currentRowTargetTag = student.isSpecialClass 
+        ? `선택:${student.courseName || student.electiveCourse?.subject || ''}`
+        : '정규';
+
       assigned.forEach(bookName => {
         const courseVal = String(student.book_courses?.[bookName] || '');
         if (courseVal.includes('-keep') || courseVal.includes('-done')) return;
         
-        if (!current.some(b => b.book_name === bookName)) {
+        const { targetTag } = parseBookCourseValue(courseVal);
+        
+        const isMatch = (targetTag === '공통') ||
+                        (!student.isSpecialClass && (targetTag === '정규' || !targetTag.startsWith('선택:'))) ||
+                        (student.isSpecialClass && (targetTag === currentRowTargetTag));
+
+        if (isMatch && !current.some(b => b.book_name === bookName)) {
           merged.push({ type: 'book', book_name: bookName, range: '', units: [] });
         }
       });
@@ -365,15 +375,21 @@ export function useTodaySheetRowLogic({
     const currentStatus = formData.attendance_status;
     let nextStatus: string;
     
-    // 직관적이고 확실한 상태 분기 조건
-    if (currentStatus === ATTENDANCE_STATUS.PRESENT) {
-      nextStatus = ATTENDANCE_STATUS.ABSENT; // 출석 ➡️ 결석
-    } else if (currentStatus === ATTENDANCE_STATUS.ABSENT) {
-      nextStatus = ATTENDANCE_STATUS.LATE;   // 결석 ➡️ 지각
-    } else if (currentStatus === ATTENDANCE_STATUS.LATE) {
-      nextStatus = ATTENDANCE_STATUS.BEFORE; // 지각 ➡️ 수업전
+    let timeSuffix = '';
+    if (currentStatus && currentStatus.includes(':')) {
+      timeSuffix = currentStatus.substring(currentStatus.indexOf(':'));
+    }
+
+    if (currentStatus && currentStatus.startsWith(ATTENDANCE_STATUS.PRESENT)) {
+      nextStatus = ATTENDANCE_STATUS.ABSENT + timeSuffix; // 출석 ➡️ 결석
+    } else if (currentStatus && currentStatus.startsWith(ATTENDANCE_STATUS.ABSENT)) {
+      nextStatus = ATTENDANCE_STATUS.LATE + timeSuffix;   // 결석 ➡️ 지각
+    } else if (currentStatus && currentStatus.startsWith(ATTENDANCE_STATUS.LATE)) {
+      const isOriginalMakeup = !student.day_schedules?.[getDayOfWeek(rowDate)]?.length && timeSuffix;
+      const revertStatus = isOriginalMakeup ? ATTENDANCE_STATUS.SUPPLEMENT : ATTENDANCE_STATUS.BEFORE;
+      nextStatus = revertStatus + timeSuffix; // 지각 ➡️ 수업전 (또는 보강)
     } else {
-      nextStatus = ATTENDANCE_STATUS.PRESENT; // 보강, 수업전, 기타 빈 상태 ➡️ 출석으로 첫 순환 개시
+      nextStatus = ATTENDANCE_STATUS.PRESENT + timeSuffix; // 보강, 수업전, 기타 빈 상태 ➡️ 출석으로 첫 순환 개시
     }
     
     console.log(`[ATTENDANCE_TOGGLE] Student: ${student.name}, current: ${currentStatus}, next: ${nextStatus}`);
@@ -400,7 +416,7 @@ export function useTodaySheetRowLogic({
     const update: any = { 
       attendance_status: ATTENDANCE_STATUS.BEFORE, 
       moved_to_hour: isOriginalRegularHour ? null : hour,
-      attendance_reason: isOriginalRegularHour ? null : '보강 수업'
+      attendance_reason: isOriginalRegularHour ? null : '시간 변경'
     };
 
     setFormData((prev: any) => ({ ...prev, ...update }));

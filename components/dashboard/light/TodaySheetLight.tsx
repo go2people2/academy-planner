@@ -44,6 +44,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'name', label: '이름', minWidth: 120, isSticky: true, canHide: false },
   { id: 'tools', label: '🛠️', minWidth: 80, isSticky: true, canHide: false },
   { id: 'management_notes', label: '주의점', minWidth: 150, canHide: true },
+  { id: 'book_progress', label: '진도파악', minWidth: 160, canHide: true },
   { id: 'attendance', label: '출결', minWidth: 80, canHide: true },
   { id: 'test_id', label: '오늘TEST', minWidth: 140, canHide: true },
   { id: 'test_score', label: '점수', minWidth: 60, canHide: true },
@@ -902,8 +903,46 @@ export default function TodaySheet({
         (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
       );
 
-      // 2. 정규 수업 행 추가 (정규 스케줄이 있거나, 이미 정규 일지가 있거나, 선택과목이 아예 없는 경우)
-      if (regularHours.length > 0 || !!regularLog || activeElectives.length === 0) {
+      // 2. 정규 수업 행 추가
+      // 💡 모든 특강 과목의 전체 요일을 수집하여 특강 전용 요일 판별
+      const allElectiveDaysForStudent = new Set<string>();
+      if (rawElective) {
+        try {
+          const allCourses = typeof rawElective === 'string' ? JSON.parse(rawElective) : Array.isArray(rawElective) ? rawElective : [];
+          if (Array.isArray(allCourses)) {
+            allCourses.forEach((c: any) => {
+              if (!c) return;
+              if (Array.isArray(c.days)) {
+                c.days.forEach((d: any) => { if (typeof d === 'string') allElectiveDaysForStudent.add(d.trim()); });
+              } else if (typeof c.days === 'string') {
+                // "금" 또는 "월,금" 등 문자열 형태도 처리
+                c.days.split(/[,\s]+/).forEach((d: string) => { if (d.trim()) allElectiveDaysForStudent.add(d.trim()); });
+              }
+            });
+          }
+        } catch (e) {}
+      }
+      const hasAnyElective = allElectiveDaysForStudent.size > 0;
+      const isElectiveDay = allElectiveDaysForStudent.has(dayKey);
+      // 오늘이 정규 수업 요일인지: class_days에 포함되어 있으면 독립적으로 정규 수업 요일로 인정
+      const isRegularClassDay = (s.class_days || []).includes(dayKey);
+      
+      // 💡 정규 수업 표시 여부 결정
+      let shouldShowRegular = false;
+      if (isRegularClassDay) {
+        shouldShowRegular = true;
+      } else if (regularLog) {
+        if (regularLog.course_name === '정규') {
+          shouldShowRegular = true; // 명시적 정규 일지가 있으면 표시
+        } else if (!regularLog.course_name && !isElectiveDay) {
+          shouldShowRegular = true; // 옛날 일지(course_name 없음)인데 특강 전용 요일이 아니면 정규로 취급
+        }
+      } else if (!hasAnyElective) {
+        // 특강이 아예 없는 학생인데 class_days에 없어도 과거 데이터를 보기 위해 띄워야 할 수도 있음 (기존 로직 유지)
+        shouldShowRegular = true;
+      }
+
+      if (shouldShowRegular) {
 
         const pastRegularLogs = (s.allLogs || [])
           .filter((l: any) => (l.date || l.session_date) < selectedDate && (l.course_name === '정규' || !l.course_name) && (l.homework_text || l.completed_classwork_text))
@@ -959,7 +998,7 @@ export default function TodaySheet({
       const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
       if (stat.includes(':')) { 
         const parts = stat.split(':'); 
-        let val = parseInt(parts[parts.length - 1]); 
+        let val = parseInt(parts[1], 10); 
         if (!isNaN(val) && val < 24) {
           if (val < 10) val += 12;
           return val;
@@ -1943,7 +1982,7 @@ export default function TodaySheet({
                   const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
                   if (stat.includes(':')) { 
                     const parts = stat.split(':'); 
-                    let val = parseInt(parts[parts.length - 1]); 
+                    let val = parseInt(parts[1], 10); 
                     if (!isNaN(val) && val < 24) {
                       if (val < 10) val += 12;
                       return val;
@@ -1997,7 +2036,7 @@ export default function TodaySheet({
                       editingCell={editingCell}
                       onActiveCellChange={handleActiveCellChange}
                       onEditingCellChange={handleEditingCellChange}
-                      isSelected={selectedIds.includes(s.id)} 
+                      isSelected={selectedIds.some((id: any) => String(id) === String(s.id))} 
                       onSelectOne={handleSelectOne} 
                       selectedRange={selectedRange} 
                       isCellInRange={isCellInRange} 
@@ -2005,6 +2044,7 @@ export default function TodaySheet({
                       onCellMouseEnter={onCellMouseEnter} 
                       isFirstInTimeSection={isNewSection}
                       timeSectionLabel={timeSectionLabel}
+                      isOtherClassSection={currentStartTime === 999}
                       historyLimit={historyLimit}
                       isScrolled={isScrolled}
                       showAllTools={showAllTools}

@@ -23,6 +23,7 @@ interface TextbookSystemProps {
   selectedDate: string;
   onUpdateAssignedBooks?: (newBooks: string[]) => Promise<void>;
   academy?: any;
+  initialBookCode?: string;
 }
 
 export default function TextbookSystem({
@@ -40,9 +41,15 @@ export default function TextbookSystem({
   approvalStatus = 'none',
   selectedDate,
   onUpdateAssignedBooks,
-  academy
+  academy,
+  initialBookCode
 }: TextbookSystemProps) {
-  const [activeBook, setActiveBook] = useState<any>(null);
+  const [activeBook, setActiveBook] = useState<any>(() => {
+    if (initialBookCode) {
+      return (availableTextbooks || []).find(b => b.bookcode === initialBookCode) || { bookcode: initialBookCode, title: initialBookCode };
+    }
+    return null;
+  });
   const [activeUnit, setActiveUnit] = useState<any>(null);
   const [units, setUnits] = useState<any[]>([]);
   const [selectedUnits, setSelectedUnits] = useState<any[]>([]); 
@@ -88,10 +95,19 @@ export default function TextbookSystem({
     );
   }, [unassignedBooks, selectedCategory]);
 
-  // 💡 activeBook 상태 변경 시 외부 콜백 호출 (대시보드 접기용)
+  // 💡 initialBookCode가 설정되어 들어오면 즉시 단원 목록 가져오기
   useEffect(() => {
-    if (onBookSelect) {
-      onBookSelect(activeBook !== null);
+    if (initialBookCode) {
+      const foundBook = (availableTextbooks || []).find(b => b.bookcode === initialBookCode) || { bookcode: initialBookCode, title: initialBookCode };
+      setActiveBook(foundBook);
+      fetchUnits(initialBookCode);
+    }
+  }, [initialBookCode, availableTextbooks]);
+
+  // 💡 activeBook 상태가 null이 될 때 부모 컴포넌트에 닫힘 상태 전송
+  useEffect(() => {
+    if (activeBook === null && onBookSelect) {
+      onBookSelect(false);
     }
   }, [activeBook, onBookSelect]);
 

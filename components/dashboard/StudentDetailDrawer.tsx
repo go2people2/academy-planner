@@ -3,8 +3,10 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTriangle, UserMinus, UserCheck, ClipboardCheck, TrendingUp, Printer } from 'lucide-react';
 import HokmaJournalPrintModal from './todaySheet/HokmaJournalPrintModal';
 import { Student, TextbookOption } from '@/types/dashboard';
+import { parseBookCourseValue, buildBookCourseValue } from '@/lib/utils';
 
 interface StudentDetailDrawerProps {
+
   student: Student;
   availableTextbooks: TextbookOption[];
   teachers: any[]; 
@@ -460,48 +462,79 @@ export default function StudentDetailDrawer({
                 }).map((code, idx) => {
                   const book = availableTextbooks.find(b => b.bookcode === code);
                   const rawCourseValue = localBookCourses[code] || localCourse;
-                  const isKeep = String(rawCourseValue).includes('-keep');
-                  let currentCourse = rawCourseValue;
-                  if (isKeep) currentCourse = currentCourse.replace('-keep', '');
-                  if (currentCourse.includes('-start-')) {
-                    currentCourse = currentCourse.split('-start-')[0]; // 시작 정보 떼어냄
-                  }
+                  const parsedCourse = parseBookCourseValue(rawCourseValue);
+                  const isKeep = parsedCourse.isKeep;
+                  const currentCourse = parsedCourse.baseCourse;
+
+                  const electiveList = (electiveCourses || []).map((c: any) => {
+                    const name = (c?.course_name || c?.subject || c?.name || '').trim();
+                    return name ? `선택:${name}` : null;
+                  }).filter(Boolean) as string[];
+
+                  const hasElectives = electiveList.length > 0;
+                  const targetOptions = hasElectives 
+                    ? Array.from(new Set(['정규', '공통', ...electiveList]))
+                    : ['정규'];
+
+
 
                   return (
-                    <div key={`${code}-${idx}`} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${isKeep ? 'bg-amber-500/5 border-amber-500/20' : book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
-                      <span className={`text-[9px] font-black px-1.5 ${isKeep ? 'text-amber-500' : book ? 'text-gray-100' : 'text-red-400'}`}>
+                    <div key={`${code}-${idx}`} className={`flex items-center gap-1.5 px-2 py-1 rounded-[2px] group border ${isKeep ? 'bg-yellow-400/10 border-yellow-400/20' : book ? 'bg-white/[0.03] border-white/5' : 'bg-red-500/10 border-red-500/20'}`}>
+                      <span className={`text-[9px] font-black px-1.5 ${isKeep ? 'text-yellow-400' : book ? 'text-gray-100' : 'text-red-400'}`}>
                         {book ? book.title : `(${code})`}
-                        {isKeep && <span className="ml-1 text-[7px] bg-amber-500 text-black px-1 rounded-sm uppercase tracking-tighter">Keep</span>}
+                        {isKeep && <span className="ml-1 text-[7px] font-black bg-yellow-400 text-black px-1 rounded-sm uppercase tracking-tighter">KEEP</span>}
                       </span>
                       <select 
                         value={currentCourse}
                         onChange={(e) => {
                           const courseCode = e.target.value;
-                          // 기존에 -start- 정보가 있다면 그것을 결합하여 유지
-                          let newVal = courseCode;
-                          if (rawCourseValue.includes('-start-')) {
-                            newVal = `${courseCode}-start-${rawCourseValue.split('-start-')[1]}`;
-                          }
-                          if (isKeep) newVal = `${newVal}-keep`;
+                          const newVal = buildBookCourseValue({
+                            ...parsedCourse,
+                            baseCourse: courseCode
+                          });
                           const newCourses = { ...localBookCourses, [code]: newVal };
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
                         }}
                         className={`bg-blue-600/20 text-blue-500 text-[10px] font-black rounded-[2px] px-1 py-0.5 outline-none appearance-none cursor-pointer hover:bg-blue-600 hover:text-white transition-all ${isKeep ? 'opacity-50' : ''}`}
+                        title="교재 레벨 설정"
                       >
                         {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c}</option>)}
                       </select>
-                      
-                      <button 
-                        onClick={() => {
-                          let baseVal = rawCourseValue;
-                          if (isKeep) baseVal = baseVal.replace('-keep', '');
-                          const newVal = isKeep ? baseVal : `${baseVal}-keep`;
+
+                      <select 
+                        value={parsedCourse.targetTag}
+                        onChange={(e) => {
+                          const newTarget = e.target.value;
+                          const newVal = buildBookCourseValue({
+                            ...parsedCourse,
+                            targetTag: newTarget
+                          });
                           const newCourses = { ...localBookCourses, [code]: newVal };
                           setLocalBookCourses(newCourses);
                           onUpdateInfo(student.id, 'book_courses', newCourses);
                         }}
-                        className={`text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all ${isKeep ? 'bg-amber-500 text-black' : 'bg-white/5 text-gray-500 hover:bg-amber-500/20 hover:text-amber-500 border border-transparent'}`}
+                        className={`bg-emerald-600/20 text-emerald-400 text-[10px] font-black rounded-[2px] px-1 py-0.5 outline-none cursor-pointer hover:bg-emerald-600 hover:text-white transition-all ${isKeep ? 'opacity-50' : ''}`}
+                        title="수업 구분 설정 (정규 / 선택:과목 / 공통)"
+                      >
+                        {targetOptions.map(opt => (
+                          <option key={opt} value={opt} className="bg-[#121212] text-white">
+                            {opt}
+                          </option>
+                        ))}
+                      </select>
+                      
+                      <button 
+                        onClick={() => {
+                          const newVal = buildBookCourseValue({
+                            ...parsedCourse,
+                            isKeep: !isKeep
+                          });
+                          const newCourses = { ...localBookCourses, [code]: newVal };
+                          setLocalBookCourses(newCourses);
+                          onUpdateInfo(student.id, 'book_courses', newCourses);
+                        }}
+                        className={`text-[8px] font-black px-1.5 py-0.5 rounded-[2px] transition-all ${isKeep ? 'bg-yellow-400 text-black font-extrabold shadow-sm' : 'bg-white/5 text-gray-500 hover:bg-yellow-400/20 hover:text-yellow-400 border border-transparent'}`}
                         title="보류 상태로 변경 (오늘 과제에서 숨김)"
                       >
                         KEEP

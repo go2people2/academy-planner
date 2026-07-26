@@ -5,10 +5,10 @@ import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3, RefreshCw
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
-import { getDayOfWeek, getCoursePrefix } from '@/lib/utils';
+import { getDayOfWeek, getCoursePrefix, parseBookCourseValue } from '@/lib/utils';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { ScoreCell } from './cells/ScoreCell';
 import { SimpleTextCell } from './cells/SimpleTextCell';
@@ -83,12 +83,15 @@ interface TodaySheetCellProps {
   rowIndex?: number;
   onApplyTestPreset?: (preset: any, colId: 'test_id' | 'next_quiz') => void;
   onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
+  masterTextbooks?: any[];
   cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number }>; // 📝 [추가] 실시간 협업 편집 중인 셀 맵
   onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
   toolsOrder?: string[];
   isToolsEditMode?: boolean;
   showAllTools?: boolean;
   onReorderTools?: (draggedId: string, targetId: string) => void;
+  isOtherClassSection?: boolean;
+  onTimePickerClick?: (e: React.MouseEvent) => void;
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
@@ -109,14 +112,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   testPresets,
   onApplyTestPreset,
   onUpdateStudentInfo,
+  masterTextbooks,
   defaultScoreCut = 80,
   defaultCountCut = 2,
-  cooperatingCells, // 📝 [추가] 실시간 협업 셀 맵
+  cooperatingCells,
   onRemoveFromToday,
   toolsOrder,
   isToolsEditMode = false,
   showAllTools = false,
-  onReorderTools
+  onReorderTools,
+  isOtherClassSection,
+  onTimePickerClick,
 }: TodaySheetCellProps) {
   
   const wasAlreadyActive = useRef(false);
@@ -790,9 +796,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       .join('');
 
                     const daysStr = sortedElectiveDays || (student.class_days || []).join('').replace(/요일/g, '') || '무';
+                    const prefix = getCoursePrefix(student.isSpecialClass, student.electiveCourse);
                     return (
                       <span className="text-[13px] font-medium text-white truncate transition-colors">
-                        <span className="text-amber-400">특강-</span>
+                        <span className="text-amber-400">{prefix}</span>
                         {student.name}-{teacherInitial}-{daysStr}
                       </span>
                     );
@@ -951,7 +958,20 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           const statusText = isSupplement ? '보강' : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
           
           return (
-            <div onClick={onAttendanceClick} className={`absolute inset-0 w-full h-full flex items-center justify-between px-3 text-[11px] cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
+            <div 
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                if (isSelected || isOtherClassSection || e.shiftKey) {
+                  onTimePickerClick?.(e);
+                } else {
+                  onAttendanceClick(e);
+                }
+              }} 
+              onContextMenu={(e) => {
+                e.preventDefault();
+                onTimePickerClick?.(e);
+              }}
+              className={`absolute inset-0 w-full h-full flex items-center justify-between px-3 text-[11px] cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
               isSupplement ? 'text-blue-400 font-semibold' :
               statusText === ATTENDANCE_STATUS.BEFORE ? 'text-gray-600' :
               statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400 font-semibold' : 
@@ -1034,7 +1054,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'review' && (
           <div className="relative w-full h-full flex items-start justify-between bg-blue-600/[0.03] py-1 px-2 gap-2">
-            <div className="flex-1 text-left min-w-0">
+            <div 
+              onMouseDown={(e) => e.stopPropagation()} 
+              className="flex-1 text-left min-w-0 select-text cursor-text"
+            >
               {student.lastSession?.homework_text ? (
                 <div className="text-[12px] font-normal text-blue-200 leading-[1.15] italic whitespace-pre-wrap break-all">
                   {student.lastSession.homework_text.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
@@ -1116,6 +1139,187 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {/* 💡 [리팩토링] 단순 텍스트 셀 분리 (mission, notes) */}
+        {colId === 'book_progress' && (
+          <div className="w-full h-full p-1.5 flex flex-col gap-1 overflow-y-auto custom-scrollbar-v text-left">
+            {(() => {
+              const currentSubject = (student.courseName || student.electiveCourse?.subject || '').trim();
+              const currentRowTargetTag = student.isSpecialClass ? `선택:${currentSubject}` : '정규';
+              const realAssignedBooks = student.assigned_books || [];
+
+              // 💡 1. 오직 현재 학생에게 진짜 배정된(assigned_books) 교재만 추출 (rpm-m3-1 등 과거 미배정 찌꺼기 제거)
+              const assignedBooks = realAssignedBooks.filter(k => {
+                if (!k || k.startsWith('__')) return false; // __elective_courses 등 시스템 키 제외
+                const rawVal = String((student.book_courses || {})[k] || '');
+                const { isKeep, targetTag } = parseBookCourseValue(rawVal);
+                if (rawVal.includes('-removed') || rawVal.includes('-done') || isKeep) return false;
+
+                // 정규 / 공통 / 선택과목 행별 100% 매칭
+                if (student.isSpecialClass) {
+                  return targetTag === currentRowTargetTag || (currentSubject && targetTag.includes(currentSubject)) || targetTag === '공통';
+                } else {
+                  return targetTag === '정규' || targetTag === '공통' || !targetTag.startsWith('선택:');
+                }
+              });
+
+              const progressMap = student.book_progress || {};
+
+              // 배정된 현재 교재가 아예 없는 경우
+              if (assignedBooks.length === 0 && Object.keys(progressMap).length === 0) {
+                return <span className="text-[10px] text-gray-500 italic select-none">-</span>;
+              }
+
+              return assignedBooks.map((bookKey, bIdx) => {
+                const bookTitle = masterTextbooks?.find((m: any) => m.bookcode?.toLowerCase() === bookKey.toLowerCase() || m.title === bookKey)?.title || bookKey;
+                const rawVal = String((student.book_courses || {})[bookKey] || '');
+                const { targetTag } = parseBookCourseValue(rawVal);
+                const isElectiveBook = targetTag.startsWith('선택:');
+
+                // 해당 교재의 현재 진도 값 (영문 키 / 한글 키 호환)
+                const val = progressMap[bookKey] || progressMap[bookTitle] || '';
+
+                return (
+                  <div key={bIdx} className={`group relative px-2 py-1 rounded-md text-[10px] flex items-center justify-between gap-1.5 truncate border ${
+                    isElectiveBook 
+                      ? 'bg-amber-500/10 border-amber-500/30' 
+                      : 'bg-emerald-500/10 border-emerald-500/20'
+                  }`}>
+                    <div className="flex items-center gap-1.5 truncate min-w-0 flex-1">
+                      {/* 💡 [정규] / [공통] / [과목명] 선명한 뱃지 표기 */}
+                      <span className={`text-[8.5px] font-black px-1 rounded shrink-0 ${
+                        isElectiveBook ? 'bg-amber-500 text-black' : targetTag === '공통' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+                      }`}>
+                        {targetTag.replace('선택:', '')}
+                      </span>
+
+                      <span className={`font-extrabold shrink-0 ${isElectiveBook ? 'text-amber-300' : 'text-emerald-400'}`}>
+                        {bookTitle}
+                      </span>
+                      <span className={`truncate text-[9.5px] ${val ? 'text-gray-300 font-medium opacity-90' : 'text-gray-500 italic'}`}>
+                        {val || ''}
+                      </span>
+                    </div>
+                    {onUpdateStudentInfo && (
+                      <div className="flex items-center gap-1 shrink-0">
+                        {/* ⚡ 수행진도/숙제 문장에서 최신 페이지/단원 자동 파싱 업데이트 버튼 */}
+                        <button
+                          onClick={async (e) => {
+                            e.stopPropagation();
+                            const sAny = student as any;
+                            
+                            // 💡 1차: 오늘 일지 문장
+                            const todayText = `${student.todaySession?.completed_classwork_text || ''}\n${student.todaySession?.homework_text || ''}\n${sAny.completed_classwork_text || ''}\n${sAny.homework_text || ''}`;
+                            
+                            // 💡 2차: 지난 과거 일지 문장들 (최근 날짜순)
+                            const pastLogs = (student.allLogs || []).slice().sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
+                            const pastTexts = pastLogs.map((l: any) => `${l.completed_classwork_text || ''}\n${l.homework_text || ''}`);
+                            
+                            const candidateTexts = [todayText, ...pastTexts];
+
+                            const targetMaster = masterTextbooks?.find((m: any) => m.title === bookTitle || m.bookcode === bookKey);
+                            const realCode = targetMaster?.bookcode || bookKey;
+
+                            let parsedResult = '';
+
+                            try {
+                              const res = await fetch(`/api/textbooks/${realCode}`);
+                              if (res.ok) {
+                                const units = (await res.json()) || [];
+                                
+                                // 💡 교재의 실제 최소 페이지 ~ 최대 페이지 범위 계산 (범위 밖의 문제번호 415 등은 무시)
+                                let minBookPage = 1;
+                                let maxBookPage = 0;
+                                units.forEach((u: any) => {
+                                  const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
+                                  const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '0', 10);
+                                  if (uStart > 0 && (minBookPage === 1 || uStart < minBookPage)) minBookPage = uStart;
+                                  if (uEnd > maxBookPage) maxBookPage = uEnd;
+                                });
+                                if (maxBookPage === 0) maxBookPage = 500; // 기본 안전 상한선
+
+                                // 오늘 일지부터 과거 일지 순으로 훑어가며 가장 먼저 발견되는 최신 페이지/단원 파싱
+                                for (const text of candidateTexts) {
+                                  if (!text.trim()) continue;
+
+                                  // 1. p.80, 80p, 80페이지 등 숫자 패턴 파싱
+                                  const pageMatches = Array.from(text.matchAll(/(?:p\.?|페이지\s*|\b)(\d{1,4})\s*(?:p|페이지|\b)/gi));
+                                  // 💡 교재 실제 페이지 범위(minBookPage ~ maxBookPage) 안에 들어오는 수치만 필터링!
+                                  const foundPages = pageMatches
+                                    .map(m => parseInt(m[1], 10))
+                                    .filter(p => p >= minBookPage && p <= maxBookPage);
+
+                                  if (foundPages.length > 0) {
+                                    const lastP = foundPages[foundPages.length - 1];
+                                    const foundUnit = units.find((u: any) => {
+                                      const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
+                                      const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
+                                      return lastP >= uStart && lastP <= uEnd;
+                                    });
+
+                                    if (foundUnit) {
+                                      const uName = foundUnit.unit || foundUnit.unitName || foundUnit.title;
+                                      parsedResult = `${uName} (p.${lastP})`;
+                                    } else {
+                                      parsedResult = `p.${lastP}`;
+                                    }
+                                    break; // 발견 시 즉시 탈출
+                                  } else {
+                                    // 2. 숫자가 없다면 단원명 직접 언급 파싱
+                                    const matchedUnit = units.slice().reverse().find((u: any) => {
+                                      const uName = u.unit || u.unitName || u.title;
+                                      return uName && text.includes(uName);
+                                    });
+                                    if (matchedUnit) {
+                                      parsedResult = matchedUnit.unit || matchedUnit.unitName || matchedUnit.title;
+                                      break; // 발견 시 즉시 탈출
+                                    }
+                                  }
+                                }
+                              }
+                            } catch (err) {
+                              console.error(err);
+                            }
+
+                            if (parsedResult) {
+                              const cleanProgress: Record<string, string> = { ...(student.book_progress || {}) };
+                              delete cleanProgress[bookKey];
+                              delete cleanProgress[bookKey.toLowerCase()];
+                              delete cleanProgress[bookTitle];
+                              cleanProgress[bookTitle] = parsedResult;
+                              await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
+                            } else {
+                              alert(`오늘 및 지난 일지 기록에서 [${bookTitle}] 교재의 페이지나 단원을 찾지 못했습니다.`);
+                            }
+                          }}
+                          title="오늘 수행진도/숙제 문장에서 최신 진도 자동 추출 업데이트"
+                          className="p-0.5 rounded text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 transition-colors"
+                        >
+                          <RefreshCw size={11} />
+                        </button>
+
+                        {val && (
+                          <button
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              const nextProg = { ...(student.book_progress || {}) };
+                              delete nextProg[bookKey];
+                              delete nextProg[bookTitle];
+                              await onUpdateStudentInfo(student.id, 'book_progress', nextProg);
+                            }}
+                            title="이 진도 내용 초기화"
+                            className="p-0.5 rounded text-gray-400 hover:text-red-400 hover:bg-red-500/20 transition-colors"
+                          >
+                            <X size={11} />
+                          </button>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              });
+            })()}
+          </div>
+        )}
+
         {(['mission', 'notes', 'management_notes'].includes(colId)) && (
           <SimpleTextCell 
             ref={colId === 'mission' ? missionRef : colId === 'notes' ? notesRef : managementNotesRef}

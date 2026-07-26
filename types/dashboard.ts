@@ -61,6 +61,7 @@ export interface Student {
   grade: string;
   course: string;
   book_courses?: Record<string, string>;
+  book_progress?: Record<string, string>; // 💡 추가 (교재별 진도파악 단원 정보)
   class: string;
   phone?: string;
   last_consulted_at?: string;

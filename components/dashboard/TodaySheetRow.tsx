@@ -39,6 +39,7 @@ interface TodaySheetRowProps {
   rowIndex?: number;
   isFirstInTimeSection?: boolean;
   timeSectionLabel?: string;
+  isOtherClassSection?: boolean;
   isScrolled?: boolean;
   historyLimit?: number;
   cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number }>; // 📝 [추가] 실시간 협업 셀 맵
@@ -58,7 +59,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     selectedDate, isHistoryExpanded, onToggleHistory, activeCell, editingCell,
     onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
     selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
-    rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel,
+    rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel, isOtherClassSection,
     cooperatingCells, onRemoveFromToday,
     toolsOrder, isToolsEditMode, showAllTools, onReorderTools
   } = props;
@@ -191,6 +192,9 @@ useEffect(() => {
               isActive={activeCell?.studentId === student.id && activeCell?.columnId === col.id}
               isInRange={isCellInRange?.(student.id, col.id) || false}
               isSelected={isSelected}
+              isFirstInTimeSection={isFirstInTimeSection}
+              timeSectionLabel={timeSectionLabel}
+              isOtherClassSection={isOtherClassSection}
               isCompleted={!!(student.todaySession?.id && student.todaySession.id !== 'temp')}
               saveStatus={saveStatus}
               isSaving={isSaving}
@@ -210,6 +214,7 @@ useEffect(() => {
               onToggleHistory={onToggleHistory}
               onViewProgress={onViewProgress}
               onViewDetail={onSelectStudent}
+              masterTextbooks={props.masterTextbooks}
               onUpdateStudentInfo={props.onUpdateStudentInfo}
               onRemoveFromToday={onRemoveFromToday}
               toolsOrder={toolsOrder}
@@ -248,6 +253,7 @@ useEffect(() => {
               onCellMouseDown={onCellMouseDown || (() => {})}
               onCellMouseEnter={onCellMouseEnter || (() => {})}
               onAttendanceClick={handleAttendanceToggle}
+              onTimePickerClick={() => setIsSupplementTimePickerOpen(true)}
               onTestScoreTypeToggle={() => {
                 const next = formData.test_score_type === 'score' ? 'count' : 'score';
                 states.setFormData((prev: any) => ({ ...prev, test_score_type: next }));
@@ -286,7 +292,7 @@ useEffect(() => {
         })}
       </tr>
 
-      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} limit={props.historyLimit || 3} masterTextbooks={masterTextbooks} />
+      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} limit={props.historyLimit || 3} masterTextbooks={masterTextbooks} onUpdateStudentInfo={props.onUpdateStudentInfo} onSave={props.onSave} academyInfo={props.academyInfo} />
 
       {/* Editors Container (Invisible row) */}
       <tr style={{ display: 'none' }}>

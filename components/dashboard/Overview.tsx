@@ -98,10 +98,10 @@ export default function Overview({
 
   // 💡 [추가] 학생 등록용 엑셀 템플릿 다운로드
   const downloadStudentTemplate = () => {
-    const headers = ['이름', '학년', '학교', '반명', '학생연락처', '부모연락처', '코스', '수업요일', '담당교사'];
-    const sampleRow = ['홍길동', '초5', '호크마초등학교', '경시반', '010-1234-5678', '010-9876-5432', 'C', '월수금', '한송이'];
+    const headers = ['이름', '학년', '학교', '반명', '학생연락처', '부모연락처', '코스', '수업요일', '수업시작시간', '수업시간(시수)', '담당교사'];
+    const sampleRow = ['홍길동', '초5', '호크마초등학교', '삼산-Y', '010-1234-5678', '010-9876-5432', 'C', '월수금', '19:00', '3', '윤여태'];
     const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
-    ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 10 }];
+    ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "학생일괄등록");
     XLSX.writeFile(wb, `학생일괄등록_양식.xlsx`);
@@ -135,6 +135,12 @@ export default function Overview({
         const parentPhoneIdx = headers.indexOf('부모연락처');
         const courseIdx = headers.indexOf('코스');
         const daysIdx = headers.indexOf('수업요일');
+        const startTimeIdx = headers.indexOf('수업시작시간') !== -1 
+          ? headers.indexOf('수업시작시간') 
+          : (headers.indexOf('시작시간') !== -1 ? headers.indexOf('시작시간') : headers.indexOf('등원시간'));
+        const durationIdx = headers.indexOf('수업시간(시수)') !== -1 
+          ? headers.indexOf('수업시간(시수)') 
+          : (headers.indexOf('수업시간') !== -1 ? headers.indexOf('수업시간') : headers.indexOf('시수'));
         const teacherIdx = headers.indexOf('담당교사');
         
         if (nameIdx === -1) {
@@ -160,10 +166,51 @@ export default function Overview({
               if (rawDays.includes(d)) cleanedDays.push(d);
             });
           }
+
+          // 💡 수업 시작시간 및 수업 시수(시간) 스마트 파싱
+          let defaultStart = 1600;
+          let durationHours = 3;
+
+          // 1) 시수(소요시간) 파싱
+          if (durationIdx !== -1 && row[durationIdx]) {
+            const rawDurStr = String(row[durationIdx] || '').trim();
+            const durMatch = rawDurStr.match(/\d+/);
+            if (durMatch) {
+              const parsedDur = parseInt(durMatch[0]);
+              if (parsedDur >= 1 && parsedDur <= 12) durationHours = parsedDur;
+            }
+          }
+
+          // 2) 시작시각 파싱
+          if (startTimeIdx !== -1 && row[startTimeIdx]) {
+            const rawTimeStr = String(row[startTimeIdx] || '').trim();
+            if (rawTimeStr.includes('7시') || rawTimeStr.includes('19')) {
+              defaultStart = 1900;
+            } else if (rawTimeStr.includes('4시') || rawTimeStr.includes('16')) {
+              defaultStart = 1600;
+            } else if (rawTimeStr.includes('5시') || rawTimeStr.includes('17')) {
+              defaultStart = 1700;
+            } else if (rawTimeStr.includes('6시') || rawTimeStr.includes('18')) {
+              defaultStart = 1800;
+            } else {
+              const nums = rawTimeStr.match(/\d+/g);
+              if (nums && nums.length > 0) {
+                let val = parseInt(nums[0]);
+                if (val < 24 && val >= 1) {
+                  if (val >= 1 && val <= 10) val += 12; // 7 -> 19시
+                  defaultStart = val * 100;
+                } else if (val >= 100) {
+                  defaultStart = val;
+                }
+              }
+            }
+          }
+
+          const defaultEnd = defaultStart + (durationHours * 100);
           
           const daySchedules: Record<string, number[]> = {};
           cleanedDays.forEach(d => {
-            daySchedules[d] = [1600, 1900];
+            daySchedules[d] = [defaultStart, defaultEnd];
           });
           
           let studentPhoneVal = phoneIdx !== -1 ? String(row[phoneIdx] || '').trim() : '';
@@ -981,14 +1028,12 @@ function StudentRowItem({
                 </span>
               );
             })}
-            {/* 💡 Keep 중인 교재 수 표시 (초소형 1K, 2K... 형태) */}
+            {/* 💡 Keep 중인 교재 수 표시 (밝은 노랑 배경/글씨로 시인성 극대화) */}
             {(() => {
-              const keepCount = (student.assigned_books || []).filter(code => String(student.book_courses?.[code]).endsWith('-keep')).length;
+              const keepCount = (student.assigned_books || []).filter(code => String(student.book_courses?.[code]).includes('-keep')).length;
               if (keepCount === 0) return null;
               return (
-                <span className={`text-[7px] font-black px-1 py-0.5 rounded-[2px] tracking-tighter uppercase border ${
-                  isSelected || isChecked ? 'bg-white/20 text-white border-white/20' : 'text-gray-600 border-white/5 bg-white/[0.02]'
-                }`}>
+                <span className="text-[7.5px] font-black px-1 py-0.5 rounded-[2px] tracking-tighter uppercase bg-yellow-400 text-black border border-yellow-300 shadow-sm leading-none">
                   {keepCount}K
                 </span>
               );

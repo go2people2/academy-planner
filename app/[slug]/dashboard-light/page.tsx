@@ -1523,11 +1523,12 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         await supabase.from('ams_students').delete().eq('id', studentId); setSelectedStudentId(null);
       } else {
         let updateData: any = (typeof fieldOrUpdates === 'string') ? { [fieldOrUpdates]: value } : { ...fieldOrUpdates };
+        const realStudentId = studentId.includes('_special_') ? studentId.split('_special_')[0] : studentId;
         
         // 💡 [낙관적 업데이트] 로컬 상태 즉시 갱신
-        setStudents(prev => prev.map(s => (s.id === studentId || s.originalId === studentId) ? { ...s, ...updateData } : s));
+        setStudents(prev => prev.map(s => (s.id === studentId || s.id === realStudentId || s.originalId === realStudentId) ? { ...s, ...updateData } : s));
 
-        const { error } = await supabase.from('ams_students').update(updateData).eq('id', studentId);
+        const { error } = await supabase.from('ams_students').update(updateData).eq('id', realStudentId);
         if (error) {
           console.error('Failed to update student info:', error);
           alert(`학생 정보 수정 중 오류가 발생했습니다: ${error.message}`);
@@ -1538,7 +1539,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           const isValidUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(currentUser?.id);
           const creatorId = isValidUUID ? currentUser.id : null;
           await supabase.from('ams_student_management_logs').insert([{
-            student_id: studentId,
+            student_id: realStudentId,
             academy_id: academy.id,
             teacher_id: creatorId,
             notes: updateData.management_notes

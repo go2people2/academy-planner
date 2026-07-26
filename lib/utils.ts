@@ -138,3 +138,47 @@ export function parseInlineTests(
   
   return tests.length > 0 ? tests : null;
 }
+
+/**
+ * 💡 교재-수업 구분(정규 / 선택:[과목명] / 공통) 파싱 및 인코딩 헬퍼
+ */
+export function parseBookCourseValue(rawCourseValue: string = '') {
+  const isKeep = rawCourseValue.includes('-keep');
+  let startMonth = '';
+  if (rawCourseValue.includes('-start-')) {
+    const match = rawCourseValue.match(/-start-([^\-]+)/);
+    if (match) startMonth = match[1];
+  }
+  let targetTag = '정규';
+  if (rawCourseValue.includes('-target-')) {
+    const match = rawCourseValue.match(/-target-([^\-]+)/);
+    if (match) targetTag = match[1] || '정규';
+  }
+
+  // Base course (e.g. 'C', 'B', 'A')
+  let baseCourse = rawCourseValue
+    .replace(/-keep/g, '')
+    .replace(/-start-[^\-]+/g, '')
+    .replace(/-target-[^\-]+/g, '');
+
+  return { baseCourse, isKeep, startMonth, targetTag };
+}
+
+export function buildBookCourseValue({
+  baseCourse = 'C',
+  isKeep = false,
+  startMonth = '',
+  targetTag = '정규'
+}: {
+  baseCourse?: string;
+  isKeep?: boolean;
+  startMonth?: string;
+  targetTag?: string;
+}): string {
+  let val = baseCourse || 'C';
+  if (startMonth) val += `-start-${startMonth}`;
+  if (targetTag && targetTag !== '정규') val += `-target-${targetTag}`;
+  if (isKeep) val += `-keep`;
+  return val;
+}
+

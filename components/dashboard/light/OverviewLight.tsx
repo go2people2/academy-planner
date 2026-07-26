@@ -907,14 +907,12 @@ function StudentRowItem({
                 </span>
               );
             })}
-            {/* 💡 Keep 중인 교재 수 표시 (초소형 1K, 2K... 형태) */}
+            {/* 💡 Keep 중인 교재 수 표시 (밝은 노랑 배경/글씨로 시인성 극대화) */}
             {(() => {
-              const keepCount = (student.assigned_books || []).filter(code => String(student.book_courses?.[code]).endsWith('-keep')).length;
+              const keepCount = (student.assigned_books || []).filter(code => String(student.book_courses?.[code]).includes('-keep')).length;
               if (keepCount === 0) return null;
               return (
-                <span className={`text-[7px] font-black px-1 py-0.5 rounded-[2px] tracking-tighter uppercase border ${
-                  isSelected || isChecked ? 'bg-white/20 text-white border-white/20' : 'text-[#37352f]/60 border-[#edece9] bg-[#f8f8f7]'
-                }`}>
+                <span className="text-[7.5px] font-black px-1 py-0.5 rounded-[2px] tracking-tighter uppercase bg-yellow-400 text-black border border-yellow-300 shadow-sm leading-none">
                   {keepCount}K
                 </span>
               );

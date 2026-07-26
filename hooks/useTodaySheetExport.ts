@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
+import { parseBookCourseValue } from '@/lib/utils';
 
 export interface UseTodaySheetExportParams {
   students: any[];
@@ -64,15 +65,27 @@ export function useTodaySheetExport({
         const teacherInitial = teacher?.initials || s.teacher_initial || '';
         const session = s.todaySession || {};
 
-        // 💡 킵해둔 교재(-keep) 및 완료된 교재(-done)는 제외하고 현재 사용 중인 교재만 필터링
+        const currentRowTargetTag = s.isSpecialClass 
+          ? `선택:${s.courseName || s.electiveCourse?.subject || ''}`
+          : '정규';
+
+        // 💡 킵해둔 교재(-keep), 완료된 교재(-done) 및 타 수업용 교재 제외
         const books = (s.assigned_books || [])
           .filter((code: string) => {
-            const status = String(s.book_courses?.[code] || '');
-            return !status.includes('-keep') && !status.includes('-done');
+            const courseVal = String(s.book_courses?.[code] || '');
+            if (courseVal.includes('-keep') || courseVal.includes('-done')) return false;
+
+            const { targetTag } = parseBookCourseValue(courseVal);
+            const isMatch = (targetTag === '공통') ||
+                            (!s.isSpecialClass && (targetTag === '정규' || !targetTag.startsWith('선택:'))) ||
+                            (s.isSpecialClass && (targetTag === currentRowTargetTag));
+
+            return isMatch;
           })
           .map((code: string) => masterTextbooks.find((m: any) => m.bookcode === code)?.title || code)
           .filter((title: any) => !!title)
           .join(', ');
+
 
         let combinedName: string;
 

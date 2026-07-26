@@ -90,7 +90,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
     if (status.includes(':')) {
       const parts = status.split(':');
-      const val = parseInt(parts[parts.length - 1]);
+      const val = parseInt(parts[1], 10);
       if (!isNaN(val) && val < 24) return val;
     }
 
@@ -273,8 +273,10 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
           }
         } catch (e) {}
       }
-
-      const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null);
+      const hasAnyStatus = status !== ATTENDANCE_STATUS.BEFORE;
+      const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || 
+                       (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null) ||
+                       (!hasRegularSession && activeElectives.length === 0 && (hasAnyStatus || (session?.id && session.id !== 'temp')));
 
       // 💡 [이중 가드 가상 팽창] 정규와 특강 수강 일정이 동시에 잡힌 복수 수강생은 분할 출력합니다.
       if (hasRegularSession) {
@@ -380,9 +382,15 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     setSelectedIds(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
   };
  
-  const handleQuickAction = async (student: any, status: string | null) => {
-    let finalStatus = status || ATTENDANCE_STATUS.BEFORE;
+  const handleQuickAction = async (student: any, statusType: string | null) => {
+    let finalStatus = statusType || ATTENDANCE_STATUS.BEFORE;
+    const currentStatus = student.todaySession?.attendance_status || '';
     
+    let timeSuffix = '';
+    if (currentStatus.includes(':')) {
+      timeSuffix = currentStatus.substring(currentStatus.indexOf(':'));
+    }
+
     if (finalStatus === ATTENDANCE_STATUS.BEFORE) {
       const mHour = student.todaySession?.moved_to_hour;
 
@@ -409,7 +417,11 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
         } else {
           finalStatus = `${ATTENDANCE_STATUS.SUPPLEMENT}:${String(mHour).padStart(2, '0')}:00`;
         }
+      } else if (!student.day_schedules?.[getDayOfWeek(selectedDate)]?.length && timeSuffix) {
+        finalStatus = ATTENDANCE_STATUS.SUPPLEMENT + timeSuffix;
       }
+    } else {
+      finalStatus = statusType + timeSuffix;
     }
     
     await localSave(student, { attendance_status: finalStatus });
@@ -439,7 +451,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
         attendance_reason: null
       });
     } else {
-      await localSave(student, { moved_to_hour: hour });
+      await localSave(student, { moved_to_hour: hour, attendance_status: ATTENDANCE_STATUS.BEFORE, attendance_reason: '시간 변경' });
     }
     setActiveStudent(null);
     setIsTimeShiftOpen(false);
