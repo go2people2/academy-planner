@@ -35,13 +35,20 @@ export function useTodaySheetClipboard({
       ? (target as HTMLInputElement | HTMLTextAreaElement).selectionStart !== (target as HTMLInputElement | HTMLTextAreaElement).selectionEnd
       : false;
 
-    if (hasSelection || !selectedRange) return;
+    const targetRange = selectedRange || (activeCell ? {
+      startStudentId: activeCell.studentId,
+      endStudentId: activeCell.studentId,
+      startColId: activeCell.columnId,
+      endColId: activeCell.columnId
+    } : null);
+
+    if (hasSelection || !targetRange) return;
     
     e.preventDefault();
-    const sIdx = filteredStudents.findIndex(s => s.id === selectedRange.startStudentId);
-    const eIdx = filteredStudents.findIndex(s => s.id === selectedRange.endStudentId);
-    const sColIdx = activeColumns.findIndex(c => c.id === selectedRange.startColId);
-    const eColIdx = activeColumns.findIndex(c => c.id === selectedRange.endColId);
+    const sIdx = filteredStudents.findIndex(s => s.id === targetRange.startStudentId);
+    const eIdx = filteredStudents.findIndex(s => s.id === targetRange.endStudentId);
+    const sColIdx = activeColumns.findIndex(c => c.id === targetRange.startColId);
+    const eColIdx = activeColumns.findIndex(c => c.id === targetRange.endColId);
     
     if (sIdx === -1 || eIdx === -1 || sColIdx === -1 || eColIdx === -1) return;
     
@@ -83,10 +90,9 @@ export function useTodaySheetClipboard({
       rows.push(rowData.join('\t'));
     }
     const finalData = rows.join('\n');
-    console.log('copy finalData', finalData);
     if (e.clipboardData) e.clipboardData.setData('text/plain', finalData);
-    else navigator.clipboard.writeText(finalData);
-  }, [selectedRange, filteredStudents, activeColumns, selectedDate]);
+    if (navigator.clipboard) navigator.clipboard.writeText(finalData).catch(() => {});
+  }, [selectedRange, activeCell, filteredStudents, activeColumns, selectedDate]);
 
   // 2. 붙여넣기 핸들러
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
