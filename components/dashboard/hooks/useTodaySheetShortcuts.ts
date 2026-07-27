@@ -332,7 +332,8 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       }
 
       // Ctrl+D / Cmd+D / Alt+D (Fill Down)
-      const isDKey = e.key?.toLowerCase() === 'd' || e.code === 'KeyD';
+      const keyLower = e.key?.toLowerCase();
+      const isDKey = keyLower === 'd' || keyLower === 'ㅇ' || e.code === 'KeyD';
       const isModifierPressed = e.ctrlKey || e.metaKey || e.altKey;
       if (isModifierPressed && isDKey && !e.shiftKey) {
         const isMultiRowSelection = selectedRange && selectedRange.startStudentId !== selectedRange.endStudentId;
@@ -348,11 +349,14 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             handleFillDown();
           }
           return;
-        } else if (activeCell || selectedRange) {
+        } else {
           // 💡 단일 셀 선택 혹은 입력창 내부 포커스 시 바로 윗행 학생의 동일 컬럼 값 복사
           e.preventDefault();
-          const targetStudentId = activeCell?.studentId || selectedRange?.endStudentId;
-          const colId = activeCell?.columnId || selectedRange?.endColId;
+          const inputStudentId = isInput ? target.getAttribute('data-student-id') : null;
+          const inputColId = isInput ? target.getAttribute('data-col-id') : null;
+
+          const targetStudentId = activeCell?.studentId || selectedRange?.endStudentId || inputStudentId;
+          const colId = activeCell?.columnId || selectedRange?.endColId || inputColId;
           if (!targetStudentId || !colId) return;
 
           const rIdx = filteredStudents.findIndex(s => s.id === targetStudentId);
