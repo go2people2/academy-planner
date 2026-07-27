@@ -152,15 +152,12 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       targetColIds.forEach(colId => {
         const prop = mapColumnToProp(colId);
         const sourceValInfo = extractColumnValue(sourceStudent, colId);
-        const targetValInfo = extractColumnValue(targetStudent, colId);
 
-        if (sourceValInfo.textVal !== targetValInfo.textVal) {
-          newData[prop] = sourceValInfo.textVal;
-          if (sourceValInfo.extraData) {
-            Object.assign(newData, sourceValInfo.extraData);
-          }
-          changed = true;
+        newData[prop] = sourceValInfo.textVal;
+        if (sourceValInfo.extraData) {
+          Object.assign(newData, sourceValInfo.extraData);
         }
+        changed = true;
       });
       
       if (changed) {
@@ -405,14 +402,22 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
               extraData = { [prop]: prevVal };
             }
             
-            // 현재 입력 포커스된 textarea / input 의 밸류를 즉각 교체
+            // 현재 입력 포커스된 textarea / input 이 있을 경우 native value setter로 갱신하여 React onChange/onInput 도 완벽 연동
             if (isInput && (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) {
-              target.value = prevVal;
+              try {
+                const proto = target instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
+                const valueSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
+                valueSetter?.call(target, prevVal);
+              } catch (e) {
+                target.value = prevVal;
+              }
               target.dispatchEvent(new Event('input', { bubbles: true }));
               target.style.height = 'auto';
               target.style.height = `${target.scrollHeight}px`;
-            } else if (currentStudent) {
-              // 단일 셀 선택 상태(비입력 모드)에서는 state 및 DB 즉각 반영
+            }
+
+            if (currentStudent) {
+              // 입력 모드 여부와 관계없이 React State, DOM, DB 저장을 100% 완전 동기화
               const newData = extraData;
               setStudents((prev: any[]) => prev.map(s => {
                 if (s.id === currentStudent.id) {
