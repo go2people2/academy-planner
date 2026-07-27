@@ -114,7 +114,7 @@ export default function TeacherTasks({
         .from('ams_session_logs')
         .select('*')
         .eq('academy_id', academyInfo.id)
-        .like('attendance_status', '보강%')
+        .or('attendance_status.ilike.보강%,special_notes.ilike.%보강%,attendance_reason.ilike.%보강%')
         .order('session_date', { ascending: true });
 
       if (error) throw error;
@@ -220,6 +220,22 @@ export default function TeacherTasks({
       // 💡 [수정 모드 - 그룹 카드 단위 일괄 수정]
       try {
         const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
+
+        const checkIsScheduledOnDate = (student: Student | undefined, dateStr: string) => {
+          if (!student || !dateStr) return false;
+          try {
+            const d = new Date(dateStr + 'T00:00:00');
+            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+            const dayName = dayNames[d.getDay()];
+            if (student.class_days && Array.isArray(student.class_days) && student.class_days.includes(dayName)) {
+              return true;
+            }
+            if (student.day_schedules && student.day_schedules[dayName] && Array.isArray(student.day_schedules[dayName]) && student.day_schedules[dayName].length > 0) {
+              return true;
+            }
+          } catch (e) {}
+          return false;
+        };
         
         // 1. 그룹에 포함된 기존 학생의 세션 로그를 일괄 업데이트합니다.
         const updatePromises = editMakeupGroup.items.map((item: any) => {
@@ -228,13 +244,16 @@ export default function TeacherTasks({
             ? currentNotes.slice(currentNotes.indexOf(']') + 1).trim()
             : currentNotes;
           const newNotes = `[${makeupType}] ${pureNotes}`.trim();
+          const studentObj = students.find(s => s.id === item.student_id);
+          const isScheduledToday = checkIsScheduledOnDate(studentObj, makeupDate);
 
           return supabase
             .from('ams_session_logs')
             .update({
               session_date: makeupDate,
               attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
-              moved_to_hour: hour,
+              attendance_reason: '보강 수업',
+              moved_to_hour: isScheduledToday ? null : hour,
               special_notes: newNotes
             })
             .eq('id', item.id);
@@ -245,13 +264,15 @@ export default function TeacherTasks({
         if (selectedStudentIds.length > 0) {
           const payloads = selectedStudentIds.map(studentId => {
             const student = students.find(s => s.id === studentId);
+            const isScheduledToday = checkIsScheduledOnDate(student, makeupDate);
             return {
               student_id: studentId,
               student_name: student?.name || '학생',
               academy_id: academyInfo.id,
               session_date: makeupDate,
               attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
-              moved_to_hour: hour,
+              attendance_reason: '보강 수업',
+              moved_to_hour: isScheduledToday ? null : hour,
               status: 'none',
               special_notes: `[${makeupType}]`,
               course_name: '정규'
@@ -286,16 +307,35 @@ export default function TeacherTasks({
       // 💡 [신규 등록 모드]
       if (selectedStudentIds.length === 0) return;
       try {
+        const checkIsScheduledOnDate = (student: Student | undefined, dateStr: string) => {
+          if (!student || !dateStr) return false;
+          try {
+            const d = new Date(dateStr + 'T00:00:00');
+            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+            const dayName = dayNames[d.getDay()];
+            if (student.class_days && Array.isArray(student.class_days) && student.class_days.includes(dayName)) {
+              return true;
+            }
+            if (student.day_schedules && student.day_schedules[dayName] && Array.isArray(student.day_schedules[dayName]) && student.day_schedules[dayName].length > 0) {
+              return true;
+            }
+          } catch (e) {}
+          return false;
+        };
+
         const payloads = selectedStudentIds.map(studentId => {
           const student = students.find(s => s.id === studentId);
           const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
+          const isScheduledToday = checkIsScheduledOnDate(student, makeupDate);
+
           return {
             student_id: studentId,
             student_name: student?.name || '학생',
             academy_id: academyInfo.id,
             session_date: makeupDate,
             attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
-            moved_to_hour: hour,
+            attendance_reason: '보강 수업',
+            moved_to_hour: isScheduledToday ? null : hour,
             status: 'none',
             special_notes: `[${makeupType}]`,
             course_name: '정규'
@@ -365,7 +405,10 @@ export default function TeacherTasks({
 
       const { error } = await supabase
         .from('ams_session_logs')
-        .update({ attendance_status: status })
+        .update({ 
+          attendance_status: status,
+          attendance_reason: '보강 수업'
+        })
         .eq('id', logId);
 
       if (error) throw error;
@@ -808,7 +851,7 @@ export default function TeacherTasks({
                           <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5 custom-scrollbar-v">
                             {group.items.map((makeup) => {
                                 const studentObj = students.find(s => s.id === makeup.student_id);
-                                const isCompleted = makeup.attendance_status === '출석' || makeup.attendance_status === '결석';
+                                const isCompleted = makeup.attendance_status === '출석' || makeup.attendance_status === '결석' || makeup.attendance_status === '지각';
                                 
                                 return (
                                   <div key={makeup.id} className="flex items-center justify-between py-1.5 border-b border-[#edece9] last:border-0 group/row">
@@ -825,13 +868,25 @@ export default function TeacherTasks({
 
                                     <div className="flex items-center gap-1.5 shrink-0">
                                       {isCompleted ? (
-                                        <span className={`text-[8px] font-black px-1.5 py-0.5 rounded ${
-                                          makeup.attendance_status === '출석'
-                                            ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                                            : 'bg-rose-50 text-rose-700 border border-rose-200'
-                                        }`}>
-                                          {makeup.attendance_status}
-                                        </span>
+                                        <div className="flex items-center gap-1">
+                                          <span className={`text-[8.5px] font-black px-2 py-0.5 rounded shadow-sm ${
+                                            makeup.attendance_status === '출석'
+                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-250'
+                                              : makeup.attendance_status === '지각'
+                                              ? 'bg-amber-50 text-amber-700 border border-amber-250'
+                                              : 'bg-rose-50 text-rose-700 border border-rose-250'
+                                          }`}>
+                                            {makeup.attendance_status === '출석' ? '🟢 출석' : makeup.attendance_status === '지각' ? '🟡 지각' : '🔴 결석'}
+                                          </span>
+                                          <button 
+                                            type="button"
+                                            onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, `보강:${group.time}`)}
+                                            className="text-[8px] font-bold text-gray-500 hover:text-gray-800 underline underline-offset-2 px-1"
+                                            title="출석 상태 재초기화"
+                                          >
+                                            재수정
+                                          </button>
+                                        </div>
                                       ) : (
                                         <div className="flex gap-1">
                                           <button 

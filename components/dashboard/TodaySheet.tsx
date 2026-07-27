@@ -1259,7 +1259,86 @@ export default function TodaySheet({
     }));
   }, [onSave, onUpdateStudentInfo, filteredStudents, selectedDate, pushToUndoStack, sendSaveEvent, setStudents]);
 
+  const handleCopy = useCallback((e: ClipboardEvent) => {
+    const activeEl = document.activeElement;
+    const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+    if (isInputFocused && editingCell) return;
+
+    if (!activeCell && (!selectedRange || !selectedRange.startStudentId)) return;
+
+    const mapField = (colId: string) => {
+      if (colId === 'attendance') return 'attendance_status';
+      if (colId === 'test_id') return 'test_id';
+      if (colId === 'test_score') return 'test_score';
+      if (colId === 'assign') return 'homework_text';
+      if (colId === 'classwork') return 'classwork_text';
+      if (colId === 'completed_classwork') return 'completed_classwork_text';
+      if (colId === 'mission') return 'mission';
+      if (colId === 'notes') return 'special_notes';
+      if (colId === 'next_quiz') return 'next_quiz_text';
+      if (colId === 'management_notes') return 'management_notes';
+      return colId;
+    };
+
+    let rowsToCopy: string[][] = [];
+
+    if (selectedRange && selectedRange.startStudentId && selectedRange.endStudentId) {
+      const startStudentIdx = students.findIndex((s: any) => s.id === selectedRange.startStudentId);
+      const endStudentIdx = students.findIndex((s: any) => s.id === selectedRange.endStudentId);
+      const startColIdx = activeColumns.findIndex(col => col.id === selectedRange.startColId);
+      const endColIdx = activeColumns.findIndex(col => col.id === selectedRange.endColId);
+
+      if (startStudentIdx !== -1 && endStudentIdx !== -1 && startColIdx !== -1 && endColIdx !== -1) {
+        const minRow = Math.min(startStudentIdx, endStudentIdx);
+        const maxRow = Math.max(startStudentIdx, endStudentIdx);
+        const minCol = Math.min(startColIdx, endColIdx);
+        const maxCol = Math.max(startColIdx, endColIdx);
+
+        for (let r = minRow; r <= maxRow; r++) {
+          const student = students[r];
+          if (!student) continue;
+          const session = student.todaySession || {};
+          const rowVals: string[] = [];
+
+          for (let c = minCol; c <= maxCol; c++) {
+            const col = activeColumns[c];
+            if (!col) continue;
+            if (col.id === 'name') {
+              rowVals.push(student.name || '');
+            } else if (col.id === 'select' || col.id === 'action') {
+              rowVals.push('');
+            } else {
+              const field = mapField(col.id);
+              rowVals.push(String(session[field] || ''));
+            }
+          }
+          rowsToCopy.push(rowVals);
+        }
+      }
+    } else if (activeCell) {
+      const student = students.find((s: any) => s.id === activeCell.studentId);
+      if (student) {
+        const session = student.todaySession || {};
+        const field = mapField(activeCell.columnId);
+        const val = String(session[field] || '');
+        rowsToCopy.push([val]);
+      }
+    }
+
+    if (rowsToCopy.length > 0) {
+      e.preventDefault();
+      const tsvText = rowsToCopy.map(r => r.join('\t')).join('\n');
+      if (e.clipboardData) {
+        e.clipboardData.setData('text/plain', tsvText);
+      }
+    }
+  }, [activeCell, selectedRange, students, activeColumns, editingCell]);
+
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
+    const activeEl = document.activeElement;
+    const isInputFocused = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA');
+    if (isInputFocused && editingCell) return;
+
     if (!activeCell) return;
     const clipboardData = e.clipboardData?.getData('text/plain');
     if (!clipboardData) return;
@@ -1286,9 +1365,11 @@ export default function TodaySheet({
         if (colId === 'test_score') return 'test_score';
         if (colId === 'assign') return 'homework_text';
         if (colId === 'classwork') return 'classwork_text';
+        if (colId === 'completed_classwork') return 'completed_classwork_text';
         if (colId === 'mission') return 'mission';
         if (colId === 'notes') return 'special_notes';
         if (colId === 'next_quiz') return 'next_quiz_text';
+        if (colId === 'management_notes') return 'management_notes';
         return colId;
       };
       if (isSingle && selectedIds.length > 1) {
@@ -1340,7 +1421,6 @@ export default function TodaySheet({
           updates.forEach(u => {
             const invMap: any = { 'test_status': 'test_id', 'test_score': 'test_score', 'classwork_text': 'classwork', 'completed_classwork_text': 'completed_classwork', 'homework_text': 'assign', 'next_quiz_text': 'next_quiz', 'mission': 'mission', 'special_notes': 'notes', 'management_notes': 'management_notes' };
             Object.keys(u.newData).forEach(field => {
-              // 💡 [최적화] 이전 데이터와 비교하여 실제 값이 바뀐 경우에만 DOM 조작
               if (String(u.newData[field] || '') === String(u.prevData?.[field] || '')) return;
 
               const colId = invMap[field];
@@ -1354,6 +1434,18 @@ export default function TodaySheet({
       }
     } catch (err) { console.error('Paste error:', err); }
   }, [activeCell, editingCell, activeColumns, selectedIds, students, handleBatchSave]);
+
+  useEffect(() => {
+    const onPaste = (e: ClipboardEvent) => handlePaste(e);
+    const onCopy = (e: ClipboardEvent) => handleCopy(e);
+
+    window.addEventListener('paste', onPaste);
+    window.addEventListener('copy', onCopy);
+    return () => {
+      window.removeEventListener('paste', onPaste);
+      window.removeEventListener('copy', onCopy);
+    };
+  }, [handlePaste, handleCopy]);
 
   // 📝 [리팩토링] 엑셀 및 ACA2000 가공/다운로드 전용 분리 훅 호출
   // 💡 filteredStudents: 정규/특강 행이 이미 분리된 배열 → 아카2000 export 시 각각 별도 행 출력

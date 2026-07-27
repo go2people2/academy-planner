@@ -169,14 +169,10 @@ export const determineTodaySession = (
 
     if (isTodayClassDay) {
       if (!isSkippedFromTest) {
-        const hasNoTestId = !todayLog.test_id || 
-                            !(todayLog.test_id.trim()) || 
-                            todayLog.test_id.trim() === '없음';
-
-        const isRealActivePlanExists = activePlanText && activePlanText.trim() && activePlanText.trim() !== '없음';
-
-        if (hasNoTestId && isRealActivePlanExists) {
-          todayLog.test_id = activePlanText; todayLog.test_cut = activePlanCut;
+        // 💡 DB에 세션 로그가 아예 없거나 test_id 필드 자체가 미정의(undefined/null)인 최초 상태에서만 과거 다음 테스트로 이월
+        if ((todayLog.test_id === undefined || todayLog.test_id === null) && activePlanText && activePlanText.trim() && activePlanText.trim() !== '없음') {
+          todayLog.test_id = activePlanText; 
+          todayLog.test_cut = activePlanCut;
         }
       } else {
         if (todayLog.test_id === activePlanText) {
@@ -184,8 +180,12 @@ export const determineTodaySession = (
           todayLog.test_cut = 0;
         }
       }
-    } else if (!todayLog.next_quiz_text && activePlanText) {
-      todayLog.next_quiz_text = activePlanText; todayLog.next_quiz_cut = activePlanCut; todayLog.next_quiz_trial = activePlanTrial;
+    } else if (todayLog.next_quiz_text === undefined || todayLog.next_quiz_text === null) {
+      if (activePlanText) {
+        todayLog.next_quiz_text = activePlanText; 
+        todayLog.next_quiz_cut = activePlanCut; 
+        todayLog.next_quiz_trial = activePlanTrial;
+      }
     }
     return todayLog;
   }
