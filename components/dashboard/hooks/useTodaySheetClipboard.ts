@@ -96,10 +96,12 @@ export function useTodaySheetClipboard({
 
   // 2. 붙여넣기 핸들러
   const handlePaste = useCallback(async (e: ClipboardEvent) => {
-    // 💡 사용자가 입력 중이거나 활성 요소가 폼 태그일 경우 네이티브 붙여넣기에 맡김
+    // 💡 사용자가 입력창 내부에서 글자를 직접 편집 중인 경우(커서 깜박임)에는 브라우저 네이티브 붙여넣기에 완전히 맡김
     const target = e.target as HTMLElement;
-    const isEditing = !!editingCell || target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
-    if (isEditing) return;
+    const isInputTarget = target?.tagName === 'INPUT' || target?.tagName === 'TEXTAREA';
+    if (editingCell || (isInputTarget && document.activeElement === target && (target as HTMLInputElement | HTMLTextAreaElement).selectionStart !== null)) {
+      return;
+    }
 
     if (!activeCell) return;
     const clipboardData = e.clipboardData?.getData('text/plain');

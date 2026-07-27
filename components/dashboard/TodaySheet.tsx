@@ -1435,17 +1435,7 @@ export default function TodaySheet({
     } catch (err) { console.error('Paste error:', err); }
   }, [activeCell, editingCell, activeColumns, selectedIds, students, handleBatchSave]);
 
-  useEffect(() => {
-    const onPaste = (e: ClipboardEvent) => handlePaste(e);
-    const onCopy = (e: ClipboardEvent) => handleCopy(e);
-
-    window.addEventListener('paste', onPaste);
-    window.addEventListener('copy', onCopy);
-    return () => {
-      window.removeEventListener('paste', onPaste);
-      window.removeEventListener('copy', onCopy);
-    };
-  }, [handlePaste, handleCopy]);
+  // 💡 [중복 제거] copy/paste 이벤트 리스너는 useTodaySheetShortcuts 훅에서 전역 단일 바인딩하여 처리합니다.
 
   // 📝 [리팩토링] 엑셀 및 ACA2000 가공/다운로드 전용 분리 훅 호출
   // 💡 filteredStudents: 정규/특강 행이 이미 분리된 배열 → 아카2000 export 시 각각 별도 행 출력
