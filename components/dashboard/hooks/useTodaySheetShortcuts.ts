@@ -572,13 +572,22 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         setEditingCell(null);
       }
 
-      // Backspace / Delete (다중 셀 삭제)
-      if (!isInput && (e.key === 'Backspace' || e.key === 'Delete') && selectedRange) {
+      // Backspace / Delete (단일 및 다중 셀 삭제)
+      if (!isInput && (e.key === 'Backspace' || e.key === 'Delete') && (selectedRange || activeCell)) {
         e.preventDefault();
-        const sI = filteredStudents.findIndex(s => s.id === selectedRange.startStudentId);
-        const eI = filteredStudents.findIndex(s => s.id === selectedRange.endStudentId);
-        const sC = activeColumns.findIndex(c => c.id === selectedRange.startColId);
-        const eC = activeColumns.findIndex(c => c.id === selectedRange.endColId);
+        const targetRange = selectedRange || (activeCell ? {
+          startStudentId: activeCell.studentId,
+          endStudentId: activeCell.studentId,
+          startColId: activeCell.columnId,
+          endColId: activeCell.columnId
+        } : null);
+
+        if (!targetRange) return;
+
+        const sI = filteredStudents.findIndex(s => s.id === targetRange.startStudentId);
+        const eI = filteredStudents.findIndex(s => s.id === targetRange.endStudentId);
+        const sC = activeColumns.findIndex(c => c.id === targetRange.startColId);
+        const eC = activeColumns.findIndex(c => c.id === targetRange.endColId);
         
         if (sI !== -1 && eI !== -1 && sC !== -1 && eC !== -1) {
           const rMin = Math.min(sI, eI), rMax = Math.max(sI, eI);
@@ -608,7 +617,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
           const updates: any[] = [];
 
-          // 💡 [수정] 삭제 대상 컬럼 ID들 미리 추출 (전수 순회 방지용)
+          // 💡 [수정] 삭제 대상 컬럼 ID들 미리 추출
           const targetColIds: string[] = [];
           for (let c = cMin; c <= cMax; c++) {
             const colId = activeColumns[c].id;
@@ -620,7 +629,18 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             let chg = false;
             targetColIds.forEach(colId => {
               const prop = mapColumnToProp(colId);
-              nD[prop] = ''; chg = true;
+              if (colId === 'test_id') {
+                // 오늘 테스트 삭제 시 '없음'으로 지정하여 자동 연결 재복구 방지
+                nD['test_id'] = '없음';
+                nD['test_status'] = '없음';
+              } else if (colId === 'mission') {
+                nD['mission'] = '';
+              } else if (colId === 'management_notes') {
+                nD['management_notes'] = '';
+              } else if (prop) {
+                nD[prop] = '';
+              }
+              chg = true;
             });
             if (chg) updates.push({ studentId: st.id, newData: nD, prevData: { ...sess } });
           }
@@ -629,6 +649,26 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             if (typeof window !== 'undefined') {
               (window as any).__ams_batch_saving = true;
             }
+
+            // 💡 [중요] React State(students) 반영으로 삭제 상태 지연/원복 없는 100% 지속 보존
+            setStudents((prev: any[]) => prev.map(s => {
+              const update = updates.find(u => u.studentId === s.id);
+              if (update) {
+                const hasMission = 'mission' in update.newData;
+                const hasNotes = 'management_notes' in update.newData;
+                return {
+                  ...s,
+                  ...(hasMission ? { recent_mission: update.newData.mission } : {}),
+                  ...(hasNotes ? { management_notes: update.newData.management_notes } : {}),
+                  todaySession: {
+                    ...(s.todaySession || {}),
+                    ...update.newData
+                  }
+                };
+              }
+              return s;
+            }));
+
             syncTodaySheetDom(updates, targetColIds, true); 
             handleBatchSave(updates).finally(() => {
               setTimeout(() => {
