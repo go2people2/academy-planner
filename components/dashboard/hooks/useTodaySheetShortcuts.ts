@@ -334,11 +334,13 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         }
       }
 
-      // Ctrl+D / Alt+D (Fill Down)
+      // Ctrl+D / Cmd+D / Alt+D (Fill Down)
       const isDKey = e.key?.toLowerCase() === 'd' || e.code === 'KeyD';
-      const isModifierPressed = e.ctrlKey || e.altKey;
+      const isModifierPressed = e.ctrlKey || e.metaKey || e.altKey;
       if (isModifierPressed && isDKey && !e.shiftKey) {
-        if (selectedRange) {
+        const isMultiRowSelection = selectedRange && selectedRange.startStudentId !== selectedRange.endStudentId;
+        
+        if (isMultiRowSelection) {
           e.preventDefault();
           if (isInput) {
             target.blur();
@@ -349,48 +351,95 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             handleFillDown();
           }
           return;
-        } else if (isInput && activeCell) {
-          // 💡 [원장님 초간편 단축키 피드백 반영] 
-          // 입력창 내부에서 단일 Ctrl+D 클릭 시, 바로 윗행 학생의 동일 컬럼 값을 즉각 긁어옵니다!
+        } else if (activeCell || selectedRange) {
+          // 💡 단일 셀 선택 혹은 입력창 내부 포커스 시 바로 윗행 학생의 동일 컬럼 값 복사
           e.preventDefault();
-          const rIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
+          const targetStudentId = activeCell?.studentId || selectedRange?.endStudentId;
+          const colId = activeCell?.columnId || selectedRange?.endColId;
+          if (!targetStudentId || !colId) return;
+
+          const rIdx = filteredStudents.findIndex(s => s.id === targetStudentId);
           if (rIdx > 0) {
             const prevStudent = filteredStudents[rIdx - 1];
-            const colId = activeCell.columnId;
+            const currentStudent = filteredStudents[rIdx];
             const prop = mapColumnToProp(colId);
             
             let prevVal = '';
+            let extraData: any = {};
+
             if (colId === 'mission') {
               prevVal = prevStudent.recent_mission || '';
+              extraData = { mission: prevVal };
             } else if (colId === 'management_notes') {
               prevVal = prevStudent.management_notes || '';
+              extraData = { management_notes: prevVal };
             } else if (colId === 'next_quiz') {
               const sess = prevStudent.todaySession || {};
               prevVal = sess.next_quiz_text || '';
+              let nqJson = sess.next_quiz_json || [];
+              let nqCut = sess.next_quiz_cut || 0;
+              let nqTrial = sess.next_quiz_trial || 1;
               if (!prevVal && sess.homework_to) {
                 try {
                   const raw = sess.homework_to;
                   if (typeof raw === 'string' && raw.startsWith('{')) {
-                    prevVal = JSON.parse(raw).text || '';
+                    const parsed = JSON.parse(raw);
+                    prevVal = parsed.text || '';
+                    nqJson = parsed.json || [];
+                    nqCut = parsed.cut || 0;
+                    nqTrial = parsed.trial || 1;
                   } else if (typeof raw === 'string') {
                     prevVal = raw;
                   }
                 } catch (e) {}
               }
+              extraData = {
+                next_quiz_text: prevVal,
+                next_quiz_json: nqJson,
+                next_quiz_cut: nqCut,
+                next_quiz_trial: nqTrial
+              };
             } else if (prop) {
               const prevSession = prevStudent.todaySession || {};
               prevVal = prevSession[prop] || '';
+              extraData = { [prop]: prevVal };
             }
             
             // 현재 입력 포커스된 textarea / input 의 밸류를 즉각 교체
-            if (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement) {
+            if (isInput && (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) {
               target.value = prevVal;
-              // React onChange / onInput 바인딩이 이를 캐치할 수 있도록 이벤트 브로드캐스트 트리거
               target.dispatchEvent(new Event('input', { bubbles: true }));
-              
-              // 추가적으로 textarea 높이 자동 조절 유도
               target.style.height = 'auto';
               target.style.height = `${target.scrollHeight}px`;
+            } else if (currentStudent) {
+              // 단일 셀 선택 상태(비입력 모드)에서는 state 및 DB 즉각 반영
+              const newData = extraData;
+              setStudents((prev: any[]) => prev.map(s => {
+                if (s.id === currentStudent.id) {
+                  return {
+                    ...s,
+                    ...(colId === 'mission' ? { recent_mission: prevVal } : {}),
+                    ...(colId === 'management_notes' ? { management_notes: prevVal } : {}),
+                    todaySession: {
+                      ...(s.todaySession || {}),
+                      ...newData
+                    }
+                  };
+                }
+                return s;
+              }));
+              
+              syncTodaySheetDom([{
+                studentId: currentStudent.id,
+                newData,
+                prevData: { ...(currentStudent.todaySession || {}) }
+              }], [colId]);
+
+              handleBatchSave([{
+                studentId: currentStudent.id,
+                newData,
+                prevData: { ...(currentStudent.todaySession || {}) }
+              }]);
             }
           }
           return;
