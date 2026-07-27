@@ -684,7 +684,7 @@ const getFilteredBaseFields = (sessionData: any) => {
       // 💡 [개선] attendance_status는 오직 명시적으로 전달된 경우에만 포함 (undefined면 제외)
       if (dbKey === 'attendance_status' && val === undefined) return;
 
-      if (dbKey === 'test_score') {
+      if (['test_score', 'moved_to_hour', 'timer_duration'].includes(dbKey)) {
         const parsed = parseInt(String(val), 10);
         val = (val === '' || val === undefined || val === null || isNaN(parsed)) ? null : parsed;
       }
