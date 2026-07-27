@@ -148,42 +148,33 @@ export const determineTodaySession = (
   student: any, todayLog: SessionLog | undefined, baseSession: SessionLog | undefined, 
   isTodayClassDay: boolean, selectedDate: string, academy: any
 ) => {
-  const activePlanText = baseSession?.next_quiz_text || "";
-  const activePlanCut = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_cut) || 0) : 0;
+  // 💡 예정된 다음 테스트(next_quiz_text)를 최우선으로 지정하되, 비어있으면 지난 수업 테스트(test_id)를 재시험/이월 시험으로 자동 지정
+  const activePlanText = baseSession?.next_quiz_text || 
+                         (baseSession?.test_completed === false ? (baseSession?.test_id || "") : "") || 
+                         baseSession?.test_id || "";
+  const activePlanCut = baseSession?.next_quiz_text 
+    ? (Number(baseSession.next_quiz_cut) || 0) 
+    : (Number(baseSession?.test_cut) || 0);
   const activePlanTrial = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_trial) || 1) : 1;
   
   const todayMission = todayLog?.mission || "";
   const defaultScoreType = baseSession?.test_score_type || 'score';
-  const attStatus = todayLog?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-  
-  const isSkippedFromTest = [
-    ATTENDANCE_STATUS.ABSENT,
-    ATTENDANCE_STATUS.EXCLUDED,
-    ATTENDANCE_STATUS.CANCELED
-  ].includes(attStatus as any);
 
   if (todayLog) {
     todayLog.mission = todayMission;
     
     if (!todayLog.test_score_type) todayLog.test_score_type = defaultScoreType;
 
-    if (isTodayClassDay) {
-      if (!isSkippedFromTest) {
-        const currentTestId = (todayLog.test_id || '').trim();
-        const isRealActivePlanExists = activePlanText && activePlanText.trim() && activePlanText.trim() !== '없음';
+    const currentTestId = (todayLog.test_id || '').trim();
+    const isRealActivePlanExists = activePlanText && activePlanText.trim() && activePlanText.trim() !== '없음';
 
-        // 💡 test_id가 비어있다면(단, 사용자가 명시적으로 '없음'을 적은 것은 제외) 과거 다음 테스트 자동 연결
-        if (!currentTestId && currentTestId !== '없음' && isRealActivePlanExists) {
-          todayLog.test_id = activePlanText; 
-          todayLog.test_cut = activePlanCut;
-        }
-      } else {
-        if (todayLog.test_id === activePlanText) {
-          todayLog.test_id = '';
-          todayLog.test_cut = 0;
-        }
-      }
-    } else if (!todayLog.next_quiz_text && activePlanText) {
+    // 💡 todayLog가 이미 존재하는 세션이더라도 test_id가 비어있다면(명시적 '없음' 제외) 예정/재시험 테스트 자동 연결
+    if (!currentTestId && currentTestId !== '없음' && isRealActivePlanExists) {
+      todayLog.test_id = activePlanText; 
+      todayLog.test_cut = activePlanCut;
+    }
+
+    if (!isTodayClassDay && !todayLog.next_quiz_text && activePlanText) {
       todayLog.next_quiz_text = activePlanText; 
       todayLog.next_quiz_cut = activePlanCut; 
       todayLog.next_quiz_trial = activePlanTrial;
@@ -194,8 +185,8 @@ export const determineTodaySession = (
   return { 
     id: 'temp', date: selectedDate, status: 'none', 
     attendance_status: ATTENDANCE_STATUS.BEFORE, 
-    test_id: (isTodayClassDay && !isSkippedFromTest) ? activePlanText : '', 
-    test_cut: (isTodayClassDay && !isSkippedFromTest) ? activePlanCut : 0, 
+    test_id: activePlanText, 
+    test_cut: activePlanCut, 
     mission: '', next_quiz_text: !isTodayClassDay ? activePlanText : '', 
     next_quiz_cut: !isTodayClassDay ? activePlanCut : 0, next_quiz_trial: !isTodayClassDay ? activePlanTrial : 1, 
     test_completed: undefined,
