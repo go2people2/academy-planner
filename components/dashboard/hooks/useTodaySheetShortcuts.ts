@@ -635,9 +635,22 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             targetColIds.forEach(colId => {
               const prop = mapColumnToProp(colId);
               if (colId === 'test_id') {
-                // 오늘 테스트 삭제 시 '없음'으로 지정하여 자동 연결 재복구 방지
-                nD['test_id'] = '없음';
-                nD['test_status'] = '없음';
+                // 💡 '오늘 테스트' 지움 시 지난 수업의 예정 테스트(next_quiz_text 또는 이전 test_id)가 있다면 즉시 자동 복구 연동
+                const sess = st.todaySession || {};
+                const lastSess = st.lastSession || {};
+                const activePlanText = sess.next_quiz_text || 
+                                       lastSess.next_quiz_text || 
+                                       (lastSess.test_completed === false ? (lastSess.test_id || "") : "") || 
+                                       lastSess.test_id || "";
+                const activePlanCut = sess.next_quiz_text 
+                  ? (Number(sess.next_quiz_cut) || 0) 
+                  : (Number(lastSess.next_quiz_cut) || Number(lastSess.test_cut) || 0);
+
+                const restoredTest = (activePlanText && activePlanText.trim() !== '없음') ? activePlanText.trim() : '';
+                
+                nD['test_id'] = restoredTest;
+                nD['test_status'] = restoredTest;
+                nD['test_cut'] = restoredTest ? activePlanCut : 0;
               } else if (colId === 'mission') {
                 nD['mission'] = '';
               } else if (colId === 'management_notes') {
