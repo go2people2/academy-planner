@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, ClipboardList, Plus, BookOpen, ChevronRight, RefreshCcw, Trash2, Eye, FileText, Loader2 } from 'lucide-react';
+import { X, ClipboardList, Plus, BookOpen, ChevronRight, RefreshCcw, Trash2, Eye, FileText, Zap, HelpCircle, Loader2 } from 'lucide-react';
 import { HomeworkItem, TextbookOption } from '@/types/dashboard';
 import { supabase } from '@/lib/supabase';
 
@@ -25,7 +25,7 @@ export default function HomeworkEditor({
 
   const [unitDataMap, setUnitDataMap] = useState<Record<string, any[]>>({});
   const [isLoadingUnits, setIsLoadingUnits] = useState(false);
-  const [pdfLinks, setPdfLinks] = useState<Record<string, string>>({});
+  const [pdfLinks, setPdfLinks] = useState<Record<string, { pdfUrl?: string; answerUrl?: string; explanationUrl?: string }>>({});
   const [activePdfUrl, setActivePdfUrl] = useState<string | null>(null);
 
   // 💡 편집 중 로컬 상태로만 관리 → 모달 닫을 때만 부모에게 전달 (깜빡임/배열 순서 버그 방지)
@@ -49,9 +49,13 @@ export default function HomeworkEditor({
         });
         if (res.ok) {
           const data = await res.json();
-          const mapped: Record<string, string> = {};
+          const mapped: Record<string, { pdfUrl?: string; answerUrl?: string; explanationUrl?: string }> = {};
           (data.pdfs || []).forEach((p: any) => {
-            mapped[p.bookcode] = p.pdf_url;
+            mapped[p.bookcode] = {
+              pdfUrl: p.pdf_url || '',
+              answerUrl: p.answer_url || '',
+              explanationUrl: p.explanation_url || ''
+            };
           });
           setPdfLinks(mapped);
         }
@@ -203,13 +207,16 @@ export default function HomeworkEditor({
     }
   };
 
-  const getEmbedUrl = (url: string) => {
-    if (!url) return '';
-    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  const openFastPdf = (url: string) => {
+    if (!url) return;
+    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/) || url.match(/id=([a-zA-Z0-9-_]+)/);
     if (match && match[1]) {
-      return `https://drive.google.com/file/d/${match[1]}/preview`;
+      // 💡 403 에러 없는 안전한 구글 드라이브 새 탭 열기 주소
+      const fastUrl = `https://drive.google.com/file/d/${match[1]}/view`;
+      window.open(fastUrl, '_blank');
+    } else {
+      window.open(url, '_blank');
     }
-    return url;
   };
 
   return createPortal(
@@ -288,7 +295,7 @@ export default function HomeworkEditor({
                 endRef={(el: any) => endRefs.current[idx] = el}
                 pdfLinks={pdfLinks}
                 isLight={isLight}
-                onOpenPdf={(url) => setActivePdfUrl(getEmbedUrl(url))}
+                onOpenPdf={(url) => openFastPdf(url)}
                 onUpdate={(updated) => {
                   const newHw = [...items];
                   newHw[idx] = updated;
@@ -401,7 +408,7 @@ export default function HomeworkEditor({
 function HomeworkRow({ 
   hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, onDuplicate, startRef, endRef, onKeyDown, pdfLinks = {}, isLight = false, onOpenPdf 
 }: { 
-  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void, pdfLinks?: Record<string, string>, isLight?: boolean, onOpenPdf?: (url: string) => void
+  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void, pdfLinks?: Record<string, any>, isLight?: boolean, onOpenPdf?: (url: string) => void
 }) {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
@@ -473,7 +480,10 @@ function HomeworkRow({
     }
   };
 
-  const pdfUrl = pdfLinks[hw.book_name];
+  const bookLinks = pdfLinks[hw.book_name];
+  const pdfUrl = typeof bookLinks === 'string' ? bookLinks : bookLinks?.pdfUrl;
+  const answerUrl = typeof bookLinks === 'object' ? bookLinks?.answerUrl : undefined;
+  const explanationUrl = typeof bookLinks === 'object' ? bookLinks?.explanationUrl : undefined;
 
   return (
     <div className="space-y-2">
@@ -554,20 +564,55 @@ function HomeworkRow({
           </div>
         )}
 
-        <div className="flex items-center gap-1.5 ml-auto shrink-0">
-          {/* 📄 구글 드라이브 교재 뷰어 링크가 있으면 버튼 표시 */}
+        <div className="flex items-center gap-1 ml-auto shrink-0">
+          {/* 1. 📖 교재 본문 PDF */}
           {hw.type === 'book' && pdfUrl && (
             <button 
               type="button"
               onClick={() => onOpenPdf?.(pdfUrl)} 
-              className={`w-6 h-6 shrink-0 rounded-lg transition-all flex items-center justify-center border ${
+              className={`px-1.5 h-6 shrink-0 rounded-[3px] text-[10px] font-bold transition-all flex items-center gap-1 border ${
                 isLight 
                   ? 'text-indigo-600 hover:bg-indigo-50 border-indigo-200 hover:border-indigo-400' 
-                  : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 border-transparent hover:border-indigo-500/30'
+                  : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 border-indigo-500/30'
               }`}
-              title="이 교재의 PDF 보기"
+              title="교재 본문 PDF 보기"
             >
-              <FileText size={13} />
+              <FileText size={11} />
+              <span>본문</span>
+            </button>
+          )}
+
+          {/* 2. ⚡ 빠른 답 PDF */}
+          {hw.type === 'book' && answerUrl && (
+            <button 
+              type="button"
+              onClick={() => onOpenPdf?.(answerUrl)} 
+              className={`px-1.5 h-6 shrink-0 rounded-[3px] text-[10px] font-bold transition-all flex items-center gap-1 border ${
+                isLight 
+                  ? 'text-amber-600 hover:bg-amber-50 border-amber-200 hover:border-amber-400' 
+                  : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 border-amber-500/30'
+              }`}
+              title="빠른 답 PDF 보기"
+            >
+              <Zap size={11} />
+              <span>빠른답</span>
+            </button>
+          )}
+
+          {/* 3. 📝 정답 및 해설 PDF */}
+          {hw.type === 'book' && explanationUrl && (
+            <button 
+              type="button"
+              onClick={() => onOpenPdf?.(explanationUrl)} 
+              className={`px-1.5 h-6 shrink-0 rounded-[3px] text-[10px] font-bold transition-all flex items-center gap-1 border ${
+                isLight 
+                  ? 'text-emerald-600 hover:bg-emerald-50 border-emerald-200 hover:border-emerald-400' 
+                  : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20 border-emerald-500/30'
+              }`}
+              title="정답 및 해설 PDF 보기"
+            >
+              <HelpCircle size={11} />
+              <span>해설</span>
             </button>
           )}
 

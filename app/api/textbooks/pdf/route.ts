@@ -100,10 +100,10 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { academyId, bookcode, pdfUrl } = body;
+    const { academyId, bookcode, pdfUrl, answerUrl, explanationUrl } = body;
 
-    if (!academyId || !bookcode || pdfUrl === undefined) {
-      return NextResponse.json({ error: '필수 파라미터(academyId, bookcode, pdfUrl)가 누락되었습니다.' }, { status: 400 });
+    if (!academyId || !bookcode) {
+      return NextResponse.json({ error: '필수 파라미터(academyId, bookcode)가 누락되었습니다.' }, { status: 400 });
     }
 
     const teacher = await getTeacherProfile(user.id);
@@ -119,17 +119,45 @@ export async function POST(req: NextRequest) {
     }
 
     // Upsert 실행 (academy_id & bookcode 유니크 복합키 기준)
-    const { data, error: upsertErr } = await supabaseAdmin
+    const upsertData: any = {
+      academy_id: academyId,
+      bookcode,
+      pdf_url: pdfUrl ?? '',
+      answer_url: answerUrl ?? '',
+      explanation_url: explanationUrl ?? ''
+    };
+
+    let { data, error: upsertErr } = await supabaseAdmin
       .from('ams_textbook_pdfs')
       .upsert(
-        { academy_id: academyId, bookcode, pdf_url: pdfUrl },
+        upsertData,
         { onConflict: 'academy_id,bookcode' }
       )
       .select();
 
     if (upsertErr) {
       console.error('[API POST PDF] Upsert error:', upsertErr.message);
-      return NextResponse.json({ error: '교재 링크 저장 실패' }, { status: 500 });
+      // 컬럼 미존재시 fallback 시도
+      if (upsertErr.message?.includes('answer_url') || upsertErr.message?.includes('column')) {
+        const fallbackData = {
+          academy_id: academyId,
+          bookcode,
+          pdf_url: pdfUrl ?? ''
+        };
+        const { data: fbData, error: fbErr } = await supabaseAdmin
+          .from('ams_textbook_pdfs')
+          .upsert(fallbackData, { onConflict: 'academy_id,bookcode' })
+          .select();
+        
+        if (!fbErr) {
+          return NextResponse.json({ 
+            success: true, 
+            data: fbData?.[0], 
+            warning: 'DB에 answer_url/explanation_url 컬럼이 아직 없어 본문 링크만 저장되었습니다. Supabase에서 컬럼 추가 SQL을 실행해 주세요.' 
+          });
+        }
+      }
+      return NextResponse.json({ error: `교재 링크 저장 실패: ${upsertErr.message}` }, { status: 500 });
     }
 
     return NextResponse.json({ success: true, data: data?.[0] });

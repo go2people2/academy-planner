@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BookOpen, Save, Trash2, Loader2, AlertCircle, Search } from 'lucide-react';
+import { BookOpen, Save, Trash2, Loader2, AlertCircle, Search, FileText, Zap, HelpCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
 interface TextbookPdfSettingsProps {
@@ -10,9 +10,15 @@ interface TextbookPdfSettingsProps {
   isLight?: boolean;
 }
 
+interface BookLinks {
+  pdfUrl: string;
+  answerUrl: string;
+  explanationUrl: string;
+}
+
 export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [], isLight = false }: TextbookPdfSettingsProps) {
-  const [pdfsMap, setPdfsMap] = useState<Record<string, string>>({});
-  const [inputMap, setInputMap] = useState<Record<string, string>>({});
+  const [pdfsMap, setPdfsMap] = useState<Record<string, BookLinks>>({});
+  const [inputMap, setInputMap] = useState<Record<string, BookLinks>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [submittingBook, setSubmittingBook] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
@@ -36,9 +42,13 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
 
       if (res.ok) {
         const data = await res.json();
-        const mapped: Record<string, string> = {};
+        const mapped: Record<string, BookLinks> = {};
         (data.pdfs || []).forEach((p: any) => {
-          mapped[p.bookcode] = p.pdf_url;
+          mapped[p.bookcode] = {
+            pdfUrl: p.pdf_url || '',
+            answerUrl: p.answer_url || '',
+            explanationUrl: p.explanation_url || ''
+          };
         });
         setPdfsMap(mapped);
         setInputMap(mapped); // 입력 폼에도 동기화
@@ -55,13 +65,20 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
   }, [academyInfo?.id]);
 
   // 2. 구글 드라이브 주소 변경 핸들러
-  const handleUrlChange = (bookcode: string, val: string) => {
-    setInputMap(prev => ({ ...prev, [bookcode]: val }));
+  const handleUrlChange = (bookcode: string, field: 'pdfUrl' | 'answerUrl' | 'explanationUrl', val: string) => {
+    const base = inputMap[bookcode] || pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
+    setInputMap(prev => ({
+      ...prev,
+      [bookcode]: {
+        ...base,
+        [field]: val
+      }
+    }));
   };
 
   // 3. 링크 등록 및 저장 (POST)
   const handleSave = async (bookcode: string) => {
-    const rawUrl = inputMap[bookcode]?.trim() || '';
+    const current = inputMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
     
     if (submittingBook) return;
     setSubmittingBook(bookcode);
@@ -81,13 +98,25 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
         body: JSON.stringify({
           academyId: academyInfo.id,
           bookcode,
-          pdfUrl: rawUrl
+          pdfUrl: current.pdfUrl.trim(),
+          answerUrl: current.answerUrl.trim(),
+          explanationUrl: current.explanationUrl.trim()
         })
       });
 
       if (res.ok) {
-        setPdfsMap(prev => ({ ...prev, [bookcode]: rawUrl }));
-        alert('구글 드라이브 교재 링크가 안전하게 저장되었습니다.');
+        const resData = await res.json();
+        const savedLinks = {
+          pdfUrl: current.pdfUrl.trim(),
+          answerUrl: current.answerUrl.trim(),
+          explanationUrl: current.explanationUrl.trim()
+        };
+        setPdfsMap(prev => ({ ...prev, [bookcode]: savedLinks }));
+        if (resData.warning) {
+          alert(`⚠️ ${resData.warning}`);
+        } else {
+          alert('구글 드라이브 교재 3종 링크가 안전하게 저장되었습니다.');
+        }
       } else {
         const errData = await res.json();
         throw new Error(errData.error || '저장 실패');
@@ -101,7 +130,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
 
   // 4. 링크 해제 및 삭제 (DELETE)
   const handleDelete = async (bookcode: string) => {
-    if (!confirm('연결된 교재 링크를 완전히 삭제하시겠습니까?')) return;
+    if (!confirm('연결된 교재 3종 링크를 완전히 삭제하시겠습니까?')) return;
     if (submittingBook) return;
     setSubmittingBook(bookcode);
 
@@ -124,8 +153,12 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
           delete next[bookcode];
           return next;
         });
-        setInputMap(prev => ({ ...prev, [bookcode]: '' }));
-        alert('링크 연동이 해제되었습니다.');
+        setInputMap(prev => {
+          const next = { ...prev };
+          delete next[bookcode];
+          return next;
+        });
+        alert('교재 연동 링크가 삭제되었습니다.');
       } else {
         const errData = await res.json();
         throw new Error(errData.error || '삭제 실패');
@@ -137,65 +170,75 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
     }
   };
 
-  // 5. 검색 및 정렬 필터링
-  const filteredTextbooks = masterTextbooks.filter(b => {
-    // 1) 탭 필터링
-    const grade = b.grade || '';
-    if (activeTab === 'elementary') {
-      if (!grade.includes('초')) return false;
-    } else if (activeTab === 'middle') {
-      if (!grade.includes('중')) return false;
-    } else if (activeTab === 'high') {
-      if (!grade.includes('고')) return false;
-    } else if (activeTab === 'etc') {
-      if (grade.includes('초') || grade.includes('중') || grade.includes('고')) return false;
-    }
+  // 학교급/학년 분류 헬퍼
+  const getGradeCategory = (b: any) => {
+    const g = (b.grade || b.grade_type || b.category || '').toString().trim();
+    const title = (b.title || '').toString().trim();
+    const code = (b.bookcode || '').toString().trim();
 
-    // 2) 검색어 필터링
-    if (!searchQuery) return true;
-    const query = searchQuery.toLowerCase();
-    return b.title?.toLowerCase().includes(query) || b.bookcode?.toLowerCase().includes(query) || grade.toLowerCase().includes(query);
+    if (g.includes('초') || title.includes('초등') || code.startsWith('E_') || code.startsWith('E-')) return 'elementary';
+    if (g.includes('중') || title.includes('중등') || code.startsWith('M_') || code.startsWith('M-')) return 'middle';
+    if (g.includes('고') || title.includes('고등') || code.startsWith('H_') || code.startsWith('H-')) return 'high';
+    return 'etc';
+  };
+
+  // 필터링 및 검색 로직
+  const filteredTextbooks = masterTextbooks.filter(book => {
+    const matchesSearch = !searchQuery.trim() || 
+      book.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
+      book.bookcode?.toLowerCase().includes(searchQuery.toLowerCase());
+    
+    if (!matchesSearch) return false;
+    if (activeTab === 'all') return true;
+
+    return getGradeCategory(book) === activeTab;
   });
 
   return (
     <div className="space-y-6">
-      {/* 🔍 검색 및 학교급 필터 바 */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 no-print">
-        <div className="relative w-full max-w-md">
-          <span className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-500">
-            <Search size={14} />
-          </span>
-          <input 
+      {/* 💡 헤더 안내 영역 */}
+      <div className={`p-4 rounded-[4px] border ${
+        isLight ? 'bg-blue-50/50 border-blue-200 text-blue-900' : 'bg-blue-500/5 border-blue-500/20 text-blue-200'
+      }`}>
+        <div className="flex items-start gap-3">
+          <BookOpen className="text-blue-500 shrink-0 mt-0.5" size={18} />
+          <div className="space-y-1 text-xs">
+            <p className="font-bold text-sm">📖 교재별 구글 드라이브 3종 링크 연동 (본문 / 빠른답 / 정답해설)</p>
+            <p className="opacity-80">
+              학원에서 사용하는 각 마스터 교재별로 **교재 본문, 빠른 답, 정답 및 해설** 구글 드라이브 공유 링크(URL)를 등록해 두시면, 수업 및 숙제 작성 시 개별 버튼으로 즉시 열어보실 수 있습니다.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      {/* 🔍 검색 및 탭 컨트롤 */}
+      <div className="flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div className="relative w-full sm:w-72">
+          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+          <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="교재명, 코드 또는 학년으로 검색..."
-            className={`w-full pl-9 pr-4 py-2 border rounded-[4px] text-xs outline-none font-bold ${
-              isLight 
-                ? 'bg-white border-gray-250 text-gray-800 placeholder:text-gray-400 focus:border-blue-500' 
-                : 'bg-black/40 border-white/10 text-white placeholder:text-gray-650 focus:border-blue-500/50'
+            placeholder="교재명 또는 교재코드 검색..."
+            className={`w-full pl-9 pr-3 py-1.5 text-xs rounded-[4px] border outline-none font-bold placeholder:text-gray-400 ${
+              isLight ? 'bg-white border-gray-250 text-gray-800 focus:border-blue-500' : 'bg-black/30 border-white/10 text-white focus:border-blue-500/50'
             }`}
           />
         </div>
 
-        {/* 🏷️ 학교급별 필터 탭 */}
-        <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex items-center gap-1 overflow-x-auto w-full sm:w-auto">
           {[
-            { id: 'all', label: '전체 교재' },
+            { id: 'all', label: '전체' },
             { id: 'elementary', label: '초등' },
             { id: 'middle', label: '중등' },
             { id: 'high', label: '고등' },
-            { id: 'etc', label: '기타' }
-          ].map(tab => {
+            { id: 'etc', label: '기타' },
+          ].map((tab) => {
             const isActive = activeTab === tab.id;
-            const count = tab.id === 'all' ? masterTextbooks.length :
-                          tab.id === 'elementary' ? masterTextbooks.filter(b => (b.grade || '').includes('초')).length :
-                          tab.id === 'middle' ? masterTextbooks.filter(b => (b.grade || '').includes('중')).length :
-                          tab.id === 'high' ? masterTextbooks.filter(b => (b.grade || '').includes('고')).length :
-                          masterTextbooks.filter(b => {
-                            const g = b.grade || '';
-                            return !g.includes('초') && !g.includes('중') && !g.includes('고');
-                          }).length;
+            const count = masterTextbooks.filter(b => {
+              if (tab.id === 'all') return true;
+              return getGradeCategory(b) === tab.id;
+            }).length;
 
             return (
               <button
@@ -237,9 +280,9 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
               <tr className={`border-b text-[9px] font-black uppercase tracking-widest ${
                 isLight ? 'bg-gray-50 border-gray-200 text-gray-500' : 'border-white/5 text-gray-500 bg-black/20'
               }`}>
-                <th className="py-3 px-4 w-[250px]">교재명 (코드)</th>
-                <th className="py-3 px-4">구글 드라이브 / 외부 링크 주소</th>
-                <th className="py-3 px-4 text-center w-[120px] no-print">작업</th>
+                <th className="py-3 px-4 w-[220px]">교재명 (코드)</th>
+                <th className="py-3 px-4">구글 드라이브 3종 연동 주소</th>
+                <th className="py-3 px-4 text-center w-[110px] no-print">작업</th>
               </tr>
             </thead>
             <tbody className={`divide-y ${isLight ? 'divide-gray-150' : 'divide-white/5'}`}>
@@ -251,53 +294,101 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                 </tr>
               ) : (
                 filteredTextbooks.map((book) => {
-                  const savedUrl = pdfsMap[book.bookcode] || '';
-                  const currentInput = inputMap[book.bookcode] || '';
+                  const saved = pdfsMap[book.bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
+                  const current = inputMap[book.bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
                   const isPending = submittingBook === book.bookcode;
-                  const isModified = currentInput.trim() !== savedUrl.trim();
+                  const isModified = 
+                    current.pdfUrl.trim() !== saved.pdfUrl.trim() ||
+                    current.answerUrl.trim() !== saved.answerUrl.trim() ||
+                    current.explanationUrl.trim() !== saved.explanationUrl.trim();
+                  const hasAnySaved = !!(saved.pdfUrl || saved.answerUrl || saved.explanationUrl);
 
                   return (
                     <tr key={book.bookcode} className={`transition-colors font-bold ${
                       isLight ? 'hover:bg-gray-50/50 text-gray-700' : 'hover:bg-white/[0.01] text-gray-300'
                     }`}>
                       {/* 교재 이름 */}
-                      <td className="py-3 px-4">
-                        <div className="flex items-center gap-2">
-                          <BookOpen size={13} className={isLight ? 'text-gray-400' : 'text-gray-650'} />
+                      <td className="py-3 px-4 align-top">
+                        <div className="flex items-start gap-2 pt-1">
+                          <BookOpen size={14} className={`mt-0.5 shrink-0 ${isLight ? 'text-gray-400' : 'text-gray-500'}`} />
                           <div>
                             <span className={isLight ? 'text-gray-850 font-black' : 'text-white'}>{book.title}</span>
-                            <div className={`text-[8px] font-mono mt-0.5 ${isLight ? 'text-gray-400' : 'text-gray-600'}`}>{book.bookcode}</div>
+                            <div className={`text-[9px] font-mono mt-0.5 ${isLight ? 'text-gray-400' : 'text-gray-600'}`}>{book.bookcode}</div>
                           </div>
                         </div>
                       </td>
 
-                      {/* 링크 주소 입력 칸 */}
-                      <td className="py-3 px-4">
-                        <input 
-                          type="text"
-                          value={currentInput}
-                          onChange={(e) => handleUrlChange(book.bookcode, e.target.value)}
-                          placeholder="https://drive.google.com/file/d/.../view?usp=sharing"
-                          disabled={isPending}
-                          className={`w-full border rounded-[2px] px-3 py-1.5 text-xs outline-none font-bold placeholder:text-gray-450 ${
-                            isLight 
-                              ? 'bg-white border-gray-250 text-gray-800 focus:border-blue-500' 
-                              : 'bg-black/30 border-white/10 text-white focus:border-blue-500/50'
-                          }`}
-                        />
+                      {/* 3종 링크 주소 입력 칸 */}
+                      <td className="py-3 px-4 space-y-2">
+                        {/* 1. 교재 본문 링크 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-[10px] font-bold text-indigo-500 flex items-center gap-1 shrink-0">
+                            <FileText size={11} /> 📖 본문
+                          </span>
+                          <input 
+                            type="text"
+                            value={current.pdfUrl}
+                            onChange={(e) => handleUrlChange(book.bookcode, 'pdfUrl', e.target.value)}
+                            placeholder="https://drive.google.com/file/d/... (본문 PDF URL)"
+                            disabled={isPending}
+                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                              isLight 
+                                ? 'bg-white border-gray-250 text-gray-800 focus:border-indigo-500' 
+                                : 'bg-black/30 border-white/10 text-white focus:border-indigo-500/50'
+                            }`}
+                          />
+                        </div>
+
+                        {/* 2. 빠른 답 링크 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-[10px] font-bold text-amber-500 flex items-center gap-1 shrink-0">
+                            <Zap size={11} /> ⚡ 빠른답
+                          </span>
+                          <input 
+                            type="text"
+                            value={current.answerUrl}
+                            onChange={(e) => handleUrlChange(book.bookcode, 'answerUrl', e.target.value)}
+                            placeholder="https://drive.google.com/file/d/... (빠른답 PDF URL)"
+                            disabled={isPending}
+                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                              isLight 
+                                ? 'bg-white border-gray-250 text-gray-800 focus:border-amber-500' 
+                                : 'bg-black/30 border-white/10 text-white focus:border-amber-500/50'
+                            }`}
+                          />
+                        </div>
+
+                        {/* 3. 정답 및 해설 링크 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-[10px] font-bold text-emerald-500 flex items-center gap-1 shrink-0">
+                            <HelpCircle size={11} /> 📝 해설
+                          </span>
+                          <input 
+                            type="text"
+                            value={current.explanationUrl}
+                            onChange={(e) => handleUrlChange(book.bookcode, 'explanationUrl', e.target.value)}
+                            placeholder="https://drive.google.com/file/d/... (정답/해설 PDF URL)"
+                            disabled={isPending}
+                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                              isLight 
+                                ? 'bg-white border-gray-250 text-gray-800 focus:border-emerald-500' 
+                                : 'bg-black/30 border-white/10 text-white focus:border-emerald-500/50'
+                            }`}
+                          />
+                        </div>
                       </td>
 
                       {/* 작업 단추 */}
-                      <td className="py-3 px-4 text-center no-print">
+                      <td className="py-3 px-4 text-center no-print align-top pt-3">
                         <div className="flex items-center justify-center gap-1.5">
                           <button
                             type="button"
                             onClick={() => handleSave(book.bookcode)}
-                            disabled={isPending || (!isModified && !!savedUrl)}
+                            disabled={isPending || (!isModified && hasAnySaved)}
                             className={`px-3 py-1.5 rounded-[2px] text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1 border ${
                               isPending
                                 ? 'opacity-40 cursor-wait'
-                                : !isModified && !!savedUrl
+                                : !isModified && hasAnySaved
                                   ? isLight 
                                     ? 'bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed'
                                     : 'bg-white/5 text-gray-600 border-white/5 cursor-not-allowed'
@@ -314,7 +405,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                             저장
                           </button>
 
-                          {savedUrl && (
+                          {hasAnySaved && (
                             <button
                               type="button"
                               onClick={() => handleDelete(book.bookcode)}
@@ -324,7 +415,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                                   ? 'bg-white border-red-200 text-red-500 hover:bg-red-50'
                                   : 'bg-red-500/5 border-red-500/10 text-red-400 hover:bg-red-500 hover:text-white'
                               }`}
-                              title="링크 연동 해제"
+                              title="링크 연동 완전 해제"
                             >
                               <Trash2 size={14} />
                             </button>

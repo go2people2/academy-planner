@@ -3,10 +3,14 @@ CREATE TABLE IF NOT EXISTS ams_textbook_pdfs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     academy_id UUID NOT NULL REFERENCES ams_academies(id) ON DELETE CASCADE,
     bookcode TEXT NOT NULL,
-    pdf_url TEXT NOT NULL,
+    pdf_url TEXT,
+    answer_url TEXT,
+    explanation_url TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     CONSTRAINT unique_academy_bookcode UNIQUE (academy_id, bookcode)
 );
+ALTER TABLE ams_textbook_pdfs ADD COLUMN IF NOT EXISTS answer_url TEXT;
+ALTER TABLE ams_textbook_pdfs ADD COLUMN IF NOT EXISTS explanation_url TEXT;
 
 -- RLS 활성화
 ALTER TABLE ams_textbook_pdfs ENABLE ROW LEVEL SECURITY;
