@@ -368,14 +368,22 @@ export default function DashboardPage() {
     }
   }, [selectedDate]);
 
-  // 💡 선택한 선생님 필터 상태 로컬스토리지 연동
+  // 💡 [보안/편의 개선] 로그인한 사용자 권한에 따른 선생님 필터 초기화
   useEffect(() => {
-    const saved = localStorage.getItem('ams_selectedTeacherId');
-    if (saved) setSelectedTeacherId(saved);
-  }, []);
+    if (currentUser) {
+      if (currentUser.role === 'teacher') {
+        setSelectedTeacherId('All');
+        localStorage.removeItem('ams_selectedTeacherId');
+      } else {
+        setSelectedTeacherId('All');
+      }
+    }
+  }, [currentUser?.id, currentUser?.role]);
 
   useEffect(() => {
-    localStorage.setItem('ams_selectedTeacherId', selectedTeacherId);
+    if (selectedTeacherId) {
+      localStorage.setItem('ams_selectedTeacherId', selectedTeacherId);
+    }
   }, [selectedTeacherId]);
 
   // 💡 선택한 시간대 필터 상태 로컬스토리지 연동

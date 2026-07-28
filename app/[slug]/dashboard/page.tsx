@@ -355,14 +355,24 @@ export default function DashboardPage() {
     }
   }, [selectedDate]);
 
-  // 💡 선택한 선생님 필터 상태 로컬스토리지 연동
+  // 💡 [보안/편의 개선] 로그인한 사용자 권한에 따른 선생님 필터 초기화
   useEffect(() => {
-    const saved = localStorage.getItem('ams_selectedTeacherId');
-    if (saved) setSelectedTeacherId(saved);
-  }, []);
+    if (currentUser) {
+      if (currentUser.role === 'teacher') {
+        // 일반 교사는 본인 전용 데이터이므로 필터를 항상 'All'로 초기화하여 가림 현상 방지
+        setSelectedTeacherId('All');
+        localStorage.removeItem('ams_selectedTeacherId');
+      } else {
+        // 관리자(admin/master)도 이전 필터 잔재로 인한 오해 방지를 위해 'All'로 초기화 (필요시 교사 선택 가능)
+        setSelectedTeacherId('All');
+      }
+    }
+  }, [currentUser?.id, currentUser?.role]);
 
   useEffect(() => {
-    localStorage.setItem('ams_selectedTeacherId', selectedTeacherId);
+    if (selectedTeacherId) {
+      localStorage.setItem('ams_selectedTeacherId', selectedTeacherId);
+    }
   }, [selectedTeacherId]);
 
   // 💡 선택한 시간대 필터 상태 로컬스토리지 연동
