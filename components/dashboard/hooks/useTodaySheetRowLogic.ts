@@ -209,38 +209,32 @@ export function useTodaySheetRowLogic({
   const [formData, setFormData] = useState<any>(() => getInitialFormData(selectedDate));
 
   // 4. Sync Effects
+  const prevSessionRef = useRef(student.todaySession);
+
   useEffect(() => {
-    const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
     const isDateChanged = rowDate !== selectedDate;
 
     if (isDateChanged) {
       const newData = getInitialFormData(selectedDate);
       setFormData(newData);
       setRowDate(selectedDate);
+      prevSessionRef.current = student.todaySession;
       return;
     }
 
-    const isBatchSaving = typeof window !== 'undefined' && (window as any).__ams_batch_saving === true;
-
-    // 💡 [초정밀 타이밍 보호] 사용자가 타이핑 중이거나, 저장이 진행 중이거나, 동기 저장 직후 찰나, 혹은 전역 배치 저장 중인 경우에는 외부 옛날 데이터로 덮어쓰기를 전면 차단합니다!
-    if (!isUserTyping && !isSaving && !recentlySavedRef.current && !isBatchSaving) {
-      const newData = getInitialFormData(selectedDate);
-      setFormData(newData);
-    }
-  }, [selectedDate, student.todaySession, student.id, isSaving, activeCell?.studentId, editingCell?.studentId, getInitialFormData, rowDate, student.recent_mission, student.management_notes]);
-
-  // 💡 [배치 저장/삭제 종료 후 동기화] 전역 배치 저장 락이 해제되는 시점, 부모의 최신 Props 데이터로 formData를 100% 깔끔하게 재동기화합니다.
-  useEffect(() => {
-    const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
-    const timer = setTimeout(() => {
+    // student.todaySession 이 부모로부터 실제로 변경되어 내려온 경우에만 동기화
+    const isSessionPropsChanged = prevSessionRef.current !== student.todaySession;
+    if (isSessionPropsChanged) {
+      prevSessionRef.current = student.todaySession;
+      const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
       const isBatchSaving = typeof window !== 'undefined' && (window as any).__ams_batch_saving === true;
-      if (!isBatchSaving && !isUserTyping && !isSaving && !recentlySavedRef.current) {
+
+      if (!isUserTyping && !isSaving && !recentlySavedRef.current && !isBatchSaving) {
         const newData = getInitialFormData(selectedDate);
         setFormData(newData);
       }
-    }, 180);
-    return () => clearTimeout(timer);
-  }, [student.todaySession, selectedDate, getInitialFormData, isSaving, editingCell?.studentId, student.id, student.originalId]);
+    }
+  }, [selectedDate, student.todaySession, student.id, isSaving, editingCell?.studentId, getInitialFormData, rowDate]);
 
   // 💡 [추가] Tab/Enter 저장 직후 발생하는 Blur를 명시적으로 무시하는 플래그
   const skipBlurRef = useRef(false);

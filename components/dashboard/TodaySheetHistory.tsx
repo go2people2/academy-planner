@@ -161,8 +161,14 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
   const history = pastLogs.slice(0, limit); 
 
   const translateBook = (bookName: string) => {
-    if (!bookName || !masterTextbooks || masterTextbooks.length === 0) return bookName;
-    let result = bookName;
+    if (!bookName) return '';
+    if (!masterTextbooks || masterTextbooks.length === 0) return bookName;
+    const trimmed = bookName.trim();
+    const foundMaster = masterTextbooks.find(m => m.bookcode === trimmed || m.title === trimmed);
+    if (foundMaster && foundMaster.title) {
+      return foundMaster.title;
+    }
+    let result = trimmed;
     const sortedMaster = [...masterTextbooks].sort((a, b) => (b.bookcode?.length || 0) - (a.bookcode?.length || 0));
     sortedMaster.forEach(m => {
       if (m.bookcode && m.title) {
@@ -217,45 +223,56 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
     setSelectedDrawerUnits([]);
   };
 
-  // 💡 📌 진도파악 수동 페이지 입력 저장 헬퍼 (단일 페이지 전용)
+  // 💡 📌 진도파악 수동 페이지 입력 저장 헬퍼 (단일 또는 | 구분 2개 진도 지원)
   const handleSaveManualProgress = async (bookCode: string) => {
     if (!onUpdateStudentInfo || !startPageInput) return;
-    const pageNum = parseInt(startPageInput, 10);
-    let matchedUnitStr = '';
-
+    const bookTitle = translateBook(bookCode);
     const targetMaster = masterTextbooks?.find((m: any) => m.title === bookCode || m.bookcode === bookCode);
     const realCode = targetMaster?.bookcode || bookCode;
 
+    let units: any[] = [];
     try {
       const res = await fetch(`/api/textbooks/${realCode}`);
-      if (res.ok) {
-        const units = await res.json();
-        const found = (units || []).find((u: any) => {
-          const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
-          const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
-          return pageNum >= uStart && pageNum <= uEnd;
-        });
-
-        if (found) {
-          matchedUnitStr = found.unit || found.unitName || found.title;
-        }
-      }
+      if (res.ok) units = (await res.json()) || [];
     } catch (e) {
       console.error(e);
     }
 
-    const pageText = `p.${startPageInput}`;
-    const bookTitle = translateBook(bookCode);
-    const resultVal = matchedUnitStr ? `${matchedUnitStr} (${pageText})` : pageText;
+    const formatPart = (rawInput: string) => {
+      const trimmed = rawInput.trim();
+      if (!trimmed) return '';
+      const pageNum = parseInt(trimmed.replace(/[^0-9]/g, ''), 10);
+      if (isNaN(pageNum) || pageNum <= 0) return trimmed;
 
-    // 💡 이전 북코드 키(예: MATH_1_1) 및 현재 한글 키(예: 중1-1 개념쎈)를 정리하고 오직 최신 한글 키 1개로 덮어쓰기!
+      const found = units.find((u: any) => {
+        const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
+        const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
+        return pageNum >= uStart && pageNum <= uEnd;
+      });
+
+      const pageText = trimmed.toLowerCase().includes('p') ? trimmed : `p.${trimmed}`;
+      return found ? `${found.unit || found.unitName || found.title} (${pageText})` : pageText;
+    };
+
+    let resultVal = '';
+    if (startPageInput.includes('|')) {
+      const parts = startPageInput.split('|').map(p => formatPart(p));
+      resultVal = parts.join(' | ');
+    } else {
+      resultVal = formatPart(startPageInput);
+    }
+
     const cleanProgress: Record<string, string> = { ...(student.book_progress || {}) };
     delete cleanProgress[bookCode]; // 영문 북코드 키 제거
     delete cleanProgress[bookCode.toLowerCase()];
-    delete cleanProgress[bookTitle]; // 기존 한글 키 대체
     cleanProgress[bookTitle] = resultVal;
-
     await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
+
+    // 💡 선택된 날짜 및 업데이트 시간 함께 저장
+    const cleanUpdated = { ...((student as any).book_progress_updated_at || {}) };
+    cleanUpdated[bookTitle] = new Date().toISOString();
+    await onUpdateStudentInfo(student.id, 'book_progress_updated_at', cleanUpdated);
+
     setPinTargetBook(null);
   };
 
@@ -465,6 +482,36 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                   </td>
                 );
               }
+              if (col.id === 'book_progress') {
+                const recordedEntries = (Array.isArray((student as any).book_progress_history) ? (student as any).book_progress_history : []).filter(
+                  (h: any) => h.date === log.date
+                );
+
+                const dateFormatted = log.date ? log.date.slice(5).replace('-', '.').replace(/^0/, '') : '';
+                const dateTag = dateFormatted ? `[${dateFormatted}]` : '';
+
+                if (recordedEntries.length > 0) {
+                  return (
+                    <td key={col.id} style={styles} onMouseDown={(e) => e.stopPropagation()} className={`py-2 px-3 ${borderClass} text-left select-text cursor-text`}>
+                      <div className="flex flex-col gap-1">
+                        {recordedEntries.map((e: any, eIdx: number) => (
+                          <span key={eIdx} className={`text-[11px] font-medium leading-tight ${
+                            isLight ? 'text-emerald-900' : 'text-emerald-300'
+                          }`}>
+                            {dateTag}{e.book ? `[${e.book}]` : ''} {e.progress}
+                          </span>
+                        ))}
+                      </div>
+                    </td>
+                  );
+                }
+
+                return (
+                  <td key={col.id} style={styles} onMouseDown={(e) => e.stopPropagation()} className={`py-2 px-3 ${borderClass} text-left select-text cursor-text`}>
+                    <span className={isLight ? 'text-gray-400' : 'text-gray-600'}>-</span>
+                  </td>
+                );
+              }
               if (col.id === 'classwork') return <td key={col.id} style={styles} onMouseDown={(e) => e.stopPropagation()} className={`py-3 px-4 ${borderClass} ${isLight ? 'text-gray-800' : 'text-gray-200'} font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left select-text cursor-text`}>{renderHighlightedHistoryText(log.classwork_text, isLight)}</td>;
               if (col.id === 'completed_classwork') return <td key={col.id} style={styles} onMouseDown={(e) => e.stopPropagation()} className={`py-3 px-4 ${borderClass} ${isLight ? 'text-blue-700 font-medium' : 'text-blue-300'} font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left select-text cursor-text`}>{renderHighlightedHistoryText(log.completed_classwork_text, isLight)}</td>;
               if (col.id === 'assign') return <td key={col.id} style={styles} onMouseDown={(e) => e.stopPropagation()} className={`py-3 px-4 ${borderClass} ${isLight ? 'text-gray-800' : 'text-gray-200'} font-normal text-[12px] whitespace-pre-wrap leading-[14px] text-left select-text cursor-text`}>{renderHighlightedHistoryText(log.homework_text, isLight)}</td>;
@@ -529,7 +576,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                       📚 배정 교재 목록 ({activeBooks.length}개)
                     </div>
                     <div className="flex flex-wrap gap-1.5 pr-1 max-h-[300px] overflow-y-auto custom-scrollbar-v">
-                      {/* 💡 교재 추가 버튼 (맨 앞) */}
+                              {/* 💡 교재 추가 버튼 (맨 앞) */}
                       {onUpdateStudentInfo && (
                         <button
                           onClick={() => { setShowAddBookModal(true); setSelectedCategory('전체'); setBookSearchQuery(''); setShowBookSearch(false); }}
@@ -546,6 +593,7 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                       {activeBooks.map((book: string, bIdx: number) => {
                         const translated = translateBook(book);
                         const progressVal = student.book_progress?.[book] || student.book_progress?.[translated] || '';
+                        const progressParts = progressVal ? progressVal.split('|').map(s => s.trim()).filter(Boolean) : [];
                         return (
                           <div key={bIdx} className="flex items-center gap-1">
                             {/* 💡 1번 메인 버튼: 교재 칩 전체 어디를 눌러도 단원별 페이지 모달 오픈 */}
@@ -561,11 +609,27 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                               } border rounded-[4px] text-[10.5px] font-extrabold flex items-center gap-1.5 cursor-pointer transition-all`}
                               title={`${translated} 단원 및 페이지 목록 보기`}
                             >
-                              <span>{translated}</span>
-                              {progressVal && (
-                                <span className={`text-[9px] font-medium px-1 rounded ${isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/20 text-emerald-300'}`}>
-                                  {progressVal}
-                                </span>
+                              {progressParts.length > 1 ? (
+                                <div className="flex flex-col gap-0.5 text-left py-0.5">
+                                  <span>{translated}</span>
+                                  <div className="flex flex-col gap-0.5 pt-0.5">
+                                    {progressParts.map((part, pIdx) => (
+                                      <span key={pIdx} className={`text-[9px] font-medium px-1 rounded flex items-center gap-1 ${isLight ? 'bg-emerald-100 text-emerald-800' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                        <span className="text-[8px] text-amber-400 font-bold">{pIdx === 0 ? '①' : '②'}</span>
+                                        <span>{part}</span>
+                                      </span>
+                                    ))}
+                                  </div>
+                                </div>
+                              ) : (
+                                <>
+                                  <span>{translated}</span>
+                                  {progressVal && (
+                                    <span className={`text-[9px] font-medium px-1 rounded ${isLight ? 'bg-emerald-100 text-emerald-700' : 'bg-emerald-500/20 text-emerald-300'}`}>
+                                      {progressVal}
+                                    </span>
+                                  )}
+                                </>
                               )}
                             </button>
 
@@ -601,6 +665,8 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                       )}
                     </div>
 
+
+
                     {/* 💡 2번 📌 버튼 클릭 시: 군더더기 없이 페이지 입력 시 해당 단원을 실시간으로 바로 보여주는 깔끔한 팝오버 */}
                     {pinTargetBook && typeof window !== 'undefined' && createPortal(
                       <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center p-4">
@@ -627,8 +693,8 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                           {/* 단 1개의 페이지 번호 입력창 */}
                           <div>
                             <input
-                              type="number"
-                              placeholder="페이지 번호 입력 (예: 80)"
+                              type="text"
+                              placeholder="페이지 입력 (예: 80 또는 25p | 120p)"
                               value={startPageInput}
                               onChange={(e) => {
                                 const val = e.target.value;

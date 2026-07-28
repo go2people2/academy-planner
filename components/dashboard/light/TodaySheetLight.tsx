@@ -699,19 +699,35 @@ export default function TodaySheet({
   }, [currentUser?.id]);
 
   // 2. Memos
-  // 💡 [추가] 드래그앤드롭 컬럼 순서 저장용 상태
+  // 💡 [추가] 드래그앤드롭 컬럼 순서 저장용 상태 (새로 추가된 컬럼 자동 보완)
   const [columnOrder, setColumnOrder] = useState<string[]>(() => {
+    const defaultIds = DEFAULT_COLUMNS.map(c => c.id);
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ams_today_sheet_column_order');
       if (saved) {
         try {
-          return JSON.parse(saved);
+          const parsed: string[] = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            const missing = defaultIds.filter(id => !parsed.includes(id));
+            if (missing.length > 0) {
+              const actionIdx = parsed.indexOf('action');
+              const merged = [...parsed];
+              if (actionIdx !== -1) {
+                merged.splice(actionIdx, 0, ...missing);
+              } else {
+                merged.push(...missing);
+              }
+              localStorage.setItem('ams_today_sheet_column_order', JSON.stringify(merged));
+              return merged;
+            }
+            return parsed;
+          }
         } catch (e) {
           console.error(e);
         }
       }
     }
-    return DEFAULT_COLUMNS.map(c => c.id);
+    return defaultIds;
   });
 
   const handleColumnReorder = useCallback((draggedId: string, targetId: string) => {
@@ -720,7 +736,10 @@ export default function TodaySheet({
     if (draggedId === targetId) return;
 
     setColumnOrder(prev => {
-      const next = [...prev];
+      let next = [...prev];
+      if (!next.includes(draggedId)) next.push(draggedId);
+      if (!next.includes(targetId)) next.push(targetId);
+
       const draggedIdx = next.indexOf(draggedId);
       const targetIdx = next.indexOf(targetId);
       if (draggedIdx === -1 || targetIdx === -1) return prev;

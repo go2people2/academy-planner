@@ -1174,30 +1174,104 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 const { targetTag } = parseBookCourseValue(rawVal);
                 const isElectiveBook = targetTag.startsWith('선택:');
 
-                // 해당 교재의 현재 진도 값 (영문 키 / 한글 키 호환)
-                const val = progressMap[bookKey] || progressMap[bookTitle] || '';
+                // 해당 교재의 현재 진도 값 (영문 키 / 한글 키 / 번역 키 / 대소문자 호환)
+                const lowerBookKey = bookKey.toLowerCase();
+                const lowerBookTitle = bookTitle.toLowerCase();
+                let val = progressMap[bookKey] || progressMap[bookTitle] || '';
+                
+                if (!val) {
+                  for (const k of Object.keys(progressMap)) {
+                    const lk = k.toLowerCase();
+                    if (lk === lowerBookKey || lk === lowerBookTitle || lk.includes(lowerBookKey) || lowerBookKey.includes(lk)) {
+                      val = progressMap[k];
+                      break;
+                    }
+                  }
+                }
+
+                // 💡 [추가] 교재 진도 세팅 경과일 계산 (7일 이상: 주황 경고, 14일 이상: 빨간 펄스 경고)
+                const updatedMap = (student as any).book_progress_updated_at || {};
+                const updatedIso = updatedMap[bookTitle] || updatedMap[bookKey];
+                let updatedDate: Date | null = updatedIso ? new Date(updatedIso) : null;
+
+                if (!updatedDate && val) {
+                  const logs = (student.allLogs || []).slice().sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
+                  const foundLog = logs.find((l: any) => {
+                    const text = `${l.completed_classwork_text || ''}\n${l.homework_text || ''}`;
+                    return text.includes(bookKey) || text.includes(bookTitle);
+                  });
+                  if (foundLog?.date) {
+                    updatedDate = new Date(foundLog.date);
+                  }
+                }
+
+                let daysElapsed = 0;
+                if (updatedDate && !isNaN(updatedDate.getTime())) {
+                  daysElapsed = Math.floor((Date.now() - updatedDate.getTime()) / (1000 * 60 * 60 * 24));
+                }
+
+                const valParts = val ? val.split('|').map(s => s.trim()).filter(Boolean) : [];
 
                 return (
-                  <div key={bIdx} className={`group relative px-2 py-1 rounded-md text-[10px] flex items-center justify-between gap-1.5 truncate border ${
-                    isElectiveBook 
-                      ? 'bg-amber-500/10 border-amber-500/30' 
-                      : 'bg-emerald-500/10 border-emerald-500/20'
+                  <div key={bIdx} className={`group relative px-2 py-1 rounded-md text-[10px] flex items-center justify-between gap-1.5 truncate border transition-all ${
+                    val && daysElapsed >= 14
+                      ? 'bg-rose-500/10 border-rose-500/70 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse'
+                      : val && daysElapsed >= 7
+                        ? 'bg-amber-500/10 border-amber-500/70'
+                        : isElectiveBook 
+                          ? 'bg-amber-500/10 border-amber-500/30' 
+                          : 'bg-emerald-500/10 border-emerald-500/20'
                   }`}>
-                    <div className="flex items-center gap-1.5 truncate min-w-0 flex-1">
-                      {/* 💡 [정규] / [공통] / [과목명] 선명한 뱃지 표기 */}
-                      <span className={`text-[8.5px] font-black px-1 rounded shrink-0 ${
-                        isElectiveBook ? 'bg-amber-500 text-black' : targetTag === '공통' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
-                      }`}>
-                        {targetTag.replace('선택:', '')}
-                      </span>
+                    {valParts.length > 1 ? (
+                      <div className="flex flex-col gap-0.5 min-w-0 flex-1 py-0.5">
+                        <div className="flex items-center gap-1.5 truncate">
+                          <span className={`text-[8.5px] font-black px-1 rounded shrink-0 ${
+                            isElectiveBook ? 'bg-amber-500 text-black' : targetTag === '공통' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+                          }`}>
+                            {targetTag.replace('선택:', '')}
+                          </span>
+                          <span className={`font-extrabold shrink-0 ${isElectiveBook ? 'text-amber-300' : 'text-emerald-400'}`}>
+                            {bookTitle}
+                          </span>
+                          {val && daysElapsed >= 14 && (
+                            <span className="text-[8px] font-black px-1 rounded bg-rose-600 text-white shrink-0">14일+ 정체</span>
+                          )}
+                          {val && daysElapsed >= 7 && daysElapsed < 14 && (
+                            <span className="text-[8px] font-black px-1 rounded bg-amber-500 text-black shrink-0">7일+ 정체</span>
+                          )}
+                        </div>
+                        <div className="flex flex-col gap-0.5 pl-0.5">
+                          {valParts.map((part, pIdx) => (
+                            <div key={pIdx} className="text-[9.5px] text-gray-200 font-medium truncate flex items-center gap-1">
+                              <span className="text-[8.5px] text-amber-400 font-bold shrink-0">{pIdx === 0 ? '①' : '②'}</span>
+                              <span className="truncate">{part}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-1.5 truncate min-w-0 flex-1">
+                        {/* 💡 [정규] / [공통] / [과목명] 선명한 뱃지 표기 */}
+                        <span className={`text-[8.5px] font-black px-1 rounded shrink-0 ${
+                          isElectiveBook ? 'bg-amber-500 text-black' : targetTag === '공통' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+                        }`}>
+                          {targetTag.replace('선택:', '')}
+                        </span>
 
-                      <span className={`font-extrabold shrink-0 ${isElectiveBook ? 'text-amber-300' : 'text-emerald-400'}`}>
-                        {bookTitle}
-                      </span>
-                      <span className={`truncate text-[9.5px] ${val ? 'text-gray-300 font-medium opacity-90' : 'text-gray-500 italic'}`}>
-                        {val || ''}
-                      </span>
-                    </div>
+                        <span className={`font-extrabold shrink-0 ${isElectiveBook ? 'text-amber-300' : 'text-emerald-400'}`}>
+                          {bookTitle}
+                        </span>
+                        <span className={`truncate text-[9.5px] ${val ? 'text-gray-300 font-medium opacity-90' : 'text-gray-500 italic'}`}>
+                          {val || ''}
+                        </span>
+                        {val && daysElapsed >= 14 && (
+                          <span className="text-[8px] font-black px-1 rounded bg-rose-600 text-white shrink-0">14일+ 정체</span>
+                        )}
+                        {val && daysElapsed >= 7 && daysElapsed < 14 && (
+                          <span className="text-[8px] font-black px-1 rounded bg-amber-500 text-black shrink-0">7일+ 정체</span>
+                        )}
+                      </div>
+                    )}
                     {onUpdateStudentInfo && (
                       <div className="flex items-center gap-1 shrink-0">
                         {/* ⚡ 수행진도/숙제 문장에서 최신 페이지/단원 자동 파싱 업데이트 버튼 */}
@@ -1284,8 +1358,45 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                               delete cleanProgress[bookKey];
                               delete cleanProgress[bookKey.toLowerCase()];
                               delete cleanProgress[bookTitle];
-                              cleanProgress[bookTitle] = parsedResult;
+
+                              let finalVal = parsedResult;
+                              if (targetTag === '공통' && val.includes('|')) {
+                                const parts = val.split('|').map(s => s.trim());
+                                if (student.isSpecialClass) {
+                                  parts[1] = parsedResult;
+                                } else {
+                                  parts[0] = parsedResult;
+                                }
+                                finalVal = parts.join(' | ');
+                              } else if (targetTag === '공통' && val) {
+                                if (student.isSpecialClass) {
+                                  finalVal = `${val} | ${parsedResult}`;
+                                } else {
+                                  finalVal = `${parsedResult} | ${val}`;
+                                }
+                              }
+
+                              cleanProgress[bookTitle] = finalVal;
                               await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
+
+                              const cleanUpdated = { ...((student as any).book_progress_updated_at || {}) };
+                              cleanUpdated[bookTitle] = new Date().toISOString();
+                              cleanUpdated[bookKey] = new Date().toISOString();
+                              await onUpdateStudentInfo(student.id, 'book_progress_updated_at', cleanUpdated);
+
+
+
+                              // 💡 진도 변경 이력 기록 자동 누적
+                              const todayStr = new Date().toISOString().slice(0, 10);
+                              const existingHist = Array.isArray((student as any).book_progress_history) ? [...(student as any).book_progress_history] : [];
+                              existingHist.unshift({
+                                id: Date.now().toString(),
+                                date: todayStr,
+                                book: bookTitle,
+                                progress: finalVal,
+                                createdAt: new Date().toISOString()
+                              });
+                              await onUpdateStudentInfo(student.id, 'book_progress_history', existingHist);
                             } else {
                               alert(`오늘 및 지난 일지 기록에서 [${bookTitle}] 교재의 페이지나 단원을 찾지 못했습니다.`);
                             }

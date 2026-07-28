@@ -1528,10 +1528,15 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         // 💡 [낙관적 업데이트] 로컬 상태 즉시 갱신
         setStudents(prev => prev.map(s => (s.id === studentId || s.id === realStudentId || s.originalId === realStudentId) ? { ...s, ...updateData } : s));
 
-        const { error } = await supabase.from('ams_students').update(updateData).eq('id', realStudentId);
-        if (error) {
-          console.error('Failed to update student info:', error);
-          alert(`학생 정보 수정 중 오류가 발생했습니다: ${error.message}`);
+        const dbUpdateData = { ...updateData };
+        delete dbUpdateData.book_progress_history;
+
+        if (Object.keys(dbUpdateData).length > 0) {
+          const { error } = await supabase.from('ams_students').update(dbUpdateData).eq('id', realStudentId);
+          if (error) {
+            console.error('Failed to update student info:', error);
+            alert(`학생 정보 수정 중 오류가 발생했습니다: ${error.message}`);
+          }
         }
 
         // 💡 [추가] 관리 주의점(management_notes) 수정 시 히스토리 로그 테이블에 적재
