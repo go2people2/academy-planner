@@ -134,10 +134,11 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
             const realId = s.originalId || s.id;
             const allSessions = students.filter(os => (os.originalId || os.id) === realId);
             allSessions.forEach(sess => {
+              const sessionObj = (sess.todaySession || {}) as Record<string, any>;
               updates.push({
                 studentId: sess.id,
                 newData: { [targetCol]: text },
-                prevData: sess.todaySession || {}
+                prevData: { [targetCol]: sessionObj[targetCol] || '' }
               });
             });
           });
@@ -152,10 +153,11 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
             const realId = s.originalId || s.id;
             const allSessions = students.filter(os => (os.originalId || os.id) === realId);
             allSessions.forEach(sess => {
+              const sessionObj = (sess.todaySession || {}) as Record<string, any>;
               updates.push({
                 studentId: sess.id,
                 newData: { [targetCol]: text },
-                prevData: sess.todaySession || {}
+                prevData: { [targetCol]: sessionObj[targetCol] || '' }
               });
             });
           });

@@ -948,16 +948,23 @@ export default function TodaySheet({
       
       // 💡 정규 수업 표시 여부 결정
       let shouldShowRegular = false;
+      const hasRegularLogActivity = regularLog && (
+        regularLog.completed_classwork_text || 
+        regularLog.homework_text || 
+        regularLog.moved_to_hour || 
+        (regularLog.attendance_status && regularLog.attendance_status !== 'none' && regularLog.attendance_status !== 'absent')
+      );
+
       if (isRegularClassDay) {
         shouldShowRegular = true;
-      } else if (regularLog) {
-        if (regularLog.course_name === '정규') {
-          shouldShowRegular = true; // 명시적 정규 일지가 있으면 표시
-        } else if (!regularLog.course_name && !isElectiveDay) {
-          shouldShowRegular = true; // 옛날 일지(course_name 없음)인데 특강 전용 요일이 아니면 정규로 취급
-        }
+      } else if (hasRegularLogActivity) {
+        // 보강/시간이동/출석체크/일지작성 등 당일 정규 수업 활동이 있는 경우 완벽 노출
+        shouldShowRegular = true;
       } else if (!hasAnyElective) {
-        // 특강이 아예 없는 학생인데 class_days에 없어도 과거 데이터를 보기 위해 띄워야 할 수도 있음 (기존 로직 유지)
+        // 특강이 아예 없는 학생은 기존처럼 정규 행 출력
+        shouldShowRegular = true;
+      } else if (!isElectiveDay) {
+        // 특강이 있는 학생이지만 오늘은 특강 요일도 아니고 정규 요일도 아닌 경우
         shouldShowRegular = true;
       }
 
@@ -1193,13 +1200,13 @@ export default function TodaySheet({
     setStudents((prev: any[]) => (prev || []).map((s: any) => {
       const match = updates.find(u => {
         const realId = u.studentId.replace(/_special.*$/, '');
-        return s.id === realId || s.id === u.studentId || s.originalId === realId;
+        return String(s.id) === String(realId) || String(s.id) === String(u.studentId) || (s.originalId && String(s.originalId) === String(realId));
       });
       if (!match) return s;
       
       const hasMission = 'mission' in match.newData;
       const hasNotes = 'management_notes' in match.newData;
-      const rowStudent = filteredStudents.find((fs: any) => fs.id === match.studentId);
+      const rowStudent = filteredStudents.find((fs: any) => String(fs.id) === String(match.studentId));
       const courseName = rowStudent?.courseName || '정규';
       
       let updatedAllLogs = s.allLogs || [];
@@ -1232,7 +1239,7 @@ export default function TodaySheet({
     }));
 
     await Promise.all(updates.map(async (u) => {
-      const rowStudent = filteredStudents.find((s: any) => s.id === u.studentId);
+      const rowStudent = filteredStudents.find((s: any) => String(s.id) === String(u.studentId));
       const realId = rowStudent?.originalId || u.studentId.replace(/_special.*$/, '');
       const courseName = rowStudent?.courseName || '정규';
 
@@ -1404,10 +1411,9 @@ export default function TodaySheet({
   const onCellMouseDown = useCallback((e: React.MouseEvent, studentId: string, colId: string) => {
     if (['select', 'action'].includes(colId)) return;
     const isShift = e.shiftKey;
-    // 💡 브라우저가 blur 이벤트를 먼저 안전하게 처리하여 저장(onBlur)되도록 상태 변경을 한 프레임 지연
+    setSelectedRange({ startStudentId: studentId, startColId: colId, endStudentId: studentId, endColId: colId });
+    setIsDragging(true);
     requestAnimationFrame(() => {
-      setSelectedRange({ startStudentId: studentId, startColId: colId, endStudentId: studentId, endColId: colId });
-      setIsDragging(true);
       if (!isShift) { setActiveCell({ studentId, columnId: colId }); }
       updateEditingCell(null);
     });

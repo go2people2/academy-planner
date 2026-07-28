@@ -98,8 +98,8 @@ export function useTodaySheetImport({
             }
           }
           
-          sessionUpdates.push({
-            student_id: matchedStudent.id,
+          const currentSession = matchedStudent.todaySession || {};
+          const newData: any = {
             completed_classwork_text: classworkText,
             homework_text: homeworkText,
             special_notes: specialNotes,
@@ -107,6 +107,21 @@ export function useTodaySheetImport({
             test_score: testScore,
             test_score_type: testScoreType,
             test_total_count: testTotalCount
+          };
+          const prevData: any = {
+            completed_classwork_text: currentSession.completed_classwork_text || '',
+            homework_text: currentSession.homework_text || '',
+            special_notes: currentSession.special_notes || '',
+            test_id: currentSession.test_id || '',
+            test_score: currentSession.test_score || '',
+            test_score_type: currentSession.test_score_type || 'score',
+            test_total_count: currentSession.test_total_count || ''
+          };
+
+          sessionUpdates.push({
+            studentId: matchedStudent.id,
+            newData,
+            prevData
           });
         }
         

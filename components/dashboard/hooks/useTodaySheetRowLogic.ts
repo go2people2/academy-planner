@@ -169,13 +169,15 @@ export function useTodaySheetRowLogic({
     const sessionMission = resolvedMission || session?.mission;
     const sessionNotes = session?.management_notes;
 
-    const initialMission = (sessionMission !== undefined && sessionMission !== null && String(sessionMission).trim() !== '')
+    // 💡 [규칙] 학생미션(mission)은 과거 기록을 당겨오지 않고 당일 기록만 사용
+    const initialMission = (sessionMission !== undefined && sessionMission !== null)
       ? sessionMission
-      : getPastMostRecentValue('mission');
+      : '';
 
-    const initialNotes = (sessionNotes !== undefined && sessionNotes !== null && String(sessionNotes).trim() !== '')
+    // 💡 [규칙] 주의점(management_notes)은 당일 작성 내용만 표시하며, 자동 이월은 수동 버튼(🪄)을 통해 선택 실행
+    const initialNotes = (sessionNotes !== undefined && sessionNotes !== null)
       ? sessionNotes
-      : getPastMostRecentValue('management_notes');
+      : '';
     
     return {
       attendance_status: normalizeAttendanceStatus(session?.attendance_status),
@@ -222,14 +224,13 @@ export function useTodaySheetRowLogic({
       return;
     }
 
-    // student.todaySession 이 부모로부터 실제로 변경되어 내려온 경우에만 동기화
+    // student.todaySession 이 부모로부터 변경되어 내려온 경우 실시간 동기화
     const isSessionPropsChanged = prevSessionRef.current !== student.todaySession;
     if (isSessionPropsChanged) {
       prevSessionRef.current = student.todaySession;
       const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
-      const isBatchSaving = typeof window !== 'undefined' && (window as any).__ams_batch_saving === true;
 
-      if (!isUserTyping && !isSaving && !recentlySavedRef.current && !isBatchSaving) {
+      if (!isUserTyping) {
         const newData = getInitialFormData(selectedDate);
         setFormData(newData);
       }

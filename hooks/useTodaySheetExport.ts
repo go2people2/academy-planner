@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import * as XLSX from 'xlsx';
 import { normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
-import { parseBookCourseValue } from '@/lib/utils';
+import { parseBookCourseValue, getCoursePrefix } from '@/lib/utils';
 
 export interface UseTodaySheetExportParams {
   students: any[];
@@ -105,7 +105,8 @@ export function useTodaySheetExport({
             .join('');
 
           const daysStr = sortedElectiveDays || (s.class_days || []).join('').replace(/요일/g, '') || '특강';
-          combinedName = `특강-${s.name}-${teacherInitial}-${daysStr}`;
+          const prefix = getCoursePrefix(s.isSpecialClass, s.electiveCourse);
+          combinedName = `${prefix}${s.name}-${teacherInitial}-${daysStr}`;
         } else {
           // 정규 행: 기존 반명 (이름-강사이니셜-요일)
           const sortedDays = (s.class_days || []).slice().sort((a: string, b: string) => {

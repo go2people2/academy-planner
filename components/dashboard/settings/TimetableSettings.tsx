@@ -55,6 +55,8 @@ const convertTimeToSlots = (startVal: any, endVal: any): string[] => {
     { start: 19, end: 20, name: '7~8' },
     { start: 20, end: 21, name: '8~9' },
     { start: 21, end: 22, name: '9~10' },
+    { start: 22, end: 23, name: '10~11' },
+    { start: 23, end: 24, name: '11~12' },
   ];
 
   slotsMap.forEach(item => {
@@ -80,13 +82,15 @@ const convertTimeToSlots = (startVal: any, endVal: any): string[] => {
     else if (sH === 19) slots.push('7~8');
     else if (sH === 20) slots.push('8~9');
     else if (sH === 21) slots.push('9~10');
+    else if (sH === 22) slots.push('10~11');
+    else if (sH === 23) slots.push('11~12');
   }
 
   return slots;
 };
 
 const DAYS = ['월', '화', '수', '목', '금'];
-const ALL_SLOTS = ['1~2', '2~3', '3~4', '4~5', '5~6', '6~7', '7~8', '8~9', '9~10'];
+const ALL_SLOTS = ['1~2', '2~3', '3~4', '4~5', '5~6', '6~7', '7~8', '8~9', '9~10', '10~11', '11~12'];
 const ROW_COUNT = 40;
 
 // 🔧 자동 배치 그리드 생성: slots 매개변수 추가 (방학 모드 지원)
@@ -285,13 +289,44 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
   const [isSaving, setIsSaving] = useState(false);
   const [isVacationMode, setIsVacationMode] = useState(false);
 
-  // 💡 방학 모드에 따라 1~2, 2~3, 3~4교시를 동적으로 활성화
+  // 💡 선택된 선생님 학생들의 실제 수업시간에 맞춰 10~11, 11~12교시 슬롯을 유연하게 감지 및 노출
   const activeSlots = useMemo(() => {
+    let base = ['4~5', '5~6', '6~7', '7~8', '8~9', '9~10'];
     if (isVacationMode) {
-      return ['1~2', '2~3', '3~4', '4~5', '5~6', '6~7', '7~8', '8~9', '9~10'];
+      base = ['1~2', '2~3', '3~4', '4~5', '5~6', '6~7', '7~8', '8~9', '9~10'];
     }
-    return ['4~5', '5~6', '6~7', '7~8', '8~9', '9~10'];
-  }, [isVacationMode]);
+
+    // 그리드 데이터나 학생 스케줄 상에 10~11, 11~12 슬롯 사용 여부 확인
+    const has10to11 = Object.keys(gridData).some(k => k.includes('-10~11-') && gridData[k]?.student_id);
+    const has11to12 = Object.keys(gridData).some(k => k.includes('-11~12-') && gridData[k]?.student_id);
+
+    // 학생들 원본 시간표 스케줄 체크
+    const teacherStudents = localStudents.filter(s => !s.is_deleted && s.teacher_id === selectedTeacherId);
+    let schedHas10to11 = false;
+    let schedHas11to12 = false;
+
+    teacherStudents.forEach(s => {
+      const sched = s.day_schedules || {};
+      Object.keys(sched).forEach(day => {
+        const val = sched[day];
+        if (Array.isArray(val) && val.length > 0) {
+          const startVal = typeof val[0] === 'number' ? val[0] : parseInt(String(val[0]).replace(':', ''));
+          const endVal = typeof val[1] === 'number' ? val[1] : (val[1] ? parseInt(String(val[1]).replace(':', '')) : startVal + 200);
+          if (startVal >= 2200 || endVal > 2200) schedHas10to11 = true;
+          if (startVal >= 2300 || endVal > 2300) schedHas11to12 = true;
+        }
+      });
+    });
+
+    if (has10to11 || schedHas10to11 || has11to12 || schedHas11to12) {
+      base.push('10~11');
+    }
+    if (has11to12 || schedHas11to12) {
+      base.push('11~12');
+    }
+
+    return base;
+  }, [isVacationMode, gridData, localStudents, selectedTeacherId]);
   // 인라인 편집 상태 { key: "요일-교시-행번호" }
   const [editingKey, setEditingKey] = useState<string | null>(null);
 
@@ -374,8 +409,8 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
           }
         }
         
-        // 이 행의 최초 등원 개시 시간대가 7시 이후('7~8', '8~9', '9~10')인 경우만 진짜 야간반 행으로 인정!
-        if (firstActiveSlot && ['7~8', '8~9', '9~10'].includes(firstActiveSlot)) {
+        // 이 행의 최초 등원 개시 시간대가 7시 이후('7~8', '8~9', '9~10', '10~11', '11~12')인 경우만 진짜 야간반 행으로 인정!
+        if (firstActiveSlot && ['7~8', '8~9', '9~10', '10~11', '11~12'].includes(firstActiveSlot)) {
           if (r < minRow) {
             minRow = r;
           }

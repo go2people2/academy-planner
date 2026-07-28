@@ -44,7 +44,7 @@ export function getInitial(name: string): string {
 export function getCoursePrefix(isSpecialClass?: boolean, electiveCourse?: any): string {
   if (!isSpecialClass) return '';
   const subj = electiveCourse?.subject?.trim();
-  if (!subj || subj === '특강' || subj === '방학특강') {
+  if (!subj) {
     return '특강-';
   }
   return `${subj}-`;

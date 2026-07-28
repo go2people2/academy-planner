@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useEffect, useCallback, useRef } from 'react';
 import { mapColumnToProp, COLUMN_TO_FIELD_MAP } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetClipboard } from './useTodaySheetClipboard';
@@ -45,13 +45,20 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
   // 1. 클립보드 로직 분리 (handleCopy, handlePaste, handleCut)
   const { handleCopy, handlePaste, handleCut } = useTodaySheetClipboard(props);
 
+  // 💡 선택 범위(selectedRange)를 ref로 보존하여 blur 이벤트 발생 시에도 단축키에 미치는 영향을 방지
+  const selectedRangeRef = useRef(selectedRange);
+  useEffect(() => {
+    selectedRangeRef.current = selectedRange;
+  }, [selectedRange]);
+
   // 아래 방향 자동 채우기 (Fill Down)
   const handleFillDown = useCallback(() => {
-    if (!selectedRange) return;
-    const sI = filteredStudents.findIndex(s => s.id === selectedRange.startStudentId);
-    const eI = filteredStudents.findIndex(s => s.id === selectedRange.endStudentId);
-    const sC = activeColumns.findIndex(c => c.id === selectedRange.startColId);
-    const eC = activeColumns.findIndex(c => c.id === selectedRange.endColId);
+    const activeRange = selectedRangeRef.current || selectedRange;
+    if (!activeRange) return;
+    const sI = filteredStudents.findIndex(s => String(s.id) === String(activeRange.startStudentId));
+    const eI = filteredStudents.findIndex(s => String(s.id) === String(activeRange.endStudentId));
+    const sC = activeColumns.findIndex(c => String(c.id) === String(activeRange.startColId));
+    const eC = activeColumns.findIndex(c => String(c.id) === String(activeRange.endColId));
     
     if (sI === -1 || eI === -1 || sC === -1 || eC === -1) return;
     
@@ -60,10 +67,14 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     const cMin = Math.min(sC, eC);
     const cMax = Math.max(sC, eC);
     
-    if (rMin === rMax) return; // 채울 대상 아래 행이 없는 경우 스킵
-    
-    const sourceStudent = filteredStudents[rMin];
-    const sourceSession = sourceStudent.todaySession || {};
+    const isMultiRow = rMin !== rMax;
+    const sourceRowIdx = isMultiRow ? rMin : (rMin > 0 ? rMin - 1 : -1);
+    if (sourceRowIdx === -1) return;
+
+    const targetStartRowIdx = isMultiRow ? rMin + 1 : rMin;
+    const targetEndRowIdx = rMax;
+
+    const sourceStudent = filteredStudents[sourceRowIdx];
     const updates: any[] = [];
     const targetColIds: string[] = [];
     
@@ -78,7 +89,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     
     // 🔒 [추가] 채워질 범위 중 승인 대기 중이고 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 작업 차단 및 알럿 노출
     let hasLockedCell = false;
-    for (let r = rMin + 1; r <= rMax; r++) {
+    for (let r = targetStartRowIdx; r <= targetEndRowIdx; r++) {
       const targetStudent = filteredStudents[r];
       if (!targetStudent) continue;
       for (let c = cMin; c <= cMax; c++) {
@@ -143,7 +154,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       return { textVal: sess[prop] || '', extraData: {} };
     };
 
-    for (let r = rMin + 1; r <= rMax; r++) {
+    for (let r = targetStartRowIdx; r <= targetEndRowIdx; r++) {
       const targetStudent = filteredStudents[r];
       const targetSession = targetStudent.todaySession || {};
       const newData: any = {};
@@ -175,7 +186,12 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       }
 
       setStudents((prev: any[]) => prev.map(s => {
-        const update = updates.find(u => u.studentId === s.id);
+        const realId = s.originalId || s.id;
+        const update = updates.find(u => 
+          String(u.studentId) === String(s.id) || 
+          String(u.studentId) === String(realId) ||
+          (s.originalId && String(u.studentId).startsWith(String(s.originalId)))
+        );
         if (update) {
           const hasMission = 'mission' in update.newData;
           const hasNotes = 'management_notes' in update.newData;
@@ -336,126 +352,145 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       const isDKey = keyLower === 'd' || keyLower === 'ㅇ' || e.code === 'KeyD';
       const isModifierPressed = e.ctrlKey || e.metaKey || e.altKey;
       if (isModifierPressed && isDKey && !e.shiftKey) {
-        const isMultiRowSelection = selectedRange && selectedRange.startStudentId !== selectedRange.endStudentId;
-        
-        if (isMultiRowSelection) {
-          e.preventDefault();
-          if (isInput) {
-            target.blur();
-            requestAnimationFrame(() => {
-              handleFillDown();
-            });
-          } else {
-            handleFillDown();
-          }
-          return;
-        } else {
-          // 💡 단일 셀 선택 혹은 입력창 내부 포커스 시 바로 윗행 학생의 동일 컬럼 값 복사
-          e.preventDefault();
-          const inputStudentId = isInput ? target.getAttribute('data-student-id') : null;
-          const inputColId = isInput ? target.getAttribute('data-col-id') : null;
-
-          const targetStudentId = activeCell?.studentId || selectedRange?.endStudentId || inputStudentId;
-          const colId = activeCell?.columnId || selectedRange?.endColId || inputColId;
-          if (!targetStudentId || !colId) return;
-
-          const rIdx = filteredStudents.findIndex(s => s.id === targetStudentId);
-          if (rIdx > 0) {
-            const prevStudent = filteredStudents[rIdx - 1];
-            const currentStudent = filteredStudents[rIdx];
-            const prop = mapColumnToProp(colId);
-            
-            let prevVal = '';
-            let extraData: any = {};
-
-            if (colId === 'mission') {
-              prevVal = prevStudent.recent_mission || '';
-              extraData = { mission: prevVal };
-            } else if (colId === 'management_notes') {
-              prevVal = prevStudent.management_notes || '';
-              extraData = { management_notes: prevVal };
-            } else if (colId === 'next_quiz') {
-              const sess = prevStudent.todaySession || {};
-              prevVal = sess.next_quiz_text || '';
-              let nqJson = sess.next_quiz_json || [];
-              let nqCut = sess.next_quiz_cut || 0;
-              let nqTrial = sess.next_quiz_trial || 1;
-              if (!prevVal && sess.homework_to) {
-                try {
-                  const raw = sess.homework_to;
-                  if (typeof raw === 'string' && raw.startsWith('{')) {
-                    const parsed = JSON.parse(raw);
-                    prevVal = parsed.text || '';
-                    nqJson = parsed.json || [];
-                    nqCut = parsed.cut || 0;
-                    nqTrial = parsed.trial || 1;
-                  } else if (typeof raw === 'string') {
-                    prevVal = raw;
-                  }
-                } catch (e) {}
-              }
-              extraData = {
-                next_quiz_text: prevVal,
-                next_quiz_json: nqJson,
-                next_quiz_cut: nqCut,
-                next_quiz_trial: nqTrial
-              };
-            } else if (prop) {
-              const prevSession = prevStudent.todaySession || {};
-              prevVal = prevSession[prop] || '';
-              extraData = { [prop]: prevVal };
-            }
-            
-            // 현재 입력 포커스된 textarea / input 이 있을 경우 native value setter로 갱신하여 React onChange/onInput 도 완벽 연동
-            if (isInput && (target instanceof HTMLTextAreaElement || target instanceof HTMLInputElement)) {
-              try {
-                const proto = target instanceof HTMLTextAreaElement ? window.HTMLTextAreaElement.prototype : window.HTMLInputElement.prototype;
-                const valueSetter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-                valueSetter?.call(target, prevVal);
-              } catch (e) {
-                target.value = prevVal;
-              }
-              target.dispatchEvent(new Event('input', { bubbles: true }));
-              target.style.height = 'auto';
-              target.style.height = `${target.scrollHeight}px`;
-            }
-
-            if (currentStudent) {
-              // 입력 모드 여부와 관계없이 React State, DOM, DB 저장을 100% 완전 동기화
-              const newData = extraData;
-              setStudents((prev: any[]) => prev.map(s => {
-                if (s.id === currentStudent.id) {
-                  return {
-                    ...s,
-                    ...(colId === 'mission' ? { recent_mission: prevVal } : {}),
-                    ...(colId === 'management_notes' ? { management_notes: prevVal } : {}),
-                    todaySession: {
-                      ...(s.todaySession || {}),
-                      ...newData
-                    }
-                  };
-                }
-                return s;
-              }));
-              
-              syncTodaySheetDom([{
-                studentId: currentStudent.id,
-                newData,
-                prevData: { ...(currentStudent.todaySession || {}) }
-              }], [colId]);
-
-              handleBatchSave([{
-                studentId: currentStudent.id,
-                newData,
-                prevData: { ...(currentStudent.todaySession || {}) }
-              }]);
-            }
-          }
-          return;
+        e.preventDefault();
+        if (isInput) {
+          target.blur();
         }
+        handleFillDown();
+        return;
       }
 
+      // Backspace / Delete (단일 및 다중 셀 삭제)
+      const currentRange = selectedRangeRef.current || selectedRange;
+      const isMultiCell = !!currentRange && (String(currentRange.startStudentId) !== String(currentRange.endStudentId) || String(currentRange.startColId) !== String(currentRange.endColId));
+      const shouldDelete = (e.key === 'Backspace' || e.key === 'Delete') && (isMultiCell || (!isInput && (currentRange || activeCell)));
+      if (shouldDelete) {
+        e.preventDefault();
+        const targetRange = currentRange || (activeCell ? {
+          startStudentId: activeCell.studentId,
+          endStudentId: activeCell.studentId,
+          startColId: activeCell.columnId,
+          endColId: activeCell.columnId
+        } : null);
 
+        if (!targetRange) return;
+
+        const sI = filteredStudents.findIndex(s => String(s.id) === String(targetRange.startStudentId));
+        const eI = filteredStudents.findIndex(s => String(s.id) === String(targetRange.endStudentId));
+        const sC = activeColumns.findIndex(c => String(c.id) === String(targetRange.startColId));
+        const eC = activeColumns.findIndex(c => String(c.id) === String(targetRange.endColId));
+        
+        if (sI !== -1 && eI !== -1 && sC !== -1 && eC !== -1) {
+          const rMin = Math.min(sI, eI), rMax = Math.max(sI, eI);
+          const cMin = Math.min(sC, eC), cMax = Math.max(sC, eC);
+
+          // 🔒 [추가] 삭제 대상 범위 내에 승인 대기 중이고 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 삭제를 차단하고 알럿 노출
+          let hasLockedCell = false;
+          for (let r = rMin; r <= rMax; r++) {
+            const st = filteredStudents[r];
+            if (!st) continue;
+            for (let c = cMin; c <= cMax; c++) {
+              const colId = activeColumns[c].id;
+              const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
+              const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
+              if (isSubmitted && isProtectedCol) {
+                hasLockedCell = true;
+                break;
+              }
+            }
+            if (hasLockedCell) break;
+          }
+
+          if (hasLockedCell) {
+            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+            return;
+          }
+
+          const updates: any[] = [];
+
+          // 💡 [수정] 삭제 대상 컬럼 ID들 미리 추출
+          const targetColIds: string[] = [];
+          for (let c = cMin; c <= cMax; c++) {
+            const colId = activeColumns[c].id;
+            if (COLUMN_TO_FIELD_MAP[colId]) targetColIds.push(colId);
+          }
+
+          for (let r = rMin; r <= rMax; r++) {
+            const st = filteredStudents[r];
+            if (!st) continue;
+            const sess = st.todaySession || {};
+            const nD: any = {};
+            let chg = false;
+
+            targetColIds.forEach(colId => {
+              const prop = mapColumnToProp(colId);
+              if (colId === 'test_id') {
+                nD['test_id'] = '';
+                nD['test_status'] = '';
+                nD['test_cut'] = 0;
+              } else if (colId === 'mission') {
+                nD['mission'] = '';
+              } else if (colId === 'management_notes') {
+                nD['management_notes'] = '';
+              } else if (prop) {
+                nD[prop] = '';
+              }
+              chg = true;
+            });
+
+            if (chg) {
+              const prevD: any = {};
+              Object.keys(nD).forEach(k => {
+                if (k === 'mission') prevD[k] = st.recent_mission || sess.mission || '';
+                else if (k === 'management_notes') prevD[k] = st.management_notes || sess.management_notes || '';
+                else prevD[k] = sess[k] || '';
+              });
+              updates.push({ studentId: st.id, newData: nD, prevData: prevD });
+            }
+          }
+          
+          if (updates.length > 0) { 
+            if (typeof window !== 'undefined') {
+              (window as any).__ams_batch_saving = true;
+            }
+
+            // 💡 [중요] React State(students) 반영으로 삭제 상태 지연/원복 없는 100% 지속 보존
+            setStudents((prev: any[]) => prev.map(s => {
+              const realId = s.originalId || s.id;
+              const update = updates.find(u => 
+                String(u.studentId) === String(s.id) || 
+                String(u.studentId) === String(realId) ||
+                (s.originalId && String(u.studentId).startsWith(String(s.originalId)))
+              );
+              if (update) {
+                const hasMission = 'mission' in update.newData;
+                const hasNotes = 'management_notes' in update.newData;
+                return {
+                  ...s,
+                  ...(hasMission ? { recent_mission: update.newData.mission } : {}),
+                  ...(hasNotes ? { management_notes: update.newData.management_notes } : {}),
+                  todaySession: {
+                    ...(s.todaySession || {}),
+                    ...update.newData
+                  }
+                };
+              }
+              return s;
+            }));
+
+            // DOM 갱신 후 배치 저장 실행
+            syncTodaySheetDom(updates, targetColIds, true); 
+            handleBatchSave(updates).finally(() => {
+              setTimeout(() => {
+                if (typeof window !== 'undefined') {
+                  (window as any).__ams_batch_saving = false;
+                }
+              }, 150);
+            }); 
+          }
+        }
+        return;
+      }
 
       if (!activeCell) return;
       const rIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
@@ -579,128 +614,6 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         }
       } else if (e.key === 'Enter' || e.key === 'Tab') {
         setEditingCell(null);
-      }
-
-      // Backspace / Delete (단일 및 다중 셀 삭제)
-      if (!isInput && (e.key === 'Backspace' || e.key === 'Delete') && (selectedRange || activeCell)) {
-        e.preventDefault();
-        const targetRange = selectedRange || (activeCell ? {
-          startStudentId: activeCell.studentId,
-          endStudentId: activeCell.studentId,
-          startColId: activeCell.columnId,
-          endColId: activeCell.columnId
-        } : null);
-
-        if (!targetRange) return;
-
-        const sI = filteredStudents.findIndex(s => s.id === targetRange.startStudentId);
-        const eI = filteredStudents.findIndex(s => s.id === targetRange.endStudentId);
-        const sC = activeColumns.findIndex(c => c.id === targetRange.startColId);
-        const eC = activeColumns.findIndex(c => c.id === targetRange.endColId);
-        
-        if (sI !== -1 && eI !== -1 && sC !== -1 && eC !== -1) {
-          const rMin = Math.min(sI, eI), rMax = Math.max(sI, eI);
-          const cMin = Math.min(sC, eC), cMax = Math.max(sC, eC);
-
-          // 🔒 [추가] 삭제 대상 범위 내에 승인 대기 중이고 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 삭제를 차단하고 알럿 노출
-          let hasLockedCell = false;
-          for (let r = rMin; r <= rMax; r++) {
-            const st = filteredStudents[r];
-            if (!st) continue;
-            for (let c = cMin; c <= cMax; c++) {
-              const colId = activeColumns[c].id;
-              const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
-              const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
-              if (isSubmitted && isProtectedCol) {
-                hasLockedCell = true;
-                break;
-              }
-            }
-            if (hasLockedCell) break;
-          }
-
-          if (hasLockedCell) {
-            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
-            return;
-          }
-
-          const updates: any[] = [];
-
-          // 💡 [수정] 삭제 대상 컬럼 ID들 미리 추출
-          const targetColIds: string[] = [];
-          for (let c = cMin; c <= cMax; c++) {
-            const colId = activeColumns[c].id;
-            if (COLUMN_TO_FIELD_MAP[colId]) targetColIds.push(colId);
-          }
-
-          for (let r = rMin; r <= rMax; r++) {
-            const st = filteredStudents[r], sess = st.todaySession || {}, nD: any = {};
-            let chg = false;
-            targetColIds.forEach(colId => {
-              const prop = mapColumnToProp(colId);
-              if (colId === 'test_id') {
-                // 💡 '오늘 테스트' 지움 시 지난 수업의 예정 테스트(next_quiz_text 또는 이전 test_id)가 있다면 즉시 자동 복구 연동
-                const sess = st.todaySession || {};
-                const lastSess = st.lastSession || {};
-                const activePlanText = sess.next_quiz_text || 
-                                       lastSess.next_quiz_text || 
-                                       (lastSess.test_completed === false ? (lastSess.test_id || "") : "") || 
-                                       lastSess.test_id || "";
-                const activePlanCut = sess.next_quiz_text 
-                  ? (Number(sess.next_quiz_cut) || 0) 
-                  : (Number(lastSess.next_quiz_cut) || Number(lastSess.test_cut) || 0);
-
-                const restoredTest = (activePlanText && activePlanText.trim() !== '없음') ? activePlanText.trim() : '';
-                
-                nD['test_id'] = restoredTest;
-                nD['test_status'] = restoredTest;
-                nD['test_cut'] = restoredTest ? activePlanCut : 0;
-              } else if (colId === 'mission') {
-                nD['mission'] = '';
-              } else if (colId === 'management_notes') {
-                nD['management_notes'] = '';
-              } else if (prop) {
-                nD[prop] = '';
-              }
-              chg = true;
-            });
-            if (chg) updates.push({ studentId: st.id, newData: nD, prevData: { ...sess } });
-          }
-          
-          if (updates.length > 0) { 
-            if (typeof window !== 'undefined') {
-              (window as any).__ams_batch_saving = true;
-            }
-
-            // 💡 [중요] React State(students) 반영으로 삭제 상태 지연/원복 없는 100% 지속 보존
-            setStudents((prev: any[]) => prev.map(s => {
-              const update = updates.find(u => u.studentId === s.id);
-              if (update) {
-                const hasMission = 'mission' in update.newData;
-                const hasNotes = 'management_notes' in update.newData;
-                return {
-                  ...s,
-                  ...(hasMission ? { recent_mission: update.newData.mission } : {}),
-                  ...(hasNotes ? { management_notes: update.newData.management_notes } : {}),
-                  todaySession: {
-                    ...(s.todaySession || {}),
-                    ...update.newData
-                  }
-                };
-              }
-              return s;
-            }));
-
-            syncTodaySheetDom(updates, targetColIds, true); 
-            handleBatchSave(updates).finally(() => {
-              setTimeout(() => {
-                if (typeof window !== 'undefined') {
-                  (window as any).__ams_batch_saving = false;
-                }
-              }, 150);
-            }); 
-          }
-        }
       }
 
     };

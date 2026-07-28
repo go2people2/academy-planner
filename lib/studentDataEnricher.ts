@@ -166,13 +166,9 @@ export const determineTodaySession = (
     if (!todayLog.test_score_type) todayLog.test_score_type = defaultScoreType;
 
     const currentTestId = (todayLog.test_id || '').trim();
-    const isRealActivePlanExists = activePlanText && activePlanText.trim() && activePlanText.trim() !== '없음';
 
-    // 💡 todayLog가 이미 존재하는 세션이더라도 test_id가 비어있다면(명시적 '없음' 제외) 예정/재시험 테스트 자동 연결
-    if (!currentTestId && currentTestId !== '없음' && isRealActivePlanExists) {
-      todayLog.test_id = activePlanText; 
-      todayLog.test_cut = activePlanCut;
-    }
+    // 💡 [규칙] todayLog가 이미 존재하는 세션이면 test_id를 자동으로 채우지 않는다.
+    // 사용자가 의도적으로 비웠을 수 있으므로, 자동 이월은 세션이 아예 없는 최초 생성 시(아래 else 분기)에서만 수행한다.
 
     if (!isTodayClassDay && !todayLog.next_quiz_text && activePlanText) {
       todayLog.next_quiz_text = activePlanText; 
