@@ -271,7 +271,7 @@ export const getEnrichedStudentData = (
   const isTodayClassDay = (isScheduledToday || isMakeup || !!hasValidContentInLog) && !isSkipped;
   
   const pastLogs = logs
-    .filter(l => l.date < selectedDate && isValidHistoryLog(l))
+    .filter(l => l.date < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))
     .sort((a, b) => b.date.localeCompare(a.date));
   const aggregatedHw = calculateAggregatedHw(pastLogs, academy, s);
   const todaySession = determineTodaySession(s, todayLog, baseSession, isTodayClassDay, selectedDate, academy);
