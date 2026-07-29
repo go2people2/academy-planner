@@ -1489,8 +1489,8 @@ export default function TodaySheet({
   // 💡 [수동 이월] 주의점(management_notes) 칼럼 헤더 🪄 버튼 클릭 시 비어있는 셀에 최신 메모 채우기
   const handleAutofillManagementNotes = useCallback(async () => {
     const emptyTargets: any[] = [];
-    students.forEach((st: any) => {
-      const currentNote = st.todaySession?.management_notes || '';
+    filteredStudents.forEach((st: any) => {
+      const currentNote = st.todaySession?.management_notes || (st.courseName === '특강' ? '' : st.management_notes) || '';
       if (!currentNote || String(currentNote).trim() === '') {
         // 과거 logs 중 가장 최근 작성된 메모 찾기
         const pastLogs = (st.allLogs || [])
@@ -1500,9 +1500,8 @@ export default function TodaySheet({
         const latestPastNote = pastLogs.length > 0 ? String(pastLogs[0].management_notes) : (st.management_notes || '');
         if (latestPastNote && String(latestPastNote).trim() !== '') {
           emptyTargets.push({
-            studentId: st.id,
-            latestNote: latestPastNote,
-            session: st.todaySession || {}
+            studentId: st.id, // 행 고유 ID (예: 'id' 또는 'id_special_...')
+            latestNote: latestPastNote
           });
         }
       }
@@ -1542,7 +1541,7 @@ export default function TodaySheet({
         if (el) el.value = t.latestNote;
       });
     });
-  }, [students, selectedDate, setStudents, handleBatchSave]);
+  }, [filteredStudents, selectedDate, setStudents, handleBatchSave]);
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
   const onMouseDown = (e: React.MouseEvent, colId: string) => { resizingCol.current = { id: colId, startX: e.pageX, startWidth: colWidths[colId] || 100 }; document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); document.body.style.cursor = 'col-resize'; };
