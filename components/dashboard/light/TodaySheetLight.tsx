@@ -42,7 +42,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
   { id: 'select', label: '', minWidth: 40, isSticky: true, canHide: false },
   { id: 'date', label: '날짜', minWidth: 50, canHide: true },
   { id: 'name', label: '이름', minWidth: 120, isSticky: true, canHide: false },
-  { id: 'tools', label: '🛠️', minWidth: 80, isSticky: true, canHide: false },
+  { id: 'tools', label: '도구', minWidth: 80, isSticky: true, canHide: false },
   { id: 'management_notes', label: '주의점', minWidth: 150, canHide: true },
   { id: 'book_progress', label: '진도파악', minWidth: 160, canHide: true },
   { id: 'attendance', label: '출결', minWidth: 80, canHide: true },
