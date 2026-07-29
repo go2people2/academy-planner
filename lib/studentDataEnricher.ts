@@ -115,23 +115,17 @@ export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, stud
     const dayName = getDayOfWeek(log.date);
     const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
 
-    if (log.homework_text && log.homework_text.trim() !== '결석') {
+    if (log.homework_text && log.homework_text.trim() !== '' && log.homework_text.trim() !== '결석') {
       const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
       const makeupLabel = (!isRegularClass || log.attendance_status?.startsWith('보강')) ? ' [보강]' : '';
       const line = `${dateStr}(${dayName})${makeupLabel}\n${log.homework_text}`;
       aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
     }
 
+    // 이미 검사 완료(hw_checked_today)로 체크된 날짜를 만나면 그 이전 과거는 탐색 종료
     if (log.hw_checked_today === true) {
       break;
     }
-
-    const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === log.date);
-    if (isLogHoliday && !log.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT)) continue;
-    if (!log.attendance_status || log.attendance_status === ATTENDANCE_STATUS.BEFORE) continue;
-    if ([ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(log.attendance_status as any)) continue;
-
-    if (log.hw_passed_today === true) continue;
   }
   return aggregatedHw;
 };
