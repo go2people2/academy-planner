@@ -982,7 +982,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       ? 'bg-blue-50 text-blue-650 border-blue-200' 
                       : 'bg-purple-50 text-purple-700 border-purple-250'
                   }`}>
-                    {!isScheduledToday ? '보강' : `이동 ${formData.moved_to_hour}시`}
+                    {!isScheduledToday ? '보강' : '이동'}
                   </span>
                 )}
               </div>
