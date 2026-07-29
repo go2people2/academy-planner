@@ -948,8 +948,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             ATTENDANCE_STATUS.CANCELED
           ].includes(formData.attendance_status as any);
           
-          const isSupplement = (formData.attendance_status === '보강') || 
-            (!hasExplicitStatus && formData.moved_to_hour !== null && formData.moved_to_hour !== undefined);
+          const isScheduledToday = student?.isScheduledToday ?? true;
+          const isMovedHour = formData.moved_to_hour !== null && formData.moved_to_hour !== undefined;
+          const isSupplement = (formData.attendance_status === '보강') || (!isScheduledToday && isMovedHour);
           const statusText = isSupplement ? '보강' : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
           
           return (
@@ -975,9 +976,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             }`}>
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <span>{statusText}</span>
-                {formData.moved_to_hour && (
-                  <span className="text-[9.5px] font-bold bg-blue-50 text-blue-650 px-1 rounded border border-blue-200 shrink-0">
-                    {formData.moved_to_hour}시
+                {isMovedHour && (
+                  <span className={`text-[9.5px] font-bold px-1 rounded shrink-0 border ${
+                    !isScheduledToday 
+                      ? 'bg-blue-50 text-blue-650 border-blue-200' 
+                      : 'bg-purple-50 text-purple-700 border-purple-250'
+                  }`}>
+                    {!isScheduledToday ? '보강' : `이동 ${formData.moved_to_hour}시`}
                   </span>
                 )}
               </div>
