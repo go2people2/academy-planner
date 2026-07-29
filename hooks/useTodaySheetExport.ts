@@ -56,10 +56,15 @@ export function useTodaySheetExport({
         }
       };
 
+      // 💡 ACA2000 엑셀 생성 시 로그인한 교사의 담당 학생만 추출
+      const exportStudents = currentUser?.id 
+        ? students.filter((s: any) => s.teacher_id === currentUser.id)
+        : students;
+
       // 💡 filteredStudents(이미 정규/특강 행 분리 완료)를 그대로 순회
       //    - isSpecialClass=false → 정규 행: 기존 반명 + 정규 todaySession
       //    - isSpecialClass=true  → 특강 행: 특강 반명 + 특강 todaySession
-      dataRows = students.map((s: any) => {
+      dataRows = exportStudents.map((s: any) => {
         const teacher = teachers?.find((t: any) => t.id === s.teacher_id);
         const tName = teacher?.nickname || teacher?.name || '';
         const teacherInitial = teacher?.initials || s.teacher_initial || '';
