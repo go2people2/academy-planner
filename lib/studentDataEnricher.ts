@@ -122,14 +122,7 @@ export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, stud
       aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
     }
 
-    const isPresent = [ATTENDANCE_STATUS.PRESENT, ATTENDANCE_STATUS.LATE].some(st => log.attendance_status?.startsWith(st));
-    const hasHomework = !!log.homework_text;
-
-    if (
-      log.hw_checked_today === true || 
-      (isPresent && isRegularClass) ||
-      (hasHomework && isRegularClass)
-    ) {
+    if (log.hw_checked_today === true) {
       break;
     }
 
