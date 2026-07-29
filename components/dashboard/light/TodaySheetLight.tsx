@@ -60,7 +60,7 @@ const DEFAULT_COLUMNS: ColumnConfig[] = [
 
 // --- Sub-components ---
 
-function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onSelectAll, isAllSelected, onFocusColumn, focusColumn, onColumnReorder, showAllTools, setShowAllTools, isToolsEditMode, setIsToolsEditMode }: any) {
+function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick, onSelectAll, isAllSelected, onFocusColumn, focusColumn, onColumnReorder, showAllTools, setShowAllTools, isToolsEditMode, setIsToolsEditMode, onAutofillManagementNotes }: any) {
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
   const lastDataColumnId = React.useMemo(() => {
     const dataCols = activeColumns.filter((c: any) => c.id !== 'action');
@@ -258,7 +258,21 @@ function TodaySheetHeader({ colWidths, activeColumns, onMouseDown, onDoubleClick
                         )}
                       </div>
                     ) : (
-                      col.label
+                      <span className="flex items-center gap-1">
+                        {col.label}
+                        {col.id === 'management_notes' && onAutofillManagementNotes && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAutofillManagementNotes();
+                            }}
+                            className="p-1 rounded bg-amber-500/10 hover:bg-amber-500/30 text-amber-700 border border-amber-300 transition-all flex items-center justify-center shadow-sm cursor-pointer ml-0.5"
+                            title="비어있는 주의점 칸에 최신 메모 수동 이월하기"
+                          >
+                            <Wand2 size={11} className="text-amber-600" />
+                          </button>
+                        )}
+                      </span>
                     )}
                     {canFocus && (
                       focusColumn === col.id ? (
@@ -1463,10 +1477,6 @@ export default function TodaySheet({
     setIsDragging,
     selectedIds,
     onSave,
-    toggleSecondRow,
-    toggleHistory,
-    handleUndo,
-    handleRedo,
     toggleShowAllTools: () => {
       setShowAllTools(prev => {
         const next = !prev;
@@ -1475,6 +1485,64 @@ export default function TodaySheet({
       });
     }
   });
+
+  // 💡 [수동 이월] 주의점(management_notes) 칼럼 헤더 🪄 버튼 클릭 시 비어있는 셀에 최신 메모 채우기
+  const handleAutofillManagementNotes = useCallback(async () => {
+    const emptyTargets: any[] = [];
+    students.forEach((st: any) => {
+      const currentNote = st.todaySession?.management_notes || '';
+      if (!currentNote || String(currentNote).trim() === '') {
+        // 과거 logs 중 가장 최근 작성된 메모 찾기
+        const pastLogs = (st.allLogs || [])
+          .filter((l: any) => l.management_notes && String(l.management_notes).trim() !== '' && (l.date || l.session_date || '') < selectedDate)
+          .sort((a: any, b: any) => String(b.date || b.session_date || '').localeCompare(String(a.date || a.session_date || '')));
+        
+        const latestPastNote = pastLogs.length > 0 ? String(pastLogs[0].management_notes) : (st.management_notes || '');
+        if (latestPastNote && String(latestPastNote).trim() !== '') {
+          emptyTargets.push({
+            studentId: st.id,
+            latestNote: latestPastNote,
+            session: st.todaySession || {}
+          });
+        }
+      }
+    });
+
+    if (emptyTargets.length === 0) {
+      alert('비어있는 주의점 항목 중 이월할 과거 메모가 있는 학생이 없습니다.');
+      return;
+    }
+
+    // 1. 부모 Local State(setStudents) 선반영
+    setStudents((prev: any[]) => prev.map(s => {
+      const target = emptyTargets.find(t => t.studentId === s.id);
+      if (target) {
+        return {
+          ...s,
+          todaySession: { ...(s.todaySession || {}), management_notes: target.latestNote }
+        };
+      }
+      return s;
+    }));
+
+    // 2. DB 및 백엔드 batchSave 반영 & Cmd+Z Undo 스택 등록 (변경된 management_notes 필드만 단일 객체로 구성)
+    const updates = emptyTargets.map(t => ({
+      studentId: t.studentId,
+      newData: { management_notes: t.latestNote },
+      prevData: { management_notes: '' }
+    }));
+
+    await handleBatchSave(updates);
+
+    // 3. DOM Sync
+    requestAnimationFrame(() => {
+      emptyTargets.forEach(t => {
+        const selector = `[data-student-id="${t.studentId}"][data-col-id="management_notes"]`;
+        const el = document.querySelector(selector) as HTMLTextAreaElement | HTMLInputElement;
+        if (el) el.value = t.latestNote;
+      });
+    });
+  }, [students, selectedDate, setStudents, handleBatchSave]);
 
   const resizingCol = useRef<{ id: string; startX: number; startWidth: number } | null>(null);
   const onMouseDown = (e: React.MouseEvent, colId: string) => { resizingCol.current = { id: colId, startX: e.pageX, startWidth: colWidths[colId] || 100 }; document.addEventListener('mousemove', onMouseMove); document.addEventListener('mouseup', onMouseUp); document.body.style.cursor = 'col-resize'; };
@@ -1989,7 +2057,7 @@ export default function TodaySheet({
           onScroll={handleScroll}
         >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} /></thead>
           <tbody className="divide-y divide-[#edece9] bg-white">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
