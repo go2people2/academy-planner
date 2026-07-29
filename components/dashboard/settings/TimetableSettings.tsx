@@ -337,9 +337,9 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
     key: string;
   } | null>(null);
 
-  // 2. 해당 학원의 활성 교사 목록 (대표교사, 일반교사 포함)
+  // 2. 해당 학원의 활성 교사 목록 (수업을 진행하는 강사/원장님만 포함, 조교/행정 및 대표계정 제외)
   const activeTeachers = useMemo(() => {
-    return teachers.filter(t => !t.is_deleted && t.role !== 'master');
+    return teachers.filter(t => !t.is_deleted && t.role !== 'master' && t.role !== 'assistant' && t.role !== 'staff');
   }, [teachers]);
 
   // 기본 교사 자동 지정

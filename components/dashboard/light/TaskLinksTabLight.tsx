@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Plus, Check, Trash2, ExternalLink, User, Loader2, Sparkles, X, Edit2
+  Plus, Check, Trash2, ExternalLink, User, Loader2, Sparkles, X, Edit2, Globe, Lock
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
@@ -16,6 +16,39 @@ interface TaskLinksTabProps {
   onRefreshTasks: () => Promise<void>;
 }
 
+// Helper to safely parse task content whether string or object
+function parseLinkContent(content: any) {
+  let textContent = '';
+  let url = '';
+  let isPrivate = false;
+
+  if (content && typeof content === 'object') {
+    textContent = content.text || content.content || '';
+    url = content.link || content.url || '';
+    isPrivate = !!(content.is_private || content.isPrivate);
+  } else if (typeof content === 'string') {
+    const trimmed = content.trim();
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsed = JSON.parse(trimmed);
+        if (parsed && typeof parsed === 'object') {
+          textContent = parsed.text || parsed.content || '';
+          url = parsed.link || parsed.url || '';
+          isPrivate = !!(parsed.is_private || parsed.isPrivate);
+        } else {
+          textContent = content;
+        }
+      } catch (e) {
+        textContent = content;
+      }
+    } else {
+      textContent = content;
+    }
+  }
+
+  return { textContent, url, isPrivate };
+}
+
 export default function TaskLinksTab({
   academyInfo,
   tasks,
@@ -23,7 +56,7 @@ export default function TaskLinksTab({
   currentUser,
   onRefreshTasks
 }: TaskLinksTabProps) {
-  const [showOnlyMyLinks, setShowOnlyMyLinks] = useState(false);
+  const [linkScopeFilter, setLinkScopeFilter] = useState<'all' | 'shared' | 'private'>('all');
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingLinkTask, setEditingLinkTask] = useState<any | null>(null);
   
@@ -32,6 +65,7 @@ export default function TaskLinksTab({
   const [linkContent, setLinkContent] = useState('');
   const [linkUrl, setLinkUrl] = useState('');
   const [linkAssignee, setLinkAssignee] = useState(currentUser?.id || '');
+  const [isPrivate, setIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Filter and parse link tasks
@@ -39,32 +73,31 @@ export default function TaskLinksTab({
     return tasks
       .filter(task => {
         if (task.type !== 'link') return false;
-        if (showOnlyMyLinks && task.created_by !== currentUser?.id) return false;
+        
+        const { isPrivate: taskIsPrivate } = parseLinkContent(task.content);
+
+        // 보안 규칙: 개인 링크는 오직 작성자 본인(created_by === currentUser.id)에게만 보임
+        if (taskIsPrivate && task.created_by !== currentUser?.id) {
+          return false;
+        }
+
+        // 세그먼트 필터링
+        if (linkScopeFilter === 'shared' && taskIsPrivate) return false;
+        if (linkScopeFilter === 'private' && !taskIsPrivate) return false;
+
         return true;
       })
       .map(task => {
-        let textContent = task.content || '';
-        let url = '';
-        
-        // Try parsing JSON format
-        if (typeof task.content === 'string' && task.content.trim().startsWith('{')) {
-          try {
-            const parsed = JSON.parse(task.content);
-            textContent = parsed.text || '';
-            url = parsed.link || '';
-          } catch (e) {
-            // fallback
-            textContent = task.content;
-          }
-        }
+        const { textContent, url, isPrivate: taskIsPrivate } = parseLinkContent(task.content);
         
         return {
           ...task,
           textContent,
-          url
+          url,
+          isPrivate: taskIsPrivate
         };
       });
-  }, [tasks, showOnlyMyLinks, currentUser]);
+  }, [tasks, linkScopeFilter, currentUser]);
 
   const handleAddLink = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -72,21 +105,27 @@ export default function TaskLinksTab({
 
     setIsSaving(true);
     try {
-      // Ensure URL starts with http:// or https://
       let formattedUrl = linkUrl.trim();
       if (!/^https?:\/\//i.test(formattedUrl)) {
         formattedUrl = `https://${formattedUrl}`;
       }
 
+      // 개인 링크인 경우 작성자를 현재 유저로 지정
+      const creatorId = isPrivate ? (currentUser?.id || linkAssignee) : (linkAssignee || currentUser?.id || '');
+
       const newLinkTask = {
         academy_id: academyInfo.id,
         title: linkTitle.trim(),
-        content: JSON.stringify({ text: linkContent.trim(), link: formattedUrl }),
+        content: JSON.stringify({ 
+          text: linkContent.trim(), 
+          link: formattedUrl,
+          is_private: isPrivate 
+        }),
         start_date: getTodayStr(),
-        target_date: '9999-12-31', // 상시 업무 기한으로 약속된 미래 날짜
+        target_date: '9999-12-31',
         display_period_type: 'custom',
         is_completed: false,
-        created_by: linkAssignee || currentUser?.id || '',
+        created_by: creatorId,
         type: 'link'
       };
 
@@ -100,6 +139,7 @@ export default function TaskLinksTab({
       setLinkContent('');
       setLinkUrl('');
       setLinkAssignee(currentUser?.id || '');
+      setIsPrivate(false);
       setIsLinkModalOpen(false);
       await onRefreshTasks();
     } catch (err) {
@@ -116,6 +156,7 @@ export default function TaskLinksTab({
     setLinkContent('');
     setLinkUrl('');
     setLinkAssignee(currentUser?.id || '');
+    setIsPrivate(false);
     setIsLinkModalOpen(true);
   };
 
@@ -125,6 +166,7 @@ export default function TaskLinksTab({
     setLinkUrl(task.url);
     setLinkContent(task.textContent);
     setLinkAssignee(task.created_by);
+    setIsPrivate(!!task.isPrivate);
     setIsLinkModalOpen(true);
   };
 
@@ -139,12 +181,19 @@ export default function TaskLinksTab({
         formattedUrl = `https://${formattedUrl}`;
       }
 
+      // 개인 링크 설정 시 본인 아이디로 created_by를 유지/지정
+      const creatorId = isPrivate ? (currentUser?.id || linkAssignee) : (linkAssignee || currentUser?.id || '');
+
       const { error } = await supabase
         .from('ams_tasks')
         .update({
           title: linkTitle.trim(),
-          content: JSON.stringify({ text: linkContent.trim(), link: formattedUrl }),
-          created_by: linkAssignee || currentUser?.id || ''
+          content: JSON.stringify({ 
+            text: linkContent.trim(), 
+            link: formattedUrl,
+            is_private: isPrivate 
+          }),
+          created_by: creatorId
         })
         .eq('id', editingLinkTask.id);
 
@@ -154,6 +203,7 @@ export default function TaskLinksTab({
       setLinkContent('');
       setLinkUrl('');
       setLinkAssignee(currentUser?.id || '');
+      setIsPrivate(false);
       setEditingLinkTask(null);
       setIsLinkModalOpen(false);
       await onRefreshTasks();
@@ -213,27 +263,53 @@ export default function TaskLinksTab({
   return (
     <div className="absolute inset-0 flex flex-col space-y-4 overflow-hidden">
       {/* Header controls */}
-      <div className="flex items-center justify-between shrink-0">
+      <div className="flex items-center justify-between shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
           <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
             업무 구글 시트 / 링크 ({linkTasks.length}개)
           </span>
-          <label className="flex items-center gap-1.5 cursor-pointer select-none">
-            <input 
-              type="checkbox" 
-              checked={showOnlyMyLinks}
-              onChange={(e) => setShowOnlyMyLinks(e.target.checked)}
-              className="w-3.5 h-3.5 rounded border border-gray-300 bg-white text-blue-650 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-650"
-            />
-            <span className="text-[10px] font-black text-gray-650 hover:text-[#37352f] transition-all uppercase tracking-wider">
-              내 담당 링크만 보기
-            </span>
-          </label>
+
+          {/* 세그먼트 필터 버튼 (라이트 테마) */}
+          <div className="flex items-center bg-[#f7f7f5] border border-[#e3e2e0] p-0.5 rounded-lg gap-1">
+            <button
+              type="button"
+              onClick={() => setLinkScopeFilter('all')}
+              className={`px-2.5 py-1 text-[10px] font-black rounded transition-all ${
+                linkScopeFilter === 'all'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-[#37352f]/60 hover:text-[#37352f]'
+              }`}
+            >
+              전체
+            </button>
+            <button
+              type="button"
+              onClick={() => setLinkScopeFilter('shared')}
+              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-black rounded transition-all ${
+                linkScopeFilter === 'shared'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-[#37352f]/60 hover:text-[#37352f]'
+              }`}
+            >
+              <Globe size={11} /> 공유 링크
+            </button>
+            <button
+              type="button"
+              onClick={() => setLinkScopeFilter('private')}
+              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-black rounded transition-all ${
+                linkScopeFilter === 'private'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : 'text-[#37352f]/60 hover:text-[#37352f]'
+              }`}
+            >
+              <Lock size={11} /> 나만 보기 (개인)
+            </button>
+          </div>
         </div>
         
         <button 
           onClick={handleOpenCreateModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-700 transition-all shadow-md"
+          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-700 transition-all shadow-sm"
         >
           <Plus size={14} /> 새 링크 등록
         </button>
@@ -253,15 +329,29 @@ export default function TaskLinksTab({
             >
               <div className="space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
-                  <h4 className={`text-sm font-black leading-tight ${task.is_completed ? 'text-gray-400 line-through' : 'text-[#37352f]'}`}>
-                    {task.title}
-                  </h4>
+                  <div className="flex flex-col min-w-0 pr-1">
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      {task.isPrivate ? (
+                        <span className="flex items-center gap-0.5 text-[8.5px] font-black px-1.5 py-0.2 bg-amber-50 text-amber-700 border border-amber-200 rounded shrink-0">
+                          <Lock size={9} /> 개인
+                        </span>
+                      ) : (
+                        <span className="flex items-center gap-0.5 text-[8.5px] font-black px-1.5 py-0.2 bg-emerald-50 text-emerald-700 border border-emerald-200 rounded shrink-0">
+                          <Globe size={9} /> 공유
+                        </span>
+                      )}
+                    </div>
+                    <h4 className={`text-sm font-black leading-tight ${task.is_completed ? 'text-gray-400 line-through' : 'text-[#37352f]'}`}>
+                      {task.title}
+                    </h4>
+                  </div>
+
                   <div className="flex items-center gap-1 shrink-0">
                     <button 
                       onClick={() => handleToggleLink(task.id, task.is_completed)}
                       className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${
                         task.is_completed 
-                          ? 'bg-emerald-50 border-emerald-350 text-emerald-600' 
+                          ? 'bg-emerald-50 border-emerald-300 text-emerald-600' 
                           : 'border-gray-300 hover:border-blue-500 hover:text-blue-500'
                       }`}
                       title="완료 처리"
@@ -301,7 +391,7 @@ export default function TaskLinksTab({
                   className={`w-full py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-black transition-all ${
                     task.is_completed
                       ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed'
-                      : 'bg-indigo-50 border border-indigo-200 text-indigo-650 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 active:scale-95 shadow-sm'
+                      : 'bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 active:scale-95 shadow-sm'
                   }`}
                 >
                   <ExternalLink size={13} />
@@ -314,7 +404,7 @@ export default function TaskLinksTab({
                     <User size={12} />
                     <span>{assignee?.nickname || assignee?.name || '지정되지 않음'}</span>
                   </div>
-                  <div className="px-2 py-0.5 rounded-[4px] uppercase font-black bg-indigo-50 text-indigo-750 border border-indigo-250">
+                  <div className="px-2 py-0.5 rounded-[4px] uppercase font-black bg-indigo-50 text-indigo-700 border border-indigo-200">
                     상시
                   </div>
                 </div>
@@ -324,7 +414,7 @@ export default function TaskLinksTab({
         })}
 
         {linkTasks.length === 0 && (
-          <div className="col-span-full h-64 border border-dashed border-[#e3e2e0] rounded-xl flex flex-col items-center justify-center text-gray-450 bg-white shadow-sm gap-2">
+          <div className="col-span-full h-64 border border-dashed border-[#e3e2e0] rounded-xl flex flex-col items-center justify-center text-gray-400 bg-white shadow-sm gap-2">
             <Sparkles size={24} className="text-gray-300" />
             <span className="text-xs font-bold text-gray-400">등록된 업무 링크가 없습니다. 새 링크를 등록해 보세요.</span>
           </div>
@@ -351,16 +441,47 @@ export default function TaskLinksTab({
               <h3 className="text-base font-black text-[#37352f] uppercase tracking-wider mb-6 flex items-center gap-2">
                 {editingLinkTask ? (
                   <>
-                    <Edit2 size={18} className="text-blue-650" /> 업무 링크 수정
+                    <Edit2 size={18} className="text-blue-600" /> 업무 링크 수정
                   </>
                 ) : (
                   <>
-                    <Plus size={18} className="text-blue-650" /> 새 업무 링크 등록
+                    <Plus size={18} className="text-blue-600" /> 새 업무 링크 등록
                   </>
                 )}
               </h3>
 
               <form onSubmit={handleSubmit} className="space-y-4 text-left">
+                {/* 공개 범위 선택 (라이트 테마) */}
+                <div className="space-y-1">
+                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">공개 범위 설정</label>
+                  <div className="grid grid-cols-2 gap-2 p-1 bg-[#f7f7f5] border border-[#e3e2e0] rounded-lg">
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate(false)}
+                      className={`flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-black transition-all ${
+                        !isPrivate
+                          ? 'bg-blue-600 text-white shadow-sm'
+                          : 'text-gray-500 hover:text-[#37352f]'
+                      }`}
+                    >
+                      <Globe size={14} />
+                      <span>🌐 전체 공유</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsPrivate(true)}
+                      className={`flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-black transition-all ${
+                        isPrivate
+                          ? 'bg-amber-600 text-white shadow-sm'
+                          : 'text-gray-500 hover:text-[#37352f]'
+                      }`}
+                    >
+                      <Lock size={14} />
+                      <span>🔒 나만 보기 (개인)</span>
+                    </button>
+                  </div>
+                </div>
+
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">업무 링크 제목</label>
                   <input 
@@ -414,7 +535,7 @@ export default function TaskLinksTab({
                           }`}
                         >
                           <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black uppercase ${
-                            isSelected ? 'bg-white text-blue-600' : 'bg-gray-250 text-gray-600'
+                            isSelected ? 'bg-white text-blue-600' : 'bg-gray-200 text-gray-600'
                           }`}>
                             {(t.nickname || t.name || '?')[0]}
                           </div>
@@ -436,7 +557,7 @@ export default function TaskLinksTab({
                   <button 
                     type="submit" 
                     disabled={isSaving}
-                    className="px-4 py-2 bg-blue-600 hover:bg-blue-755 hover:bg-blue-700 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-sm"
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5 shadow-sm"
                   >
                     {isSaving && <Loader2 size={12} className="animate-spin" />}
                     <span>{editingLinkTask ? '수정' : '등록'}</span>

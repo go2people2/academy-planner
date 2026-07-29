@@ -115,7 +115,7 @@ export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, stud
     const dayName = getDayOfWeek(log.date);
     const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
 
-    if (log.homework_text && log.homework_text.trim() !== '' && log.homework_text.trim() !== '결석') {
+    if (log.homework_text && log.homework_text.trim() !== '') {
       const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
       const makeupLabel = (!isRegularClass || log.attendance_status?.startsWith('보강')) ? ' [보강]' : '';
       const line = `${dateStr}(${dayName})${makeupLabel}\n${log.homework_text}`;
@@ -217,7 +217,7 @@ export const selectBaseSession = (logs: SessionLog[], targetDate: string, holida
     const isMakeup = l.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
     return (l.next_quiz_text || l.test_id || l.classwork_text || l.homework_text) && 
            ![ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(l.attendance_status as any) && (!isLogHoliday || isMakeup); 
-  }) || pastLogs[0];
+  }) || pastLogs.find(l => l.homework_text || l.next_quiz_text || l.test_id) || pastLogs[0];
 };
 
 // 10. 오늘의 수업 여부 및 휴일 상태 판정

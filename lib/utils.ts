@@ -35,14 +35,19 @@ export function getInitial(name: string): string {
 }
 
 /**
- * 💡 수업 구분에 따른 이름 접두어 반환
- * 예: 정규수업 -> ''
- *     선택과목(확통) -> '확통-'
- *     선택과목(미적분2) -> '미적분2-'
- *     선택과목(방학특강/특강/미지정) -> '특강-'
+ * 💡 ACA2000 규격 반명용 접두사 추출 헬퍼
+ * 규칙:
+ *     정규수업 -> ''
+ *     선택과목(아카 반명 입력 시) -> '[아카 반명]-'
+ *     선택과목(아카 반명 비어있을 시) -> '[선택과목 명칭]-'
+ *     선택과목(미지정 시) -> '특강-'
  */
 export function getCoursePrefix(isSpecialClass?: boolean, electiveCourse?: any): string {
   if (!isSpecialClass) return '';
+  const akaName = electiveCourse?.className?.trim();
+  if (akaName) {
+    return `${akaName}-`;
+  }
   const subj = electiveCourse?.subject?.trim();
   if (!subj) {
     return '특강-';

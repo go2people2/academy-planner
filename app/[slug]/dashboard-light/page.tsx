@@ -191,7 +191,17 @@ const filterStudentList = (params: {
         } catch (e) {}
       }
 
-      if (!hasRegMatch && !hasElectiveMatch) return false;
+      // 💡 보강/시간이동 학생 매칭 검사
+      let hasMovedMatch = false;
+      if (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null) {
+        const mVal = s.todaySession.moved_to_hour;
+        let hourVal = typeof mVal === 'number' ? mVal : parseInt(mVal, 10);
+        if (hourVal >= 100) hourVal = Math.floor(hourVal / 100);
+        if (hourVal < 10) hourVal += 12;
+        if (hourVal === matchHour) hasMovedMatch = true;
+      }
+
+      if (!hasRegMatch && !hasElectiveMatch && !hasMovedMatch) return false;
     }
 
     const isTodayTarget = filterTarget === 'today';
@@ -351,7 +361,12 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string>('All');
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ams_selectedTeacherId') || 'All';
+    }
+    return 'All';
+  });
   const [selectedHour, setSelectedHour] = useState<string>('All');
   const isFirstRender = useRef(true);
   const prevDateRef = useRef(selectedDate);
@@ -375,7 +390,10 @@ export default function DashboardPage() {
         setSelectedTeacherId('All');
         localStorage.removeItem('ams_selectedTeacherId');
       } else {
-        setSelectedTeacherId('All');
+        const savedTeacherId = localStorage.getItem('ams_selectedTeacherId');
+        if (savedTeacherId) {
+          setSelectedTeacherId(savedTeacherId);
+        }
       }
     }
   }, [currentUser?.id, currentUser?.role]);

@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   ClipboardList, Calendar, Plus, Check, Trash2, Clock, 
   User, CheckCircle, AlertCircle, Search, Sparkles, Loader2, CalendarRange, X, EyeOff, ExternalLink,
-  Edit, Users, MessageSquare, CheckCircle2, Circle
+  Edit, Users, MessageSquare, CheckCircle2, Circle, FileText, Edit2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
@@ -42,7 +42,7 @@ export default function TeacherTasks({
   currentUser,
   onRefreshStudents
 }: TeacherTasksProps) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>('tasks');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>('makeups');
   const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
   const [makeups, setMakeups] = useState<any[]>([]);
   const [isTaskLoading, setIsTaskLoading] = useState(false);
@@ -84,6 +84,48 @@ export default function TeacherTasks({
   const [makeupDayFilter, setMakeupDayFilter] = useState<string>('all');
   const [showOnlyMyStudentsInMakeup, setShowOnlyMyStudentsInMakeup] = useState<boolean>(true);
 
+  // 보강 카드 검색 및 기간 필터 state
+  const [makeupCardSearch, setMakeupCardSearch] = useState<string>('');
+  const [makeupCardPeriod, setMakeupCardPeriod] = useState<'today' | 'month' | 'all' | 'custom'>('today');
+  const [makeupCardStartDate, setMakeupCardStartDate] = useState<string>(getTodayStr());
+  const [makeupCardEndDate, setMakeupCardEndDate] = useState<string>(getTodayStr());
+
+  // 메모 인라인 수정 state
+  const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
+  const [editingMemoText, setEditingMemoText] = useState<string>('');
+
+  // 이번 달 몇 번째 보강인지 계산
+  const getMonthlyMakeupCount = useCallback((studentId: string, sessionDate: string, makeupId?: string) => {
+    if (!studentId || !sessionDate) return 1;
+    const monthKey = sessionDate.slice(0, 7);
+    const studentMonthMakeups = makeups
+      .filter(m => m.student_id === studentId && m.session_date && m.session_date.startsWith(monthKey))
+      .sort((a, b) => a.session_date.localeCompare(b.session_date) || (a.created_at || '').localeCompare(b.created_at || ''));
+
+    const index = studentMonthMakeups.findIndex(m => m.id === makeupId || m.session_date === sessionDate);
+    return index >= 0 ? index + 1 : 1;
+  }, [makeups]);
+
+  // 보강 메모 저장 (attendance_reason 사용, special_notes/숙제평가 보호)
+  const handleSaveMemo = async (makeupId: string) => {
+    try {
+      setMakeups(prev => prev.map(m => m.id === makeupId ? { ...m, attendance_reason: editingMemoText } : m));
+      setEditingMemoId(null);
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .update({ attendance_reason: editingMemoText })
+        .eq('id', makeupId);
+
+      if (error) throw error;
+      if (onRefreshStudents) onRefreshStudents(false);
+    } catch (err) {
+      console.error('Error saving memo:', err);
+      alert('메모 저장 중 오류가 발생했습니다.');
+      fetchMakeups();
+    }
+  };
+
   // 1. Fetch Tasks
   const fetchTasks = useCallback(async () => {
     if (!academyInfo?.id) return;
@@ -115,7 +157,7 @@ export default function TeacherTasks({
         .select('*')
         .eq('academy_id', academyInfo.id)
         .or('attendance_status.ilike.보강%,special_notes.ilike.%보강%,attendance_reason.ilike.%보강%')
-        .order('session_date', { ascending: true });
+        .order('session_date', { ascending: false });
 
       if (error) throw error;
       setMakeups(data || []);
@@ -253,7 +295,7 @@ export default function TeacherTasks({
               session_date: makeupDate,
               attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
               attendance_reason: '보강 수업',
-              moved_to_hour: isScheduledToday ? null : hour,
+              moved_to_hour: hour,
               special_notes: newNotes
             })
             .eq('id', item.id);
@@ -272,7 +314,7 @@ export default function TeacherTasks({
               session_date: makeupDate,
               attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
               attendance_reason: '보강 수업',
-              moved_to_hour: isScheduledToday ? null : hour,
+              moved_to_hour: hour,
               status: 'none',
               special_notes: `[${makeupType}]`,
               course_name: '정규'
@@ -335,7 +377,7 @@ export default function TeacherTasks({
             session_date: makeupDate,
             attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
             attendance_reason: '보강 수업',
-            moved_to_hour: isScheduledToday ? null : hour,
+            moved_to_hour: hour,
             status: 'none',
             special_notes: `[${makeupType}]`,
             course_name: '정규'
@@ -534,17 +576,54 @@ export default function TeacherTasks({
   }, [students, makeupSearch, makeupGradeFilter, makeupDayFilter, showOnlyMyStudentsInMakeup, currentUser]);
 
   const getMakeupTimeKey = useCallback((makeup: any) => {
-    // 1. 예약 상태(attendance_status)에서 보강 시간 영역 전체 파싱 (시작~종료 포함)
+    // 1. 시간이동 정보(moved_to_hour) 최우선 적용
+    if (makeup.moved_to_hour !== undefined && makeup.moved_to_hour !== null) {
+      const h = typeof makeup.moved_to_hour === 'number' ? makeup.moved_to_hour : parseInt(makeup.moved_to_hour, 10);
+      if (!isNaN(h)) {
+        return `${String(h).padStart(2, '0')}:00`;
+      }
+    }
+    // 2. 예약 상태(attendance_status)에서 보강 시간 영역 파싱
     const status = makeup.attendance_status || '';
     if (status.startsWith('보강:')) {
       return status.replace('보강:', '');
     }
-    // 2. 시간이동 정보(moved_to_hour) 최우선 적용
-    if (makeup.moved_to_hour !== undefined && makeup.moved_to_hour !== null) {
-      return `${String(makeup.moved_to_hour).padStart(2, '0')}:00`;
+    if (status.includes(':')) {
+      const match = status.match(/(\d{1,2}):/);
+      if (match) {
+        return `${match[1].padStart(2, '0')}:00`;
+      }
     }
     return '시간 미지정';
   }, []);
+
+  const filteredMakeups = useMemo(() => {
+    const todayStr = getTodayStr();
+    return makeups.filter(makeup => {
+      // 1. 기간 필터링
+      if (makeupCardPeriod === 'today') {
+        if (makeup.session_date < todayStr) return false;
+      } else if (makeupCardPeriod === 'month') {
+        const currentMonth = todayStr.slice(0, 7);
+        if (!makeup.session_date?.startsWith(currentMonth)) return false;
+      } else if (makeupCardPeriod === 'custom') {
+        if (makeupCardStartDate && makeup.session_date < makeupCardStartDate) return false;
+        if (makeupCardEndDate && makeup.session_date > makeupCardEndDate) return false;
+      }
+
+      // 2. 학생 / 검색어 필터링
+      if (makeupCardSearch.trim()) {
+        const q = makeupCardSearch.toLowerCase().replace(/\s+/g, '');
+        const nameMatch = makeup.student_name ? makeup.student_name.toLowerCase().replace(/\s+/g, '').includes(q) : false;
+        const noteMatch = makeup.special_notes ? makeup.special_notes.toLowerCase().replace(/\s+/g, '').includes(q) : false;
+        const studentObj = students.find(s => s.id === makeup.student_id);
+        const gradeMatch = studentObj?.grade ? studentObj.grade.toLowerCase().replace(/\s+/g, '').includes(q) : false;
+        if (!(nameMatch || noteMatch || gradeMatch)) return false;
+      }
+
+      return true;
+    });
+  }, [makeups, makeupCardPeriod, makeupCardStartDate, makeupCardEndDate, makeupCardSearch, students]);
 
   const groupedMakeups = useMemo(() => {
     const groups: Record<string, {
@@ -553,7 +632,7 @@ export default function TeacherTasks({
       items: any[];
     }> = {};
 
-    makeups.forEach(makeup => {
+    filteredMakeups.forEach(makeup => {
       const timeKey = getMakeupTimeKey(makeup);
       const groupKey = `${makeup.session_date}|${timeKey}`;
       
@@ -568,11 +647,11 @@ export default function TeacherTasks({
     });
 
     return Object.values(groups).sort((a, b) => {
-      const dateCompare = a.date.localeCompare(b.date);
+      const dateCompare = b.date.localeCompare(a.date); // 최신 날짜 우선 (내림차순)
       if (dateCompare !== 0) return dateCompare;
       return a.time.localeCompare(b.time);
     });
-  }, [makeups, getMakeupTimeKey]);
+  }, [filteredMakeups, getMakeupTimeKey]);
 
   const isAllFilteredSelected = useMemo(() => {
     return filteredStudents.length > 0 && filteredStudents.every(s => selectedStudentIds.includes(s.id));
@@ -619,16 +698,16 @@ export default function TeacherTasks({
 
         <div className="flex bg-[#f7f7f5] border border-[#e3e2e0] p-0.5 rounded-lg flex-wrap gap-0.5">
           <button 
-            onClick={() => setActiveTab('tasks')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'tasks' ? 'bg-blue-600 text-white shadow-sm' : 'text-[#37352f]/50 hover:text-[#37352f]'}`}
-          >
-            <Sparkles size={14} /> 업무 목록
-          </button>
-          <button 
             onClick={() => setActiveTab('makeups')}
             className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'makeups' ? 'bg-blue-600 text-white shadow-sm' : 'text-[#37352f]/50 hover:text-[#37352f]'}`}
           >
             <CalendarRange size={14} /> 보강 관리
+          </button>
+          <button 
+            onClick={() => setActiveTab('tasks')}
+            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'tasks' ? 'bg-blue-600 text-white shadow-sm' : 'text-[#37352f]/50 hover:text-[#37352f]'}`}
+          >
+            <Sparkles size={14} /> 업무 목록
           </button>
           <button 
             onClick={() => setActiveTab('suggestions')}
@@ -793,11 +872,59 @@ export default function TeacherTasks({
               exit={{ opacity: 0, y: -15 }}
               className="absolute inset-0 flex flex-col space-y-4 overflow-hidden"
             >
-              <div className="flex items-center justify-between shrink-0">
-                <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">다가오는 보강 스케줄 ({makeups.length}개)</span>
+              <div className="flex flex-wrap items-center justify-between gap-3 shrink-0 bg-[#f4f3ef] p-2.5 rounded-xl border border-[#e2e1dc]">
+                <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
+                  {/* 학생 / 보강 검색어 */}
+                  <div className="relative w-48 shrink-0">
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-400" size={13} />
+                    <input
+                      type="text"
+                      placeholder="학생명/학년 검색..."
+                      value={makeupCardSearch}
+                      onChange={(e) => setMakeupCardSearch(e.target.value)}
+                      className="w-full bg-white border border-[#d8d6d0] rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-[#37352f] placeholder-gray-400 focus:outline-none focus:border-blue-500 transition-all shadow-sm"
+                    />
+                  </div>
+
+                  {/* 기간 선택 드롭다운 */}
+                  <select
+                    value={makeupCardPeriod}
+                    onChange={(e) => setMakeupCardPeriod(e.target.value as any)}
+                    className="bg-white border border-[#d8d6d0] rounded-lg px-2.5 py-1.5 text-xs text-[#37352f] font-bold focus:outline-none focus:border-blue-500 transition-all cursor-pointer shadow-sm"
+                  >
+                    <option value="today">오늘 이후</option>
+                    <option value="month">이번 달</option>
+                    <option value="all">전체 기간</option>
+                    <option value="custom">기간 직접 지정</option>
+                  </select>
+
+                  {/* 기간 직접 지정 시 시작일~종료일 */}
+                  {makeupCardPeriod === 'custom' && (
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="date"
+                        value={makeupCardStartDate}
+                        onChange={(e) => setMakeupCardStartDate(e.target.value)}
+                        className="bg-white border border-[#d8d6d0] rounded-lg px-2 py-1 text-xs text-[#37352f] focus:outline-none focus:border-blue-500 transition-all shadow-sm"
+                      />
+                      <span className="text-gray-400 text-xs">~</span>
+                      <input
+                        type="date"
+                        value={makeupCardEndDate}
+                        onChange={(e) => setMakeupCardEndDate(e.target.value)}
+                        className="bg-white border border-[#d8d6d0] rounded-lg px-2 py-1 text-xs text-[#37352f] focus:outline-none focus:border-blue-500 transition-all shadow-sm"
+                      />
+                    </div>
+                  )}
+
+                  <span className="text-[10px] font-black text-gray-500">
+                    ({groupedMakeups.reduce((acc, g) => acc + g.items.length, 0)}명 / {groupedMakeups.length}개 카드)
+                  </span>
+                </div>
+
                 <button 
                   onClick={() => setIsMakeupModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-700 transition-all shadow-md"
+                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-700 transition-all shadow-md shrink-0"
                 >
                   <Plus size={14} /> 보강 일정 예약
                 </button>
@@ -852,74 +979,130 @@ export default function TeacherTasks({
                             {group.items.map((makeup) => {
                                 const studentObj = students.find(s => s.id === makeup.student_id);
                                 const isCompleted = makeup.attendance_status === '출석' || makeup.attendance_status === '결석' || makeup.attendance_status === '지각';
+                                const monthlyCount = getMonthlyMakeupCount(makeup.student_id, makeup.session_date, makeup.id);
                                 
                                 return (
-                                  <div key={makeup.id} className="flex items-center justify-between py-1.5 border-b border-[#edece9] last:border-0 group/row">
-                                    <div className="flex flex-col min-w-0 pr-2">
-                                      <span className="text-xs font-bold text-[#37352f] truncate">{makeup.student_name}</span>
-                                      <span className="text-[8.5px] font-black text-gray-400 uppercase">
-                                        {studentObj?.grade || '정보없음'}
-                                        {studentObj?.class_days && studentObj.class_days.length > 0 ? ` · ${[...studentObj.class_days].sort((a, b) => {
-                                          const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-                                          return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
-                                        }).join('')}` : ''}
-                                      </span>
+                                  <div key={makeup.id} className="py-2 border-b border-[#edece9] last:border-0 group/row space-y-1.5">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex flex-col min-w-0 pr-2">
+                                        <div className="flex items-center gap-1.5 min-w-0">
+                                          <span className="text-xs font-bold text-[#37352f] truncate">{makeup.student_name}</span>
+                                          <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-blue-50 text-blue-700 border border-blue-200 rounded shrink-0 shadow-sm">
+                                            이번 달 {monthlyCount}회차
+                                          </span>
+                                        </div>
+                                        <span className="text-[8.5px] font-black text-gray-400 uppercase mt-0.5">
+                                          {studentObj?.grade || '정보없음'}
+                                          {studentObj?.class_days && studentObj.class_days.length > 0 ? ` · ${[...studentObj.class_days].sort((a, b) => {
+                                            const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                                            return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+                                          }).join('')}` : ''}
+                                        </span>
+                                      </div>
+
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        {isCompleted ? (
+                                          <div className="flex items-center gap-1">
+                                            <span className={`text-[8.5px] font-black px-2 py-0.5 rounded shadow-sm ${
+                                              makeup.attendance_status === '출석'
+                                                ? 'bg-emerald-50 text-emerald-700 border border-emerald-250'
+                                                : makeup.attendance_status === '지각'
+                                                ? 'bg-amber-50 text-amber-700 border border-amber-250'
+                                                : 'bg-rose-50 text-rose-700 border border-rose-250'
+                                            }`}>
+                                              {makeup.attendance_status === '출석' ? '🟢 출석' : makeup.attendance_status === '지각' ? '🟡 지각' : '🔴 결석'}
+                                            </span>
+                                            <button 
+                                              type="button"
+                                              onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, `보강:${group.time}`)}
+                                              className="text-[8px] font-bold text-gray-500 hover:text-gray-800 underline underline-offset-2 px-1"
+                                              title="출석 상태 재초기화"
+                                            >
+                                              재수정
+                                            </button>
+                                          </div>
+                                        ) : (
+                                          <div className="flex gap-1">
+                                            <button 
+                                              onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '출석')}
+                                              className="text-[8px] font-black px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-250 text-emerald-650 rounded transition-all shadow-sm"
+                                            >
+                                              출석
+                                            </button>
+                                            <button 
+                                              onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '결석')}
+                                              className="text-[8px] font-black px-1.5 py-0.5 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-250 text-rose-650 rounded transition-all shadow-sm"
+                                            >
+                                              결석
+                                            </button>
+                                          </div>
+                                        )}
+
+                                        <button 
+                                          onClick={() => handleDeleteMakeup(makeup.id)}
+                                          className="w-5 h-5 rounded-full flex items-center justify-center border border-gray-200 text-gray-400 hover:border-rose-500 hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover/row:opacity-100"
+                                          title="보강 취소"
+                                        >
+                                          <Trash2 size={10} />
+                                        </button>
+                                      </div>
                                     </div>
 
-                                    <div className="flex items-center gap-1.5 shrink-0">
-                                      {isCompleted ? (
-                                        <div className="flex items-center gap-1">
-                                          <span className={`text-[8.5px] font-black px-2 py-0.5 rounded shadow-sm ${
-                                            makeup.attendance_status === '출석'
-                                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-250'
-                                              : makeup.attendance_status === '지각'
-                                              ? 'bg-amber-50 text-amber-700 border border-amber-250'
-                                              : 'bg-rose-50 text-rose-700 border border-rose-250'
-                                          }`}>
-                                            {makeup.attendance_status === '출석' ? '🟢 출석' : makeup.attendance_status === '지각' ? '🟡 지각' : '🔴 결석'}
-                                          </span>
-                                          <button 
+                                    {/* 메모 표시 및 인라인 입력창 */}
+                                    <div className="text-[10px] pt-0.5">
+                                      {editingMemoId === makeup.id ? (
+                                        <div className="flex items-center gap-1 w-full">
+                                          <input
+                                            type="text"
+                                            value={editingMemoText}
+                                            onChange={(e) => setEditingMemoText(e.target.value)}
+                                            onKeyDown={(e) => {
+                                              if (e.key === 'Enter') handleSaveMemo(makeup.id);
+                                              if (e.key === 'Escape') setEditingMemoId(null);
+                                            }}
+                                            placeholder="메모 입력 후 Enter (예: 3단원 오답풀이)"
+                                            className="flex-1 bg-white border border-blue-400 rounded px-2 py-0.5 text-[10px] text-[#37352f] focus:outline-none shadow-sm"
+                                            autoFocus
+                                          />
+                                          <button
                                             type="button"
-                                            onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, `보강:${group.time}`)}
-                                            className="text-[8px] font-bold text-gray-500 hover:text-gray-800 underline underline-offset-2 px-1"
-                                            title="출석 상태 재초기화"
+                                            onClick={() => handleSaveMemo(makeup.id)}
+                                            className="px-2 py-0.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-[9.5px] font-black shrink-0 shadow-sm"
                                           >
-                                            재수정
+                                            저장
+                                          </button>
+                                          <button
+                                            type="button"
+                                            onClick={() => setEditingMemoId(null)}
+                                            className="px-1.5 py-0.5 bg-gray-100 hover:bg-gray-200 text-gray-600 rounded text-[9.5px] font-black shrink-0 border border-gray-200"
+                                          >
+                                            취소
                                           </button>
                                         </div>
                                       ) : (
-                                        <div className="flex gap-1">
-                                          <button 
-                                            onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '출석')}
-                                            className="text-[8px] font-black px-1.5 py-0.5 bg-emerald-50 hover:bg-emerald-600 hover:text-white border border-emerald-250 text-emerald-650 rounded transition-all shadow-sm"
-                                          >
-                                            출석
-                                          </button>
-                                          <button 
-                                            onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '결석')}
-                                            className="text-[8px] font-black px-1.5 py-0.5 bg-rose-50 hover:bg-rose-600 hover:text-white border border-rose-250 text-rose-650 rounded transition-all shadow-sm"
-                                          >
-                                            결석
-                                          </button>
+                                        <div 
+                                          onClick={() => { setEditingMemoId(makeup.id); setEditingMemoText(makeup.attendance_reason || ''); }}
+                                          className="flex items-center justify-between text-gray-500 hover:text-blue-600 cursor-pointer group/memo py-0.5 px-1 rounded hover:bg-black/5 transition-all"
+                                          title="클릭하여 메모 수정"
+                                        >
+                                          <div className="flex items-center gap-1 min-w-0 pr-1">
+                                            <FileText size={10} className="text-gray-400 shrink-0" />
+                                            <span className={`truncate text-[9.5px] ${makeup.attendance_reason ? "text-blue-700 font-medium" : "text-gray-400 italic"}`}>
+                                              {makeup.attendance_reason || '메모 작성...'}
+                                            </span>
+                                          </div>
+                                          <Edit2 size={9} className="text-gray-400 group-hover/memo:text-blue-600 shrink-0 opacity-0 group-hover/memo:opacity-100 transition-opacity" />
                                         </div>
                                       )}
-
-                                      <button 
-                                        onClick={() => handleDeleteMakeup(makeup.id)}
-                                        className="w-5 h-5 rounded-full flex items-center justify-center border border-gray-200 text-gray-400 hover:border-rose-500 hover:text-rose-500 hover:bg-rose-50 transition-all opacity-0 group-hover/row:opacity-100"
-                                        title="보강 취소"
-                                      >
-                                        <Trash2 size={10} />
-                                      </button>
-                                    </div>
                                   </div>
-                                );
-                              })}
-                            </div>
+                                </div>
+                              );
+                            })}
                           </div>
-                        </motion.div>
-                      );
-                    })}
+                        </div>
+                      </motion.div>
+                    );
+                  })}
                     {makeups.length === 0 && (
                       <div className="col-span-full h-64 border border-dashed border-[#e3e2e0] rounded-xl flex flex-col items-center justify-center text-gray-400 gap-2 bg-white shadow-sm">
                         <CalendarRange size={24} className="text-gray-300" />

@@ -364,9 +364,25 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
   const handleCardClick = async (student: any) => {
     const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
     
+    // 💡 기존 moved_to_hour 또는 status 내 시각 정보 보존
+    let mHour = student.todaySession?.moved_to_hour;
+    if ((mHour === undefined || mHour === null) && status.includes(':')) {
+      const match = status.match(/(\d{1,2}):/);
+      if (match) {
+        let val = parseInt(match[1], 10);
+        if (!isNaN(val) && val < 24) {
+          if (val < 10) val += 12;
+          mHour = val;
+        }
+      }
+    }
+
     const isPendingMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
     if (status === ATTENDANCE_STATUS.BEFORE || isPendingMakeup) {
-      await localSave(student, { attendance_status: ATTENDANCE_STATUS.PRESENT });
+      await localSave(student, { 
+        attendance_status: ATTENDANCE_STATUS.PRESENT,
+        ...(mHour !== undefined && mHour !== null ? { moved_to_hour: mHour } : {})
+      });
       return;
     }
  
@@ -385,6 +401,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
   const handleQuickAction = async (student: any, statusType: string | null) => {
     let finalStatus = statusType || ATTENDANCE_STATUS.BEFORE;
     const currentStatus = student.todaySession?.attendance_status || '';
+    const currentMovedHour = student.todaySession?.moved_to_hour;
     
     let timeSuffix = '';
     if (currentStatus.includes(':')) {
@@ -392,9 +409,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
     }
 
     if (finalStatus === ATTENDANCE_STATUS.BEFORE) {
-      const mHour = student.todaySession?.moved_to_hour;
-
-      if (mHour !== undefined && mHour !== null) {
+      if (currentMovedHour !== undefined && currentMovedHour !== null) {
         const day = getDayOfWeek(selectedDate);
         const regularHours = student.day_schedules?.[day] || [];
         const isOriginalRegularHour = (() => {
@@ -402,7 +417,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
           const firstVal = regularHours[0];
           let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
           if (h <= 12) h += 12;
-          return h === mHour;
+          return h === currentMovedHour;
         })();
 
         if (isOriginalRegularHour) {
@@ -415,7 +430,7 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
           setIsTimeShiftOpen(false);
           return;
         } else {
-          finalStatus = `${ATTENDANCE_STATUS.SUPPLEMENT}:${String(mHour).padStart(2, '0')}:00`;
+          finalStatus = `${ATTENDANCE_STATUS.SUPPLEMENT}:${String(currentMovedHour).padStart(2, '0')}:00`;
         }
       } else if (!student.day_schedules?.[getDayOfWeek(selectedDate)]?.length && timeSuffix) {
         finalStatus = ATTENDANCE_STATUS.SUPPLEMENT + timeSuffix;
@@ -424,7 +439,10 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       finalStatus = statusType + timeSuffix;
     }
     
-    await localSave(student, { attendance_status: finalStatus });
+    await localSave(student, { 
+      attendance_status: finalStatus,
+      ...(currentMovedHour !== undefined && currentMovedHour !== null ? { moved_to_hour: currentMovedHour } : {})
+    });
     setActiveStudent(null);
     setIsTimeShiftOpen(false);
   };

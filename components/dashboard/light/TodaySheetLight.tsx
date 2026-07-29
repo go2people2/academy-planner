@@ -1037,11 +1037,13 @@ export default function TodaySheet({
       }
       const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
       if (stat.includes(':')) { 
-        const parts = stat.split(':'); 
-        let val = parseInt(parts[1], 10); 
-        if (!isNaN(val) && val < 24) {
-          if (val < 10) val += 12;
-          return val;
+        const match = stat.match(/(\d{1,2}):/);
+        if (match) {
+          let val = parseInt(match[1], 10);
+          if (!isNaN(val) && val < 24) {
+            if (val < 8) val += 12;
+            return val;
+          }
         }
       }
 
@@ -2073,11 +2075,13 @@ export default function TodaySheet({
                   }
                   const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
                   if (stat.includes(':')) { 
-                    const parts = stat.split(':'); 
-                    let val = parseInt(parts[1], 10); 
-                    if (!isNaN(val) && val < 24) {
-                      if (val < 10) val += 12;
-                      return val;
+                    const match = stat.match(/(\d{1,2}):/);
+                    if (match) {
+                      let val = parseInt(match[1], 10);
+                      if (!isNaN(val) && val < 24) {
+                        if (val < 8) val += 12;
+                        return val;
+                      }
                     }
                   }
 

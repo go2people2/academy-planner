@@ -940,24 +940,32 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'attendance' && (() => {
-          const hasExplicitStatus = formData.attendance_status && [
+          const rawStatus = formData.attendance_status || '';
+          const cleanStatus = rawStatus.includes(':') ? rawStatus.split(':')[0] : rawStatus;
+
+          const hasExplicitStatus = cleanStatus && [
             ATTENDANCE_STATUS.PRESENT, 
             ATTENDANCE_STATUS.ABSENT, 
             ATTENDANCE_STATUS.LATE, 
             ATTENDANCE_STATUS.EXCLUDED, 
-            ATTENDANCE_STATUS.CANCELED
-          ].includes(formData.attendance_status as any);
+            ATTENDANCE_STATUS.CANCELED,
+            ATTENDANCE_STATUS.BEFORE
+          ].includes(cleanStatus as any);
           
           const isScheduledToday = student?.isScheduledToday ?? true;
           const isMovedHour = formData.moved_to_hour !== null && formData.moved_to_hour !== undefined;
-          const isSupplement = (formData.attendance_status === '보강') || (!isScheduledToday && isMovedHour);
-          const statusText = isSupplement ? '보강' : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
+          
+          const statusText = hasExplicitStatus 
+            ? cleanStatus 
+            : (cleanStatus === '보강' || !isScheduledToday ? '보강' : ATTENDANCE_STATUS.BEFORE);
+
+          const isSupplementText = cleanStatus === '보강' || statusText === '보강';
           
           return (
             <div 
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
-                if (isSelected || isOtherClassSection || e.shiftKey) {
+                if (isOtherClassSection || e.shiftKey) {
                   onTimePickerClick?.(e);
                 } else {
                   onAttendanceClick(e);
@@ -968,7 +976,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 onTimePickerClick?.(e);
               }}
               className={`absolute inset-0 w-full h-full flex items-center justify-between px-3 text-[11px] cursor-pointer select-none transition-colors hover:bg-[#edece9]/30 z-30 ${
-              isSupplement ? 'text-blue-600 font-semibold' :
+              isSupplementText ? 'text-blue-600 font-semibold' :
               statusText === ATTENDANCE_STATUS.BEFORE ? 'text-[#37352f]/65 font-normal' :
               statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-600 font-semibold' : 
               statusText.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-rose-600 font-bold' : 
@@ -976,7 +984,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             }`}>
               <div className="flex items-center gap-1.5 min-w-0 flex-1">
                 <span>{statusText}</span>
-                {isMovedHour && (
+                {isMovedHour && statusText !== '보강' && (
                   <span className={`text-[9.5px] font-bold px-1 rounded shrink-0 border ${
                     !isScheduledToday 
                       ? 'bg-blue-50 text-blue-650 border-blue-200' 
