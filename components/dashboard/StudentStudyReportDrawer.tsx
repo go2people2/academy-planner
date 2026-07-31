@@ -711,6 +711,26 @@ function JournalTab({ student, isLight }: any) {
   const [consultations, setConsultations] = useState<any[]>([]);
   const [isFetchLoading, setIsFetchLoading] = useState(false);
 
+  // 과목 선택 상태 ('정규' 또는 학생의 선택과목/특강명)
+  const availableCourses = useMemo(() => {
+    const courses = ['정규'];
+    if (student?.elective_courses && Array.isArray(student.elective_courses)) {
+      student.elective_courses.forEach((ec: any) => {
+        const subject = typeof ec === 'string' ? ec : ec?.subject;
+        if (subject && !courses.includes(subject)) {
+          courses.push(subject);
+        }
+      });
+    } else if (student?.electiveCourse?.subject) {
+      if (!courses.includes(student.electiveCourse.subject)) {
+        courses.push(student.electiveCourse.subject);
+      }
+    }
+    return courses;
+  }, [student]);
+
+  const [selectedCourse, setSelectedCourse] = useState<string>('정규');
+
   // 작성/수정용 상태
   const [newDate, setNewDate] = useState(() => {
     const now = new Date();
@@ -725,7 +745,7 @@ function JournalTab({ student, isLight }: any) {
   const [editingDate, setEditingDate] = useState('');
   const [editingContent, setEditingContent] = useState('');
 
-  // 1. 상담 데이터 조회 (Read)
+  // 1. 상담 데이터 조회 (Read - 과목별)
   const fetchConsultations = async () => {
     if (!student?.id) return;
     setIsFetchLoading(true);
@@ -763,7 +783,8 @@ function JournalTab({ student, isLight }: any) {
           student_id: student.id,
           academy_id: student.academy_id,
           date: newDate.replace(/-/g, '.'), // 2026.07.10 형식으로 저장
-          content: newContent.trim()
+          content: newContent.trim(),
+          course_name: selectedCourse || '정규'
         });
 
       if (error) throw error;
@@ -825,34 +846,60 @@ function JournalTab({ student, isLight }: any) {
     }
   };
 
-  // 5. 학부모 전용 상담 일지 피드 생성
+  // 5. 학부모 전용 상담 일지 피드 생성 (선택된 과목별 필터링)
   const mergedFeed = useMemo(() => {
     const feed: any[] = [];
 
-    // 학부모 상담 기록만 추가
+    // 학부모 상담 기록 중 현재 선택된 과목(정규 또는 선택과목)의 데이터만 추가
     consultations.forEach((c: any) => {
-      feed.push({
-        type: 'consult',
-        id: c.id,
-        date: c.date.replace(/-/g, '.'),
-        content: c.content,
-      });
+      const cCourse = c.course_name || '정규';
+      if (cCourse === selectedCourse || (selectedCourse === '정규' && !c.course_name)) {
+        feed.push({
+          type: 'consult',
+          id: c.id,
+          date: c.date.replace(/-/g, '.'),
+          content: c.content,
+          course_name: cCourse,
+        });
+      }
     });
 
     // 내림차순 정렬 (최신 날짜순)
     return feed.sort((a, b) => b.date.localeCompare(a.date));
-  }, [consultations]);
+  }, [consultations, selectedCourse]);
 
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       
+      {/* 📚 과목 선택 탭 (정규 / 선택과목, 방학특강) */}
+      {availableCourses.length > 1 && (
+        <div className="flex items-center gap-1.5 p-1 bg-black/20 rounded-md border border-white/5 no-print">
+          {availableCourses.map((crs) => (
+            <button
+              key={crs}
+              type="button"
+              onClick={() => setSelectedCourse(crs)}
+              className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${
+                selectedCourse === crs
+                  ? 'bg-amber-500 text-white shadow'
+                  : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
+              }`}
+            >
+              {crs === '정규' ? '정규 수업 일지' : `[선택] ${crs} 일지`}
+            </button>
+          ))}
+        </div>
+      )}
+
       {/* ✍️ 신규 상담 일지 작성 폼 */}
       <div className={`border rounded-[4px] p-4 space-y-3 no-print ${
         isLight ? 'bg-amber-50/50 border-amber-500/20 shadow-sm' : 'bg-amber-500/5 border border-amber-500/10'
       }`}>
-        <div className="flex items-center gap-1.5 text-amber-500 font-black text-[10px] uppercase tracking-wider">
-          <MessageSquare size={12} />
-          학부모 상담 일지 새 기록
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5 text-amber-500 font-black text-[10px] uppercase tracking-wider">
+            <MessageSquare size={12} />
+            학부모 상담 일지 새 기록 ({selectedCourse})
+          </div>
         </div>
         
         <form onSubmit={handleAddConsultation} className="space-y-3">

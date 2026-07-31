@@ -40,7 +40,7 @@ import { useTodaySheetUndoRedo } from './todaySheet/hooks/useTodaySheetUndoRedo'
 // --- Main Component ---
 
 export default function TodaySheet({
-  students, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, onRemoveFromToday, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
+  students, allStudents, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, onRemoveFromToday, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange,
   sortDirection = 'asc', onSortDirectionChange,
   onOpenBriefing, // 💡 추가
@@ -1892,7 +1892,7 @@ export default function TodaySheet({
         isOpen={isHokmaPrintOpen}
         onClose={() => setIsHokmaPrintOpen(false)}
         selectedStudents={selectedIds.length > 0 ? filteredStudents.filter((s: any) => selectedIds.includes(s.id)) : filteredStudents}
-        allStudents={students}
+        allStudents={allStudents && allStudents.length > 0 ? allStudents : students}
         selectedTeacherId={selectedTeacherId}
         masterTextbooks={masterTextbooks}
         initialMonth={selectedDate.substring(0, 7)}

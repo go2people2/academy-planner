@@ -2,8 +2,9 @@
 
 import React, { useState, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Printer, Palette, Edit3 } from 'lucide-react';
+import { X, Printer, Palette, Edit3, Users, Search, Filter } from 'lucide-react';
 import { Student, SessionLog } from '@/types/dashboard';
+import { supabase } from '@/lib/supabase';
 
 interface HokmaJournalPrintModalProps {
   isOpen: boolean;
@@ -121,30 +122,171 @@ export default function HokmaJournalPrintModal({
     return `${now.getFullYear()}-${mm}`;
   }, [initialMonth]);
 
+  const [dateMode, setDateMode] = useState<'month' | 'custom'>('month'); // 'month': 월별, 'custom': 직접 지정
   const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
-  const [regularTheme, setRegularTheme] = useState<ThemeKey>('amber'); // 💡 정규수업 기본 테마 (호박색)
-  const [specialTheme, setSpecialTheme] = useState<ThemeKey>('slateBlue'); // 💡 선택과목/특강 기본 테마 (슬레이트 인디고 블루)
-  const [selectedPenColor, setSelectedPenColor] = useState<string>('#1e3a8a'); // 기본 펜색상: 청색 볼펜
-  const [showAllStudents, setShowAllStudents] = useState(false); // 💡 모든학생 일괄인쇄 토글 상태
+  
+  // 직접 지정 시작일 / 종료일 기본값 (현재월 1일 ~ 말일)
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    const now = new Date();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    return `${now.getFullYear()}-${mm}-01`;
+  });
+  const [customEndDate, setCustomEndDate] = useState(() => {
+    const now = new Date();
+    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const mm = String(now.getMonth() + 1).padStart(2, '0');
+    const dd = String(lastDay).padStart(2, '0');
+    return `${now.getFullYear()}-${mm}-${dd}`;
+  });
 
-  // 💡 인쇄 대상 학생 리스트 연산 (학생 ID 기준 100% 중복 제거)
-  const targetStudents = useMemo(() => {
-    let rawList = selectedStudents;
-    if (showAllStudents && selectedStudents.length > 0) {
-      if (selectedTeacherId === 'All') {
-        rawList = selectedStudents.filter(s => !s.is_deleted);
-      } else {
-        rawList = selectedStudents.filter(s => !s.is_deleted && s.teacher_id === selectedTeacherId);
+  const [selectedTheme, setSelectedTheme] = useState<ThemeKey>('amber'); // 💡 기본 테마 (호박색)
+  const [selectedPenColor, setSelectedPenColor] = useState<string>('#1e3a8a'); // 기본 펜색상: 청색 볼펜
+  
+  // 💡 [원장님 기능] 인쇄 모달 내에서 특정 학생/날짜의 숙제 점수(완성도) 손쉽게 직접 수정
+  // Key: `${studentId}_${dateKey}` -> Value: '10점' | '7점' | '4점' | '0점' | '-'
+  const [hwOverrides, setHwOverrides] = useState<Record<string, string>>({});
+
+  const handleToggleHwScore = async (studentId: string, dateKey: string, currentScore: string, targetCourse?: string) => {
+    if (!dateKey || !studentId) return;
+    const scoreOrder = ['10점', '7점', '4점', '0점', '-'];
+    const curIdx = scoreOrder.indexOf(currentScore);
+    const nextScore = scoreOrder[(curIdx + 1) % scoreOrder.length];
+    const overrideKey = `${studentId}_${dateKey}`;
+    
+    // 1. 화면 UI 즉시 변경 (낙관적 업데이트)
+    setHwOverrides(prev => ({
+      ...prev,
+      [overrideKey]: nextScore
+    }));
+
+    // 2. 점수별 todo_achievement (0~100%) 매핑
+    let newAchievement = 0;
+    if (nextScore === '10점') newAchievement = 100;
+    else if (nextScore === '7점') newAchievement = 70;
+    else if (nextScore === '4점') newAchievement = 40;
+    else if (nextScore === '0점' || nextScore === '-') newAchievement = 0;
+
+    try {
+      // Supabase ams_daily_sheets 세션 테이블 업데이트
+      const formattedDate = dateKey.replace(/\./g, '-');
+      let query = supabase
+        .from('ams_daily_sheets')
+        .update({ todo_achievement: newAchievement })
+        .eq('student_id', studentId)
+        .or(`date.eq.${formattedDate},session_date.eq.${formattedDate}`);
+
+      if (targetCourse && targetCourse !== '정규') {
+        query = query.eq('course_name', targetCourse);
       }
+
+      await query;
+    } catch (err) {
+      console.error('Supabase 숙제 점수 저장 실패:', err);
     }
-    const uniqueMap = new Map<string, any>();
-    (rawList || []).forEach(s => {
-      if (s && s.id && !uniqueMap.has(s.id)) {
-        uniqueMap.set(s.id, s);
+  };
+  // 💡 오늘 시트 원생이 없거나 휴일인 경우 자동으로 전체 학생 보기(true) 활성화
+  const [includeOtherDays, setIncludeOtherDays] = useState(() => {
+    return !selectedStudents || selectedStudents.length === 0;
+  });
+
+  React.useEffect(() => {
+    if (!selectedStudents || selectedStudents.length === 0) {
+      setIncludeOtherDays(true);
+    }
+  }, [selectedStudents]);
+  // 💡 수업 유형 필터 ('all': 전체, 'regular': 정규수업만, 'special': 선택과목/특강만)
+  const [courseTypeFilter, setCourseTypeFilter] = useState<'all' | 'regular' | 'special'>('all');
+  const [searchQuery, setSearchQuery] = useState(''); // 이름 검색어
+
+  // 💡 인쇄 대상 항목 리스트 연산 (학생 X 수강 코스별 1:1 독립 항목 분리)
+  const printTargetItems = useMemo(() => {
+    let baseList: Student[] = [];
+
+    // 💡 모든 학생 보기 체크 시: 요일/휴일 제약 없이, '선택된 담당 선생님(selectedTeacherId)' 원생 목록을 반영합니다.
+    if (includeOtherDays) {
+      const fullList = (allStudents && allStudents.length > 0 ? allStudents : selectedStudents).filter(s => !s.is_deleted);
+      if (selectedTeacherId === 'All') {
+        baseList = fullList;
+      } else {
+        baseList = fullList.filter(s => s.teacher_id === selectedTeacherId);
+      }
+    } else {
+      baseList = selectedStudents;
+    }
+
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      baseList = baseList.filter(s => s.name && s.name.toLowerCase().includes(q));
+    }
+
+    const items: Array<{ student: Student; courseName: string; isSpecial: boolean }> = [];
+    const seenKeys = new Set<string>();
+
+    (baseList || []).forEach(student => {
+      if (!student || !student.id) return;
+
+      // 1. 정규 수업 항목 추가 (수업 유형 필터가 'special'이 아닌 경우 무조건 추가)
+      if (courseTypeFilter !== 'special') {
+        const regKey = `${student.id}_정규`;
+        if (!seenKeys.has(regKey)) {
+          seenKeys.add(regKey);
+          items.push({
+            student: { ...student, courseName: '정규' },
+            courseName: '정규',
+            isSpecial: false
+          });
+        }
+      }
+
+      // 2. 특강/선택과목 항목 추가 (수업 유형 필터가 'regular'가 아닌 경우)
+      if (courseTypeFilter !== 'regular') {
+        const electiveSubjects: string[] = [];
+        const rawElectives = (student as any).elective_courses;
+        if (Array.isArray(rawElectives)) {
+          rawElectives.forEach((ec: any) => {
+            if (typeof ec === 'string' && ec.trim()) electiveSubjects.push(ec.trim());
+            else if (ec && typeof ec === 'object' && ec.subject) electiveSubjects.push(ec.subject.trim());
+          });
+        }
+        if (student.electiveCourse?.subject) {
+          electiveSubjects.push(student.electiveCourse.subject.trim());
+        }
+
+        const logsToScan = [...(student.allLogs || [])];
+        if (student.todaySession) logsToScan.push(student.todaySession);
+        logsToScan.forEach(log => {
+          if (log.course_name && log.course_name !== '정규') {
+            electiveSubjects.push(log.course_name.trim());
+          }
+        });
+
+        const uniqueElectives = Array.from(new Set(electiveSubjects)).filter(subj => subj && subj !== '정규' && subj.trim().length > 1);
+
+        uniqueElectives.forEach(subj => {
+          const specKey = `${student.id}_${subj}`;
+          if (!seenKeys.has(specKey)) {
+            seenKeys.add(specKey);
+            items.push({
+              student: { ...student, courseName: subj },
+              courseName: subj,
+              isSpecial: true
+            });
+          }
+        });
       }
     });
-    return Array.from(uniqueMap.values());
-  }, [showAllStudents, selectedTeacherId, selectedStudents]);
+
+    // 💡 [이름순 정렬] 학생 이름 가나다순으로 정렬 (동일 학생일 경우 정규 -> 특강 순)
+    items.sort((a, b) => {
+      const nameA = a.student.name || '';
+      const nameB = b.student.name || '';
+      const nameComp = nameA.localeCompare(nameB, 'ko');
+      if (nameComp !== 0) return nameComp;
+      return a.isSpecial ? 1 : -1; // 동일 학생 시 정규 수업이 먼저 오도록 배치
+    });
+
+    return items;
+  }, [includeOtherDays, courseTypeFilter, selectedStudents, allStudents, selectedTeacherId, searchQuery]);
 
   // 💡 글자 수가 20자를 초과하면 15px로 축소, 그렇지 않으면 기본 크기(18px/19px) 유지하는 유틸
   const getHandwritingFontSize = (text: string, baseSize = 18) => {
@@ -178,7 +320,7 @@ export default function HokmaJournalPrintModal({
     }
   };
 
-  if (!isOpen || targetStudents.length === 0) return null;
+  if (!isOpen) return null;
 
   return createPortal(
     <div className="hokma-journal-print-root fixed inset-0 z-[9999] flex flex-col bg-slate-900/95 text-white overflow-hidden">
@@ -279,14 +421,15 @@ export default function HokmaJournalPrintModal({
           border-collapse: collapse;
           font-size: 11px;
           text-align: center;
-          background: #ffffff;
+          background: transparent;
         }
         .hj-sign-table th, .hj-sign-table td {
           border: 1px solid #64748b;
           padding: 0;
+          background: rgba(255, 255, 255, 0.85);
         }
         .hj-sign-table th {
-          background-color: #ffffff;
+          background-color: rgba(255, 255, 255, 0.95);
           color: #1f2937;
           font-weight: bold;
           width: 58px;
@@ -297,7 +440,7 @@ export default function HokmaJournalPrintModal({
         }
         .hj-sign-title-cell {
           width: 24px;
-          background-color: #ffffff;
+          background-color: rgba(255, 255, 255, 0.95);
           color: #1f2937;
           font-weight: bold;
           font-size: 10px;
@@ -337,16 +480,17 @@ export default function HokmaJournalPrintModal({
           border-collapse: collapse;
           font-size: 12px;
           text-align: center;
-          background: #ffffff;
+          background: transparent;
         }
         .hj-table th, .hj-table td {
           border: 1px solid #64748b;
           height: 38px;
           padding: 2px 4px;
           box-sizing: border-box;
+          background-color: rgba(255, 255, 255, 0.45);
         }
         .hj-table th {
-          background-color: #ffffff;
+          background-color: rgba(255, 255, 255, 0.65);
           color: #1f2937;
           font-weight: bold;
         }
@@ -355,6 +499,7 @@ export default function HokmaJournalPrintModal({
           background-color: var(--theme-header-bg) !important;
           color: var(--theme-header-text) !important;
           font-weight: bold;
+          opacity: 0.85;
         }
         .hj-desc-text {
           font-size: 10px;
@@ -387,12 +532,13 @@ export default function HokmaJournalPrintModal({
           width: 100%;
           border: 1px solid #64748b;
           border-collapse: collapse;
-          background: #ffffff;
+          background: transparent;
         }
         .hj-feedback-box td {
           border: 1px solid #64748b;
           padding: 8px;
           font-size: 12px;
+          background-color: rgba(255, 255, 255, 0.45);
         }
         .hj-feedback-title {
           font-weight: bold;
@@ -419,111 +565,173 @@ export default function HokmaJournalPrintModal({
       ` }} />
 
       {/* 상단 액션바 (인쇄 시 숨겨짐) */}
-      <div className="hokma-action-bar flex items-center justify-between px-6 py-4 bg-slate-800 border-b border-slate-700 shrink-0">
+      <div className="hokma-action-bar flex items-center justify-between px-6 py-3 bg-slate-900 border-b border-slate-800 shrink-0 gap-4 flex-wrap">
         <div className="flex items-center gap-4 flex-wrap">
-          <h2 className="text-lg font-black tracking-wider flex items-center gap-2">
-            <Printer className="text-amber-500" /> 월간 {academyName} 일지 인쇄
+          <h2 className="text-base font-black tracking-wider flex items-center gap-2 whitespace-nowrap text-slate-100">
+            <Printer size={18} className="text-amber-500" /> 월간 {academyName} 일지 인쇄
           </h2>
           
-          <div className="flex items-center gap-3">
-            {/* 대상 월 선택 */}
-            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">대상 월</span>
-              <select
-                value={selectedMonth}
-                onChange={(e) => setSelectedMonth(e.target.value)}
-                className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
-              >
-                {monthOptions.map((opt) => (
-                  <option key={opt.val} value={opt.val} className="bg-slate-800 text-white">
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
+          <div className="flex items-center gap-2.5 flex-wrap">
+            {/* 1. 기간 설정 그룹 */}
+            <div className="flex items-center h-9 bg-slate-950 px-1 rounded-lg border border-slate-800">
+              <div className="flex items-center gap-1 p-0.5 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setDateMode('month')}
+                  className={`px-3 py-1 rounded-md transition-all whitespace-nowrap ${
+                    dateMode === 'month' ? 'bg-amber-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  월별 선택
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setDateMode('custom')}
+                  className={`px-3 py-1 rounded-md transition-all whitespace-nowrap ${
+                    dateMode === 'custom' ? 'bg-amber-500 text-white font-black shadow' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  기간 지정
+                </button>
+              </div>
+
+              <div className="h-4 w-px bg-slate-800 mx-1" />
+
+              {dateMode === 'month' ? (
+                <div className="flex items-center gap-2 px-2.5 whitespace-nowrap">
+                  <span className="text-xs text-slate-400 font-bold">대상 월:</span>
+                  <select
+                    value={selectedMonth}
+                    onChange={(e) => setSelectedMonth(e.target.value)}
+                    className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                  >
+                    {monthOptions.map((opt) => (
+                      <option key={opt.val} value={opt.val} className="bg-slate-900 text-white">
+                        {opt.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              ) : (
+                <div className="flex items-center gap-2 px-2.5 text-xs font-bold whitespace-nowrap">
+                  <span className="text-slate-400">기간:</span>
+                  <input
+                    type="date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="bg-slate-900 text-white border border-slate-700 rounded px-2 py-0.5 outline-none [color-scheme:dark]"
+                  />
+                  <span className="text-slate-400">~</span>
+                  <input
+                    type="date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="bg-slate-900 text-white border border-slate-700 rounded px-2 py-0.5 outline-none [color-scheme:dark]"
+                  />
+                </div>
+              )}
             </div>
 
-            {/* 🎨 정규수업 테마 선택 */}
-            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-              <Palette size={14} className="text-amber-400" />
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">정규 테마</span>
-              <select
-                value={regularTheme}
-                onChange={(e) => setRegularTheme(e.target.value as ThemeKey)}
-                className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
-              >
-                {Object.entries(JOURNAL_THEMES).map(([key, config]) => (
-                  <option key={key} value={key} className="bg-slate-800 text-white">
-                    {config.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+            {/* 2. 스타일 디자인 그룹 (테마 + 펜 색상) */}
+            <div className="flex items-center gap-3 h-9 bg-slate-950 px-3 rounded-lg border border-slate-800">
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <Palette size={14} className="text-amber-400 shrink-0" />
+                <span className="text-xs text-slate-400 font-bold">테마:</span>
+                <select
+                  value={selectedTheme}
+                  onChange={(e) => setSelectedTheme(e.target.value as ThemeKey)}
+                  className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                >
+                  {Object.entries(JOURNAL_THEMES).map(([key, config]) => (
+                    <option key={key} value={key} className="bg-slate-900 text-white">
+                      {config.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-            {/* 💜 선택과목(특강) 테마 선택 */}
-            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-              <Palette size={14} className="text-purple-400" />
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">특강 테마</span>
-              <select
-                value={specialTheme}
-                onChange={(e) => setSpecialTheme(e.target.value as ThemeKey)}
-                className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
-              >
-                {Object.entries(JOURNAL_THEMES).map(([key, config]) => (
-                  <option key={key} value={key} className="bg-slate-800 text-white">
-                    {config.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+              <div className="h-4 w-px bg-slate-800" />
 
-            {/* 🖊️ 손글씨 펜 색상 선택 추가 */}
-            <div className="flex items-center gap-2 bg-slate-900 px-3 py-1.5 rounded border border-slate-700">
-              <Edit3 size={14} className="text-blue-400" />
-              <span className="text-xs text-slate-400 font-bold uppercase tracking-widest">펜 색상</span>
-              <select
-                value={selectedPenColor}
-                onChange={(e) => setSelectedPenColor(e.target.value)}
-                className="bg-transparent text-sm font-bold text-white outline-none cursor-pointer"
-              >
-                {PEN_COLORS.map((col) => (
-                  <option key={col.val} value={col.val} className="bg-slate-800 text-white">
-                    {col.label}
-                  </option>
-                ))}
-              </select>
+              <div className="flex items-center gap-2 whitespace-nowrap">
+                <Edit3 size={14} className="text-blue-400 shrink-0" />
+                <span className="text-xs text-slate-400 font-bold">펜 색상:</span>
+                <select
+                  value={selectedPenColor}
+                  onChange={(e) => setSelectedPenColor(e.target.value)}
+                  className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+                >
+                  {PEN_COLORS.map((col) => (
+                    <option key={col.val} value={col.val} className="bg-slate-900 text-white">
+                      {col.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
         </div>
 
+        {/* 3. 우측 대상 학생 그룹 & 인쇄 실행 버튼 */}
         <div className="flex items-center gap-2.5 shrink-0 whitespace-nowrap">
-          {/* 총 선택된 인원수 표시 */}
-          <span className="text-xs text-slate-300 font-bold bg-slate-900 border border-slate-700 px-3 py-2 rounded shrink-0 whitespace-nowrap flex items-center gap-1">
-            총 <span className="text-amber-400 font-black">{targetStudents.length}</span>명 선택
+          <label className="flex items-center gap-2 h-9 bg-slate-950 px-3 rounded-lg border border-slate-800 cursor-pointer select-none hover:bg-slate-900 transition-colors">
+            <input
+              type="checkbox"
+              checked={includeOtherDays}
+              onChange={(e) => setIncludeOtherDays(e.target.checked)}
+              className="w-3.5 h-3.5 rounded border-slate-700 text-amber-500 focus:ring-amber-500 bg-slate-900 cursor-pointer"
+            />
+            <span className="text-xs text-slate-200 font-bold">모든 학생 보기</span>
+          </label>
+
+          <div className="flex items-center gap-2 h-9 bg-slate-950 px-3 rounded-lg border border-slate-800">
+            <Filter size={14} className="text-amber-400 shrink-0" />
+            <select
+              value={courseTypeFilter}
+              onChange={(e) => setCourseTypeFilter(e.target.value as any)}
+              className="bg-transparent text-xs font-bold text-white outline-none cursor-pointer"
+            >
+              <option value="all" className="bg-slate-900 text-white">전체 수업 (정규+특강)</option>
+              <option value="regular" className="bg-slate-900 text-white">정규수업만 보기</option>
+              <option value="special" className="bg-slate-900 text-white">선택과목(특강)만 보기</option>
+            </select>
+          </div>
+
+          <div className="flex items-center gap-1.5 h-9 bg-slate-950 px-3 rounded-lg border border-slate-800">
+            <Search size={14} className="text-slate-400 shrink-0" />
+            <input
+              type="text"
+              placeholder="이름 검색..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="bg-transparent text-xs font-bold text-white outline-none w-20 placeholder:text-slate-500"
+            />
+            {searchQuery && (
+              <button 
+                onClick={() => setSearchQuery('')}
+                className="text-slate-400 hover:text-white text-xs font-bold"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <span className="h-9 px-3 bg-blue-950/80 border border-blue-800/80 rounded-lg text-[11px] text-blue-200 font-bold flex items-center gap-1.5 shadow-sm">
+            💡 <span className="text-blue-300">숙제 완성도 셀 클릭 시 바로 수정</span>
           </span>
 
-          {/* 모든학생 토글 버튼 */}
-          {allStudents.length > 0 && (
-            <button
-              onClick={() => setShowAllStudents(prev => !prev)}
-              className={`px-3.5 py-2 rounded text-xs font-black transition-all shrink-0 whitespace-nowrap ${
-                showAllStudents 
-                  ? 'bg-blue-600 border border-blue-500 text-white shadow-lg' 
-                  : 'bg-slate-700 hover:bg-slate-650 border border-slate-600 text-slate-300'
-              }`}
-            >
-              {showAllStudents ? '✓ 전체학생' : '전체학생 선택'}
-            </button>
-          )}
+          <span className="h-9 px-3.5 bg-slate-950 border border-slate-800 rounded-lg text-xs text-slate-300 font-bold flex items-center gap-1">
+            총 <span className="text-amber-400 font-black">{printTargetItems.length}</span>개 일지
+          </span>
 
           <button
             onClick={handlePrint}
-            className="flex items-center gap-1.5 px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white text-xs font-black rounded shadow transition-all shrink-0 whitespace-nowrap cursor-pointer"
+            className="h-9 flex items-center gap-1.5 px-4 bg-amber-600 hover:bg-amber-500 text-white text-xs font-black rounded-lg shadow-md transition-all shrink-0 cursor-pointer"
           >
             <Printer size={14} /> 인쇄하기
           </button>
           <button
             onClick={onClose}
-            className="p-2 hover:bg-slate-700 rounded text-slate-400 hover:text-white transition-colors shrink-0"
+            className="h-9 w-9 flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
           >
             <X size={18} />
           </button>
@@ -531,33 +739,60 @@ export default function HokmaJournalPrintModal({
       </div>
 
       <div className="flex-1 bg-slate-950 overflow-y-auto journal-preview-container">
-        {targetStudents.map((student, stIdx) => {
-          const [yearStr, monthStr] = selectedMonth.split('-');
-          const targetYear = parseInt(yearStr, 10);
-          const targetMonth = parseInt(monthStr, 10);
+        {printTargetItems.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-64 text-slate-400 font-bold">
+            <Filter size={32} className="mb-2 text-slate-600" />
+            <p>선택 조건에 해당하는 학생 및 특강 일지가 없습니다.</p>
+          </div>
+        ) : (
+          printTargetItems.map((item, stIdx) => {
+            const { student, courseName: targetCourse, isSpecial } = item;
+            let startDate: Date;
+            let endDate: Date;
+            let displayMonth: string;
 
-          const startOfMonth = new Date(targetYear, targetMonth - 1, 1);
-          const endOfMonth = new Date(targetYear, targetMonth, 0);
+            if (dateMode === 'custom' && customStartDate && customEndDate) {
+              startDate = new Date(`${customStartDate}T00:00:00`);
+              endDate = new Date(`${customEndDate}T23:59:59`);
+              const startM = startDate.getMonth() + 1;
+              const endM = endDate.getMonth() + 1;
+              displayMonth = startM === endM ? `${startM}` : `${startM}~${endM}`;
+            } else {
+              const [yearStr, monthStr] = selectedMonth.split('-');
+              const targetYear = parseInt(yearStr, 10);
+              const targetMonthVal = parseInt(monthStr, 10);
+              startDate = new Date(targetYear, targetMonthVal - 1, 1);
+              endDate = new Date(targetYear, targetMonthVal, 0, 23, 59, 59);
+              displayMonth = `${targetMonthVal}`;
+            }
 
-          const targetCourse = student.courseName || '정규';
-          const allSessionLogs = [...(student.allLogs || [])];
-          if (student.todaySession) {
-            const exists = allSessionLogs.some(l => 
-              (l.date || l.session_date) === (student.todaySession?.date || student.todaySession?.session_date) &&
-              (l.course_name || '정규') === targetCourse
-            );
-            if (!exists) allSessionLogs.push(student.todaySession);
-          }
+            const allSessionLogs = [...(student.allLogs || [])];
+            if (student.todaySession) {
+              const exists = allSessionLogs.some(l => 
+                (l.date || l.session_date) === (student.todaySession?.date || student.todaySession?.session_date) &&
+                ((l.course_name || '정규') === targetCourse)
+              );
+              if (!exists) allSessionLogs.push(student.todaySession);
+            }
 
-          const monthLogs = allSessionLogs
-            .filter((log) => {
-              const logDate = new Date(log.date || log.session_date || '');
-              const logCourse = log.course_name || '정규';
-              return logDate >= startOfMonth && logDate <= endOfMonth && logCourse === targetCourse;
-            })
-            .sort((a, b) => {
-              return new Date(a.date || a.session_date || '').getTime() - new Date(b.date || b.session_date || '').getTime();
-            });
+            const monthLogs = allSessionLogs
+              .filter((log) => {
+                const rawDateStr = log.date || log.session_date || '';
+                if (!rawDateStr) return false;
+                const logDate = new Date(rawDateStr.replace(/\./g, '-'));
+                const logCourse = log.course_name || '정규';
+                
+                const isCourseMatch = isSpecial 
+                  ? logCourse === targetCourse 
+                  : (logCourse === '정규' || !log.course_name);
+
+                return logDate >= startDate && logDate <= endDate && isCourseMatch;
+              })
+              .sort((a, b) => {
+                const dateA = new Date((a.date || a.session_date || '').replace(/\./g, '-')).getTime();
+                const dateB = new Date((b.date || b.session_date || '').replace(/\./g, '-')).getTime();
+                return dateA - dateB;
+              });
 
           // 💡 [안정화] 합의된 결석(수업제외, 수업취소)만 걷어내며, 출결 상태가 null이거나 빈 값인 유효 세션도 정상 포함합니다.
           const validMonthLogs = monthLogs.filter(
@@ -618,8 +853,12 @@ export default function HokmaJournalPrintModal({
                   attendanceSign = '▲';
                 }
 
+                const rawDateKey = log.date || log.session_date || '';
                 let hwScore = '';
-                if (attStatus.includes('결석')) {
+                const overrideKey = `${student.id}_${rawDateKey}`;
+                if (hwOverrides[overrideKey] !== undefined) {
+                  hwScore = hwOverrides[overrideKey];
+                } else if (attStatus.includes('결석')) {
                   hwScore = '-';
                 } else if (log.hw_checked_today === true || log.hw_passed_today === true) {
                   hwScore = '10점';
@@ -646,6 +885,7 @@ export default function HokmaJournalPrintModal({
 
                 return {
                   dateText,
+                  rawDateKey,
                   attendanceSign,
                   hwScore,
                   classworkText,
@@ -654,6 +894,7 @@ export default function HokmaJournalPrintModal({
               }
               return {
                 dateText: '',
+                rawDateKey: '',
                 attendanceSign: '',
                 hwScore: '',
                 classworkText: '',
@@ -715,8 +956,7 @@ export default function HokmaJournalPrintModal({
             });
 
             const isSpecial = student.isSpecialClass || (student.courseName && student.courseName !== '정규');
-            const currentThemeKey = isSpecial ? specialTheme : regularTheme;
-            const currentThemeConfig = JOURNAL_THEMES[currentThemeKey];
+            const currentThemeConfig = JOURNAL_THEMES[selectedTheme];
 
             const pageSuffix = totalSheets > 1 ? ` (${sheetIdx + 1}/${totalSheets})` : '';
 
@@ -726,6 +966,7 @@ export default function HokmaJournalPrintModal({
                 <div 
                   className="hokma-page"
                   style={{
+                    position: 'relative',
                     '--theme-bg': currentThemeConfig.bg,
                     '--theme-border': currentThemeConfig.border,
                     '--theme-header-bg': currentThemeConfig.headerBg,
@@ -735,38 +976,51 @@ export default function HokmaJournalPrintModal({
                     '--theme-desc-color': currentThemeConfig.descColor,
                   } as React.CSSProperties}
                 >
-                  {/* 상단 콘텐츠 그룹 */}
-                  <div>
-                    {/* 1. 헤더 */}
+                  {/* 중앙 초대형 워터마크 배경 (앞페이지: 하단 배치) */}
+                  {logoSrc && (
+                    <div 
+                      style={{ 
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'flex-end',
+                        justifyContent: 'center',
+                        paddingBottom: '80px',
+                        pointerEvents: 'none',
+                        zIndex: 0,
+                        opacity: 0.13,
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <img 
+                        src={logoSrc} 
+                        alt="Watermark Single" 
+                        style={{ 
+                          width: '580px',
+                          maxHeight: '580px',
+                          transform: 'rotate(-12deg) translateY(20px)',
+                          objectFit: 'contain',
+                          filter: currentThemeConfig.logoFilter
+                        }} 
+                      />
+                    </div>
+                  )}
+
+                  {/* 상단/하단 그룹 포함 콘텐츠 Container */}
+                  <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+                    <div>
+                      {/* 1. 헤더 */}
                     <div className="hj-title-container">
                       <h1 className="hj-main-title">
                         {(() => {
-                          const isSpecial = student.isSpecialClass || (student.courseName && student.courseName !== '정규');
-                          const courseSubject = student.courseName && student.courseName !== '정규'
-                            ? student.courseName
+                          const courseSubject = targetCourse && targetCourse !== '정규'
+                            ? targetCourse
                             : (student.electiveCourse?.subject || '선택과목');
                           return isSpecial
-                            ? `〈 ${courseSubject} ${academyName} 일지${pageSuffix} 〉`
-                            : `〈 나의 ${targetMonth}월 ${academyName} 일지${pageSuffix} 〉`;
+                            ? `〈 나의 ${courseSubject} ${academyName} 일지${pageSuffix} 〉`
+                            : `〈 나의 ${displayMonth}월 ${academyName} 일지${pageSuffix} 〉`;
                         })()}
                       </h1>
-                      {logoSrc && (
-                        <img 
-                          src={logoSrc} 
-                          alt="Academy Logo" 
-                          style={{ 
-                            position: 'absolute',
-                            right: '220px',
-                            bottom: '-2px',
-                            width: '135px',
-                            height: '65px',
-                            opacity: 0.42,
-                            objectFit: 'contain',
-                            filter: currentThemeConfig.logoFilter,
-                            pointerEvents: 'none'
-                          }} 
-                        />
-                      )}
                       <table className="hj-sign-table">
                         <tbody>
                           <tr>
@@ -856,7 +1110,13 @@ export default function HokmaJournalPrintModal({
                         <tr>
                           <th className="hj-first-col">숙제 완성도</th>
                           {rows.map((r, i) => (
-                            <td key={i} className="hj-handwriting" style={{ fontSize: '20px' }}>
+                            <td 
+                              key={i} 
+                              className="hj-handwriting cursor-pointer hover:bg-amber-100/60 transition-colors select-none" 
+                              style={{ fontSize: '20px' }}
+                              onClick={() => r.dateText && handleToggleHwScore(student.id, r.rawDateKey, r.hwScore, targetCourse)}
+                              title={r.dateText ? '클릭 시 숙제 점수 변경 (10점 -> 7점 -> 4점 -> 0점 -> -)' : ''}
+                            >
                               {r.dateText ? r.hwScore : ''}
                             </td>
                           ))}
@@ -866,9 +1126,9 @@ export default function HokmaJournalPrintModal({
                     <div className="hj-desc-text">
                       ※ 0점 - 하나도 안함 / 4점 - 풀이만 / 7점 - 채점까지 / 10점 - 완벽하게함(오답까지) : 내준 숙제를 다 해왔을 때는 10점 만점입니다.
                     </div>
-                  </div>
+                    </div>
 
-                  {/* 하단 콘텐츠 그룹 */}
+                    {/* 하단 콘텐츠 그룹 */}
                   <div style={{ marginBottom: '2mm' }}>
                     {/* 5. 테스트 결과 */}
                     <h3 className="hj-section-title">3. 테스트 결과</h3>
@@ -898,11 +1158,13 @@ export default function HokmaJournalPrintModal({
                     </table>
                   </div>
                 </div>
+              </div>
 
                 {/* PAGE 2: 뒷면 */}
                 <div 
                   className="hokma-page"
                   style={{
+                    position: 'relative',
                     '--theme-bg': currentThemeConfig.bg,
                     '--theme-border': currentThemeConfig.border,
                     '--theme-header-bg': currentThemeConfig.headerBg,
@@ -912,77 +1174,109 @@ export default function HokmaJournalPrintModal({
                     '--theme-desc-color': currentThemeConfig.descColor,
                   } as React.CSSProperties}
                 >
-                  {/* 상단 그룹: 일일 진도 기록 표 */}
-                  <div>
-                    <h3 className="hj-section-title" style={{ fontSize: '18px', marginTop: '0', marginBottom: '3mm' }}>
-                      3. 일일 진도 기록{pageSuffix}
-                    </h3>
-                    <table className="hj-table" style={{ fontSize: '11px' }}>
-                      <thead>
-                        <tr>
-                          <th style={{ width: '12%', height: '34px' }} className="hj-first-col">날 짜</th>
-                          <th style={{ width: '44%' }} className="hj-first-col">오늘의 진도 (교재, 페이지)</th>
-                          <th style={{ width: '44%' }} className="hj-first-col">오늘의 숙제</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rows.map((r, i) => {
-                          const globalNum = startIdx + i + 1;
-                          return (
-                            <tr key={i}>
-                              <td style={{ height: '52px' }} className="relative">
-                                <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1f2937', display: 'block', marginBottom: '2px' }}>
-                                  {globalNum}회
-                                </span>
-                                {r.dateText && (
-                                  <div className="hj-handwriting" style={{ fontSize: '17px' }}>
-                                    {r.dateText}
-                                  </div>
-                                )}
-                              </td>
-                              <td className="text-left hj-handwriting" style={{ paddingLeft: '6px', whiteSpace: 'pre-wrap', lineHeight: '1.2', fontSize: getHandwritingFontSize(r.classworkText, 18) }}>
-                                {r.classworkText}
-                              </td>
-                              <td className="text-left hj-handwriting" style={{ paddingLeft: '6px', whiteSpace: 'pre-wrap', lineHeight: '1.2', fontSize: getHandwritingFontSize(r.homeworkText, 18) }}>
-                                {r.homeworkText}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                  {/* 중앙 초대형 워터마크 배경 */}
+                  {logoSrc && (
+                    <div 
+                      style={{ 
+                        position: 'absolute',
+                        inset: 0,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        pointerEvents: 'none',
+                        zIndex: 0,
+                        opacity: 0.13,
+                        overflow: 'hidden'
+                      }}
+                    >
+                      <img 
+                        src={logoSrc} 
+                        alt="Watermark Single" 
+                        style={{ 
+                          width: '620px',
+                          maxHeight: '620px',
+                          transform: 'rotate(-12deg)',
+                          objectFit: 'contain',
+                          filter: currentThemeConfig.logoFilter
+                        }} 
+                      />
+                    </div>
+                  )}
 
-                  {/* 하단 그룹: 한달을 돌아보며 (A4 최하단으로 고정 배치됨) */}
-                  <div style={{ marginBottom: '2mm' }}>
-                    <h3 className="hj-section-title" style={{ fontSize: '16px', marginTop: '0', marginBottom: '2mm' }}>
-                      4. 한 달을 돌아보며 ...{pageSuffix}
-                    </h3>
-                    <table className="hj-feedback-box">
-                      <tbody>
-                        {/* 학생 회고 영역 */}
-                        <tr>
-                          <td rowSpan={2} className="hj-feedback-title">학 생</td>
-                          <td className="hj-feedback-sub-title" style={{ width: '50%' }}>아쉬운 점 or 반성할 점</td>
-                          <td className="hj-feedback-sub-title" style={{ width: '50%' }}>잘한 점 or 칭찬할 점</td>
-                        </tr>
-                        <tr>
-                          <td className="hj-feedback-content-area" style={{ height: '80px' }}></td>
-                          <td className="hj-feedback-content-area" style={{ height: '80px' }}></td>
-                        </tr>
-                        {/* 선생님 피드백 영역 */}
-                        <tr>
-                          <td className="hj-feedback-title">선생님</td>
-                          <td colSpan={2} className="hj-teacher-feedback-area" style={{ height: '100px' }}></td>
-                        </tr>
-                      </tbody>
-                    </table>
+                  {/* 상단/하단 그룹 포함 콘텐츠 Container */}
+                  <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', height: '100%', justifyContent: 'space-between' }}>
+                    <div>
+                      <h3 className="hj-section-title" style={{ fontSize: '18px', marginTop: '0', marginBottom: '3mm' }}>
+                        3. 일일 진도 기록{pageSuffix}
+                      </h3>
+                      <table className="hj-table" style={{ fontSize: '11px' }}>
+                        <thead>
+                          <tr>
+                            <th style={{ width: '12%', height: '34px' }} className="hj-first-col">날 짜</th>
+                            <th style={{ width: '44%' }} className="hj-first-col">오늘의 진도 (교재, 페이지)</th>
+                            <th style={{ width: '44%' }} className="hj-first-col">오늘의 숙제</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {rows.map((r, i) => {
+                            const globalNum = startIdx + i + 1;
+                            return (
+                              <tr key={i}>
+                                <td style={{ height: '52px' }} className="relative">
+                                  <span style={{ fontSize: '12px', fontWeight: 'bold', color: '#1f2937', display: 'block', marginBottom: '2px' }}>
+                                    {globalNum}회
+                                  </span>
+                                  {r.dateText && (
+                                    <div className="hj-handwriting" style={{ fontSize: '17px' }}>
+                                      {r.dateText}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="text-left hj-handwriting" style={{ paddingLeft: '6px', whiteSpace: 'pre-wrap', lineHeight: '1.2', fontSize: getHandwritingFontSize(r.classworkText, 18) }}>
+                                  {r.classworkText}
+                                </td>
+                                <td className="text-left hj-handwriting" style={{ paddingLeft: '6px', whiteSpace: 'pre-wrap', lineHeight: '1.2', fontSize: getHandwritingFontSize(r.homeworkText, 18) }}>
+                                  {r.homeworkText}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* 하단 그룹: 한달을 돌아보며 (A4 최하단 고정 배치) */}
+                    <div style={{ marginBottom: '2mm' }}>
+                      <h3 className="hj-section-title" style={{ fontSize: '16px', marginTop: '0', marginBottom: '2mm' }}>
+                        4. 한 달을 돌아보며 ...{pageSuffix}
+                      </h3>
+                      <table className="hj-feedback-box">
+                        <tbody>
+                          {/* 학생 회고 영역 */}
+                          <tr>
+                            <td rowSpan={2} className="hj-feedback-title">학 생</td>
+                            <td className="hj-feedback-sub-title" style={{ width: '50%' }}>아쉬운 점 or 반성할 점</td>
+                            <td className="hj-feedback-sub-title" style={{ width: '50%' }}>잘한 점 or 칭찬할 점</td>
+                          </tr>
+                          <tr>
+                            <td className="hj-feedback-content-area" style={{ height: '80px' }}></td>
+                            <td className="hj-feedback-content-area" style={{ height: '80px' }}></td>
+                          </tr>
+                          {/* 선생님 피드백 영역 */}
+                          <tr>
+                            <td className="hj-feedback-title">선생님</td>
+                            <td colSpan={2} className="hj-teacher-feedback-area" style={{ height: '100px' }}></td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 </div>
               </React.Fragment>
             );
           });
-        })}
+        })
+      )}
       </div>
     </div>,
     document.body
