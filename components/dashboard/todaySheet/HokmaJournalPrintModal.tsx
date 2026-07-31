@@ -227,11 +227,12 @@ export default function HokmaJournalPrintModal({
 
       // 1. 정규 수업 항목 추가 (수업 유형 필터가 'special'이 아닌 경우 무조건 추가)
       if (courseTypeFilter !== 'special') {
-        const regKey = `${student.id}_정규`;
+        const studentRealId = (student as any).originalId || student.id;
+        const regKey = `${studentRealId}_정규`;
         if (!seenKeys.has(regKey)) {
           seenKeys.add(regKey);
           items.push({
-            student: { ...student, courseName: '정규' },
+            student: { ...student, id: studentRealId, courseName: '정규' },
             courseName: '정규',
             isSpecial: false
           });
@@ -262,12 +263,13 @@ export default function HokmaJournalPrintModal({
 
         const uniqueElectives = Array.from(new Set(electiveSubjects)).filter(subj => subj && subj !== '정규' && subj.trim().length > 1);
 
+        const studentRealId = (student as any).originalId || student.id;
         uniqueElectives.forEach(subj => {
-          const specKey = `${student.id}_${subj}`;
+          const specKey = `${studentRealId}_${subj}`;
           if (!seenKeys.has(specKey)) {
             seenKeys.add(specKey);
             items.push({
-              student: { ...student, courseName: subj },
+              student: { ...student, id: studentRealId, courseName: subj },
               courseName: subj,
               isSpecial: true
             });
