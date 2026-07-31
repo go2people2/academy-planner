@@ -482,9 +482,17 @@ export default function TodaySheet({
       // 1. 선택과목 각각 독립 행으로 추가
       activeElectives.forEach((c: any, cIdx: number) => {
         const courseSubject = c.subject?.trim() || '특강';
-        const electiveLog = (s.allLogs || []).find((l: any) => 
-          (l.date || l.session_date) === selectedDate && l.course_name === courseSubject
-        );
+        const isGenericElective = ['특강', '방학특강', '선택과목'].includes(courseSubject);
+
+        const electiveLog = (s.allLogs || []).find((l: any) => {
+          const logDate = l.date || l.session_date;
+          if (logDate !== selectedDate) return false;
+          const logCourse = (l.course_name || '정규').trim();
+          if (isGenericElective) {
+            return ['특강', '방학특강', '선택과목'].includes(logCourse);
+          }
+          return logCourse === courseSubject;
+        });
         const specialHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
           ? c.schedules[dayKey]
           : [1300, 1600];

@@ -211,7 +211,15 @@ export default function HokmaJournalPrintModal({
         baseList = fullList.filter(s => s.teacher_id === selectedTeacherId);
       }
     } else {
-      baseList = selectedStudents;
+      // 오늘 시트/휴일/요일 필터링된 원생 기준 (파생 행 중복 제거)
+      const uniqueMap = new Map<string, Student>();
+      (selectedStudents || []).forEach(s => {
+        const realId = (s as any).originalId || s.id;
+        if (!uniqueMap.has(realId) || !(s as any).isSpecialClass) {
+          uniqueMap.set(realId, s);
+        }
+      });
+      baseList = Array.from(uniqueMap.values());
     }
 
     if (searchQuery.trim()) {
@@ -249,19 +257,47 @@ export default function HokmaJournalPrintModal({
             else if (ec && typeof ec === 'object' && ec.subject) electiveSubjects.push(ec.subject.trim());
           });
         }
+        
+        // 💡 student.book_courses.__elective_courses 구조 파싱
+        const bookElectives = (student as any).book_courses?.['__elective_courses'];
+        if (bookElectives) {
+          try {
+            const parsed = typeof bookElectives === 'string' ? JSON.parse(bookElectives) : bookElectives;
+            if (Array.isArray(parsed)) {
+              parsed.forEach((ec: any) => {
+                if (ec?.subject && typeof ec.subject === 'string' && ec.subject.trim()) {
+                  electiveSubjects.push(ec.subject.trim());
+                }
+              });
+            }
+          } catch (e) {}
+        }
+
         if (student.electiveCourse?.subject) {
           electiveSubjects.push(student.electiveCourse.subject.trim());
         }
 
-        const logsToScan = [...(student.allLogs || [])];
-        if (student.todaySession) logsToScan.push(student.todaySession);
-        logsToScan.forEach(log => {
-          if (log.course_name && log.course_name !== '정규') {
-            electiveSubjects.push(log.course_name.trim());
+        // 💡 범용 특강 명칭('특강', '방학특강', '선택과목')을 대표 과목명 하나로 통합
+        const normalizedElectives: string[] = [];
+        let hasGenericElective = false;
+
+        electiveSubjects.forEach(s => {
+          const trimmed = s?.trim();
+          if (!trimmed || trimmed === '정규' || trimmed.length <= 1) return;
+          if (['특강', '방학특강', '선택과목'].includes(trimmed)) {
+            hasGenericElective = true;
+          } else {
+            normalizedElectives.push(trimmed);
           }
         });
 
-        const uniqueElectives = Array.from(new Set(electiveSubjects)).filter(subj => subj && subj !== '정규' && subj.trim().length > 1);
+        if (hasGenericElective && normalizedElectives.length === 0) {
+          // 대표 과목명으로 '방학특강' 사용
+          const representativeCourse = student.electiveCourse?.subject?.trim() || '방학특강';
+          normalizedElectives.push(representativeCourse);
+        }
+
+        const uniqueElectives = Array.from(new Set(normalizedElectives));
 
         const studentRealId = (student as any).originalId || student.id;
         uniqueElectives.forEach(subj => {
@@ -777,19 +813,35 @@ export default function HokmaJournalPrintModal({
               if (!exists) allSessionLogs.push(student.todaySession);
             }
 
-            const monthLogs = allSessionLogs
-              .filter((log) => {
-                const rawDateStr = log.date || log.session_date || '';
-                if (!rawDateStr) return false;
-                const logDate = new Date(rawDateStr.replace(/\./g, '-'));
-                const logCourse = log.course_name || '정규';
-                
-                const isCourseMatch = isSpecial 
-                  ? logCourse === targetCourse 
-                  : (logCourse === '정규' || !log.course_name);
+            // 💡 [동일 날짜 중복 제거] 7/21 같은 날짜에 '특강'과 '방학특강' 이름으로 2개의 세션 로그가 상존할 경우 1개만 보존
+            const uniqueLogsMap = new Map<string, typeof allSessionLogs[0]>();
+            allSessionLogs.forEach((log) => {
+              const rawDateStr = (log.date || log.session_date || '').replace(/\./g, '-');
+              if (!rawDateStr) return;
+              const logDate = new Date(rawDateStr);
+              const logCourse = log.course_name || '정규';
+              
+              const isTargetGeneric = ['특강', '방학특강', '선택과목'].includes(targetCourse?.trim());
+              const isCourseMatch = isSpecial 
+                ? (isTargetGeneric ? ['특강', '방학특강', '선택과목'].includes(logCourse.trim()) : logCourse === targetCourse)
+                : (logCourse === '정규' || !log.course_name);
 
-                return logDate >= startDate && logDate <= endDate && isCourseMatch;
-              })
+              if (logDate >= startDate && logDate <= endDate && isCourseMatch) {
+                // 더 많은 학습 정보(수행진도/숙제 등)가 채워진 세션을 우선 채택
+                if (!uniqueLogsMap.has(rawDateStr)) {
+                  uniqueLogsMap.set(rawDateStr, log);
+                } else {
+                  const existing = uniqueLogsMap.get(rawDateStr)!;
+                  const newScore = (log.completed_classwork_text ? 2 : 0) + (log.homework_text ? 2 : 0) + (log.attendance_status ? 1 : 0);
+                  const oldScore = (existing.completed_classwork_text ? 2 : 0) + (existing.homework_text ? 2 : 0) + (existing.attendance_status ? 1 : 0);
+                  if (newScore > oldScore) {
+                    uniqueLogsMap.set(rawDateStr, log);
+                  }
+                }
+              }
+            });
+
+            const monthLogs = Array.from(uniqueLogsMap.values())
               .sort((a, b) => {
                 const dateA = new Date((a.date || a.session_date || '').replace(/\./g, '-')).getTime();
                 const dateB = new Date((b.date || b.session_date || '').replace(/\./g, '-')).getTime();

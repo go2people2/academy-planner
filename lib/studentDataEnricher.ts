@@ -204,13 +204,20 @@ export const calculateStudentHistory = (logs: SessionLog[], targetDate: string):
 // 9. 오늘 수업 계획의 모태가 될 과거 세션(베이스 세션) 선택
 // 💡 courseName 파라미터: 정규/특강 로그를 구분하여 이월 기준을 혼용하지 않도록 방지
 export const selectBaseSession = (logs: SessionLog[], targetDate: string, holidays: any[], courseName = '정규'): SessionLog | undefined => {
+  const isGenericElective = ['특강', '방학특강', '선택과목'].includes(courseName?.trim());
+
   const pastLogs = logs
     .filter(l => l.date < targetDate)
-    .filter(l =>
-      courseName === '정규'
-        ? (!l.course_name || l.course_name === '정규')  // 레거시 로그(course_name 없음) 포함
-        : l.course_name === courseName
-    )
+    .filter(l => {
+      const logCourse = (l.course_name || '정규').trim();
+      if (courseName === '정규') {
+        return !l.course_name || logCourse === '정규';
+      }
+      if (isGenericElective) {
+        return ['특강', '방학특강', '선택과목'].includes(logCourse);
+      }
+      return logCourse === courseName;
+    })
     .sort((a, b) => b.date.localeCompare(a.date));
   return pastLogs.find(l => {
     const isLogHoliday = (holidays || []).some((h: any) => h.date === l.date);
