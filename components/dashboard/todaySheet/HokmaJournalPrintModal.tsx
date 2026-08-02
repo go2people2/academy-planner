@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { X, Printer, Palette, Edit3, Users, Search, Filter } from 'lucide-react';
 import { Student, SessionLog } from '@/types/dashboard';
 import { supabase } from '@/lib/supabase';
+import { isValidHistoryLog } from '@/lib/studentDataEnricher';
 
 interface HokmaJournalPrintModalProps {
   isOpen: boolean;
@@ -239,8 +240,17 @@ export default function HokmaJournalPrintModal({
         const regKey = `${studentRealId}_정규`;
         if (!seenKeys.has(regKey)) {
           seenKeys.add(regKey);
+          const rawRealName = (student as any).realName || student.name;
+          const cleanName = rawRealName ? rawRealName.replace(/^(특강|방학특강|선택과목)\s*-\s*/, '') : student.name;
+
           items.push({
-            student: { ...student, id: studentRealId, courseName: '정규' },
+            student: { 
+              ...student, 
+              id: studentRealId, 
+              name: cleanName,
+              courseName: '정규', 
+              isSpecialClass: false
+            },
             courseName: '정규',
             isSpecial: false
           });
@@ -276,6 +286,14 @@ export default function HokmaJournalPrintModal({
         if (student.electiveCourse?.subject) {
           electiveSubjects.push(student.electiveCourse.subject.trim());
         }
+
+        const logsToScan = [...(student.allLogs || [])];
+        if (student.todaySession) logsToScan.push(student.todaySession);
+        logsToScan.forEach(log => {
+          if (log.course_name && log.course_name !== '정규') {
+            electiveSubjects.push(log.course_name.trim());
+          }
+        });
 
         // 💡 범용 특강 명칭('특강', '방학특강', '선택과목')을 대표 과목명 하나로 통합
         const normalizedElectives: string[] = [];
@@ -824,9 +842,32 @@ export default function HokmaJournalPrintModal({
               const isTargetGeneric = ['특강', '방학특강', '선택과목'].includes(targetCourse?.trim());
               const isCourseMatch = isSpecial 
                 ? (isTargetGeneric ? ['특강', '방학특강', '선택과목'].includes(logCourse.trim()) : logCourse === targetCourse)
-                : (logCourse === '정규' || !log.course_name);
+                : (logCourse === '정규' || !log.course_name || log.course_name.trim() === '');
 
               if (logDate >= startDate && logDate <= endDate && isCourseMatch) {
+                // 💡 [특강 기간 이중 검증] 특강 일지 인쇄 시 특강 시작일(startDate) 이전 항목은 자동 제외
+                if (isSpecial) {
+                  const rawElective = student.book_courses?.['__elective_courses'];
+                  if (rawElective) {
+                    try {
+                      const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+                      if (Array.isArray(courses)) {
+                        const matchedCourse = courses.find((c: any) => {
+                          const cSubj = c.subject?.trim() || '방학특강';
+                          return ['특강', '방학특강', '선택과목'].includes(cSubj) || cSubj === targetCourse;
+                        });
+                        if (matchedCourse) {
+                          const eStart = matchedCourse.startDate || matchedCourse.start_date;
+                          const eEnd = matchedCourse.endDate || matchedCourse.end_date;
+                          const logYMD = logDate.toISOString().split('T')[0];
+                          if (eStart && logYMD < eStart) return;
+                          if (eEnd && logYMD > eEnd) return;
+                        }
+                      }
+                    } catch (e) {}
+                  }
+                }
+
                 // 더 많은 학습 정보(수행진도/숙제 등)가 채워진 세션을 우선 채택
                 if (!uniqueLogsMap.has(rawDateStr)) {
                   uniqueLogsMap.set(rawDateStr, log);
@@ -848,10 +889,25 @@ export default function HokmaJournalPrintModal({
                 return dateA - dateB;
               });
 
-          // 💡 [안정화] 합의된 결석(수업제외, 수업취소)만 걷어내며, 출결 상태가 null이거나 빈 값인 유효 세션도 정상 포함합니다.
-          const validMonthLogs = monthLogs.filter(
-            (log) => !log.attendance_status || !['수업제외', '수업취소'].includes(log.attendance_status)
-          );
+          // 💡 [안정화] 합의된 결석(수업제외, 수업취소) 걷어내기 및 정규 수업 요일이 아니면서 비어있는 유령 세션 제거
+          const validMonthLogs = monthLogs.filter((log) => {
+            if (log.attendance_status && ['수업제외', '수업취소'].includes(log.attendance_status)) return false;
+            
+            // 💡 [유령 세션 가드] 정규 일지 출력 시, 정규 수업 요일(class_days)이 아니면서 아무 기록도 없는 빈 세션은 자동 제외
+            if (!isSpecial) {
+              const rawDateStr = (log.date || log.session_date || '').replace(/\./g, '-');
+              const logDateObj = new Date(rawDateStr);
+              const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
+              const dayName = dayNames[logDateObj.getDay()];
+              const isRegularClassDay = (student.class_days || []).includes(dayName);
+              const hasAnyContent = isValidHistoryLog(log);
+
+              if (!isRegularClassDay && !hasAnyContent) {
+                return false; // 정규 요일도 아니고 내용도 없는 찌꺼기 세션 제거
+              }
+            }
+            return true;
+          });
 
           // 💡 [안정화] 예정만 잡아놓고 미응시한 날(예: /8/2)은 제외하고, 실제로 채점(예: 6/8/2 또는 90점)이 완료된 건만 앞페이지에 인쇄합니다.
           const testLogs = validMonthLogs.filter((log) => {

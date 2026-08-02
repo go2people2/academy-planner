@@ -611,14 +611,23 @@ export default function DashboardPage() {
 
       // 2. 개별 학생 데이터 보강 (Enrichment)
       const enriched = await Promise.all((studentsData || []).map(async (s) => {
-        const [recentLogsRes, legacyLogRes] = await Promise.all([
+        const [recentLogsRes, selectedDateLogRes, legacyLogRes] = await Promise.all([
           supabase.from('ams_session_logs')
             .select('*').eq('student_id', s.id).order('session_date', { ascending: false }).limit(20),
+          supabase.from('ams_session_logs')
+            .select('*').eq('student_id', s.id).eq('session_date', selectedDate),
           supabase.from('ams_session_logs')
             .select('*').eq('student_id', s.id).eq('session_date', '1900-01-01').maybeSingle()
         ]);
         
         const logsData = [...(recentLogsRes.data || [])];
+        if (selectedDateLogRes.data && Array.isArray(selectedDateLogRes.data)) {
+          selectedDateLogRes.data.forEach(l => {
+            if (!logsData.some(existing => existing.id === l.id)) {
+              logsData.push(l);
+            }
+          });
+        }
         if (legacyLogRes.data && !logsData.some(l => l.id === legacyLogRes.data.id)) {
           logsData.push(legacyLogRes.data);
         }
@@ -757,9 +766,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   const student = students.find(s => s.id === realStudentId);
   if (!student || !academy) return false;
 
+  const targetSaveDate = sessionData.session_date || selectedDate;
   const targetCourseName = sessionData.course_name || '정규';
   const existingLog = (student.allLogs || []).find((l: any) => 
-    (l.date || l.session_date) === selectedDate && 
+    (l.date || l.session_date) === targetSaveDate && 
     (l.course_name === targetCourseName || (targetCourseName === '정규' && !l.course_name))
   );
   let sessionId = existingLog?.id || (targetCourseName === '정규' ? student.todaySession?.id : undefined);
@@ -937,7 +947,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         student_id: realStudentId, 
         student_name: student.name, 
         academy_id: academy.id, 
-        session_date: selectedDate, 
+        session_date: targetSaveDate, 
         course_name: sessionData.course_name || '정규',
         ...filteredData 
       };
@@ -947,7 +957,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           .from('ams_session_logs')
           .select('id')
           .eq('student_id', realStudentId)
-          .eq('session_date', selectedDate)
+          .eq('session_date', targetSaveDate)
           .eq('course_name', targetCourseName)
           .maybeSingle();
         if (existingDbLog?.id) {

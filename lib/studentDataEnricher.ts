@@ -101,8 +101,7 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
     hw_passed_today: tr.hwPassedToday,
     approval_status: l.approval_status || 'none',
     test_result: l.test_result || null,
-    attendance_reason: l.attendance_reason || null,
-    management_notes: translateBookCodes(l.management_notes || '', textbooks)
+    attendance_reason: l.attendance_reason || null
   };
 };
 
@@ -135,14 +134,10 @@ export const determineTodaySession = (
   student: any, todayLog: SessionLog | undefined, baseSession: SessionLog | undefined, 
   isTodayClassDay: boolean, selectedDate: string, academy: any
 ) => {
-  // 💡 예정된 다음 테스트(next_quiz_text)를 최우선으로 지정하되, 비어있으면 지난 수업 테스트(test_id)를 재시험/이월 시험으로 자동 지정
-  const activePlanText = baseSession?.next_quiz_text || 
-                         (baseSession?.test_completed === false ? (baseSession?.test_id || "") : "") || 
-                         baseSession?.test_id || "";
-  const activePlanCut = baseSession?.next_quiz_text 
-    ? (Number(baseSession.next_quiz_cut) || 0) 
-    : (Number(baseSession?.test_cut) || 0);
-  const activePlanTrial = baseSession?.next_quiz_text ? (Number(baseSession.next_quiz_trial) || 1) : 1;
+  // 💡 [단일 명확 규칙] 오직 지난 수업의 예정된 다음 테스트(next_quiz_text)만 승계 대상으로 지정
+  const activePlanText = baseSession?.next_quiz_text || "";
+  const activePlanCut = Number(baseSession?.next_quiz_cut) || 0;
+  const activePlanTrial = Number(baseSession?.next_quiz_trial) || 1;
   
   const todayMission = todayLog?.mission || "";
   const defaultScoreType = baseSession?.test_score_type || 'score';
@@ -152,10 +147,25 @@ export const determineTodaySession = (
     
     if (!todayLog.test_score_type) todayLog.test_score_type = defaultScoreType;
 
-    const currentTestId = (todayLog.test_id || '').trim();
+    // 💡 [원장님 2번 지침 100% 보장 수정]
+    // 1. 당일 세션(todayLog)에 이미 test_id가 존재하고, 지운 상태(test_id === '')는 가만히 보존
+    // 2. 오직 지난 수업의 '다음 테스트(activePlanText)'가 새로 작성/수정되어 원래 세션에 기록된 계획과 다를 때 1회 새로 주입!
+    const savedPlanSnapshot = (todayLog as any).__saved_plan_snapshot;
 
-    // 💡 [규칙] todayLog가 이미 존재하는 세션이면 test_id를 자동으로 채우지 않는다.
-    // 사용자가 의도적으로 비웠을 수 있으므로, 자동 이월은 세션이 아예 없는 최초 생성 시(아래 else 분기)에서만 수행한다.
+    if (savedPlanSnapshot === undefined) {
+      if (!todayLog.test_id && activePlanText) {
+        todayLog.test_id = activePlanText;
+        (todayLog as any).test_status = activePlanText;
+        todayLog.test_cut = activePlanCut;
+      }
+      (todayLog as any).__saved_plan_snapshot = activePlanText || '';
+    } else if (activePlanText !== savedPlanSnapshot) {
+      // ➔ 원장님이 지난 수업으로 이동해서 다음 테스트를 새로 업데이트한 상황 감지!
+      todayLog.test_id = activePlanText;
+      (todayLog as any).test_status = activePlanText;
+      todayLog.test_cut = activePlanCut;
+      (todayLog as any).__saved_plan_snapshot = activePlanText;
+    }
 
     if (!isTodayClassDay && !todayLog.next_quiz_text && activePlanText) {
       todayLog.next_quiz_text = activePlanText; 
@@ -219,12 +229,18 @@ export const selectBaseSession = (logs: SessionLog[], targetDate: string, holida
       return logCourse === courseName;
     })
     .sort((a, b) => b.date.localeCompare(a.date));
-  return pastLogs.find(l => {
-    const isLogHoliday = (holidays || []).some((h: any) => h.date === l.date);
-    const isMakeup = l.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
-    return (l.next_quiz_text || l.test_id || l.classwork_text || l.homework_text) && 
-           ![ATTENDANCE_STATUS.ABSENT, ATTENDANCE_STATUS.CANCELED, ATTENDANCE_STATUS.EXCLUDED].includes(l.attendance_status as any) && (!isLogHoliday || isMakeup); 
-  }) || pastLogs.find(l => l.homework_text || l.next_quiz_text || l.test_id) || pastLogs[0];
+
+  // 💡 직전 과거 세션 1개만 추출 (도미노 이월 차단)
+  const lastDirectLog = pastLogs[0];
+  if (!lastDirectLog) return undefined;
+
+  const isLogHoliday = (holidays || []).some((h: any) => h.date === lastDirectLog.date);
+  const isMakeup = lastDirectLog.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
+  
+  if (!isLogHoliday || isMakeup) {
+    return lastDirectLog;
+  }
+  return lastDirectLog;
 };
 
 // 10. 오늘의 수업 여부 및 휴일 상태 판정
@@ -275,7 +291,7 @@ export const getEnrichedStudentData = (
   const isSkipped = todayLog?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
   
   const hasValidContentInLog = todayLog && isValidHistoryLog(todayLog);
-  const isTodayClassDay = (isScheduledToday || isMakeup || !!hasValidContentInLog) && !isSkipped;
+  const isTodayClassDay = (isScheduledToday || isMakeup || !!todayLog) && !isSkipped;
   
   const pastLogs = logs
     .filter(l => l.date < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))

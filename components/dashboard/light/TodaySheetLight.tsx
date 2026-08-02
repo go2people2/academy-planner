@@ -1397,8 +1397,11 @@ export default function TodaySheet({
 
   // 📝 [리팩토링] 아카2000 일지 엑셀 데이터 파일 복원/가져오기 전용 분리 훅 호출
   const { handleImportExcel } = useTodaySheetImport({
-    students,
-    onBatchSave,
+    students: filteredStudents,
+    allStudents: allStudents || students,
+    onBatchSave: handleBatchSave,
+    selectedDate,
+    onDateChange
   });
 
   const handleSelectAll = useCallback((checked: boolean) => { setSelectedIds(checked ? students.map((s: any) => s.id) : []); }, [students]);
@@ -1719,6 +1722,13 @@ export default function TodaySheet({
           </button>
           
           <div className="relative">
+            <input 
+              type="file" 
+              id="excel-aca-import-input-light" 
+              accept=".xlsx, .xls" 
+              onChange={handleImportExcel} 
+              className="hidden" 
+            />
             <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-white border border-[#edece9] rounded-[6px] text-[10px] font-black uppercase tracking-widest text-[#37352f]/70 hover:text-[#37352f] hover:bg-[#edece9]/50 transition-all shadow-sm"><Download size={14} /> Download</button>
             <AnimatePresence>
               {isExportOpen && (
@@ -1731,17 +1741,16 @@ export default function TodaySheet({
                     
                     <div className="border-t border-[#edece9] my-1.5" />
                     
-                    <input 
-                      type="file" 
-                      id="excel-aca-import-input" 
-                      accept=".xlsx, .xls" 
-                      onChange={handleImportExcel} 
-                      className="hidden" 
-                    />
                     <button 
                       onClick={() => {
                         setIsExportOpen(false);
-                        document.getElementById('excel-aca-import-input')?.click();
+                        setTimeout(() => {
+                          const inputEl = document.getElementById('excel-aca-import-input-light') as HTMLInputElement;
+                          if (inputEl) {
+                            inputEl.value = '';
+                            inputEl.click();
+                          }
+                        }, 50);
                       }} 
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-[#edece9]/50 text-[#37352f]/70 hover:text-purple-600 transition-all text-left group border border-purple-100 hover:border-purple-300 bg-purple-5/30"
                     >

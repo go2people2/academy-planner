@@ -85,16 +85,35 @@ export default function LoginForm({ academy }: { academy: any }) {
     const electives = getActiveTodayElectives(s);
     const courses: string[] = [];
     if (isRegularDay) courses.push('정규');
-    electives.forEach((e: any) => courses.push(e.subject?.trim() || '특강'));
+    electives.forEach((e: any) => {
+      const subj = e.subject?.trim() || '특강';
+      if (!courses.includes(subj)) courses.push(subj);
+    });
 
     if (courses.length > 1) {
-      // 오늘 수업이 2개 이상 → 선택 화면 표시
+      // 오늘 수업이 2개 이상 (예: 정규 + 선택과목) -> 선택 모달 띄움
       setCourseSelectStudent(s);
       setActiveTodayElectives(electives);
+    } else if (courses.length === 1) {
+      // 오늘 수업이 1개만 있음 -> 그 수업으로 즉시 진입
+      localStorage.setItem('ams_student', JSON.stringify({ ...s, _selectedCourse: courses[0] }));
+      router.push(`/${slug}/student`);
     } else {
-      // 수업이 1개만 있으면 자동 선택
-      const courseName = courses.length === 1 ? courses[0] : '정규';
-      localStorage.setItem('ams_student', JSON.stringify({ ...s, _selectedCourse: courseName }));
+      // 오늘 정규/선택 요일이 명시적으로 지정되지 않은 날 -> 기본 정규로 진입 (또는 등록된 첫 과목)
+      const rawAlt = s.book_courses?.['__elective_courses'];
+      let fallbackCourse = '정규';
+      if (rawAlt) {
+        try {
+          const parsed = typeof rawAlt === 'string' ? JSON.parse(rawAlt) : rawAlt;
+          if (Array.isArray(parsed) && parsed.length > 0 && parsed[0].subject) {
+            // 정규 요일이 아닐 때 등록된 선택과목이 있으면 선택과목도 고를 수 있게 팝업 제공
+            setCourseSelectStudent(s);
+            setActiveTodayElectives(parsed);
+            return;
+          }
+        } catch (e) {}
+      }
+      localStorage.setItem('ams_student', JSON.stringify({ ...s, _selectedCourse: fallbackCourse }));
       router.push(`/${slug}/student`);
     }
   };

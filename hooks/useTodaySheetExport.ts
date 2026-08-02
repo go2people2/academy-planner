@@ -39,7 +39,19 @@ export function useTodaySheetExport({
     const customFileName = `업무일지_${dateClean}_${dayOfWeek}_${teacherName}`;
 
     if (type === 'aca2000') {
-      headers = ['일자', '강사', '반명', '과목', '교재', '진도', '테스트', '과제', '기타'];
+      headers = [
+        '수업일(YYYY-MM-DD)',
+        '강사명',
+        '반명',
+        '과목명',
+        '교재',
+        '진도',
+        '테스트',
+        '과제',
+        '기타',
+        '',
+        '*수업일 ,반명 ,강사명,과목을 필수 입력란입니다.'
+      ];
 
       // 💡 테스트 표기 문자열 생성 헬퍼
       const buildTestDisplay = (session: any): string => {
@@ -131,6 +143,8 @@ export function useTodaySheetExport({
           buildTestDisplay(session),
           session.homework_text || '',
           session.special_notes || '',
+          '',
+          ''
         ];
       });
 

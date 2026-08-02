@@ -79,6 +79,7 @@ export default function StudentPortal() {
   });
   const [validClassDates, setValidClassDates] = useState<{ date: string; label: string }[]>([]);
   const [selectedCourse, setSelectedCourse] = useState<string>('정규');
+  const [invalidDateAlert, setInvalidDateAlert] = useState<string | null>(null);
 
   const matchedExam = useMemo(() => {
     if (!student || !examSchedules.length) return null;
@@ -139,7 +140,7 @@ export default function StudentPortal() {
 
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;
-    const pastLogs = allLogs.filter(l => l.session_date < selectedDate).sort((a, b) => b.session_date.localeCompare(a.session_date));
+    const pastLogs = allLogs.filter(l => l.session_date < selectedDate && (l.course_name || '정규') === selectedCourse).sort((a, b) => b.session_date.localeCompare(a.session_date));
     
     let aggregatedHw = "";
     for (const log of pastLogs) {
@@ -184,7 +185,7 @@ export default function StudentPortal() {
     }) || pastLogs.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || pastLogs[0];
     
     return baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', session_date: selectedDate, homework_text: aggregatedHw } : null);
-  }, [allLogs, selectedDate, academy, student, availableTextbooks]);
+  }, [allLogs, selectedDate, selectedCourse, academy, student, availableTextbooks]);
 
   const upcomingMakeups = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -304,7 +305,7 @@ export default function StudentPortal() {
         const courseLogs = logs.filter(l => (l.course_name || '정규') === activeCourse);
 
         const holidays = acData?.operation_settings?.holidays || [];
-        const calculatedDates = getValidClassDates(stData, courseLogs, holidays);
+        const calculatedDates = getValidClassDates(stData, courseLogs, holidays, activeCourse);
         setValidClassDates(calculatedDates);
 
         // 💡 오늘 날짜 문자열 구하기
@@ -862,7 +863,10 @@ export default function StudentPortal() {
       {/* 💡 헤더 컴포넌트 */}
       <StudentHeader 
         student={student} teachers={teachers} selectedDate={selectedDate} 
-        setSelectedDate={setSelectedDate} matchedExam={matchedExam} 
+        setSelectedDate={setSelectedDate} 
+        validClassDates={validClassDates}
+        onInvalidDateSelect={(dateStr) => setInvalidDateAlert(dateStr)}
+        matchedExam={matchedExam} 
         getRemainingClasses={getRemainingClasses} handleLogout={handleLogout} getInitial={getInitial}
         academy={academy} selectedCourse={selectedCourse} setSelectedCourse={setSelectedCourse}
       />
@@ -938,41 +942,6 @@ export default function StudentPortal() {
             {/* ① 왼쪽 섹션: 대시보드 및 교재 시스템 */}
             <div className={`w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 relative lg:block ${activeTab === 'study' || activeTab === 'history' ? 'block' : 'hidden lg:block'}`}>
           <div className={activeTab === 'study' ? 'block space-y-4 md:space-y-8' : 'hidden lg:block lg:space-y-8'}>
-            {/* 💡 [대수술] 귀속 수업일 드롭다운 선택 UI 신설 */}
-            <div className="bg-gradient-to-r from-violet-950/20 to-indigo-950/20 border border-violet-500/20 rounded-2xl p-4 md:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xl shadow-violet-950/10 mb-2 animate-in fade-in slide-in-from-top-3 duration-500">
-              <div className="space-y-1">
-                <h4 className="text-sm font-black text-violet-300 flex items-center gap-1.5">
-                  <Calendar size={16} className="text-violet-400" />
-                  제출 대상 수업일 선택
-                </h4>
-                <p className="text-[11px] text-gray-400 leading-snug">
-                  제출한 일지와 숙제가 선생님 장부의 이 날짜 칸으로 쏙 들어갑니다.
-                </p>
-              </div>
-              <div className="relative w-full md:w-64">
-                <select
-                  value={selectedDate}
-                  onChange={(e) => setSelectedDate(e.target.value)}
-                  className="w-full bg-black/40 border border-white/10 hover:border-violet-500/40 text-xs font-bold text-white pl-4 pr-10 py-3 rounded-xl appearance-none focus:outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500/30 transition-all cursor-pointer"
-                >
-                  {validClassDates.length > 0 ? (
-                    validClassDates.map((d) => (
-                      <option key={d.date} value={d.date} className="bg-zinc-950 text-white font-semibold">
-                        {d.label}
-                      </option>
-                    ))
-                  ) : (
-                    <option value={selectedDate} className="bg-zinc-950 text-white font-semibold">
-                      {selectedDate} (기본 날짜)
-                    </option>
-                  )}
-                </select>
-                <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-gray-400">
-                  <ChevronDown size={14} />
-                </div>
-              </div>
-            </div>
-
             <LearningDashboard 
               student={student} lastSession={lastSession} todaySession={todaySession} 
               selectedDate={selectedDate} currentSelfEval={currentSelfEval} 
@@ -991,20 +960,32 @@ export default function StudentPortal() {
               onBookSelect={(isActive) => { if (isActive) setIsDashboardSlim(true); }}
               approvalStatus={approvalStatus}
               selectedDate={selectedDate}
+              selectedCourse={selectedCourse}
               onUpdateAssignedBooks={handleUpdateAssignedBooks}
               academy={academy}
             />
             {(() => {
+              const isValidClassDate = validClassDates.some(d => d.date === selectedDate);
+
               return (
                 <div className="mt-8 mb-4">
                   {approvalStatus === 'none' ? (
-                    <button 
-                      onClick={() => setConfirmSubmitOpen(true)} 
-                      disabled={isSaving}
-                      className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 text-lg transition-all animate-in slide-in-from-bottom-2"
-                    >
-                      🚀 오늘의 학습 제출하기
-                    </button>
+                    isValidClassDate ? (
+                      <button 
+                        onClick={() => setConfirmSubmitOpen(true)} 
+                        disabled={isSaving}
+                        className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 text-lg transition-all animate-in slide-in-from-bottom-2"
+                      >
+                        🚀 오늘의 학습 제출하기
+                      </button>
+                    ) : (
+                      <button 
+                        disabled={true}
+                        className="w-full py-4 bg-gray-800/80 border border-gray-700/50 text-gray-400 font-bold rounded-xl text-base cursor-not-allowed flex items-center justify-center gap-2 shadow-inner"
+                      >
+                        🚫 수업일이 아니라 제출할 수 없습니다
+                      </button>
+                    )
                   ) : (
                     <div className="w-full py-4 bg-white/10 border border-white/20 text-white font-black rounded-xl text-lg flex items-center justify-center gap-2">
                       {approvalStatus === 'approved' ? (
@@ -1301,12 +1282,47 @@ export default function StudentPortal() {
         )}
       </AnimatePresence>
 
+      {/* 💡 비수업일 선택 시 안내 모달 */}
+      <AnimatePresence>
+        {invalidDateAlert && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }} 
+              onClick={() => setInvalidDateAlert(null)} 
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm" 
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 10 }} 
+              animate={{ scale: 1, opacity: 1, y: 0 }} 
+              exit={{ scale: 0.9, opacity: 0, y: 10 }} 
+              className="relative bg-[#121215] border border-amber-500/30 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center overflow-hidden"
+            >
+              <div className="w-12 h-12 bg-amber-500/20 border border-amber-500/40 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400">
+                <AlertTriangle size={24} />
+              </div>
+              <h3 className="text-lg font-black text-white mb-2">이동할 수 없는 날짜입니다</h3>
+              <p className="text-[13px] text-gray-300 font-semibold leading-relaxed mb-6">
+                선생님 출석부에 등록된 <span className="text-amber-400 font-bold">수업일(정규/보강/특강)</span>이 아니어서 일지를 제출하거나 조회할 수 없습니다.
+              </p>
+              <button 
+                onClick={() => setInvalidDateAlert(null)}
+                className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black rounded-xl shadow-lg shadow-amber-950/40 text-sm transition-all"
+              >
+                확인 (수업일 선택하기)
+              </button>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
     </div>
   );
 }
 
 // 💡 [추가] 학생의 공식 수업일(정규, 보강, 특강/선택수업) 목록만을 역산하는 초정밀 필터링 유틸리티
-const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = []) => {
+const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = [], activeCourse: string = '정규') => {
   if (!st) return [];
   const validDatesMap: { [date: string]: { label: string; date: string } } = {};
   
@@ -1321,7 +1337,7 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = []) =
     const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][targetDate.getDay()];
     
     // 1. 정규 수업일 여부
-    const isRegularClass = st.class_days?.includes(dayOfWeek);
+    const isRegularClass = activeCourse === '정규' && st.class_days?.includes(dayOfWeek);
     
     // 2. 선택/특강 수업일 여부
     let isElectiveClass = false;
@@ -1331,6 +1347,8 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = []) =
         const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
         if (Array.isArray(courses)) {
           for (const c of courses) {
+            const courseSubject = c.subject?.trim() || '특강';
+            if (activeCourse !== '정규' && courseSubject !== activeCourse) continue;
             if (c.days?.includes(dayOfWeek) && c.schedules?.[dayOfWeek]) {
               isElectiveClass = true;
               break;
@@ -1350,7 +1368,7 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = []) =
     if ((isRegularClass || isElectiveClass || isMakeup || matchingLog) && (!isHoliday || isMakeup)) {
       let typeLabel = '';
       if (isMakeup) typeLabel = '보강 수업';
-      else if (isElectiveClass) typeLabel = '방학특강/선택';
+      else if (isElectiveClass) typeLabel = `${activeCourse} 수업`;
       else if (isRegularClass) typeLabel = '정규 수업';
       else typeLabel = '기존 수업';
       

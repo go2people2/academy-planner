@@ -175,8 +175,8 @@ export default function LearningDashboard({
       </div>
 
       <div className={isSlim ? "grid grid-cols-1 gap-1.5" : "space-y-4 md:space-y-8"}>
-        {/* 1. 학생 미션 */}
-        {student?.recent_mission ? (
+        {/* 1. 학생 미션 (미션 내용이 있을 때만 노출) */}
+        {student?.recent_mission && (
           <motion.div 
             layout
             className={isSlim 
@@ -198,16 +198,122 @@ export default function LearningDashboard({
               </div>
             </div>
           </motion.div>
-        ) : (
-          !isSlim && (
-            <div className="relative py-2 group">
-              <div className="absolute inset-0 flex items-center" aria-hidden="true"><div className="w-full border-t border-amber-500"></div></div>
-              <div className="relative flex justify-center"><span className="bg-[#080808] px-6 text-[12px] font-black text-amber-500 uppercase tracking-[0.4em] border-2 border-amber-500 rounded-full py-1">학생미션</span></div>
-            </div>
-          )
         )}
 
-        {/* 2. 과제 확인 */}
+        {/* 2. 오늘 할 일 (할 일 내용이 있을 때만 노출) */}
+        {planTasks.length > 0 && (
+          <motion.div 
+            layout
+            className={isSlim 
+              ? "bg-[#0a0a0a] border border-emerald-500/20 rounded-md p-1.5 flex items-center gap-3 overflow-hidden shadow-lg shadow-emerald-900/10"
+              : "bg-emerald-600/5 border border-emerald-500/20 rounded-lg shadow-xl text-left border-l-4 border-l-emerald-500 flex flex-col overflow-hidden"
+            }
+          >
+            {isSlim ? (
+              <div className="flex items-center gap-3 w-full">
+                <div className="w-6 h-6 bg-emerald-600 rounded-full flex items-center justify-center shrink-0 border border-emerald-400/50">
+                  <TrendingUp className="text-white" size={10} />
+                </div>
+                <div className="text-left flex-1 min-w-0 overflow-x-auto no-scrollbar">
+                  <p className="text-[13px] font-bold text-white whitespace-nowrap">{todayPlan ? todayPlan.trim().replace(/\n/g, ' | ') : ''}</p>
+                </div>
+                {todaySession?.todo_achievement > 0 && (
+                  <div className="bg-emerald-600 px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg tabular-nums shrink-0">
+                    {todaySession.todo_achievement}%
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div className="px-3 md:px-6 py-1 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 md:gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex items-center gap-1.5">
+                      <TrendingUp className="text-emerald-500" size={14} />
+                      <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest">오늘 할 일</h4>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
+                    {displayOptions.map(num => (
+                        <button 
+                          key={num} 
+                          disabled={approvalStatus !== 'none'}
+                          onClick={() => approvalStatus === 'none' && handleTodoClick(num)} 
+                          className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
+                            (todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null && num <= todaySession.todo_achievement) 
+                              ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
+                              : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50'
+                          } ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
+                        >
+                        {(todaySession?.todo_achievement === undefined || todaySession?.todo_achievement === null) ? num : (num === todaySession?.todo_achievement ? num : '')}
+                      </button>
+                    ))}
+                    <span className="text-[11px] font-black text-emerald-500/60 ml-1">%</span>
+                  </div>
+                </div>
+                <div className={`space-y-1.5 ${planTasks.length > 0 ? "p-3 md:p-4" : "p-2"}`}>
+                  {planTasks.map((task, i) => {
+                    const cleanTask = task.replace(/^[0-9]+[\.\)]\s*|^[-*#]\s*/, '').trim();
+                    const isCheckboxStyle = task !== cleanTask;
+                    
+                    const testResultObj = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
+                    const checkedTodos = Array.isArray(testResultObj.checked_todos) ? testResultObj.checked_todos : null;
+
+                    let isChecked = false;
+                    if (checkedTodos !== null) {
+                      isChecked = checkedTodos.includes(i);
+                    } else {
+                      let checkedCount = 0;
+                      for (let j = 1; j < achievementOptions.length; j++) {
+                        if ((todaySession?.todo_achievement || 0) >= achievementOptions[j]) {
+                          checkedCount = j;
+                        }
+                      }
+                      isChecked = i < checkedCount;
+                    }
+
+                    return (
+                      <div 
+                        key={i} 
+                        onClick={() => {
+                          if (approvalStatus !== 'none') return;
+                          if (isCheckboxStyle) {
+                            if (onTodoToggle) {
+                              onTodoToggle(i, planTasks.length);
+                            } else {
+                              const nextIndex = isChecked ? i : i + 1;
+                              const nextValue = achievementOptions[nextIndex] || 0;
+                              handleTodoClick(nextValue);
+                            }
+                          }
+                        }}
+                        className={`flex items-start gap-2 md:gap-3 group/task transition-all ${
+                          isCheckboxStyle && approvalStatus === 'none' ? 'cursor-pointer hover:bg-white/5 rounded-md p-1 -m-1' : ''
+                        } ${isChecked ? 'opacity-50' : ''}`}
+                      >
+                        {isCheckboxStyle ? (
+                          <div className={`mt-0.5 shrink-0 w-4 h-4 rounded-sm border flex items-center justify-center transition-all ${
+                            isChecked ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500 bg-black/20 group-hover/task:border-emerald-400'
+                          }`}>
+                            {isChecked && <Check size={12} className="text-white" strokeWidth={4} />}
+                          </div>
+                        ) : (
+                          <div className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] group-hover/task:scale-125 transition-transform" />
+                        )}
+                        <p className={`text-[13px] md:text-[14.5px] font-bold leading-snug transition-all ${
+                          isChecked ? 'text-gray-400 line-through decoration-emerald-500/50' : 'text-white'
+                        }`}>
+                          {cleanTask}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </motion.div>
+        )}
+
+        {/* 3. 과제 확인 */}
         {lastSession && (
           <motion.div 
             layout
@@ -275,130 +381,6 @@ export default function LearningDashboard({
             )}
           </motion.div>
         )}
-
-        {/* 3. 오늘 할 일 */}
-        <motion.div 
-          layout
-          className={isSlim 
-            ? "bg-[#0a0a0a] border border-emerald-500/20 rounded-md p-1.5 flex items-center gap-3 overflow-hidden shadow-lg shadow-emerald-900/10"
-            : "bg-emerald-600/5 border border-emerald-500/20 rounded-lg shadow-xl text-left border-l-4 border-l-emerald-500 flex flex-col overflow-hidden"
-          }
-        >
-          {isSlim ? (
-            <div className="flex items-center gap-3 w-full">
-              <div className="w-6 h-6 bg-emerald-600 rounded-full flex items-center justify-center shrink-0 border border-emerald-400/50">
-                <TrendingUp className="text-white" size={10} />
-              </div>
-              <div className="text-left flex-1 min-w-0 overflow-x-auto no-scrollbar">
-                <p className="text-[13px] font-bold text-white whitespace-nowrap">{todayPlan ? todayPlan.trim().replace(/\n/g, ' | ') : '오늘 학원에서 할일이 입력될 예정입니다.'}</p>
-              </div>
-              {todaySession?.todo_achievement > 0 && (
-                <div className="bg-emerald-600 px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg tabular-nums shrink-0">
-                  {todaySession.todo_achievement}%
-                </div>
-              )}
-            </div>
-          ) : (
-            <>
-              <div className="px-3 md:px-6 py-1 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 md:gap-2">
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="flex items-center gap-1.5">
-                    <TrendingUp className="text-emerald-500" size={14} />
-                    <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest">오늘 할 일</h4>
-                  </div>
-                </div>
-                <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
-                  {displayOptions.map(num => (
-                      <button 
-                        key={num} 
-                        disabled={approvalStatus !== 'none'}
-                        onClick={() => approvalStatus === 'none' && handleTodoClick(num)} 
-                        className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
-                          (todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null && num <= todaySession.todo_achievement) 
-                            ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
-                            : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50'
-                        } ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                      {(todaySession?.todo_achievement === undefined || todaySession?.todo_achievement === null) ? num : (num === todaySession?.todo_achievement ? num : '')}
-                    </button>
-                  ))}
-                  <span className="text-[11px] font-black text-emerald-500/60 ml-1">%</span>
-                </div>
-              </div>
-              <div className={`space-y-1.5 ${planTasks.length > 0 ? "p-3 md:p-4" : "p-2"}`}>
-                {planTasks.length > 0 ? (
-                  planTasks.map((task, i) => {
-                    const cleanTask = task.replace(/^[0-9]+[\.\)]\s*|^[-*#]\s*/, '').trim();
-                    const isCheckboxStyle = task !== cleanTask;
-                    
-                    const testResultObj = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
-                    const checkedTodos = Array.isArray(testResultObj.checked_todos) ? testResultObj.checked_todos : null;
-
-                    let isChecked = false;
-                    if (checkedTodos !== null) {
-                      isChecked = checkedTodos.includes(i);
-                    } else {
-                      let checkedCount = 0;
-                      for (let j = 1; j < achievementOptions.length; j++) {
-                        if ((todaySession?.todo_achievement || 0) >= achievementOptions[j]) {
-                          checkedCount = j;
-                        }
-                      }
-                      isChecked = i < checkedCount;
-                    }
-
-                    return (
-                      <div 
-                        key={i} 
-                        onClick={() => {
-                          if (approvalStatus !== 'none') return;
-                          if (isCheckboxStyle) {
-                            if (onTodoToggle) {
-                              // 새로운 개별 체크박스 토글 모드
-                              onTodoToggle(i, planTasks.length);
-                            } else {
-                              // 하위 호환: 기존 순차적 채우기
-                              const nextIndex = isChecked ? i : i + 1;
-                              const nextValue = achievementOptions[nextIndex] || 0;
-                              handleTodoClick(nextValue);
-                            }
-                          }
-                        }}
-                        className={`flex items-start gap-2 md:gap-3 group/task transition-all ${
-                          isCheckboxStyle && approvalStatus === 'none' ? 'cursor-pointer hover:bg-white/5 rounded-md p-1 -m-1' : ''
-                        } ${isChecked ? 'opacity-50' : ''}`}
-                      >
-                        {isCheckboxStyle ? (
-                          <div className={`mt-0.5 shrink-0 w-4 h-4 rounded-sm border flex items-center justify-center transition-all ${
-                            isChecked ? 'bg-emerald-500 border-emerald-500' : 'border-gray-500 bg-black/20 group-hover/task:border-emerald-400'
-                          }`}>
-                            {isChecked && <Check size={12} className="text-white" strokeWidth={4} />}
-                          </div>
-                        ) : (
-                          <div className="mt-1.5 shrink-0 w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.6)] group-hover/task:scale-125 transition-transform" />
-                        )}
-                        <p className={`text-[13px] md:text-[14.5px] font-bold leading-snug transition-all ${
-                          isChecked ? 'text-gray-400 line-through decoration-emerald-500/50' : 'text-white'
-                        }`}>
-                          {cleanTask}
-                        </p>
-                      </div>
-                    );
-                  })
-                ) : (
-                  <div className="flex items-center gap-2 opacity-40 px-2 py-0.5">
-                    <CheckCircle2 size={12} className="text-emerald-500" />
-                    <p className="text-[11px] font-bold text-white italic">
-                      {new Date(selectedDate) < new Date(new Date().setHours(0,0,0,0)) 
-                        ? '기록된 학습 정보가 없습니다.' 
-                        : '할일이 입력될 예정입니다.'}
-                    </p>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-        </motion.div>
       </div>
     </div>
   );

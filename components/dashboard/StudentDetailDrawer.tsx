@@ -290,7 +290,9 @@ export default function StudentDetailDrawer({
       subject: '',
       days: [] as string[],
       schedules: {} as Record<string, number[]>,
-      className: ''
+      className: '',
+      startDate: '',
+      endDate: ''
     };
     saveElectiveCourses([...electiveCourses, newCourse]);
   };
@@ -833,6 +835,30 @@ export default function StudentDetailDrawer({
                           onChange={(e) => handleElectiveFieldChangeLocal(c.id, 'className', e.target.value)}
                           onBlur={handleElectiveFieldBlur}
                           className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-1.5 text-xs text-white outline-none focus:border-emerald-500 transition-all font-bold"
+                        />
+                      </div>
+                    </div>
+
+                    {/* 💡 [추가] 특강 수강 기간 지정 (시작일 ~ 종료일) */}
+                    <div className="grid grid-cols-2 gap-2 bg-black/20 p-2 rounded border border-white/5">
+                      <div>
+                        <label className="text-[8px] font-black text-emerald-400 uppercase block mb-1">특강 시작일 (선택)</label>
+                        <input
+                          type="date"
+                          value={c.startDate || ''}
+                          onChange={(e) => handleElectiveFieldChangeLocal(c.id, 'startDate', e.target.value)}
+                          onBlur={handleElectiveFieldBlur}
+                          className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-1 text-[11px] text-white outline-none focus:border-emerald-500 transition-all font-bold"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[8px] font-black text-emerald-400 uppercase block mb-1">특강 종료일 (선택)</label>
+                        <input
+                          type="date"
+                          value={c.endDate || ''}
+                          onChange={(e) => handleElectiveFieldChangeLocal(c.id, 'endDate', e.target.value)}
+                          onBlur={handleElectiveFieldBlur}
+                          className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-1 text-[11px] text-white outline-none focus:border-emerald-500 transition-all font-bold"
                         />
                       </div>
                     </div>

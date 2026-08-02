@@ -470,7 +470,14 @@ export default function TodaySheet({
                   ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
                   : (typeof c.days === 'string' && c.days.includes(dayKey))
               );
-              if (hasDay) {
+
+              // 💡 [특강 기간 검사] 특강 시작일(startDate) 이전이거나 종료일(endDate) 이후인 경우 출석표 미노출
+              const electiveStartDate = c.startDate || c.start_date;
+              const electiveEndDate = c.endDate || c.end_date;
+              const isBeforeStartDate = electiveStartDate ? (selectedDate < electiveStartDate) : false;
+              const isAfterEndDate = electiveEndDate ? (selectedDate > electiveEndDate) : false;
+
+              if (hasDay && !isBeforeStartDate && !isAfterEndDate) {
                 seenCourseKeys.add(cKey);
                 activeElectives.push(c);
               }
@@ -567,8 +574,8 @@ export default function TodaySheet({
 
       if (isRegularClassDay) {
         shouldShowRegular = true;
-      } else if (hasRegularLogActivity) {
-        // 보강/시간이동/출석체크/일지작성 등 당일 정규 수업 활동이 있는 경우 완벽 노출
+      } else if (regularLog) {
+        // 💡 해당 날짜에 정규 세션 데이터가 존재하는 경우(비어있는 찌꺼기 세션 포함) 무조건 출석표 행에 노출하여 원장님이 R버튼으로 수동 삭제/확인할 수 있도록 보장
         shouldShowRegular = true;
       } else if (!hasAnyElective) {
         // 특강이 아예 없는 학생은 기존처럼 정규 행 출력
@@ -586,6 +593,8 @@ export default function TodaySheet({
 
         const regularLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
         const realId = s.originalId || s.id;
+        const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
+        const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);
 
         expandedResult.push({
           ...s,
@@ -598,7 +607,7 @@ export default function TodaySheet({
             [dayKey]: regularHours
           },
           lastSession: regularLastSession,
-          todaySession: regularLog || s.todaySession
+          todaySession: regularTodaySession
         });
       }
     });
@@ -818,9 +827,10 @@ export default function TodaySheet({
     return true;
   }, [onSave, onUpdateStudentInfo, students, filteredStudents, pushToUndoStack, setStudents, sendSaveEvent]);
 
-  const handleBatchSave = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[]) => {
+  const handleBatchSave = useCallback(async (updates: { studentId: string, newData: any, prevData: any }[], targetDate?: string) => {
     if (updates.length === 0) return;
 
+    const saveDate = targetDate || selectedDate;
     pushToUndoStack(updates);
 
     // 💡 낙관적 업데이트: 화면에 즉시 반영
@@ -838,20 +848,22 @@ export default function TodaySheet({
       
       let updatedAllLogs = s.allLogs || [];
       const logIdx = updatedAllLogs.findIndex((l: any) =>
-        (l.date || l.session_date) === selectedDate &&
+        (l.date || l.session_date) === saveDate &&
         (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규')))
       );
 
       const newSess = {
         ...(logIdx !== -1 ? updatedAllLogs[logIdx] : {}),
         ...match.newData,
-        course_name: courseName
+        course_name: courseName,
+        date: saveDate,
+        session_date: saveDate
       };
 
       if (logIdx !== -1) {
         updatedAllLogs = updatedAllLogs.map((l: any, i: number) => i === logIdx ? { ...l, ...newSess } : l);
       } else {
-        updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
+        updatedAllLogs = [{ ...newSess, date: saveDate, session_date: saveDate }, ...updatedAllLogs];
       }
 
       const isRegularCourse = courseName === '정규' || !courseName;
@@ -870,29 +882,22 @@ export default function TodaySheet({
       const realId = rowStudent?.originalId || u.studentId.replace(/_special.*$/, '');
       const courseName = rowStudent?.courseName || '정규';
 
-      // 💡 이제 벌크 저장 시에도 미션/주의점을 일지 테이블에 다이렉트 저장하여 하루하루 온전히 관리합니다.
-      const savePayload = { ...u.newData, course_name: courseName };
+      const savePayload = { ...u.newData, course_name: courseName, session_date: saveDate };
       
-      if (Object.keys(savePayload).length > 1 || 'mission' in savePayload || 'management_notes' in savePayload) {
-        const success = await onSave(realId, savePayload);
-        if (success && sendSaveEvent) {
-          const invMap: any = { 
-            'test_status': 'test_id', 
-            'test_score': 'test_score', 
-            'classwork_text': 'classwork', 
-            'completed_classwork_text': 'completed_classwork', 
-            'homework_text': 'assign', 
-            'next_quiz_text': 'next_quiz', 
-            'mission': 'mission', 
-            'special_notes': 'notes', 
-            'management_notes': 'management_notes' 
-          };
-          Object.keys(savePayload).forEach(key => {
-            if (key === 'course_name') return;
-            const colId = invMap[key] || key;
-            sendSaveEvent(u.studentId, colId, savePayload[key]);
-          });
-        }
+      const success = await onSave(realId, savePayload);
+      if (success && sendSaveEvent) {
+        const invMap: any = { 
+          'test_status': 'test_id', 
+          'test_score': 'test_score', 
+          'classwork_text': 'classwork', 
+          'completed_classwork_text': 'completed_classwork', 
+          'homework_text': 'assign', 
+          'special_notes': 'notes' 
+        };
+        Object.keys(u.newData).forEach(key => {
+          const colId = invMap[key] || key;
+          sendSaveEvent(u.studentId, colId, u.newData[key]);
+        });
       }
     }));
   }, [onSave, onUpdateStudentInfo, filteredStudents, selectedDate, pushToUndoStack, sendSaveEvent, setStudents]);
@@ -1145,8 +1150,11 @@ export default function TodaySheet({
 
   // 📝 [리팩토링] 아카2000 일지 엑셀 데이터 파일 복원/가져오기 전용 분리 훅 호출
   const { handleImportExcel } = useTodaySheetImport({
-    students,
-    onBatchSave,
+    students: filteredStudents,
+    allStudents: allStudents || students,
+    onBatchSave: handleBatchSave,
+    selectedDate,
+    onDateChange
   });
 
   const handleSelectAll = useCallback((checked: boolean) => { setSelectedIds(checked ? students.map((s: any) => s.id) : []); }, [students]);
@@ -1414,6 +1422,13 @@ export default function TodaySheet({
           </button>
           
           <div className="relative">
+            <input 
+              type="file" 
+              id="excel-aca-import-input" 
+              accept=".xlsx, .xls" 
+              onChange={handleImportExcel} 
+              className="hidden" 
+            />
             <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-zinc-200 hover:text-white hover:bg-zinc-800 transition-all shadow-xl"><Download size={14} /> Download</button>
             <AnimatePresence>
               {isExportOpen && (
@@ -1426,17 +1441,16 @@ export default function TodaySheet({
                     
                     <div className="border-t border-white/5 my-1.5" />
                     
-                    <input 
-                      type="file" 
-                      id="excel-aca-import-input" 
-                      accept=".xlsx, .xls" 
-                      onChange={handleImportExcel} 
-                      className="hidden" 
-                    />
                     <button 
                       onClick={() => {
                         setIsExportOpen(false);
-                        document.getElementById('excel-aca-import-input')?.click();
+                        setTimeout(() => {
+                          const inputEl = document.getElementById('excel-aca-import-input') as HTMLInputElement;
+                          if (inputEl) {
+                            inputEl.value = '';
+                            inputEl.click();
+                          }
+                        }, 50);
                       }} 
                       className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-purple-400 transition-all text-left group border border-purple-500/10 hover:border-purple-500/30 bg-purple-500/5"
                     >

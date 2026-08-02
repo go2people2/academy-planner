@@ -6,6 +6,7 @@ import {
   BookOpen, TrendingUp, ClipboardList, Loader2, Check, ArrowLeft, X, ArrowRight
 } from 'lucide-react';
 import { TextbookOption } from '@/types/dashboard';
+import { parseBookCourseValue } from '@/lib/utils';
 
 interface TextbookSystemProps {
   student: any;
@@ -21,6 +22,7 @@ interface TextbookSystemProps {
   onBookSelect?: (isActive: boolean) => void;
   approvalStatus?: 'none' | 'submitted' | 'approved';
   selectedDate: string;
+  selectedCourse?: string;
   onUpdateAssignedBooks?: (newBooks: string[]) => Promise<void>;
   academy?: any;
   initialBookCode?: string;
@@ -40,6 +42,7 @@ export default function TextbookSystem({
   onBookSelect,
   approvalStatus = 'none',
   selectedDate,
+  selectedCourse = '정규',
   onUpdateAssignedBooks,
   academy,
   initialBookCode
@@ -413,7 +416,22 @@ export default function TextbookSystem({
       {/* 상단 교재 선택 바 */}
       <div className="relative bg-white/[0.03] border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2 overflow-x-auto py-3 px-4 scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-        {(student.assigned_books || []).filter((code: string) => !String(student.book_courses?.[code]).includes('-keep') && !String(student.book_courses?.[code]).includes('-done')).map((code: string) => {
+        {(student.assigned_books || []).filter((code: string) => {
+          const rawVal = student.book_courses?.[code] || '';
+          const { isKeep, targetTag } = parseBookCourseValue(rawVal);
+          if (isKeep) return false;
+          
+          if (selectedCourse === '정규') {
+            // 정규수업 모드: targetTag가 '정규'이거나 '공통'인 교재만 노출
+            return !targetTag || targetTag === '정규' || targetTag === '공통';
+          } else {
+            // 선택과목 모드: targetTag가 해당 선택과목명이거나(예: '선택:방학특강' or '방학특강') '공통'인 교재 노출
+            if (!targetTag || targetTag === '공통') return true;
+            const cleanTag = targetTag.replace(/^선택:\s*/, '').trim();
+            const cleanCourse = selectedCourse.replace(/^선택:\s*/, '').trim();
+            return cleanTag === cleanCourse || targetTag.includes(cleanCourse);
+          }
+        }).map((code: string) => {
           const book = availableTextbooks.find(b => b.bookcode === code); if (!book) return null;
           const isActive = activeBook?.bookcode === code;
           return (

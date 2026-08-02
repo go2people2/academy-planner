@@ -7,6 +7,8 @@ interface StudentHeaderProps {
   teachers: any[];
   selectedDate: string;
   setSelectedDate: (date: string) => void;
+  validClassDates?: { date: string; label: string }[];
+  onInvalidDateSelect?: (attemptedDate: string) => void;
   matchedExam: any;
   getRemainingClasses: (targetDate: string) => number | null;
   handleLogout: () => void;
@@ -21,6 +23,8 @@ export default function StudentHeader({
   teachers,
   selectedDate,
   setSelectedDate,
+  validClassDates = [],
+  onInvalidDateSelect,
   matchedExam,
   getRemainingClasses,
   handleLogout,
@@ -68,24 +72,47 @@ export default function StudentHeader({
           // 지점명 축약 (2글자까지)
           const branchShort = simplifiedClass.length > 3 ? simplifiedClass.slice(0, 2) : simplifiedClass;
 
+          // 선택과목인 경우 해당 선택과목 표시이름 및 요일 추출
+          let courseDays = days;
+          let courseDisplayName = selectedCourse;
+          if (selectedCourse && selectedCourse !== '정규') {
+            const rawElective = student.book_courses?.['__elective_courses'];
+            if (rawElective) {
+              try {
+                const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+                if (Array.isArray(parsed)) {
+                  const targetCourse = parsed.find((c: any) => c.subject?.trim() === selectedCourse);
+                  if (targetCourse) {
+                    if (targetCourse.className?.trim()) {
+                      courseDisplayName = targetCourse.className.trim();
+                    } else if (targetCourse.subject?.trim()) {
+                      courseDisplayName = targetCourse.subject.trim();
+                    }
+                    if (Array.isArray(targetCourse.days)) {
+                      courseDays = [...targetCourse.days].sort((a, b) => {
+                        const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                        return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+                      }).join('');
+                    }
+                  }
+                }
+              } catch (e) {}
+            }
+          }
+
+          const headerTitle = selectedCourse && selectedCourse !== '정규'
+            ? `${courseDisplayName}-${student.name}-${initial}-${courseDays}`
+            : `${student.name}-${initial}-${days}`;
+
           return (
             <>
-              <div className={`w-10 h-10 md:w-11 md:h-11 bg-gradient-to-br ${badgeBg} rounded-[4px] flex items-center justify-center shadow-lg shrink-0`}>
-                <span className="text-[16px] md:text-[18px] font-black text-white leading-none">{grade}</span>
+              <div className={`w-8 h-8 md:w-9 md:h-9 bg-gradient-to-br ${badgeBg} rounded-[4px] flex items-center justify-center shadow-lg shrink-0`}>
+                <span className="text-[14px] md:text-[15px] font-black text-white leading-none">{grade}</span>
               </div>
               <div className="flex items-center gap-2 min-w-0 truncate">
                 <p className="text-lg md:text-xl font-black text-white truncate tracking-tight leading-none min-w-0">
-                  {student.name}-{initial}-{days}
+                  {headerTitle}
                 </p>
-                {selectedCourse && selectedCourse !== '정규' ? (
-                  <span className="px-2 py-0.5 rounded text-[10px] md:text-xs font-black bg-purple-600/30 text-purple-300 border border-purple-500/40 shrink-0">
-                    ✨ {selectedCourse}
-                  </span>
-                ) : (
-                  <span className="px-2 py-0.5 rounded text-[10px] md:text-xs font-black bg-blue-600/30 text-blue-300 border border-blue-500/40 shrink-0">
-                    📚 정규
-                  </span>
-                )}
               </div>
             </>
           );
@@ -114,7 +141,15 @@ export default function StudentHeader({
             <input 
               type="date" 
               value={selectedDate}
-              onChange={(e) => setSelectedDate(e.target.value)}
+              onChange={(e) => {
+                const newDate = e.target.value;
+                if (!newDate) return;
+                if (validClassDates.length > 0 && !validClassDates.some(d => d.date === newDate)) {
+                  if (onInvalidDateSelect) onInvalidDateSelect(newDate);
+                } else {
+                  setSelectedDate(newDate);
+                }
+              }}
               className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark] z-10"
             />
           </div>
@@ -167,7 +202,15 @@ export default function StudentHeader({
           <input 
             type="date" 
             value={selectedDate}
-            onChange={(e) => setSelectedDate(e.target.value)}
+            onChange={(e) => {
+              const newDate = e.target.value;
+              if (!newDate) return;
+              if (validClassDates.length > 0 && !validClassDates.some(d => d.date === newDate)) {
+                if (onInvalidDateSelect) onInvalidDateSelect(newDate);
+              } else {
+                setSelectedDate(newDate);
+              }
+            }}
             className="absolute inset-0 opacity-0 cursor-pointer [color-scheme:dark] z-10"
           />
         </div>
