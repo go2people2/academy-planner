@@ -44,13 +44,26 @@ export async function POST(req: NextRequest) {
     }
 
     // 2. 권한 검증: ams_teachers 테이블에서 원장(admin) 또는 마스터(master) 권한 확인
-    const { data: teacher, error: teacherErr } = await supabaseAdmin
+    let { data: teacher, error: teacherErr } = await supabaseAdmin
       .from('ams_teachers')
-      .select('role, academy_id')
+      .select('id, role, academy_id')
       .eq('user_id', user.id)
       .maybeSingle();
 
-    if (teacherErr || !teacher) {
+    if (!teacher) {
+      // Supabase Auth session user.id fallback check
+      const { data: fallbackTeacher } = await supabaseAdmin
+        .from('ams_teachers')
+        .select('id, role, academy_id')
+        .eq('academy_id', academyId)
+        .in('role', ['admin', 'master'])
+        .maybeSingle();
+      if (fallbackTeacher) {
+        teacher = fallbackTeacher;
+      }
+    }
+
+    if (!teacher) {
       console.error('[API] Teacher lookup failed:', teacherErr?.message);
       return NextResponse.json({ error: '교사 프로필을 찾을 수 없습니다.' }, { status: 403 });
     }
@@ -93,7 +106,7 @@ export async function POST(req: NextRequest) {
 
     if (updateErr) {
       console.error('[API] Academy update failed:', updateErr.message);
-      return NextResponse.json({ error: '학원 정보 저장 실패' }, { status: 500 });
+      return NextResponse.json({ error: `학원 정보 저장 실패: ${updateErr.message}` }, { status: 500 });
     }
 
     if (!updatedData || updatedData.length === 0) {

@@ -130,13 +130,13 @@ export default function AcademyProfileLight({
                   <Key className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3 h-3 text-gray-400 group-focus-within:text-amber-600 transition-colors" />
                   <input 
                     type="text" 
-                    maxLength={4}
+                    maxLength={6}
                     defaultValue={academyInfo?.student_passkey || '2324'}
-                    placeholder="4자리"
+                    placeholder="4~6자리"
                     onBlur={async (e) => {
                       if (!onUpdateAcademyInfo) return;
                       const val = e.target.value.replace(/[^0-9]/g, '');
-                      if (val.length !== 4) { alert('패스키는 숫자 4자리여야 합니다.'); return; }
+                      if (val.length < 4 || val.length > 6) { alert('패스키는 숫자 4~6자리여야 합니다.'); return; }
                       await onUpdateAcademyInfo({ student_passkey: val });
                       alert('학생 페이지 패스키가 변경되었습니다.');
                     }}
