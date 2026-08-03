@@ -131,14 +131,14 @@ export default function AcademyProfile({
                   <input 
                     type="text" 
                     maxLength={6}
-                    defaultValue={academyInfo?.student_passkey || '2324'}
+                    defaultValue={academyInfo?.student_passkey || academyInfo?.operation_settings?.student_passkey || opSettings.student_passkey || '2324'}
                     placeholder="4~6자리"
                     onBlur={async (e) => {
-                      if (!onUpdateAcademyInfo) return;
                       const val = e.target.value.replace(/[^0-9]/g, '');
                       if (val.length < 4 || val.length > 6) { alert('패스키는 숫자 4~6자리여야 합니다.'); return; }
-                      await onUpdateAcademyInfo({ student_passkey: val });
-                      alert('학생 페이지 패스키가 변경되었습니다.');
+                      // 💡 DB 테이블에 student_passkey 컬럼이 없으므로 operation_settings 내부에 안전하게 전역 저장
+                      await updateOpSetting('student_passkey', val);
+                      alert('학생 페이지 패스키가 성공적으로 변경되었습니다.');
                     }}
                     className="w-full bg-black/40 border border-white/10 rounded pl-7 pr-2 py-1.5 text-[13px] font-black text-amber-400 outline-none focus:border-amber-500 transition-all" 
                   />

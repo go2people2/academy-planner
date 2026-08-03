@@ -206,7 +206,7 @@ export default function LoginForm({ academy }: { academy: any }) {
         }
       } else {
         // 3. 학생 로그인 체크 (ams_students 테이블 조회)
-        const masterPasskey = academy.student_passkey || '2324';
+        const masterPasskey = academy.student_passkey || academy.operation_settings?.student_passkey || '2324';
         const isMasterAccess = phoneLast4 === masterPasskey;
 
         if (!phoneLast4 || phoneLast4.length < 4) {
