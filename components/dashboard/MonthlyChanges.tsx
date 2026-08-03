@@ -40,16 +40,27 @@ type TabType = 'new' | 'makeup' | 'absence' | 'dischargedMonth' | 'dischargedAll
 export default function MonthlyChanges({ students, onSelectStudent }: MonthlyChangesProps) {
   const [activeTab, setActiveTab] = useState<TabType>('new');
   
-  const now = new Date();
-  const currentMonth = now.getMonth();
-  const currentYear = now.getFullYear();
+  // 조회 대상 연월 상태 (기본값: 현재 연월)
+  const [targetDate, setTargetDate] = useState<Date>(() => new Date());
+
+  const currentMonth = targetDate.getMonth();
+  const currentYear = targetDate.getFullYear();
+
+  // 이전 달 / 다음 달 이동
+  const handlePrevMonth = () => {
+    setTargetDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+  };
+
+  const handleNextMonth = () => {
+    setTargetDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+  };
 
   // 1. 현재 재원생 수 (퇴원생 제외)
   const activeStudentsCount = useMemo(() => {
     return students.filter(s => !s.is_deleted).length;
   }, [students]);
 
-  // 2. 이번 달 신규 등록생 목록
+  // 2. 선택된 달의 신규 등록생 목록
   const newStudents = useMemo(() => {
     return students.filter(s => {
       if (!s.created_at) return false;
@@ -68,7 +79,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
     }).sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [students, currentMonth, currentYear]);
 
-  // 3. 이번 달 수업 보강 내역
+  // 3. 선택된 달의 수업 보강 내역
   const makeups = useMemo(() => {
     const list: any[] = [];
     students.forEach(s => {
@@ -93,7 +104,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
     return list.sort((a, b) => b.date.getTime() - a.date.getTime());
   }, [students, currentMonth, currentYear]);
 
-  // 4. 이번 달 결석 / 지각 내역
+  // 4. 선택된 달의 결석 / 지각 내역
   const absences = useMemo(() => {
     const list: any[] = [];
     students.forEach(s => {
@@ -132,11 +143,10 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
       const d = new Date(rawTime);
       if (!isNaN(d.getTime())) return d;
     }
-    // 💡 [핵심 보정] 등록일(created_at)만 있고 퇴원시각이 없던 원생은 오늘/현재 시점으로 보정하여 누락 차단
     return new Date();
   };
 
-  // 5. 이번 달 퇴원생 내역
+  // 5. 선택된 달의 퇴원생 내역
   const dischargedMonth = useMemo(() => {
     return students.filter(s => {
       if (!s.is_deleted) return false;
@@ -191,9 +201,48 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
             {currentYear}년 {currentMonth + 1}월 학원 학생 동향 대시보드
           </p>
         </div>
-        <div className="flex items-center gap-3 bg-white/5 px-4 py-2 rounded-[4px] border border-white/10 shadow-xl">
-          <Calendar size={14} className="text-blue-500" />
-          <span className="text-[11px] font-black text-gray-200 uppercase tracking-widest">{currentMonth + 1}월 현황</span>
+
+        {/* 연/월 선택 컨트롤러 */}
+        <div className="flex items-center gap-2 bg-white/5 p-1 rounded-[4px] border border-white/10 shadow-xl">
+          <button
+            onClick={handlePrevMonth}
+            className="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors text-xs font-black"
+            title="이전 달 조회"
+          >
+            ◀
+          </button>
+          
+          <div className="flex items-center gap-1.5 px-2">
+            <Calendar size={14} className="text-blue-500" />
+            <select
+              value={`${currentYear}-${currentMonth}`}
+              onChange={(e) => {
+                const [y, m] = e.target.value.split('-').map(Number);
+                setTargetDate(new Date(y, m, 1));
+              }}
+              className="bg-transparent text-gray-200 text-xs font-black outline-none cursor-pointer focus:bg-[#121212] py-0.5"
+            >
+              {Array.from({ length: 12 }).map((_, i) => {
+                const d = new Date();
+                d.setMonth(d.getMonth() - i);
+                const y = d.getFullYear();
+                const m = d.getMonth();
+                return (
+                  <option key={`${y}-${m}`} value={`${y}-${m}`} className="bg-[#121212] text-white font-bold">
+                    {y}년 {m + 1}월
+                  </option>
+                );
+              })}
+            </select>
+          </div>
+
+          <button
+            onClick={handleNextMonth}
+            className="px-2 py-1 text-gray-400 hover:text-white hover:bg-white/10 rounded transition-colors text-xs font-black"
+            title="다음 달 조회"
+          >
+            ▶
+          </button>
         </div>
       </div>
 
