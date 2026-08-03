@@ -1358,14 +1358,21 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = [], a
       } catch (e) {}
     }
     
-    // 3. 보강일 여부 (기존 로그 분석)
+    // 3. 보강일 및 실제 일지 데이터 존재 여부 (기존 로그 분석)
     const matchingLog = logs?.find(l => l.session_date === dateStr);
+    const hasLogContent = matchingLog && (
+      (matchingLog.attendance_status && !['수업전', '수업제외', '수업취소'].includes(matchingLog.attendance_status)) ||
+      matchingLog.classwork_text ||
+      matchingLog.homework_text ||
+      matchingLog.test_status ||
+      matchingLog.homework_to
+    );
     const isMakeup = matchingLog?.attendance_status?.startsWith('보강');
     
     // 4. 휴일 여부 체크 (휴일인데 보강이 없으면 수업 제외)
     const isHoliday = academyHolidays.some((h: any) => h.date === dateStr);
     
-    if ((isRegularClass || isElectiveClass || isMakeup || matchingLog) && (!isHoliday || isMakeup)) {
+    if ((isRegularClass || isElectiveClass || isMakeup || hasLogContent) && (!isHoliday || isMakeup)) {
       let typeLabel = '';
       if (isMakeup) typeLabel = '보강 수업';
       else if (isElectiveClass) typeLabel = `${activeCourse} 수업`;
