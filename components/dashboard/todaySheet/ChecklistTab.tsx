@@ -134,30 +134,54 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
 
   // 활성화된 메인 토픽과 보관된 토픽 분리
   const activeTopics = useMemo(() => {
-    return topics.filter(t => !archivedTopicIds.includes(t.id));
+    return topics.filter(t => !t.title?.startsWith('[ARCHIVED]') && !archivedTopicIds.includes(t.id));
   }, [topics, archivedTopicIds]);
 
   const archivedTopics = useMemo(() => {
-    return topics.filter(t => archivedTopicIds.includes(t.id));
+    return topics.filter(t => t.title?.startsWith('[ARCHIVED]') || archivedTopicIds.includes(t.id));
   }, [topics, archivedTopicIds]);
 
   // 보관함 검색 필터링 토픽
   const searchedArchivedTopics = useMemo(() => {
     if (!archiveSearchQuery.trim()) return archivedTopics;
     const query = archiveSearchQuery.trim().toLowerCase();
-    return archivedTopics.filter(t => t.title.toLowerCase().includes(query));
+    return archivedTopics.filter(t => {
+      const cleanTitle = t.title.replace(/^\[ARCHIVED\]\s*/, '');
+      return cleanTitle.toLowerCase().includes(query);
+    });
   }, [archivedTopics, archiveSearchQuery]);
 
-  const handleArchiveTopic = (topicId: string) => {
+  const handleArchiveTopic = async (topicId: string) => {
     const topic = topics.find(t => t.id === topicId);
     if (!topic) return;
-    if (confirm(`📦 "${topic.title}" 체크 항목을 보관함으로 이동하시겠습니까?\n메인 체크리스트 표에서는 즉시 숨겨지며 언제든지 보관함에서 복구할 수 있습니다.`)) {
+    const cleanTitle = topic.title.replace(/^\[ARCHIVED\]\s*/, '');
+    if (confirm(`📦 "${cleanTitle}" 체크 항목을 보관함으로 이동하시겠습니까?\n메인 체크리스트 표에서는 즉시 숨겨지며 언제든지 보관함에서 복구할 수 있습니다.`)) {
       setArchivedTopicIds(prev => [...prev, topicId]);
+      // DB 전역 업데이트 (제목 앞에 [ARCHIVED] 마킹)
+      if (!topic.title.startsWith('[ARCHIVED]')) {
+        const newTitle = `[ARCHIVED] ${topic.title}`;
+        setTopics(prev => prev.map(t => t.id === topicId ? { ...t, title: newTitle } : t));
+        try {
+          await supabase.from('ams_checklist_topics').update({ title: newTitle }).eq('id', topicId);
+        } catch (e) {
+          console.error('Archive DB Update Error:', e);
+        }
+      }
     }
   };
 
-  const handleRestoreTopic = (topicId: string) => {
+  const handleRestoreTopic = async (topicId: string) => {
     setArchivedTopicIds(prev => prev.filter(id => id !== topicId));
+    const topic = topics.find(t => t.id === topicId);
+    if (topic && topic.title.startsWith('[ARCHIVED]')) {
+      const cleanTitle = topic.title.replace(/^\[ARCHIVED\]\s*/, '');
+      setTopics(prev => prev.map(t => t.id === topicId ? { ...t, title: cleanTitle } : t));
+      try {
+        await supabase.from('ams_checklist_topics').update({ title: cleanTitle }).eq('id', topicId);
+      } catch (e) {
+        console.error('Restore DB Update Error:', e);
+      }
+    }
   };
 
   const handleCycleColumnFilter = (topicId: string) => {
@@ -922,7 +946,9 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                       className="flex items-center justify-between p-3 bg-[#181818] border border-white/5 rounded-lg hover:border-amber-500/30 transition-all group"
                     >
                       <div className="flex flex-col gap-0.5">
-                        <span className="text-xs font-black text-gray-200">{topic.title}</span>
+                        <span className="text-xs font-black text-gray-200">
+                          {topic.title.replace(/^\[ARCHIVED\]\s*/, '')}
+                        </span>
                         <span className="text-[9.5px] font-bold text-gray-500">
                           생성일: {new Date(topic.created_at || Date.now()).toLocaleDateString('ko-KR')}
                         </span>
