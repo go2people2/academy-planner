@@ -128,16 +128,6 @@ export default function StudentPortal() {
     return schoolMatch || null;
   }, [student, examSchedules, academy?.operation_settings?.current_exam_period, selectedDate]);
 
-  const currentSelfEval = useMemo(() => {
-    try {
-      if (todaySession?.test_result?.startsWith('{')) {
-        const res = JSON.parse(todaySession.test_result);
-        if (res.hw_eval !== undefined && res.hw_eval !== null) return res.hw_eval;
-      }
-    } catch (e) {}
-    return null;
-  }, [todaySession?.test_result]);
-
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;
     const pastLogs = allLogs.filter(l => l.session_date < selectedDate && (l.course_name || '정규') === selectedCourse).sort((a, b) => b.session_date.localeCompare(a.session_date));
@@ -186,6 +176,16 @@ export default function StudentPortal() {
     
     return baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', session_date: selectedDate, homework_text: aggregatedHw } : null);
   }, [allLogs, selectedDate, selectedCourse, academy, student, availableTextbooks]);
+
+  const currentSelfEval = useMemo(() => {
+    try {
+      if (lastSession?.test_result?.startsWith('{')) {
+        const res = JSON.parse(lastSession.test_result);
+        if (res.hw_eval !== undefined && res.hw_eval !== null) return res.hw_eval;
+      }
+    } catch (e) {}
+    return null;
+  }, [lastSession?.test_result]);
 
   const upcomingMakeups = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -704,10 +704,13 @@ export default function StudentPortal() {
   };
 
   const handleSelfEval = async (level: number) => {
-    if (!student || !academy) return;
+    if (!student || !academy || !lastSession?.session_date) return;
+    const targetDate = lastSession.session_date;
+    const targetLog = allLogs.find(l => l.session_date === targetDate && (l.course_name || '정규') === selectedCourse) || lastSession;
+
     const isToggleOff = currentSelfEval === level; 
     let currentResult: any = {};
-    try { if (todaySession?.test_result?.startsWith('{')) currentResult = JSON.parse(todaySession.test_result); } catch (e) {}
+    try { if (targetLog?.test_result?.startsWith('{')) currentResult = JSON.parse(targetLog.test_result); } catch (e) {}
     
     if (isToggleOff) {
       delete currentResult.hw_eval;
@@ -720,14 +723,14 @@ export default function StudentPortal() {
       const updateData: any = { 
         student_id: student.id, 
         student_name: student.name,
-        session_date: selectedDate, 
+        session_date: targetDate, 
         academy_id: academy.id, 
         course_name: selectedCourse,
         test_result: JSON.stringify(currentResult) 
       };
       let savedLog: any = null;
-      if (todaySession?.id && todaySession.id !== 'temp') { 
-        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id).select(); 
+      if (targetLog?.id && targetLog.id !== 'temp') { 
+        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', targetLog.id).select(); 
         if (error) throw error;
         if (data && data[0]) savedLog = data[0];
       } else { 
@@ -735,10 +738,11 @@ export default function StudentPortal() {
         if (error) throw error;
         if (data && data[0]) savedLog = data[0];
       }
+      
       if (savedLog) {
-        setTodaySession((prev: any) => ({ ...prev, ...savedLog }));
+        setAllLogs(prev => prev.map(l => (l.session_date === targetDate && (l.course_name || '정규') === selectedCourse) ? { ...l, ...savedLog } : l));
       } else {
-        setTodaySession((prev: any) => ({ ...prev, test_result: JSON.stringify(currentResult) }));
+        setAllLogs(prev => prev.map(l => (l.session_date === targetDate && (l.course_name || '정규') === selectedCourse) ? { ...l, test_result: JSON.stringify(currentResult) } : l));
       }
       
       // 특이사항에 남아있는 예전 "[숙제이행: X단계]" 텍스트가 있다면 지워줍니다 (마이그레이션 효과)
