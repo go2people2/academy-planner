@@ -385,9 +385,15 @@ export default function TextbookSystem({
 
     const fullText = `${type === 'wrong' ? '[오답] ' : ''}${displayTitle} ${unitText ? `${unitText} ` : ''}${rangeText}`;
     const targetField = type === 'homework' ? 'homework' : 'completed_classwork';
-    const currentText = targetField === 'homework' ? localHomework : localCompletedClasswork;
-    const trimmedCurrent = currentText ? currentText.trim() : "";
-    const newText = trimmedCurrent ? `${trimmedCurrent}\n${fullText}` : fullText;
+    const currentText = targetField === 'homework' ? (localHomework || '') : (localCompletedClasswork || '');
+    const trimmedCurrent = currentText.trim();
+    
+    // 이미 존재하는 동일 텍스트 라인이 없을 때만 추가 (중복 기록 방지 및 안전 결합)
+    const currentLines = trimmedCurrent ? trimmedCurrent.split('\n') : [];
+    if (!currentLines.includes(fullText)) {
+      currentLines.push(fullText);
+    }
+    const newText = currentLines.join('\n');
     
     if (targetField === 'homework') setLocalHomework(newText); else setLocalCompletedClasswork(newText);
     await handleManualSave(targetField, newText); 
