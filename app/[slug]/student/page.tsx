@@ -609,35 +609,12 @@ export default function StudentPortal() {
       
       const newResult = { ...currentResult, todo_achievement: newPercentage, checked_todos: currentChecked };
       
-      // 💡 [추가] 오늘 할일 개별 체크박스 토글 시 '학원에서 한 공부(completed_classwork_text)'에 텍스트 동기화 (빈 줄 제거)
-      let currentClasswork = localCompletedClasswork || '';
-      const planTasks = todayPlan ? todayPlan.split('\n').filter((l: string) => l.trim()) : [];
-      const task = planTasks[index];
-      
-      if (task) {
-        const cleanTask = task.replace(/^[0-9]+[\.\)]\s*|^[-*#]\s*/, '').trim();
-        if (cleanTask) {
-          let currentLines = currentClasswork.split('\n').map(l => l.trim()).filter(Boolean);
-          if (isChecking) {
-            // 체크 시: '학원 공부'에 추가 (중복 방지)
-            if (!currentLines.includes(cleanTask)) {
-              currentLines.push(cleanTask);
-            }
-          } else {
-            // 해제 시: '학원 공부'에서 해당 라인 제거
-            currentLines = currentLines.filter(line => line !== cleanTask);
-          }
-          currentClasswork = currentLines.join('\n');
-        }
-      }
-      
       const updateData: any = { 
         student_id: student.id, 
         session_date: selectedDate, 
         academy_id: academy.id, 
         course_name: selectedCourse,
-        test_result: JSON.stringify(newResult),
-        completed_classwork_text: currentClasswork
+        test_result: JSON.stringify(newResult)
       };
       
       const { data, error } = await supabase
@@ -647,7 +624,6 @@ export default function StudentPortal() {
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
       
-      setLocalCompletedClasswork(currentClasswork);
       if (savedLog) {
         let savedAchievement = null;
         try {
@@ -662,7 +638,7 @@ export default function StudentPortal() {
           todo_achievement: savedAchievement 
         }));
       } else {
-        setTodaySession((prev: any) => ({ ...prev, todo_achievement: newPercentage, test_result: JSON.stringify(newResult), completed_classwork_text: currentClasswork }));
+        setTodaySession((prev: any) => ({ ...prev, todo_achievement: newPercentage, test_result: JSON.stringify(newResult) }));
       }
     } catch (e) { console.error(e); } finally { setIsSaving(false); }
   };
