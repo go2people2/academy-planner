@@ -266,7 +266,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       return { ...prev, [studentId]: studentMap };
     });
 
-    // 2) DB Upsert
+    // 2) DB Upsert (status 컬럼이 없는 DB 환경에 대한 방어 fallback 포함)
     try {
       const payload: any = {
         topic_id: topicId,
@@ -277,10 +277,21 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       };
       if (currentVal.id) payload.id = currentVal.id;
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('ams_checklist_items')
         .upsert([payload], { onConflict: 'student_id,topic_id' })
         .select();
+
+      // 만약 DB에 status 컬럼이 없는 경우(42703), status 제외 후 is_checked 기준 2차 시도
+      if (error && (error.code === '42703' || error.message?.includes('status'))) {
+        delete payload.status;
+        const retry = await supabase
+          .from('ams_checklist_items')
+          .upsert([payload], { onConflict: 'student_id,topic_id' })
+          .select();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
       
@@ -288,13 +299,13 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       if (data && data[0]) {
         setItems(prev => {
           const studentMap = { ...(prev[studentId] || {}) };
-          studentMap[topicId] = data[0];
+          studentMap[topicId] = { ...data[0], status: nextStatus };
           return { ...prev, [studentId]: studentMap };
         });
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('Cycle Status Error:', err);
-      alert('체크 상태 저장에 실패했습니다.');
+      alert('체크 상태 저장에 실패했습니다: ' + (err.message || ''));
       fetchData(); // 롤백 복구
     }
   };

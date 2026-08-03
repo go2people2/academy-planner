@@ -1,6 +1,6 @@
 import React, { useState, useEffect, forwardRef, useImperativeHandle, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare, Square } from 'lucide-react';
+import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare, Square, GripVertical } from 'lucide-react';
 import ChecklistPrintPreviewModal from '../todaySheet/ChecklistPrintPreviewModal';
 
 interface ChecklistTabLightProps {
@@ -25,6 +25,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
   const [newTopicTitle, setNewTopicTitle] = useState('');
   
   const [isPrintOpen, setIsPrintOpen] = useState(false);
+  const [draggedTopicId, setDraggedTopicId] = useState<string | null>(null);
 
   const [showAllDays, setShowAllDays] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
@@ -177,7 +178,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
     if (!academyInfo?.id) return;
     setIsLoading(true);
     try {
-      // 1) 주제 조회
+      // 1) 주제 조회 (기본 DB 조회를 만든 후, display_order/로컬 순서로 보정)
       const { data: topicsData, error: err1 } = await supabase
         .from('ams_checklist_topics')
         .select('*')
@@ -185,10 +186,32 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
         .order('created_at', { ascending: true });
 
       if (err1) throw err1;
-      setTopics(topicsData || []);
+      
+      let rawTopics = topicsData || [];
+      // 로컬에 저장된 드래그 순서가 있는 경우 순서 재정렬
+      const savedOrderJson = localStorage.getItem(`ams_checklist_topics_order_${academyInfo.id}`);
+      if (savedOrderJson) {
+        try {
+          const savedOrder: string[] = JSON.parse(savedOrderJson);
+          if (Array.isArray(savedOrder) && savedOrder.length > 0) {
+            rawTopics = [...rawTopics].sort((a, b) => {
+              const idxA = savedOrder.indexOf(a.id);
+              const idxB = savedOrder.indexOf(b.id);
+              if (idxA !== -1 && idxB !== -1) return idxA - idxB;
+              if (idxA !== -1) return -1;
+              if (idxB !== -1) return 1;
+              return (a.display_order || 0) - (b.display_order || 0);
+            });
+          }
+        } catch (e) {}
+      } else if (rawTopics.some(t => t.display_order !== undefined && t.display_order !== null)) {
+        rawTopics = [...rawTopics].sort((a, b) => (a.display_order || 0) - (b.display_order || 0));
+      }
 
-      if (topicsData && topicsData.length > 0) {
-        const topicIds = topicsData.map(t => t.id);
+      setTopics(rawTopics);
+
+      if (rawTopics.length > 0) {
+        const topicIds = rawTopics.map(t => t.id);
         
         // 2) 아이템 조회
         const { data: itemsData, error: err2 } = await supabase
@@ -243,7 +266,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
       return { ...prev, [studentId]: studentMap };
     });
 
-    // 2) DB Upsert
+    // 2) DB Upsert (status 컬럼이 없는 DB 환경에 대한 방어 fallback 포함)
     try {
       const payload: any = {
         topic_id: topicId,
@@ -254,10 +277,21 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
       };
       if (currentVal.id) payload.id = currentVal.id;
 
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('ams_checklist_items')
         .upsert([payload], { onConflict: 'student_id,topic_id' })
         .select();
+
+      // 만약 DB에 status 컬럼이 없는 경우(42703), status 제외 후 is_checked 기준 2차 시도
+      if (error && (error.code === '42703' || error.message?.includes('status'))) {
+        delete payload.status;
+        const retry = await supabase
+          .from('ams_checklist_items')
+          .upsert([payload], { onConflict: 'student_id,topic_id' })
+          .select();
+        data = retry.data;
+        error = retry.error;
+      }
 
       if (error) throw error;
       
@@ -369,6 +403,42 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
       alert('체크 항목 주제 추가에 실패했습니다.');
     } finally {
       setIsAddingTopic(false);
+    }
+  };
+
+  // 6. 주제 순서 변경 (Drag & Drop)
+  const handleTopicReorder = async (draggedId: string, targetId: string) => {
+    if (draggedId === targetId) return;
+    const currentIndex = topics.findIndex(t => t.id === draggedId);
+    const targetIndex = topics.findIndex(t => t.id === targetId);
+    if (currentIndex === -1 || targetIndex === -1) return;
+
+    const newTopics = [...topics];
+    const [moved] = newTopics.splice(currentIndex, 1);
+    newTopics.splice(targetIndex, 0, moved);
+
+    // display_order 부여
+    const updatedTopics = newTopics.map((t, idx) => ({ ...t, display_order: idx + 1 }));
+    setTopics(updatedTopics);
+
+    try {
+      const upsertPayload = updatedTopics.map(t => ({
+        id: t.id,
+        academy_id: academyInfo.id,
+        title: t.title,
+        display_order: t.display_order
+      }));
+
+      const { error } = await supabase
+        .from('ams_checklist_topics')
+        .upsert(upsertPayload, { onConflict: 'id' });
+
+      if (error) {
+        console.warn('Upsert display_order DB error (falling back to local):', error);
+        localStorage.setItem(`ams_checklist_topics_order_${academyInfo.id}`, JSON.stringify(updatedTopics.map(t => t.id)));
+      }
+    } catch (err) {
+      console.error('Reorder Topic Error:', err);
     }
   };
 
@@ -537,11 +607,35 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
                 />
               </th>
               {topics.map(t => (
-                <th key={t.id} colSpan={2} className="py-2.5 px-3 border-r border-[#edece9] text-center group relative">
-                  <div className="flex items-center justify-center gap-2 mr-2">
+                <th 
+                  key={t.id} 
+                  colSpan={2} 
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggedTopicId(t.id);
+                    e.dataTransfer.effectAllowed = 'move';
+                    e.dataTransfer.setData('text/plain', t.id);
+                  }}
+                  onDragOver={(e) => {
+                    e.preventDefault();
+                    e.dataTransfer.dropEffect = 'move';
+                  }}
+                  onDrop={(e) => {
+                    e.preventDefault();
+                    if (draggedTopicId && draggedTopicId !== t.id) {
+                      handleTopicReorder(draggedTopicId, t.id);
+                    }
+                    setDraggedTopicId(null);
+                  }}
+                  className={`py-2.5 px-3 border-r border-[#edece9] text-center group relative cursor-grab active:cursor-grabbing transition-colors ${
+                    draggedTopicId === t.id ? 'bg-blue-50 border-blue-300' : ''
+                  }`}
+                >
+                  <div className="flex items-center justify-center gap-1.5 mr-2">
+                    <GripVertical size={13} className="text-gray-400 hover:text-gray-700 shrink-0 cursor-grab active:cursor-grabbing" />
                     {/* 전역 열 필터 버튼 */}
                     <button
-                      onClick={() => handleCycleColumnFilter(t.id)}
+                      onClick={(e) => { e.stopPropagation(); handleCycleColumnFilter(t.id); }}
                       className="inline-flex items-center justify-center p-0.5 rounded hover:bg-gray-100 transition-all cursor-pointer"
                       title="클릭하여 이 열의 체크 상태 기준 필터링 순환"
                     >
@@ -551,7 +645,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
                       {t.title}
                     </span>
                     <button 
-                      onClick={() => handleDeleteTopic(t.id)} 
+                      onClick={(e) => { e.stopPropagation(); handleDeleteTopic(t.id); }} 
                       className="opacity-0 group-hover:opacity-100 p-1 rounded text-red-500 hover:bg-red-50 transition-all cursor-pointer"
                       title="체크 항목 제거"
                     >
@@ -559,7 +653,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
                     </button>
                   </div>
                   <div 
-                    onMouseDown={(e) => handleResizeStart(e, `${t.id}-memo`)}
+                    onMouseDown={(e) => { e.stopPropagation(); handleResizeStart(e, `${t.id}-memo`); }}
                     className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40"
                     title="드래그하여 이 주제의 가로 폭 조절"
                   />
