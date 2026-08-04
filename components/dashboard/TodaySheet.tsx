@@ -21,6 +21,7 @@ import StudentReportCardPrintModal from './todaySheet/StudentReportCardPrintModa
 import { TagBatchInputModal } from './todaySheet/TagBatchInputModal';
 import HokmaJournalPrintModal from './todaySheet/HokmaJournalPrintModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
+import { calculateAggregatedHw, selectBaseSession, determineTodaySession } from '@/lib/studentDataEnricher';
 import { ChecklistTab } from './todaySheet/ChecklistTab';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
@@ -28,7 +29,6 @@ import { useTodaySheetShortcuts } from './hooks/useTodaySheetShortcuts';
 import { useCoopCollaboration } from '@/hooks/useCoopCollaboration';
 import { useTodaySheetExport } from '@/hooks/useTodaySheetExport';
 import { useTodaySheetImport } from '@/hooks/useTodaySheetImport';
-import { selectBaseSession, determineTodaySession } from '@/lib/studentDataEnricher';
 
 import { ColumnConfig, DEFAULT_COLUMNS } from './todaySheet/types';
 import { TodaySheetHeader } from './todaySheet/TodaySheetHeader';
@@ -506,11 +506,12 @@ export default function TodaySheet({
 
         // 💡 [독립 세션 보장] 특강 전용 지난 세션 로그(lastSession) 및 baseSession 추출
         const pastElectiveLogs = (s.allLogs || [])
-          .filter((l: any) => (l.date || l.session_date) < selectedDate && l.course_name === courseSubject && (l.homework_text || l.completed_classwork_text))
+          .filter((l: any) => (l.date || l.session_date) < selectedDate)
           .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
 
-        const electiveLastSession = pastElectiveLogs.length > 0 ? pastElectiveLogs[0] : undefined;
+        const electiveAggregatedHw = calculateAggregatedHw(pastElectiveLogs, academyInfo, s, courseSubject);
         const electiveBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, courseSubject);
+        const electiveLastSession = electiveBaseSession ? { ...electiveBaseSession, homework_text: electiveAggregatedHw } : (electiveAggregatedHw ? { id: 'temp', homework_text: electiveAggregatedHw } as any : undefined);
         const electiveTodaySession = determineTodaySession(s, electiveLog, electiveBaseSession, true, selectedDate, academyInfo);
 
         const specialId = `${s.originalId || s.id}_special_${c.id || courseSubject}_${cIdx}`;

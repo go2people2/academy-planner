@@ -105,28 +105,38 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
   };
 };
 
-// 5. 과거 숙제 내역 취합 유틸리티
-export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: any) => {
-  let aggregatedHw = "";
+// 5. 과거 숙제 내역 취합 유틸리티 (중간 결석/휴업일이 있어도 가장 최근 1회의 숙제만 깔끔하게 이월)
+export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: any, targetCourse = '정규') => {
   if (pastLogs.length === 0) return "";
 
-  for (const log of pastLogs) {
-    const dayName = getDayOfWeek(log.date);
-    const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
+  const isTargetElective = ['특강', '방학특강', '선택과목'].includes(targetCourse?.trim());
 
-    if (log.homework_text && log.homework_text.trim() !== '') {
+  // 해당 과목(정규/특강)에 해당하거나 course_name 구분이 없는 과거 로그 필터링
+  const filteredLogs = pastLogs.filter(l => {
+    const rawCourse = l.course_name ? l.course_name.trim() : '';
+    const logCourse = rawCourse || '정규';
+    if (targetCourse === '정규') {
+      return !rawCourse || logCourse === '정규';
+    }
+    if (isTargetElective) {
+      return ['특강', '방학특강', '선택과목'].includes(logCourse);
+    }
+    return logCourse === targetCourse;
+  });
+
+  const logsToProcess = filteredLogs.length > 0 ? filteredLogs : pastLogs;
+
+  // 가장 최근에 숙제가 작성되었던 1회의 과거 수업 찾기 (결석/휴가 무관)
+  for (const log of logsToProcess) {
+    if (log.homework_text && log.homework_text.trim() !== '' && log.homework_text.trim() !== '결석') {
+      const dayName = getDayOfWeek(log.date);
+      const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
       const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
       const makeupLabel = (!isRegularClass || log.attendance_status?.startsWith('보강')) ? ' [보강]' : '';
-      const line = `${dateStr}(${dayName})${makeupLabel}\n${log.homework_text}`;
-      aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
-    }
-
-    // 이미 검사 완료(hw_checked_today)로 체크된 날짜를 만나면 그 이전 과거는 탐색 종료
-    if (log.hw_checked_today === true) {
-      break;
+      return `${dateStr}(${dayName})${makeupLabel}\n${log.homework_text}`;
     }
   }
-  return aggregatedHw;
+  return "";
 };
 
 // 6. 오늘의 세션 데이터 결정 및 이월 로직
@@ -219,9 +229,10 @@ export const selectBaseSession = (logs: SessionLog[], targetDate: string, holida
   const pastLogs = logs
     .filter(l => l.date < targetDate)
     .filter(l => {
-      const logCourse = (l.course_name || '정규').trim();
+      const rawCourse = l.course_name ? l.course_name.trim() : '';
+      const logCourse = rawCourse || '정규';
       if (courseName === '정규') {
-        return !l.course_name || logCourse === '정규';
+        return !rawCourse || logCourse === '정규';
       }
       if (isGenericElective) {
         return ['특강', '방학특강', '선택과목'].includes(logCourse);
@@ -296,7 +307,8 @@ export const getEnrichedStudentData = (
   const pastLogs = logs
     .filter(l => l.date < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))
     .sort((a, b) => b.date.localeCompare(a.date));
-  const aggregatedHw = calculateAggregatedHw(pastLogs, academy, s);
+  const targetCourseName = (s as any).isSpecialClass ? ((s as any).electiveCourse?.subject || '특강') : '정규';
+  const aggregatedHw = calculateAggregatedHw(pastLogs, academy, s, targetCourseName);
   const todaySession = determineTodaySession(s, todayLog, baseSession, isTodayClassDay, selectedDate, academy);
 
   const tInfo = findTeacherInfo(teachers, s.teacher_id, s.teacher_name);

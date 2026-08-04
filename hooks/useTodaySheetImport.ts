@@ -198,9 +198,8 @@ export function useTodaySheetImport({
             hw_passed_today: false
           };
 
-          // 💡 핵심: classwork_text와 completed_classwork_text에 동시에 반영하여 화면에 100% 즉시 표시
+          // 💡 엑셀 일지 불러오기: 진도 항목은 오직 '수행진도(completed_classwork_text)'에만 채워짐 ('오늘할일' 침범 방지)
           const newData: any = {
-            classwork_text: classworkText || currentSession.classwork_text || '',
             completed_classwork_text: classworkText,
             homework_text: homeworkText,
             special_notes: specialNotes,
@@ -210,7 +209,6 @@ export function useTodaySheetImport({
           };
 
           const prevData: any = {
-            classwork_text: currentSession.classwork_text || '',
             completed_classwork_text: currentSession.completed_classwork_text || '',
             homework_text: currentSession.homework_text || '',
             special_notes: currentSession.special_notes || '',

@@ -134,37 +134,14 @@ export default function StudentPortal() {
     
     let aggregatedHw = "";
     for (const log of pastLogs) {
-      if (log.homework_text && log.homework_text.trim() !== '결석') {
+      if (log.homework_text && log.homework_text.trim() !== '' && log.homework_text.trim() !== '결석') {
         const dateStr = log.session_date ? log.session_date.slice(5).replace('-', '.') : '';
         const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(log.session_date).getDay()];
         let hText = log.homework_text;
         availableTextbooks.forEach(tb => { hText = hText.split(`[${tb.bookcode}]`).join(tb.title); });
-        const line = `${dateStr}(${dayName})\n${hText}`;
-        aggregatedHw = aggregatedHw ? `${line}\n\n${aggregatedHw}` : line;
+        aggregatedHw = `${dateStr}(${dayName})\n${hText}`;
+        break;
       }
-
-      const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === log.session_date);
-      if (isLogHoliday && !log.attendance_status?.startsWith('보강')) continue;
-      if (!log.attendance_status || log.attendance_status === '수업전') continue;
-      if (['결석', '수업취소', '수업제외'].includes(log.attendance_status)) continue;
-
-      let hwPassedToday = false;
-      let hwCheckedToday = false;
-      try {
-        if (log.test_result?.startsWith('{')) {
-          const res = JSON.parse(log.test_result);
-          hwPassedToday = res.hw_passed_today === true;
-          hwCheckedToday = res.hw_checked_today === true;
-        }
-      } catch (e) {}
-
-      if (hwPassedToday) continue;
-
-      const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(log.session_date).getDay()];
-      const isRegularClass = student?.class_days?.includes(dayName);
-      const isPresent = ['출석', '지각'].some(st => log.attendance_status?.startsWith(st));
-
-      if (hwCheckedToday || (isPresent && isRegularClass)) break;
     }
 
     const baseSession = pastLogs.find(l => {
