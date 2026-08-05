@@ -323,10 +323,8 @@ export function useTodaySheetRows({
         if (tA !== tB) {
           return sortDirection === 'asc' ? tA - tB : tB - tA;
         }
-        const gA = getGradeWeight(a.grade);
-        const gB = getGradeWeight(b.grade);
-        if (gA !== gB) return gA - gB;
-        return a.name.localeCompare(b.name);
+        // 💡 동일 시간대 내에서는 무조건 학생 이름 가나다순(ko)으로 정렬
+        return a.name.localeCompare(b.name, 'ko');
       } else if (sortMode === 'grade') {
         const gA = getGradeWeight(a.grade);
         const gB = getGradeWeight(b.grade);
