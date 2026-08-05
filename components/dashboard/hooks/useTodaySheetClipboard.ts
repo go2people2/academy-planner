@@ -4,6 +4,7 @@ import { useCallback } from 'react';
 import { parseClipboardText } from '@/lib/clipboardParser';
 import { mapColumnToProp, mapFieldToColumn, mapColumnToField, COLUMN_TO_FIELD_MAP } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
+import { matchRowIdentity } from '@/lib/rowIdentity';
 
 interface UseTodaySheetClipboardProps {
   activeCell: { studentId: string; columnId: string } | null;
@@ -200,7 +201,7 @@ export function useTodaySheetClipboard({
           (window as any).__ams_batch_saving = true;
         }
         setStudents((prev: any[]) => prev.map(s => {
-          const update = updates.find(u => u.studentId === s.id);
+          const update = updates.find(u => matchRowIdentity(s, u.studentId));
           return update ? { ...s, todaySession: { ...(s.todaySession || {}), ...update.newData } } : s;
         }));
 
@@ -311,7 +312,7 @@ export function useTodaySheetClipboard({
         (window as any).__ams_batch_saving = true;
       }
       setStudents((prev: any[]) => prev.map(s => {
-        const update = updates.find(u => u.studentId === s.id);
+        const update = updates.find(u => matchRowIdentity(s, u.studentId));
         return update ? { ...s, todaySession: { ...(s.todaySession || {}), ...update.newData } } : s;
       }));
       syncTodaySheetDom(updates, targetColIds, true);

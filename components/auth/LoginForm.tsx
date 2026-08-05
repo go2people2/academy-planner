@@ -529,8 +529,8 @@ export default function LoginForm({ academy }: { academy: any }) {
                     }`} />
                     <input 
                       type="tel"
-                      maxLength={5}
-                      placeholder="번호 4~5자리 입력"
+                      maxLength={6}
+                      placeholder="패스코드 입력"
                       value={phoneLast4}
                       onChange={(e) => setPhoneLast4(e.target.value.replace(/[^0-9]/g, ''))}
                       className={`w-full border rounded-[4px] py-4 pl-12 pr-4 outline-none transition-all font-black text-lg tracking-[0.3em] text-center ${

@@ -769,11 +769,27 @@ function StudentRowItem({
     return { needs: false };
   }, [student.last_consulted_at]);
 
-  return (
-    <motion.div 
-      layout 
-      onClick={onClick} 
-      className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
+    const handleCardClick = (e: React.MouseEvent) => {
+      try {
+        onClick();
+      } catch (err) {
+        console.error('Card click execution error:', err);
+      }
+    };
+
+    return (
+      <motion.div 
+        layout 
+        onClick={handleCardClick}
+        tabIndex={0}
+        role="button"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleCardClick(e as any);
+          }
+        }}
+        className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
         isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg text-white' : 
         isBatchMode 
           ? isSelectionMode 

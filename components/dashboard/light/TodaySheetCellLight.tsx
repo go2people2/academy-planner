@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -12,6 +12,8 @@ import { getDayOfWeek, getCoursePrefix, parseBookCourseValue } from '@/lib/utils
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { ScoreCell } from './ScoreCellLight';
 import { SimpleTextCell } from './SimpleTextCellLight';
+import { FeedbackKeyboardPopup } from '../todaySheet/FeedbackKeyboardPopup';
+import TextbookSystem from '@/components/student/TextbookSystem';
 
 interface TodaySheetCellProps {
   col: any;
@@ -131,6 +133,28 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const [isNotePopupOpen, setIsNotePopupOpen] = useState(false);
   const [noteText, setNoteText] = useState(student.management_notes || '');
   const [isSavingNote, setIsSavingNote] = useState(false);
+
+  // 💡 [추가] 교재 클릭 시 단원/페이지 드로어 모달 상태
+  const [selectedBookForDrawer, setSelectedBookForDrawer] = useState<string | null>(null);
+
+  // 💡 [교재 저장 버퍼] TextbookSystem에 전달할 ccw/hw 최신값을 독립 ref로 관리
+  const ccwBookBuf = useRef(formData?.completed_classwork_text ?? student.todaySession?.completed_classwork_text ?? '');
+  const hwBookBuf = useRef(formData?.homework_text ?? student.todaySession?.homework_text ?? '');
+  
+  const incomingCcw = formData?.completed_classwork_text ?? student.todaySession?.completed_classwork_text ?? '';
+  const incomingHw = formData?.homework_text ?? student.todaySession?.homework_text ?? '';
+  
+  useEffect(() => {
+    if (incomingCcw && !ccwBookBuf.current.includes(incomingCcw)) {
+      ccwBookBuf.current = incomingCcw;
+    }
+  }, [incomingCcw]);
+
+  useEffect(() => {
+    if (incomingHw && !hwBookBuf.current.includes(incomingHw)) {
+      hwBookBuf.current = incomingHw;
+    }
+  }, [incomingHw]);
 
   // 🧲 [추가] 도구 드래그앤드롭 이벤트 핸들러
   const handleDragStart = (e: React.DragEvent, id: string) => {
@@ -1067,12 +1091,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               className="flex-1 text-left min-w-0 select-text cursor-text"
             >
               {student.lastSession?.homework_text ? (
-                <div className="text-[12px] font-medium text-blue-900 leading-[1.15] italic whitespace-pre-wrap break-all">
+                <div className="text-[12px] font-medium text-blue-950 leading-[1.15] italic whitespace-pre-wrap break-all">
                   {student.lastSession.homework_text.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
                     <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
                       {i === 0 && <span className="text-blue-600 text-[14px] font-bold mr-1 align-top leading-[1.15]">"</span>}
                       {para.split(/(\([월화수목금토일]\))/g).map((part, j) => 
-                        part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className="text-amber-600 font-bold">{part}</span> : part
+                        part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className="bg-amber-200/90 text-amber-950 font-black not-italic px-1 py-0.2 rounded border border-amber-400/50 shadow-sm inline-block mx-0.5">{part}</span> : part
                       )}
                       {i === arr.length - 1 && <span className="text-blue-600 text-[14px] font-bold ml-1 align-bottom leading-[1.15]">"</span>}
                     </span>
@@ -1130,17 +1154,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 >
                   <MessageSquare size={12} />
                 </button>
-                <AnimatePresence>
-                  {isFeedbackOpen && (
-                    <motion.div initial={{ opacity: 0, x: 10, scale: 0.9 }} animate={{ opacity: 1, x: 0, scale: 1 }} exit={{ opacity: 0, x: 10, scale: 0.9 }}
-                      className="absolute right-full top-0 mr-2 flex gap-1 bg-white p-1 rounded-md border border-[#edece9] shadow-2xl z-[100]">
-                      {(['gradeA', 'gradeB', 'gradeC', 'gradeD', 'gradeE', 'gradeF'] as const).map((k) => (
-                        <button key={k} onClick={(e) => { e.stopPropagation(); onSelectFeedback(k); }} className={`w-7 h-7 rounded-[2px] flex items-center justify-center text-[10px] font-normal transition-all hover:scale-110 ${statusMap[k].color} shadow-md`}>{statusMap[k].label}</button>
-                      ))}
-                      <button onClick={(e) => { e.stopPropagation(); onCloseFeedback(); }} className="w-7 h-7 flex items-center justify-center text-gray-500 hover:text-white"><X size={14} /></button>
-                    </motion.div>
-                  )}
-                </AnimatePresence>
+                <FeedbackKeyboardPopup
+                  isOpen={isFeedbackOpen}
+                  statusMap={statusMap}
+                  onSelectFeedback={onSelectFeedback}
+                  onCloseFeedback={onCloseFeedback}
+                  isLight={true}
+                />
               </div>
             </div>
           </div>
@@ -1239,7 +1259,15 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 const valParts = val ? val.split('|').map(s => s.trim()).filter(Boolean) : [];
 
                 return (
-                  <div key={bIdx} className={`group relative px-2 py-1 rounded-md text-[10px] flex items-center justify-between gap-1.5 truncate border transition-all ${
+                  <div key={bIdx} 
+                    onMouseDown={(e) => {
+                      e.stopPropagation();
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setSelectedBookForDrawer(bookKey);
+                    }}
+                    className={`group relative px-2 py-1 rounded-md text-[10px] flex items-center justify-between gap-1.5 truncate border transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
                     val && daysElapsed >= 14
                       ? 'bg-rose-50 border-rose-400 shadow-sm animate-pulse'
                       : val && daysElapsed >= 7
@@ -1269,7 +1297,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         <div className="flex flex-col gap-0.5 pl-0.5">
                           {valParts.map((part, pIdx) => (
                             <div key={pIdx} className="text-[9.5px] text-gray-800 font-medium truncate flex items-center gap-1">
-                              <span className="text-[8.5px] text-amber-700 font-bold shrink-0">{pIdx === 0 ? '①' : '②'}</span>
+                              <span className="text-[8.5px] text-amber-600 font-bold shrink-0">{pIdx === 0 ? '①' : '②'}</span>
                               <span className="truncate">{part}</span>
                             </div>
                           ))}
@@ -1287,7 +1315,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         <span className={`font-extrabold shrink-0 ${isElectiveBook ? 'text-amber-800' : 'text-emerald-800'}`}>
                           {bookTitle}
                         </span>
-                        <span className={`truncate text-[9.5px] ${val ? 'text-gray-700 font-medium opacity-90' : 'text-gray-400 italic'}`}>
+                        <span className={`truncate text-[9.5px] ${val ? 'text-gray-800 font-medium opacity-90' : 'text-gray-500 italic'}`}>
                           {val || ''}
                         </span>
                         {val && daysElapsed >= 14 && (
@@ -1410,8 +1438,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                               cleanUpdated[bookKey] = new Date().toISOString();
                               await onUpdateStudentInfo(student.id, 'book_progress_updated_at', cleanUpdated);
 
-
-
                               // 💡 진도 변경 이력 기록 자동 누적
                               const todayStr = new Date().toISOString().slice(0, 10);
                               const existingHist = Array.isArray((student as any).book_progress_history) ? [...(student as any).book_progress_history] : [];
@@ -1454,6 +1480,56 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 );
               });
             })()}
+
+            {/* 💡 교재 클릭 시 단원/쪽수 팝업 드로어 모달 */}
+            {selectedBookForDrawer && typeof window !== 'undefined' && createPortal(
+              <TextbookSystem
+                student={student}
+                availableTextbooks={masterTextbooks || []}
+                allLogs={student.allLogs || []}
+                initialBookCode={selectedBookForDrawer}
+                localCompletedClasswork={ccwBookBuf.current}
+                setLocalCompletedClasswork={(val) => {
+                  const nextVal = typeof val === 'function' ? (val as any)(ccwBookBuf.current) : val;
+                  ccwBookBuf.current = nextVal;
+                }}
+                localHomework={hwBookBuf.current}
+                setLocalHomework={(val) => {
+                  const nextVal = typeof val === 'function' ? (val as any)(hwBookBuf.current) : val;
+                  hwBookBuf.current = nextVal;
+                }}
+                todayPlan={formData?.classwork_text ?? student.todaySession?.classwork_text ?? ''}
+                handleManualSave={async (field, val) => {
+                  const saveValueMap: any = {
+                    completed_classwork: typeof val === 'string' && val ? val : ccwBookBuf.current,
+                    homework: typeof val === 'string' && val ? val : hwBookBuf.current,
+                  };
+                  if (field === 'completed_classwork' && typeof val === 'string' && val) {
+                    ccwBookBuf.current = val;
+                  }
+                  if (field === 'homework' && typeof val === 'string' && val) {
+                    hwBookBuf.current = val;
+                  }
+                  const keyMap: any = {
+                    completed_classwork: 'completed_classwork',
+                    homework: 'assign',
+                    classwork: 'classwork',
+                    special_notes: 'notes'
+                  };
+                  const targetKey = keyMap[field] || field;
+                  const saveValue = field in saveValueMap ? saveValueMap[field] : val;
+                  if (onSave) {
+                    await onSave(targetKey, saveValue);
+                  }
+                }}
+                isSaving={false}
+                onBookSelect={(isActive) => {
+                  if (!isActive) setSelectedBookForDrawer(null);
+                }}
+                selectedDate={displayDateShort || new Date().toISOString().slice(0, 10)}
+              />,
+              document.body
+            )}
           </div>
         )}
 

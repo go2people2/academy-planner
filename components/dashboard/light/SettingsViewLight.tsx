@@ -111,17 +111,18 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
 
   const TABS = useMemo(() => [
     { id: 'notices', label: 'Notices', color: 'text-amber-600', activeBg: 'bg-amber-500', roles: ['admin', 'master'] },
-    { id: 'exams', label: 'Exams', color: 'text-rose-600', activeBg: 'bg-rose-500', roles: ['admin', 'master'] },
+    { id: 'exams', label: 'Exams', color: 'text-rose-600', activeBg: 'bg-rose-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'teachers', label: 'Teachers', color: 'text-blue-600', activeBg: 'bg-blue-500', roles: ['admin', 'master'] },
-    { id: 'holidays', label: 'Holidays', color: 'text-emerald-600', activeBg: 'bg-emerald-500', roles: ['admin', 'master'] },
+    { id: 'holidays', label: 'Holidays', color: 'text-emerald-600', activeBg: 'bg-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-650', activeBg: 'bg-blue-650', roles: ['admin', 'master'] },
     { id: 'textbooks', label: 'Textbook PDFs', color: 'text-indigo-600', activeBg: 'bg-indigo-500', roles: ['admin', 'master'] },
-    { id: 'timetables', label: 'Weekly Timetable', color: 'text-emerald-600', activeBg: 'bg-emerald-500', roles: ['admin', 'master'] },
+    { id: 'timetables', label: 'Weekly Timetable', color: 'text-emerald-600', activeBg: 'bg-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'manual', label: 'Manual', color: 'text-purple-600', activeBg: 'bg-purple-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'account', label: 'My Account', color: 'text-slate-700', activeBg: 'bg-slate-700', roles: ['admin', 'master', 'teacher'] }
   ], []);
 
   const userRole = currentUser?.role || 'teacher';
+  const isAdmin = userRole === 'admin' || userRole === 'master';
   const availableTabs = useMemo(() => TABS.filter(tab => tab.roles.includes(userRole)), [TABS, userRole]);
 
   useEffect(() => {
@@ -190,6 +191,7 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
             holidays={opSettings.holidays || []} 
             onAddHoliday={handleAddHoliday} 
             onDeleteHoliday={handleDeleteHoliday} 
+            isAdmin={isAdmin}
           />
         )}
 
@@ -250,6 +252,7 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
             academyInfo={academyInfo}
             teachers={teachers}
             students={students}
+            currentUser={currentUser}
             isLight={true}
           />
         )}

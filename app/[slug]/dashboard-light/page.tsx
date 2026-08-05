@@ -279,12 +279,7 @@ export default function DashboardPage() {
     const savedTab = localStorage.getItem('ams_viewMode');
     const recoveredUserJson = localStorage.getItem('ams_user');
     if (recoveredUserJson && savedTab) {
-      const role = JSON.parse(recoveredUserJson).role;
-      if (savedTab === 'settings' && role !== 'admin' && role !== 'master') {
-        setViewMode('board');
-      } else {
-        setViewMode(savedTab);
-      }
+      setViewMode(savedTab);
     }
 
     if (!slug) return;
@@ -330,7 +325,7 @@ export default function DashboardPage() {
 
       // 💡 마지막으로 보던 화면(탭) 복구 (새로고침 대응 - 지연 초기화 함수에서 선행 처리하므로 중복 set is_deleted)
       const savedViewMode = localStorage.getItem('ams_viewMode');
-      const initialMode = savedViewMode && !(savedViewMode === 'settings' && localUser?.role !== 'admin' && localUser?.role !== 'master') ? savedViewMode : 'board';
+      const initialMode = savedViewMode || 'board';
       if (typeof window !== 'undefined') {
         window.history.replaceState({ viewMode: initialMode }, '');
       }
@@ -462,12 +457,6 @@ export default function DashboardPage() {
 
   const navigateTo = useCallback((mode: string, skipHistory = false) => { 
     if (viewMode === mode) return;
-
-    // 💡 [방어] 일반 교사의 설정 화면 진입 차단
-    if (mode === 'settings' && currentUser?.role !== 'admin' && currentUser?.role !== 'master') {
-      alert('권한이 없습니다.');
-      return;
-    }
 
     setViewMode(mode); setSelectedStudentId(null); 
     if (typeof window !== 'undefined') {
@@ -858,7 +847,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     dataToSave, 
     {
       completed: targetSession?.test_completed,
-      mission: student.recent_mission ?? '',
+      mission: targetSession?.mission ?? '',
       cut: targetSession?.test_cut ?? 0,
       achievement: targetSession?.todo_achievement ?? 0,
       sType: targetSession?.test_score_type ?? 'score',
@@ -1426,7 +1415,12 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
   };
 
-  const batchAddStudents = async (studentIds: string[], reasons: Record<string, string> = {}, makeupHours: Record<string, number> = {}) => {
+  const batchAddStudents = async (
+    studentIds: string[], 
+    reasons: Record<string, string> = {}, 
+    makeupHours: Record<string, number> = {},
+    makeupCourses: Record<string, string> = {}
+  ) => {
     if (isWarpMode) {
       alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
       return;
@@ -1438,6 +1432,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         const s = students.find(st => st.id === id);
         if (!s) return null;
         
+        const courseName = makeupCourses[id] || '정규';
         const { isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, s.class_days || [], academy?.operation_settings?.holidays);
         const hour = makeupHours[id] !== undefined ? makeupHours[id] : null;
         const reason = reasons[id] || '보강 수업';
@@ -1451,7 +1446,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           status: null, 
           moved_to_hour: isScheduledToday ? null : hour,
           attendance_reason: isScheduledToday ? null : reason,
-          course_name: '정규'
+          course_name: courseName
         };
 
         const exist = s.todaySession?.special_notes || ''; 
@@ -1482,7 +1477,20 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
       return;
     }
-    const student = students.find(s => s.id === studentId); 
+
+    // 💡 [선택과목/특강 파생 ID 대응] 'student_123_special_방학특강_0' 형식일 경우 realStudentId와 course_name 파싱
+    let realStudentId = studentId;
+    let targetCourseName = '정규';
+    if (studentId.includes('_special_')) {
+      const parts = studentId.split('_special_');
+      realStudentId = parts[0];
+      if (parts[1]) {
+        const subParts = parts[1].split('_');
+        targetCourseName = subParts[0] || '특강';
+      }
+    }
+
+    const student = students.find(s => s.id === realStudentId || s.originalId === realStudentId); 
     if (!student || !academy) return;
     try {
       const logId = student.todaySession?.id;
@@ -1490,7 +1498,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
       if (mode === 'delete') {
         const confirmResult = confirm(
-          `오늘 ${student.name} 학생의 수업 데이터를 데이터베이스에서 완전히 삭제하시겠습니까?\n\n` +
+          `오늘 ${student.name} 학생의 [${targetCourseName}] 수업 데이터를 데이터베이스에서 완전히 삭제하시겠습니까?\n\n` +
           `※ 이 작업은 되돌릴 수 없으며, 오늘 출결 통계 및 명단에서 아예 지워집니다.`
         );
         if (!confirmResult) return;
@@ -1501,8 +1509,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             action: 'delete_session',
-            studentId,
-            sessionDate: selectedDate
+            studentId: realStudentId,
+            sessionDate: selectedDate,
+            courseName: targetCourseName
           })
         });
         const resData = await res.json();
@@ -1512,7 +1521,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       } else {
         // 📝 기존 결석/수업취소 이력 보존 방식 유지 (UPSERT)
         const payload: any = { 
-          student_id: studentId, 
+          student_id: realStudentId, 
           student_name: student.name, 
           academy_id: academy.id, 
           session_date: selectedDate, 
@@ -1520,13 +1529,47 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           status: null,
           attendance_reason: reason || '결석 공지',
           moved_to_hour: null,
-          course_name: student.courseName || '정규'
+          course_name: targetCourseName
         };
 
         const exist = student.todaySession?.special_notes || ''; 
         payload.special_notes = (exist && !exist.includes('[temp]')) ? exist : '';
 
-        if (hasLog) payload.id = logId;
+        // 💡 [낙관적 상태 변경] 클릭 즉시 특강/정규 행 세션의 attendance_status를 '결석'으로 전환하여 화면에서 0.1초 만에 감춤
+        const isCourseMatch = (c1: string, c2: string) => {
+          const clean1 = (c1 || '정규').replace(/\s+/g, '').toLowerCase();
+          const clean2 = (c2 || '정규').replace(/\s+/g, '').toLowerCase();
+          return clean1 === clean2 || clean1.includes(clean2) || clean2.includes(clean1);
+        };
+
+        setStudents((prev: any[]) => (prev || []).map((s: any) => {
+          if (s.id === realStudentId || s.originalId === realStudentId) {
+            let updatedLogs = (s.allLogs || []).map((l: any) => {
+              const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
+              const lCourse = l.course_name || '정규';
+              if (lDate === selectedDate && isCourseMatch(lCourse, targetCourseName)) {
+                return { ...l, attendance_status: '결석', attendance_reason: reason || '결석 공지' };
+              }
+              return l;
+            });
+            const hasLogMatch = (s.allLogs || []).some((l: any) => {
+              const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
+              const lCourse = l.course_name || '정규';
+              return lDate === selectedDate && isCourseMatch(lCourse, targetCourseName);
+            });
+            if (!hasLogMatch) {
+              updatedLogs = [{ student_id: realStudentId, session_date: selectedDate, course_name: targetCourseName, attendance_status: '결석', attendance_reason: reason || '결석 공지' }, ...updatedLogs];
+            }
+            return {
+              ...s,
+              allLogs: updatedLogs,
+              ...(targetCourseName === '정규' ? { todaySession: { ...s.todaySession, attendance_status: '결석', attendance_reason: reason || '결석 공지' } } : {})
+            };
+          }
+          return s;
+        }));
+
+        if (hasLog && targetCourseName === '정규') payload.id = logId;
         const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date,course_name' });
         if (error) throw error;
       }

@@ -126,14 +126,16 @@ export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, stud
 
   const logsToProcess = filteredLogs.length > 0 ? filteredLogs : pastLogs;
 
-  // 가장 최근에 숙제가 작성되었던 1회의 과거 수업 찾기 (결석/휴가 무관)
+  // 가장 최근에 숙제가 작성되었던 1회의 과거 수업 찾기 (결석 세션은 무조건 스킵하고 그 전 수업 계속 추적)
   for (const log of logsToProcess) {
-    if (log.homework_text && log.homework_text.trim() !== '' && log.homework_text.trim() !== '결석') {
+    const attStatus = log.attendance_status || '';
+    const isAbsent = attStatus.startsWith('결석');
+    const hw = log.homework_text ? log.homework_text.trim() : '';
+
+    if (!isAbsent && hw !== '' && hw !== '결석') {
       const dayName = getDayOfWeek(log.date);
-      const isRegularClass = student?.class_days?.map((d: string) => d.trim()).includes(dayName);
       const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
-      const makeupLabel = (!isRegularClass || log.attendance_status?.startsWith('보강')) ? ' [보강]' : '';
-      return `${dateStr}(${dayName})${makeupLabel}\n${log.homework_text}`;
+      return `${dateStr}(${dayName})\n${hw}`;
     }
   }
   return "";

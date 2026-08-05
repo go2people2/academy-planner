@@ -30,6 +30,10 @@ import { useCoopCollaboration } from '@/hooks/useCoopCollaboration';
 import { useTodaySheetExport } from '@/hooks/useTodaySheetExport';
 import { useTodaySheetImport } from '@/hooks/useTodaySheetImport';
 import { useTodaySheetUndoRedo } from '../todaySheet/hooks/useTodaySheetUndoRedo';
+import { useTodaySheetRows } from '../todaySheet/hooks/useTodaySheetRows';
+import { useTodaySheetSelection } from '../todaySheet/hooks/useTodaySheetSelection';
+import { TodaySheetModals } from '../todaySheet/TodaySheetModals';
+import { extractRealStudentId } from '@/lib/rowIdentity';
 
 interface ColumnConfig {
   id: string;
@@ -379,7 +383,7 @@ export default function TodaySheet({
     });
   }, []);
 
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
   const [activeTab, setActiveTab] = useState<'daily' | 'checklist'>('daily');
   const [historyLimit, setHistoryLimit] = useState(3);
   
@@ -392,7 +396,7 @@ export default function TodaySheet({
   }, []);
 
   const [hiddenStudentIds, setHiddenStudentIds] = useState<string[]>([]);
-  const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
+
   const [selectedRange, setSelectedRange] = useState<{
     startStudentId: string, 
     startColId: string, 
@@ -679,293 +683,38 @@ export default function TodaySheet({
     return activeColumns.reduce((acc, col) => acc + (focusColWidths[col.id] || col.minWidth), 0);
   }, [activeColumns, focusColWidths, focusColumn]);
 
-  // 💡 포커스 모드일 때 학생 필터링 및 전체 정렬 로직 적용
-  const filteredStudents = useMemo(() => {
+  // 💡 [리팩토링 Step 2-1] 라이트 버전 행 확장 및 필터링 커스텀 훅 적용
+  const baseStudents = useMemo(() => {
     let result = students.filter((s: any) => !s.isSpecialClass && !s.originalId);
-    
-    // 숨김 처리된 학생 필터링
     if (hiddenStudentIds.length > 0) {
       result = result.filter((s: any) => !hiddenStudentIds.includes(s.id));
     }
+    return result;
+  }, [students, hiddenStudentIds]);
 
+  const filteredStudents = useTodaySheetRows({
+    students: baseStudents,
+    selectedDate,
+    academyInfo,
+    sortMode,
+    sortDirection,
+    selectedHour,
+    hideAbsent,
+    focusColumn
+  });
 
-
-    const getGradeWeight = (grade: string): number => {
-      if (!grade) return 999;
-      const cleaned = grade.replace(/\s+/g, '');
-      let levelWeight = 0;
-      let year = 0;
-      if (cleaned.includes('초')) {
-        levelWeight = 10;
-        const match = cleaned.match(/\d/);
-        year = match ? parseInt(match[0], 10) : 0;
-      } else if (cleaned.includes('중')) {
-        levelWeight = 20;
-        const match = cleaned.match(/\d/);
-        year = match ? parseInt(match[0], 10) : 0;
-      } else if (cleaned.includes('고')) {
-        levelWeight = 30;
-        const match = cleaned.match(/\d/);
-        year = match ? parseInt(match[0], 10) : 0;
-      } else {
-        levelWeight = 40;
-      }
-      return levelWeight + year;
-    };
-
-    const dayKey = getDayOfWeek(selectedDate);
-
-    // 💡 선택과목(방학특강, 확통 등) 및 정규 수업 분리 (여러 선택과목 및 정규 수업 개별 행으로 확장)
-    const uniqueOriginalStudents = new Map<string, any>();
-    result.forEach((s: any) => {
-      const realId = s.originalId || s.id;
-      if (!uniqueOriginalStudents.has(realId) || !s.isSpecialClass) {
-        uniqueOriginalStudents.set(realId, s);
-      }
-    });
-
-    const expandedResult: any[] = [];
-    Array.from(uniqueOriginalStudents.values()).forEach((s: any) => {
-      const regularHours = s.day_schedules?.[dayKey] || [];
-      const rawElective = s.book_courses?.['__elective_courses'];
-      const activeElectives: any[] = [];
-      const seenCourseKeys = new Set<string>();
-
-      if (rawElective) {
-        try {
-          let courses = [];
-          if (typeof rawElective === 'string') {
-            courses = JSON.parse(rawElective);
-          } else if (Array.isArray(rawElective)) {
-            courses = rawElective;
-          }
-          if (Array.isArray(courses)) {
-            courses.forEach((c: any) => {
-              if (!c) return;
-              const cKey = c.id || c.subject?.trim() || JSON.stringify(c);
-              if (seenCourseKeys.has(cKey)) return;
-
-              const hasDay = c.days && (
-                Array.isArray(c.days) 
-                  ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
-                  : (typeof c.days === 'string' && c.days.includes(dayKey))
-              );
-              if (hasDay) {
-                seenCourseKeys.add(cKey);
-                activeElectives.push(c);
-              }
-            });
-          }
-        } catch (e) {}
-      }
-
-      // 1. 선택과목 각각 독립 행으로 추가
-      activeElectives.forEach((c: any, cIdx: number) => {
-        const courseSubject = c.subject?.trim() || '특강';
-        const electiveLog = (s.allLogs || []).find((l: any) => 
-          (l.date || l.session_date) === selectedDate && l.course_name === courseSubject
-        );
-        const specialHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
-          ? c.schedules[dayKey]
-          : [1300, 1600];
-
-        // 💡 [독립 세션 보장] 특강 전용 지난 세션 로그(lastSession) 및 baseSession 추출
-        const pastElectiveLogs = (s.allLogs || [])
-          .filter((l: any) => (l.date || l.session_date) < selectedDate)
-          .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
-
-        const electiveAggregatedHw = calculateAggregatedHw(pastElectiveLogs, academyInfo, s, courseSubject);
-        const electiveBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, courseSubject);
-        const electiveLastSession = electiveBaseSession ? { ...electiveBaseSession, homework_text: electiveAggregatedHw } : (electiveAggregatedHw ? { id: 'temp', homework_text: electiveAggregatedHw } as any : undefined);
-        const electiveTodaySession = determineTodaySession(s, electiveLog, electiveBaseSession, true, selectedDate, academyInfo);
-
-        const specialId = `${s.originalId || s.id}_special_${c.id || courseSubject}_${cIdx}`;
-        if (!expandedResult.some(item => item.id === specialId)) {
-          expandedResult.push({
-            ...s,
-            id: specialId,
-            originalId: s.originalId || s.id,
-            isSpecialClass: true,
-            courseName: courseSubject,
-            day_schedules: {
-              ...s.day_schedules,
-              [dayKey]: specialHours
-            },
-            electiveCourse: {
-              ...c,
-              subject: courseSubject
-            },
-            lastSession: electiveLastSession,
-            todaySession: electiveTodaySession
-          });
-        }
-      });
-
-      const regularLog = (s.allLogs || []).find((l: any) => 
-        (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
-      );
-
-      // 2. 정규 수업 행 추가
-      // 💡 모든 특강 과목의 전체 요일을 수집하여 특강 전용 요일 판별
-      const allElectiveDaysForStudent = new Set<string>();
-      if (rawElective) {
-        try {
-          const allCourses = typeof rawElective === 'string' ? JSON.parse(rawElective) : Array.isArray(rawElective) ? rawElective : [];
-          if (Array.isArray(allCourses)) {
-            allCourses.forEach((c: any) => {
-              if (!c) return;
-              if (Array.isArray(c.days)) {
-                c.days.forEach((d: any) => { if (typeof d === 'string') allElectiveDaysForStudent.add(d.trim()); });
-              } else if (typeof c.days === 'string') {
-                // "금" 또는 "월,금" 등 문자열 형태도 처리
-                c.days.split(/[,\s]+/).forEach((d: string) => { if (d.trim()) allElectiveDaysForStudent.add(d.trim()); });
-              }
-            });
-          }
-        } catch (e) {}
-      }
-      const hasAnyElective = allElectiveDaysForStudent.size > 0;
-      const isElectiveDay = allElectiveDaysForStudent.has(dayKey);
-      // 오늘이 정규 수업 요일인지: class_days에 포함되어 있으면 독립적으로 정규 수업 요일로 인정
-      const isRegularClassDay = (s.class_days || []).includes(dayKey);
-      
-      // 💡 정규 수업 표시 여부 결정
-      let shouldShowRegular = false;
-      const hasRegularLogActivity = regularLog && (
-        regularLog.completed_classwork_text || 
-        regularLog.homework_text || 
-        regularLog.moved_to_hour || 
-        (regularLog.attendance_status && regularLog.attendance_status !== 'none' && regularLog.attendance_status !== 'absent')
-      );
-
-      if (isRegularClassDay) {
-        shouldShowRegular = true;
-      } else if (hasRegularLogActivity) {
-        // 보강/시간이동/출석체크/일지작성 등 당일 정규 수업 활동이 있는 경우 완벽 노출
-        shouldShowRegular = true;
-      } else if (!hasAnyElective) {
-        // 특강이 아예 없는 학생은 기존처럼 정규 행 출력
-        shouldShowRegular = true;
-      } else if (!isElectiveDay) {
-        // 특강이 있는 학생이지만 오늘은 특강 요일도 아니고 정규 요일도 아닌 경우
-        shouldShowRegular = true;
-      }
-
-      if (shouldShowRegular) {
-
-        const pastRegularLogs = (s.allLogs || [])
-          .filter((l: any) => (l.date || l.session_date) < selectedDate && (l.course_name === '정규' || !l.course_name) && (l.homework_text || l.completed_classwork_text))
-          .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
-
-        const regularLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
-        const realId = s.originalId || s.id;
-
-        expandedResult.push({
-          ...s,
-          id: realId,
-          originalId: realId,
-          isSpecialClass: false,
-          courseName: '정규',
-          day_schedules: {
-            ...s.day_schedules,
-            [dayKey]: regularHours
-          },
-          lastSession: regularLastSession,
-          todaySession: regularLog || s.todaySession
-        });
-      }
-    });
-    result = expandedResult;
-
-    // 💡 [안정화] 결석/출석 접기 순환 필터링을 특강 분할 팽창 이후로 이동하여 특강생 결석 여부도 완벽 감지
-    if (hideAbsent !== 'all') {
-      result = result.filter((s: any) => {
-        const status = normalizeAttendanceStatus(s.todaySession?.attendance_status);
-        if (hideAbsent === 'absent') {
-          // 결석한 학생만 표시
-          return status === ATTENDANCE_STATUS.ABSENT;
-        }
-        if (hideAbsent === 'attend') {
-          // 출석한 학생(결석 아니면 다 포함)만 표시
-          return status !== ATTENDANCE_STATUS.ABSENT;
-        }
-        return true;
-      });
-    }
-    
-    if (focusColumn === 'test_id') {
-      result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
-    }
-
-    const getStartTime = (st: any) => {
-      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-        const mVal = st.todaySession.moved_to_hour;
-        let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
-        if (h < 10) h += 12;
-        return h;
-      }
-      const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-      if (stat.includes(':')) { 
-        const match = stat.match(/(\d{1,2}):/);
-        if (match) {
-          let val = parseInt(match[1], 10);
-          if (!isNaN(val) && val < 24) {
-            if (val < 8) val += 12;
-            return val;
-          }
-        }
-      }
-
-      // 스케줄 적용 (특강/정규 개별 적용)
-      const hours = st.day_schedules?.[dayKey] || [];
-      if (hours.length > 0) {
-        const firstVal = hours[0];
-        let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-        if (h < 10) h += 12;
-        return h;
-      }
-      return 999;
-    };
-
-    // 💡 [시간 정밀 필터] 확장된 독립 가상 행 단위로 선택 시간대와 불일치하는 행만 정밀 여과합니다.
-    if (selectedFilter !== 'Discharged' && selectedHour && selectedHour !== 'All') {
-      const matchHour = parseInt(selectedHour, 10);
-      result = result.filter((st: any) => {
-        const stHour = getStartTime(st);
-        return stHour === matchHour;
-      });
-    }
-
-    return result.sort((a: any, b: any) => {
-      let comparison = 0;
-      if (sortMode === 'grade') {
-        const gradeA = getGradeWeight(a.grade);
-        const gradeB = getGradeWeight(b.grade);
-        if (gradeA !== gradeB) {
-          comparison = gradeA - gradeB;
-          return sortDirection === 'asc' ? comparison : -comparison;
-        }
-      } else if (sortMode === 'time') {
-        const timeA = getStartTime(a);
-        const timeB = getStartTime(b);
-        if (timeA !== timeB) {
-          comparison = timeA - timeB;
-          return sortDirection === 'asc' ? comparison : -comparison;
-        }
-      } else if (sortMode === 'school') {
-        const schoolCmp = (a.school || '').localeCompare(b.school || '', 'ko');
-        if (schoolCmp !== 0) return sortDirection === 'asc' ? schoolCmp : -sortDirection;
-        const gradeA = getGradeWeight(a.grade);
-        const gradeB = getGradeWeight(b.grade);
-        if (gradeA !== gradeB) {
-          comparison = gradeA - gradeB;
-          return sortDirection === 'asc' ? comparison : -comparison;
-        }
-      }
-      comparison = a.name.localeCompare(b.name, 'ko');
-      return sortDirection === 'asc' ? comparison : -comparison;
-    });
-  }, [students, focusColumn, sortMode, sortDirection, selectedDate, hiddenStudentIds, hideAbsent, selectedHour, selectedFilter]);
+  const {
+    selectedIds,
+    setSelectedIds,
+    handleSelectOne,
+    handleSelectAll,
+    handleCycleSelectAll,
+    selectCycleMode,
+    handleRemoveSelectedStudents
+  } = useTodaySheetSelection({
+    filteredStudents,
+    onRemoveFromToday
+  });
 
   // 3. Callbacks
   const isCellInRange = useCallback((studentId: string, colId: string) => {
@@ -990,7 +739,7 @@ export default function TodaySheet({
     const student = students.find((s: any) => s.id === realId);
     // 💡 [버그 완치] 특강 행일 때는 정규 수업 세션(student?.todaySession)을 절대 함부로 도용하지 않습니다!
     // 오직 해당 행의 고유 세션(rowStudent?.todaySession)만을 철저히 고수하여 크로스 오버를 완벽 차단합니다.
-    const session = rowStudent?.todaySession || {};
+    const session: any = rowStudent?.todaySession || {};
     
     const prevData: any = {};
     const filteredNewData: any = {};
@@ -1112,13 +861,14 @@ export default function TodaySheet({
         updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
       }
 
+      const isMatchingRow = String(s.id) === String(match.studentId);
       const isRegularCourse = courseName === '정규' || !courseName;
 
       return {
         ...s,
         ...(hasMission ? { recent_mission: match.newData.mission } : {}),
         ...(hasNotes ? { management_notes: match.newData.management_notes } : {}),
-        ...(isRegularCourse ? { todaySession: newSess } : {}),
+        ...(isRegularCourse || isMatchingRow ? { todaySession: newSess } : {}),
         allLogs: updatedAllLogs
       };
     }));
@@ -1273,28 +1023,7 @@ export default function TodaySheet({
     onDateChange
   });
 
-  const handleSelectAll = useCallback((checked: boolean) => { setSelectedIds(checked ? students.map((s: any) => s.id) : []); }, [students]);
-  const handleSelectOne = useCallback((id: string, checked: boolean, shiftKey: boolean = false) => { 
-    if (shiftKey && lastSelectedId) {
-      const lastIdx = filteredStudents.findIndex((s: any) => s.id === lastSelectedId);
-      const currIdx = filteredStudents.findIndex((s: any) => s.id === id);
-      if (lastIdx !== -1 && currIdx !== -1) {
-        const start = Math.min(lastIdx, currIdx);
-        const end = Math.max(lastIdx, currIdx);
-        const idsInRange = filteredStudents.slice(start, end + 1).map((s: any) => s.id);
-        setSelectedIds(prev => {
-          const newSet = new Set(prev);
-          if (checked) { idsInRange.forEach((i: any) => newSet.add(i)); }
-          else { idsInRange.forEach((i: any) => newSet.delete(i)); }
-          return Array.from(newSet);
-        });
-        setLastSelectedId(id);
-        return;
-      }
-    }
-    setSelectedIds(prev => checked ? [...prev, id] : prev.filter(i => i !== id));
-    setLastSelectedId(id);
-  }, [filteredStudents, lastSelectedId]);
+
 
   const onCellMouseDown = useCallback((e: React.MouseEvent, studentId: string, colId: string) => {
     if (['select', 'action'].includes(colId)) return;
@@ -1718,75 +1447,45 @@ export default function TodaySheet({
               {isFullScreen && (
                 <>
                   <div className="h-4 w-px bg-[#edece9]" />
-
-                  {/* 담당 선생님 필터 (라벨 제거) */}
-                  <select 
-                    value={selectedTeacherId} 
-                    onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className="bg-white border border-[#edece9] rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold text-[#37352f] outline-none focus:border-blue-500 shadow-sm"
-                  >
-                    <option value="All">전체 선생님</option>
-                    {teachers.map((t: any) => (
-                      <option key={t.id} value={t.id}>{t.name} ({t.initials || '?'})</option>
-                    ))}
-                  </select>
-
-                  <div className="h-4 w-px bg-[#edece9]" />
-
-                  {/* 학년 필터 (라벨 제거 & 초/중/고 축소) */}
-                  <div className="flex bg-white rounded-[4px] p-0.5 border border-gray-300 shadow-sm">
-                    {[
-                      { label: 'ALL', key: 'All' }, { label: '초', key: '초' }, { label: '중', key: '중' }, { label: '고', key: '고' }
-                    ].map((g) => (
-                      <button 
-                        key={g.key} 
-                        onClick={() => setSelectedFilter(g.key)} 
-                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-850'}`}
-                      >
-                        {g.label}
-                      </button>
-                    ))}
-                  </div>
-
-                  <div className="h-4 w-px bg-gray-250" />
-
-                  {/* 요일 필터 (라벨 제거) */}
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex gap-[3px]">
-                      {['월', '화', '수', '목', '금', '토', '일'].map((day) => {
-                        const isActive = selectedDays.includes(day);
-                        return (
-                          <button 
-                            key={day} 
-                            onClick={() => {
-                              if (selectedDays.includes(day)) {
-                                setSelectedDays(selectedDays.filter((d: string) => d !== day));
-                              } else {
-                                setSelectedDays([...selectedDays, day]);
-                              }
-                            }} 
-                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-white border border-gray-300 text-gray-500 hover:bg-gray-100 hover:text-gray-800 shadow-sm'}`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {selectedDays.length > 0 && (
-                      <button 
-                        onClick={() => setIsAndFilter(!isAndFilter)} 
-                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-50 border-indigo-250 text-indigo-700 shadow-sm font-bold' : 'bg-white border border-gray-300 text-gray-500 hover:text-gray-800'}`}
-                      >
-                        {isAndFilter ? 'AND' : 'OR'}
-                      </button>
-                    )}
-                  </div>
                 </>
               )}
             </div>
 
             {/* 2행 오른쪽: 정렬, 선택 숨김 제어, 화면 컨트롤 */}
-            <div className="flex flex-wrap items-center gap-4 ml-auto justify-end">
+            <div className="flex flex-nowrap items-center gap-3 ml-auto justify-end shrink-0">
+              {/* 선택 학생 숨김 / 전체 해제 버튼 (이력 왼쪽 배치) */}
+              {(selectedIds.length > 0 || hiddenStudentIds.length > 0) && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  {selectedIds.length > 0 && (
+                    <button
+                      onClick={() => {
+                        setHiddenStudentIds(prev => [
+                          ...prev,
+                          ...selectedIds.map((id: string) => extractRealStudentId(id))
+                        ]);
+                        setSelectedIds([]);
+                      }}
+                      className="px-2 py-1 rounded-[4px] bg-red-50 border border-red-300 text-red-700 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black shadow-sm cursor-pointer"
+                      title="선택한 학생들을 임시로 숨깁니다"
+                    >
+                      <EyeOff size={10} />
+                      숨김 ({selectedIds.length})
+                    </button>
+                  )}
+                  {hiddenStudentIds.length > 0 && (
+                    <button
+                      onClick={() => setHiddenStudentIds([])}
+                      className="px-2 py-1 rounded-[4px] bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-650 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black shadow-sm cursor-pointer"
+                      title="숨겨진 학생들을 모두 다시 표시합니다"
+                    >
+                      <Eye size={10} />
+                      해제 ({hiddenStudentIds.length})
+                    </button>
+                  )}
+                  <div className="h-4 w-px bg-[#edece9]" />
+                </div>
+              )}
+
               {/* 이전 기록 개수 설정 */}
               <div className="flex items-center gap-1.5 bg-white rounded-[4px] px-2 py-0.5 border border-[#edece9] shadow-sm">
                 <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-1">이력</span>
@@ -1810,22 +1509,24 @@ export default function TodaySheet({
 
               <div className="h-4 w-px bg-[#edece9]" />
 
-              {/* 정렬 방식 및 방향 필터 */}
-              <div className="flex items-center gap-2">
+              {/* 순환형 정렬(Sort) 스마트 버튼 + UP/DOWN 방향 유지 */}
+              <div className="flex items-center gap-1.5">
                 <span className="text-[9px] font-black text-gray-550 uppercase tracking-widest">Sort</span>
-                <div className="flex bg-white rounded-[4px] p-0.5 border border-gray-300 shadow-sm">
-                  {[
-                    { label: '시간순', key: 'time' }, { label: '이름순', key: 'name' }, { label: '학년순', key: 'grade' }, { label: '학교순', key: 'school' }
-                  ].map((m) => (
-                    <button 
-                      key={m.key} 
-                      onClick={() => onSortModeChange(m.key as any)} 
-                      className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${sortMode === m.key ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-500 hover:text-gray-800'}`}
-                    >
-                      {m.label}
-                    </button>
-                  ))}
-                </div>
+                <button
+                  onClick={() => {
+                    const modes: ('time' | 'name' | 'grade' | 'school')[] = ['time', 'name', 'grade', 'school'];
+                    const nextIdx = (modes.indexOf(sortMode) + 1) % modes.length;
+                    onSortModeChange(modes[nextIdx]);
+                  }}
+                  className="px-2.5 py-1 rounded-[4px] bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white transition-all text-[9.5px] font-black uppercase shadow-sm cursor-pointer flex items-center gap-1"
+                  title="클릭 시: 시간순 -> 이름순 -> 학년순 -> 학교순 순환 정렬"
+                >
+                  {sortMode === 'time' && '⏰ 시간순'}
+                  {sortMode === 'name' && '🔤 이름순'}
+                  {sortMode === 'grade' && '🎓 학년순'}
+                  {sortMode === 'school' && '🏫 학교순'}
+                </button>
+
                 <button 
                   onClick={() => onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')}
                   className="px-2 py-1 rounded-[4px] bg-white border border-gray-300 text-gray-700 hover:text-black hover:bg-gray-100/60 transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
@@ -1835,34 +1536,6 @@ export default function TodaySheet({
                   {sortDirection === 'asc' ? 'UP' : 'DOWN'}
                 </button>
               </div>
-
-              {(selectedIds.length > 0 || hiddenStudentIds.length > 0) && (
-                <div className="flex items-center gap-1.5">
-                  {selectedIds.length > 0 && (
-                    <button
-                      onClick={() => {
-                        setHiddenStudentIds(prev => [...prev, ...selectedIds]);
-                        setSelectedIds([]);
-                      }}
-                      className="px-2 py-1 rounded-[4px] bg-red-50 border border-red-300 text-red-700 hover:bg-red-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
-                      title="선택한 학생들을 임시로 숨깁니다"
-                    >
-                      <EyeOff size={10} />
-                      숨김 ({selectedIds.length})
-                    </button>
-                  )}
-                  {hiddenStudentIds.length > 0 && (
-                    <button
-                      onClick={() => setHiddenStudentIds([])}
-                      className="px-2 py-1 rounded-[4px] bg-blue-50 border border-blue-250 text-blue-700 hover:bg-blue-600 hover:text-white transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
-                      title="숨겨진 학생들을 모두 다시 표시합니다"
-                    >
-                      <Eye size={10} />
-                      해제 ({hiddenStudentIds.length})
-                    </button>
-                  )}
-                </div>
-              )}
 
               <div className="h-4 w-px bg-[#edece9]" />
 
@@ -1936,7 +1609,7 @@ export default function TodaySheet({
           onScroll={handleScroll}
         >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} isAllSelected={students.length > 0 && selectedIds.length === students.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} onCycleSelectAll={handleCycleSelectAll} selectCycleMode={selectCycleMode} isAllSelected={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} /></thead>
           <tbody className="divide-y divide-[#edece9] bg-white">
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
@@ -2052,40 +1725,25 @@ export default function TodaySheet({
       )}
 
       <AnimatePresence>{isReportVisible && <ReportPreview students={students} selectedDate={selectedDate} academyInfo={academyInfo} isSendingReport={isSendingReport} handleSendIndividual={handleSendIndividual} />}</AnimatePresence>
-      <PrintPreviewModal
-        isOpen={isPrintPreviewOpen}
-        onClose={() => setIsPrintPreviewOpen(false)}
-        students={filteredStudents}
+      {/* 💡 [리팩토링 Step 2-2] 라이트 버전 팝업 모달 서브 컴포넌트로 격리 */}
+      <TodaySheetModals
+        isPrintPreviewOpen={isPrintPreviewOpen}
+        setIsPrintPreviewOpen={setIsPrintPreviewOpen}
+        isCardPrintOpen={isCardPrintOpen}
+        setIsCardPrintOpen={setIsCardPrintOpen}
+        isHokmaPrintOpen={isHokmaPrintOpen}
+        setIsHokmaPrintOpen={setIsHokmaPrintOpen}
+        isTagModalOpen={isTagBatchMode}
+        setIsTagModalOpen={setIsTagBatchMode}
+        filteredStudents={filteredStudents}
         selectedDate={selectedDate}
         academyInfo={academyInfo}
+        teachers={teachers}
+        masterTextbooks={masterTextbooks}
+        currentUser={currentUser}
+        onBatchSave={handleBatchSave}
         activeColumns={activeColumns}
         columnWidths={colWidths}
-      />
-      <StudentReportCardPrintModal
-        isOpen={isCardPrintOpen}
-        onClose={() => setIsCardPrintOpen(false)}
-        students={selectedIds.length > 0 ? filteredStudents.filter((s: any) => selectedIds.includes(s.id)) : filteredStudents}
-        selectedDate={selectedDate}
-        academyInfo={academyInfo}
-      />
-      <HokmaJournalPrintModal
-        isOpen={isHokmaPrintOpen}
-        onClose={() => setIsHokmaPrintOpen(false)}
-        selectedStudents={selectedIds.length > 0 ? filteredStudents.filter((s: any) => selectedIds.includes(s.id)) : filteredStudents}
-        allStudents={allStudents && allStudents.length > 0 ? allStudents : students}
-        selectedTeacherId={selectedTeacherId}
-        masterTextbooks={masterTextbooks}
-        initialMonth={selectedDate.substring(0, 7)}
-        academyInfo={academyInfo}
-      />
-
-      {/* 태그별 일괄입력 모달 */}
-      <TagBatchInputModal
-        isOpen={isTagBatchMode}
-        onClose={() => setIsTagBatchMode(false)}
-        students={filteredStudents}
-        selectedIds={selectedIds}
-        onBatchSave={handleBatchSave}
       />
     </div>
   );

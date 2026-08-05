@@ -78,11 +78,13 @@ export default function TeacherTasks({
   const [makeupTime, setMakeupTime] = useState<string>('19:00'); // 디폴트 19:00
   const [makeupEndTime, setMakeupEndTime] = useState<string>('21:00'); // 보강 종료 시간
   const [makeupType, setMakeupType] = useState<string>('진도 보강'); // 보강 유형
+  const [makeupReason, setMakeupReason] = useState<string>('');
   const [makeupSearch, setMakeupSearch] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
   const [makeupGradeFilter, setMakeupGradeFilter] = useState<string>('all');
   const [makeupDayFilter, setMakeupDayFilter] = useState<string>('all');
   const [showOnlyMyStudentsInMakeup, setShowOnlyMyStudentsInMakeup] = useState<boolean>(true);
+  const [courseFilterMode, setCourseFilterMode] = useState<'all' | 'regularOnly' | 'electiveOnly'>('all');
 
   // 보강 카드 검색 및 기간 필터 state
   const [makeupCardSearch, setMakeupCardSearch] = useState<string>('');
@@ -365,13 +367,23 @@ export default function TeacherTasks({
           return false;
         };
 
-        const payloads = selectedStudentIds.map(studentId => {
-          const student = students.find(s => s.id === studentId);
-          const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
-          const isScheduledToday = checkIsScheduledOnDate(student, makeupDate);
+        const payloads = selectedStudentIds.map(itemKey => {
+          // itemKey 형식: "student_123" (정규) 또는 "student_123_special_기하" (특강)
+          let realStudentId = itemKey;
+          let courseName = '정규';
 
+          if (itemKey.includes('_special_')) {
+            const parts = itemKey.split('_special_');
+            realStudentId = parts[0];
+            courseName = parts[1] || '특강';
+          }
+
+          const student = students.find(s => s.id === realStudentId);
+          const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
+
+          const noteText = makeupReason.trim() ? `[${makeupType}] (${makeupReason.trim()})` : `[${makeupType}]`;
           return {
-            student_id: studentId,
+            student_id: realStudentId,
             student_name: student?.name || '학생',
             academy_id: academyInfo.id,
             session_date: makeupDate,
@@ -379,8 +391,8 @@ export default function TeacherTasks({
             attendance_reason: '보강 수업',
             moved_to_hour: hour,
             status: 'none',
-            special_notes: `[${makeupType}]`,
-            course_name: '정규'
+            special_notes: noteText,
+            course_name: courseName
           };
         });
 
@@ -395,6 +407,7 @@ export default function TeacherTasks({
         setMakeupGradeFilter('all');
         setMakeupDayFilter('all');
         setMakeupType('진도 보강');
+        setMakeupReason('');
         setMakeupEndTime('21:00');
         setShowOnlyMyStudentsInMakeup(true);
         setIsMakeupModalOpen(false);
@@ -429,12 +442,16 @@ export default function TeacherTasks({
     setMakeupTime(startTime);
     setMakeupEndTime(endTime || `${String(parseInt(startTime.split(':')[0]) + 2).padStart(2, '0')}:00`);
 
-    // 보강 유형 파싱 (첫 번째 아이템의 특이사항 기준)
+    // 보강 유형 및 결석 원인 날짜 파싱
     const firstItem = group.items[0];
     const notes = firstItem?.special_notes || '';
     const typeMatch = notes.match(/^\[(.*?)\]/);
     const type = typeMatch ? typeMatch[1] : '진도 보강';
+    const reasonMatch = notes.match(/\((.*?)\)/);
+    const reason = reasonMatch ? reasonMatch[1] : '';
+
     setMakeupType(type);
+    setMakeupReason(reason);
 
     setIsMakeupModalOpen(true);
   };
@@ -531,49 +548,95 @@ export default function TeacherTasks({
   }, [tasks, currentUser, showOnlyMyTasks, hiddenTaskIds]);
 
   const filteredStudents = useMemo(() => {
-    return students
-      .filter(s => {
-        if (s.is_deleted) return false;
+    const list: any[] = [];
 
-        // 내 학생만 보기 필터링 (활성화된 경우)
-        if (showOnlyMyStudentsInMakeup && currentUser?.id) {
-          if (s.teacher_id !== currentUser.id) return false;
+    students.forEach(s => {
+      if (s.is_deleted) return;
+
+      // 내 학생만 보기 필터링 (내가 담임인 학생만 노출)
+      if (showOnlyMyStudentsInMakeup && currentUser?.id) {
+        if (s.teacher_id !== currentUser.id) return;
+      }
+
+      // 1. 학년 필터링
+      if (makeupGradeFilter !== 'all') {
+        const gradeStr = s.grade || '';
+        if (!gradeStr.includes(makeupGradeFilter)) return;
+      }
+
+      // 수강 중인 선택과목(특강) 목록 파싱
+      let electiveCourses: any[] = [];
+      const rawElective = s.book_courses?.['__elective_courses'];
+      if (rawElective) {
+        try {
+          const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : Array.isArray(rawElective) ? rawElective : [];
+          if (Array.isArray(parsed)) electiveCourses = parsed;
+        } catch (e) {}
+      }
+
+      // 2. 요일 필터링 (정규 요일 / 선택과목 요일 체크)
+      const regularDays = s.class_days || [];
+      const isRegularMatchingDay = makeupDayFilter === 'all' || regularDays.includes(makeupDayFilter);
+
+      // 3. 텍스트 검색어 필터링
+      const query = makeupSearch.trim().toLowerCase().replace(/\s+/g, '');
+      const daysMap: { [key: string]: string } = {
+        '월요일': '월', '화요일': '화', '수요일': '수', '목요일': '목',
+        '금요일': '금', '토요일': '토', '일요일': '일'
+      };
+      const cleanQuery = daysMap[query] || query;
+
+      const nameMatch = query ? s.name.toLowerCase().replace(/\s+/g, '').includes(query) : true;
+      const gradeMatch = query && s.grade ? s.grade.toLowerCase().replace(/\s+/g, '').includes(query) : false;
+      const classMatch = query && s.class ? s.class.toLowerCase().replace(/\s+/g, '').includes(query) : false;
+      const dayMatch = query && s.class_days ? s.class_days.some((d: string) => d.toLowerCase().includes(cleanQuery)) : false;
+      const isSearchMatch = !query || (nameMatch || gradeMatch || classMatch || dayMatch);
+
+      // (A) 정규 수업 항목 추가
+      if (isRegularMatchingDay && isSearchMatch) {
+        if (courseFilterMode !== 'electiveOnly') {
+          list.push({
+            ...s,
+            itemKey: s.id,
+            displayName: s.name,
+            courseName: '정규'
+          });
         }
+      }
 
-        // 1. 학년 필터링
-        if (makeupGradeFilter !== 'all') {
-          const gradeStr = s.grade || '';
-          if (!gradeStr.includes(makeupGradeFilter)) return false;
-        }
+      // (B) 선택과목(특강) 수강생인 경우 선택과목 독립 항목 (예: [기하] 김시윤) 추가
+      if (courseFilterMode !== 'regularOnly') {
+        electiveCourses.forEach((c: any) => {
+          if (!c) return;
+          const subject = c.subject?.trim() || '특강';
+          const courseDays = Array.isArray(c.days) ? c.days : (typeof c.days === 'string' ? c.days.split(/[,\s]+/) : []);
+          const isElectiveMatchingDay = makeupDayFilter === 'all' || courseDays.includes(makeupDayFilter);
+          const subjectMatch = query ? subject.toLowerCase().includes(query) : false;
 
-        // 2. 요일 필터링
-        if (makeupDayFilter !== 'all') {
-          const days = s.class_days || [];
-          if (!days.includes(makeupDayFilter)) return false;
-        }
+          if (isElectiveMatchingDay && (isSearchMatch || subjectMatch)) {
+            list.push({
+              ...s,
+              itemKey: `${s.id}_special_${subject}`,
+              displayName: `[${subject}] ${s.name}`,
+              courseName: subject
+            });
+          }
+        });
+      }
+    });
 
-        // 3. 텍스트 검색어 필터링 (이름, 학년, 요일, 반 이름 복합 매칭)
-        if (makeupSearch.trim()) {
-          const query = makeupSearch.toLowerCase().replace(/\s+/g, '');
-          
-          const nameMatch = s.name.toLowerCase().replace(/\s+/g, '').includes(query);
-          const gradeMatch = s.grade ? s.grade.toLowerCase().replace(/\s+/g, '').includes(query) : false;
-          const classMatch = s.class ? s.class.toLowerCase().replace(/\s+/g, '').includes(query) : false;
-          
-          const daysMap: { [key: string]: string } = {
-            '월요일': '월', '화요일': '화', '수요일': '수', '목요일': '목',
-            '금요일': '금', '토요일': '토', '일요일': '일'
-          };
-          const cleanQuery = daysMap[query] || query;
-          const dayMatch = s.class_days ? s.class_days.some((d: string) => d.toLowerCase().includes(cleanQuery)) : false;
+    // 가나다순 정렬 (1. 학생 이름 가나다순 -> 2. 동일 학생 내 과목 가나다순: '정규' 우선)
+    list.sort((a, b) => {
+      const nameCompare = a.name.localeCompare(b.name, 'ko');
+      if (nameCompare !== 0) return nameCompare;
+      
+      if (a.courseName === '정규') return -1;
+      if (b.courseName === '정규') return 1;
+      return a.courseName.localeCompare(b.courseName, 'ko');
+    });
 
-          if (!(nameMatch || gradeMatch || classMatch || dayMatch)) return false;
-        }
-
-        return true;
-      })
-      .slice(0, 30);
-  }, [students, makeupSearch, makeupGradeFilter, makeupDayFilter, showOnlyMyStudentsInMakeup, currentUser]);
+    return list;
+  }, [students, makeupSearch, makeupGradeFilter, makeupDayFilter, showOnlyMyStudentsInMakeup, courseFilterMode, currentUser]);
 
   const getMakeupTimeKey = useCallback((makeup: any) => {
     // 1. 시간이동 정보(moved_to_hour) 최우선 적용
@@ -599,7 +662,17 @@ export default function TeacherTasks({
 
   const filteredMakeups = useMemo(() => {
     const todayStr = getTodayStr();
+    const isAdmin = currentUser?.role === 'admin' || currentUser?.role === 'master';
+
     return makeups.filter(makeup => {
+      // 💡 [철통 보안 패치] 일반 선생님(teacher) 로그인 시 100% 오직 '본인 담당 학생' 보강 카드만 노출 (담당자 미지정 포함 타 학생 완전 차단)
+      if (!isAdmin && currentUser?.id) {
+        const studentObj = students.find(s => s.id === makeup.student_id);
+        if (!studentObj || studentObj.teacher_id !== currentUser.id) {
+          return false;
+        }
+      }
+
       // 1. 기간 필터링
       if (makeupCardPeriod === 'today') {
         if (makeup.session_date < todayStr) return false;
@@ -623,7 +696,7 @@ export default function TeacherTasks({
 
       return true;
     });
-  }, [makeups, makeupCardPeriod, makeupCardStartDate, makeupCardEndDate, makeupCardSearch, students]);
+  }, [makeups, makeupCardPeriod, makeupCardStartDate, makeupCardEndDate, makeupCardSearch, students, currentUser]);
 
   const groupedMakeups = useMemo(() => {
     const groups: Record<string, {
@@ -978,6 +1051,8 @@ export default function TeacherTasks({
                           <div className="space-y-2 max-h-48 overflow-y-auto pr-0.5 custom-scrollbar-v">
                             {group.items.map((makeup) => {
                               const studentObj = students.find(s => s.id === makeup.student_id);
+                              const teacherObj = teachers.find(t => t.id === studentObj?.teacher_id);
+                              const teacherName = teacherObj?.name || '담당미지정';
                               const isCompleted = makeup.attendance_status === '출석' || makeup.attendance_status === '결석' || makeup.attendance_status === '지각';
                               const monthlyCount = getMonthlyMakeupCount(makeup.student_id, makeup.session_date, makeup.id);
                               
@@ -990,6 +1065,20 @@ export default function TeacherTasks({
                                         <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-blue-500/15 text-blue-400 border border-blue-500/30 rounded shrink-0">
                                           이번 달 {monthlyCount}회차
                                         </span>
+                                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded shrink-0">
+                                          담당: {teacherName}
+                                        </span>
+                                        {(() => {
+                                          const notes = makeup.special_notes || '';
+                                          const rMatch = notes.match(/\((.*?)\)/);
+                                          const reasonText = rMatch ? rMatch[1] : null;
+                                          if (!reasonText) return null;
+                                          return (
+                                            <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded shrink-0 flex items-center gap-0.5">
+                                              📅 {reasonText}
+                                            </span>
+                                          );
+                                        })()}
                                       </div>
                                       <span className="text-[8.5px] font-black text-gray-500 uppercase mt-0.5">
                                         {studentObj?.grade || '정보없음'}
@@ -1353,19 +1442,34 @@ export default function TeacherTasks({
                   </div>
                 </div>
 
-                {/* 보강 구분 셀렉트 박스 */}
-                <div className="space-y-1">
-                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">보강 구분</label>
-                  <select 
-                    value={makeupType}
-                    onChange={(e) => setMakeupType(e.target.value)}
-                    className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
-                  >
-                    <option value="진도 보강">진도 보강</option>
-                    <option value="시험 보강">시험 보강</option>
-                    <option value="결석 보강">결석 보강</option>
-                    <option value="기타 보강">기타 보강</option>
-                  </select>
+                {/* 보강 구분 & 결석 원인 날짜 입력 */}
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">보강 구분</label>
+                    <select 
+                      value={makeupType}
+                      onChange={(e) => setMakeupType(e.target.value)}
+                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+                    >
+                      <option value="진도 보강">진도 보강</option>
+                      <option value="시험 보강">시험 보강</option>
+                      <option value="결석 보강">결석 보강</option>
+                      <option value="기타 보강">기타 보강</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                      결석 원인 날짜 <span className="text-[8px] font-normal text-gray-500">(선택)</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={makeupReason}
+                      onChange={(e) => setMakeupReason(e.target.value)}
+                      placeholder="예: 8/2 결석분"
+                      className="w-full bg-white/5 border border-amber-500/30 rounded-lg px-3 py-2 text-xs text-amber-200 placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-all"
+                    />
+                  </div>
                 </div>
 
                 {/* 수정 모드일 때 기존 학생 목록 표시 */}
@@ -1427,9 +1531,31 @@ export default function TeacherTasks({
                     </div>
                   </div>
 
-                  {/* 원장용 내 학생만 보기 체크박스 */}
-                  {(currentUser?.role === 'admin' || currentUser?.role === 'master') && (
-                    <div className="flex justify-end px-1 pt-1">
+                  {/* 내 담당 학생만 보기 & 정규만 / 선택과목만 필터 체크박스 바 */}
+                  <div className="flex items-center justify-between px-1 pt-1 border-t border-white/5">
+                    <div className="flex items-center gap-3">
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox"
+                          checked={courseFilterMode === 'regularOnly'}
+                          onChange={(e) => setCourseFilterMode(e.target.checked ? 'regularOnly' : 'all')}
+                          className="w-3.5 h-3.5 rounded border border-white/20 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-500"
+                        />
+                        <span className="text-[10px] font-bold text-gray-300 hover:text-white transition-all">정규만</span>
+                      </label>
+                      
+                      <label className="flex items-center gap-1.5 cursor-pointer select-none">
+                        <input 
+                          type="checkbox"
+                          checked={courseFilterMode === 'electiveOnly'}
+                          onChange={(e) => setCourseFilterMode(e.target.checked ? 'electiveOnly' : 'all')}
+                          className="w-3.5 h-3.5 rounded border border-white/20 bg-black/40 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-500"
+                        />
+                        <span className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-all">선택과목만</span>
+                      </label>
+                    </div>
+
+                    {(currentUser?.role === 'admin' || currentUser?.role === 'master') && (
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
                         <input 
                           type="checkbox"
@@ -1439,8 +1565,8 @@ export default function TeacherTasks({
                         />
                         <span className="text-[10px] font-black text-gray-400 hover:text-white transition-all uppercase tracking-wider">내 담당 학생만 보기</span>
                       </label>
-                    </div>
-                  )}
+                    )}
+                  </div>
 
                   <div className="relative">
                     <Search className="absolute left-3 top-2.5 text-gray-600" size={14} />
@@ -1470,20 +1596,38 @@ export default function TeacherTasks({
 
                       <div className="max-h-48 overflow-y-auto border border-white/10 rounded-lg p-1 bg-black/60 space-y-0.5 custom-scrollbar-v">
                         {filteredStudents.map(s => {
-                          const isSelected = selectedStudentIds.includes(s.id);
+                          const itemKey = s.itemKey || s.id;
+                          const isSelected = selectedStudentIds.includes(itemKey);
+                          const isSpecial = itemKey.includes('_special_');
+                          const courseSubject = s.courseName || '정규';
                           return (
                             <div 
-                              key={s.id}
+                              key={itemKey}
                               onClick={() => {
-                                setSelectedStudentIds(prev => isSelected ? prev.filter(id => id !== s.id) : [...prev, s.id]);
+                                setSelectedStudentIds(prev => isSelected ? prev.filter(id => id !== itemKey) : [...prev, itemKey]);
                               }}
-                              className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-xs font-bold transition-all ${isSelected ? 'bg-blue-600/20 text-blue-400' : 'hover:bg-white/5 text-gray-400 hover:text-white'}`}
+                              className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-xs font-bold transition-all ${
+                                isSelected 
+                                  ? (isSpecial ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-blue-600/20 text-blue-400 border border-blue-500/30') 
+                                  : 'hover:bg-white/5 text-gray-400 hover:text-white'
+                              }`}
                             >
-                              <span>{s.name} ({s.grade || '학년미정'} | {s.class_days && s.class_days.length > 0 ? [...s.class_days].sort((a, b) => {
-                                const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-                                return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
-                              }).join('') : '요일미정'})</span>
-                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${isSelected ? 'border-blue-500 bg-blue-600 text-white' : 'border-white/20'}`}>
+                              <div className="flex items-center gap-1.5">
+                                {isSpecial && (
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                    {courseSubject}
+                                  </span>
+                                )}
+                                <span>{s.name} ({s.grade || '학년미정'} | {s.class_days && s.class_days.length > 0 ? [...s.class_days].sort((a, b) => {
+                                  const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                                  return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+                                }).join('') : '요일미정'})</span>
+                              </div>
+                              <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
+                                isSelected 
+                                  ? (isSpecial ? 'border-amber-500 bg-amber-500 text-black font-black' : 'border-blue-500 bg-blue-600 text-white') 
+                                  : 'border-white/20'
+                              }`}>
                                 {isSelected && <Check size={10} strokeWidth={4} />}
                               </div>
                             </div>
@@ -1498,15 +1642,32 @@ export default function TeacherTasks({
                   {/* Selected Students Chips */}
                   {selectedStudentIds.length > 0 && (
                     <div className="flex flex-wrap gap-1.5 pt-1.5">
-                      {selectedStudentIds.map(id => {
-                        const s = students.find(st => st.id === id);
+                      {selectedStudentIds.map(itemKey => {
+                        let name = '학생';
+                        let isSpecial = false;
+                        if (itemKey.includes('_special_')) {
+                          isSpecial = true;
+                          const parts = itemKey.split('_special_');
+                          const st = students.find(s => s.id === parts[0]);
+                          name = `[${parts[1]}] ${st?.name || '학생'}`;
+                        } else {
+                          const st = students.find(s => s.id === itemKey);
+                          name = st?.name || '학생';
+                        }
                         return (
-                          <div key={id} className="flex items-center gap-1.5 bg-blue-600/10 border border-blue-500/20 px-2 py-1 rounded text-[10px] font-black text-blue-400">
-                            <span>{s?.name}</span>
+                          <div 
+                            key={itemKey} 
+                            className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-black border ${
+                              isSpecial 
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' 
+                                : 'bg-blue-600/10 border-blue-500/20 text-blue-400'
+                            }`}
+                          >
+                            <span>{name}</span>
                             <button 
                               type="button" 
-                              onClick={() => setSelectedStudentIds(prev => prev.filter(item => item !== id))}
-                              className="text-blue-500 hover:text-blue-300 transition-colors"
+                              onClick={() => setSelectedStudentIds(prev => prev.filter(item => item !== itemKey))}
+                              className={isSpecial ? "text-amber-400 hover:text-amber-200 transition-colors" : "text-blue-500 hover:text-blue-300 transition-colors"}
                             >
                               <X size={10} />
                             </button>

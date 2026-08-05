@@ -13,9 +13,9 @@ interface TextbookSystemProps {
   availableTextbooks: TextbookOption[];
   allLogs: any[];
   localCompletedClasswork: string;
-  setLocalCompletedClasswork: (v: string) => void;
+  setLocalCompletedClasswork: (v: string | ((prev: string) => string)) => void;
   localHomework: string;
-  setLocalHomework: (v: string) => void;
+  setLocalHomework: (v: string | ((prev: string) => string)) => void;
   todayPlan: string;
   handleManualSave: (field: 'classwork' | 'completed_classwork' | 'homework' | 'special_notes', value: string) => Promise<void>;
   isSaving: boolean;
@@ -73,11 +73,21 @@ export default function TextbookSystem({
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState({ sheets: 0, pages: 0 });
 
+  // 💡 [실시간 동기화] 방금 추가한 교재가 비동기 DB 리턴 지연 없이 즉시 목록에 뜨도록 로컬 state 관리
+  const [localAssigned, setLocalAssigned] = useState<string[]>(() => student?.assigned_books || []);
+  useEffect(() => {
+    if (student?.assigned_books) {
+      setLocalAssigned(prev => {
+        const merged = Array.from(new Set([...(student.assigned_books || []), ...prev]));
+        return merged;
+      });
+    }
+  }, [student?.assigned_books]);
+
   // 💡 미배정 교재 리스트 필터링
   const unassignedBooks = useMemo(() => {
-    const assigned = student?.assigned_books || [];
-    return (availableTextbooks || []).filter(b => !assigned.includes(b.bookcode) && b.status !== '비활성');
-  }, [availableTextbooks, student?.assigned_books]);
+    return (availableTextbooks || []).filter(b => !localAssigned.includes(b.bookcode) && b.status !== '비활성');
+  }, [availableTextbooks, localAssigned]);
 
   // 💡 학원 설정의 대분류 목록 가져오기 (없으면 기본값)
   const bookCategories = useMemo(() => {
@@ -105,14 +115,12 @@ export default function TextbookSystem({
       setActiveBook(foundBook);
       fetchUnits(initialBookCode);
     }
+    // 🔍 디버그: TextbookSystem 마운트 시 실제로 받는 초기값 확인
+    console.log('[TextbookSystem MOUNT] localCompletedClasswork:', JSON.stringify(localCompletedClasswork), '| localHomework:', JSON.stringify(localHomework));
   }, [initialBookCode, availableTextbooks]);
 
-  // 💡 activeBook 상태가 null이 될 때 부모 컴포넌트에 닫힘 상태 전송
-  useEffect(() => {
-    if (activeBook === null && onBookSelect) {
-      onBookSelect(false);
-    }
-  }, [activeBook, onBookSelect]);
+  // 💡 activeBook이 null이 되면 모달을 닫지 않고 배정된 전체 교재 목록 화면을 보여줍니다.
+  // 모달 닫기는 사용자가 X 버튼을 누를 때 수행됩니다.
 
   useEffect(() => {
     if (selectedPages.length > 1 && (activeUnit || isMergedViewActive)) {
@@ -388,15 +396,18 @@ export default function TextbookSystem({
     const currentText = targetField === 'homework' ? (localHomework || '') : (localCompletedClasswork || '');
     const trimmedCurrent = currentText.trim();
     
-    // 이미 존재하는 동일 텍스트 라인이 없을 때만 추가 (중복 기록 방지 및 안전 결합)
-    const currentLines = trimmedCurrent ? trimmedCurrent.split('\n') : [];
-    if (!currentLines.includes(fullText)) {
-      currentLines.push(fullText);
-    }
-    const newText = currentLines.join('\n');
+    // 🔍 디버그: 저장 시 실제 누적 기준값 확인
+    console.log('[TextbookSystem SAVE]', { targetField, trimmedCurrent, fullText, latestText: trimmedCurrent ? `${trimmedCurrent}\n${fullText}` : fullText });
     
-    if (targetField === 'homework') setLocalHomework(newText); else setLocalCompletedClasswork(newText);
-    await handleManualSave(targetField, newText); 
+    if (targetField === 'homework') {
+      setLocalHomework((prev: string) => prev ? `${prev.trim()}\n${fullText}` : fullText);
+    } else {
+      setLocalCompletedClasswork((prev: string) => prev ? `${prev.trim()}\n${fullText}` : fullText);
+    }
+    
+    // 💡 저장할 때도 최신 누적 텍스트를 확실하게 계산하여 전달
+    const latestText = trimmedCurrent ? `${trimmedCurrent}\n${fullText}` : fullText;
+    await handleManualSave(targetField, latestText); 
     setSelectedPages([]);
     setSelectedUnits([]); 
     setLastClickedUnitIdx(null); 
@@ -422,22 +433,7 @@ export default function TextbookSystem({
       {/* 상단 교재 선택 바 */}
       <div className="relative bg-white/[0.03] border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2 overflow-x-auto py-3 px-4 scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-        {(student.assigned_books || []).filter((code: string) => {
-          const rawVal = student.book_courses?.[code] || '';
-          const { isKeep, targetTag } = parseBookCourseValue(rawVal);
-          if (isKeep) return false;
-          
-          if (selectedCourse === '정규') {
-            // 정규수업 모드: targetTag가 '정규'이거나 '공통'인 교재만 노출
-            return !targetTag || targetTag === '정규' || targetTag === '공통';
-          } else {
-            // 선택과목 모드: targetTag가 해당 선택과목명이거나(예: '선택:방학특강' or '방학특강') '공통'인 교재 노출
-            if (!targetTag || targetTag === '공통') return true;
-            const cleanTag = targetTag.replace(/^선택:\s*/, '').trim();
-            const cleanCourse = selectedCourse.replace(/^선택:\s*/, '').trim();
-            return cleanTag === cleanCourse || targetTag.includes(cleanCourse);
-          }
-        }).map((code: string) => {
+        {(localAssigned || []).map((code: string) => {
           const book = availableTextbooks.find(b => b.bookcode === code); if (!book) return null;
           const isActive = activeBook?.bookcode === code;
           return (
@@ -540,10 +536,17 @@ export default function TextbookSystem({
                     <div className="flex flex-col gap-2 px-1 shrink-0">
                       <div className="flex items-center justify-between pb-1.5 border-b border-white/5">
                         <div className="flex items-center gap-3">
+                          <button
+                            onClick={() => { setActiveBook(null); setSelectedUnits([]); setLastClickedUnitIdx(null); setIsMergedViewActive(false); }}
+                            className="flex items-center gap-1.5 px-2.5 py-1 bg-white/10 hover:bg-white/20 text-white rounded-md text-[11px] font-bold transition-all border border-white/10"
+                          >
+                            <ArrowLeft size={13} />
+                            <span>전체 교재 목록</span>
+                          </button>
                           {selectedUnits.length > 0 ? (
                             <span className="text-[12px] font-black text-blue-400">옵션을 선택해주세요 👇</span>
                           ) : (
-                            <span className="text-[12px] font-black text-blue-400">▶ 단원을 선택해주세요</span>
+                            <span className="text-[12px] font-black text-emerald-400">▶ [{activeBook?.title}] 단원 선택</span>
                           )}
                         </div>
                       </div>
@@ -753,7 +756,8 @@ export default function TextbookSystem({
                     <button
                       key={book.bookcode}
                       onClick={async () => {
-                        const nextBooks = [...(student.assigned_books || []), book.bookcode];
+                        const nextBooks = Array.from(new Set([...localAssigned, book.bookcode]));
+                        setLocalAssigned(nextBooks);
                         if (onUpdateAssignedBooks) {
                           await onUpdateAssignedBooks(nextBooks);
                         }

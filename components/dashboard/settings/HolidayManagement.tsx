@@ -8,9 +8,10 @@ interface HolidayManagementProps {
   holidays: any[];
   onAddHoliday: (date: string, note: string) => Promise<void>;
   onDeleteHoliday: (date: string) => Promise<void>;
+  isAdmin?: boolean;
 }
 
-export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoliday }: HolidayManagementProps) {
+export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoliday, isAdmin = true }: HolidayManagementProps) {
   const [newHoliday, setNewHoliday] = useState('');
   const [holidayNote, setHolidayNote] = useState('');
 
@@ -29,36 +30,39 @@ export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoli
           <h3 className="text-sm font-black text-white uppercase tracking-widest">Academy Holidays (휴일 관리)</h3>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/40 p-6 rounded-lg border border-white/5">
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Holiday Date</label>
-            <input 
-              type="date" 
-              value={newHoliday}
-              onChange={(e) => setNewHoliday(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-white outline-none focus:border-emerald-500 transition-all [color-scheme:dark]"
-            />
+        {/* 관리자(isAdmin)일 때만 휴일 신규 등록 폼 노출 */}
+        {isAdmin && (
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 bg-black/40 p-6 rounded-lg border border-white/5">
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Holiday Date</label>
+              <input 
+                type="date" 
+                value={newHoliday}
+                onChange={(e) => setNewHoliday(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-white outline-none focus:border-emerald-500 transition-all [color-scheme:dark]"
+              />
+            </div>
+            <div className="space-y-1">
+              <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Description (Optional)</label>
+              <input 
+                type="text" 
+                placeholder="예: 현충일, 학원 방학"
+                value={holidayNote}
+                onChange={(e) => setHolidayNote(e.target.value)}
+                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-white outline-none focus:border-emerald-500 transition-all"
+              />
+            </div>
+            <div className="flex items-end">
+              <button 
+                onClick={handleAdd}
+                disabled={!newHoliday}
+                className="w-full py-3 bg-emerald-600 text-white rounded-[2px] text-[11px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                Add Holiday
+              </button>
+            </div>
           </div>
-          <div className="space-y-1">
-            <label className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Description (Optional)</label>
-            <input 
-              type="text" 
-              placeholder="예: 현충일, 학원 방학"
-              value={holidayNote}
-              onChange={(e) => setHolidayNote(e.target.value)}
-              className="w-full bg-black/40 border border-white/10 rounded-[2px] px-4 py-3 text-sm font-black text-white outline-none focus:border-emerald-500 transition-all"
-            />
-          </div>
-          <div className="flex items-end">
-            <button 
-              onClick={handleAdd}
-              disabled={!newHoliday}
-              className="w-full py-3 bg-emerald-600 text-white rounded-[2px] text-[11px] font-black uppercase tracking-widest hover:bg-emerald-500 transition-all shadow-lg shadow-emerald-900/20 disabled:opacity-30 disabled:cursor-not-allowed"
-            >
-              Add Holiday
-            </button>
-          </div>
-        </div>
+        )}
 
         <div className="space-y-4">
           <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em] ml-1">Registered Holidays</h4>
@@ -95,12 +99,14 @@ export default function HolidayManagement({ holidays, onAddHoliday, onDeleteHoli
                         }`}>{h.note || '설명 없음'}</p>
                       </div>
                     </div>
-                    <button 
-                      onClick={() => onDeleteHoliday(h.date)}
-                      className="p-2 text-gray-600 hover:text-red-500 transition-colors"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                    {isAdmin && (
+                      <button 
+                        onClick={() => onDeleteHoliday(h.date)}
+                        className="p-2 text-gray-600 hover:text-red-500 transition-colors"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    )}
                   </div>
                 );
               })

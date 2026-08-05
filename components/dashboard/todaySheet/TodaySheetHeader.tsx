@@ -12,6 +12,8 @@ interface TodaySheetHeaderProps {
   onMouseDown: (e: React.MouseEvent, colId: string) => void;
   onDoubleClick: (colId: string) => void;
   onSelectAll: (checked: boolean) => void;
+  onCycleSelectAll?: () => void;
+  selectCycleMode?: 'none' | 'all' | 'elective' | 'regular';
   isAllSelected: boolean;
   onFocusColumn: (colId: string | null) => void;
   focusColumn: string | null;
@@ -29,6 +31,8 @@ export function TodaySheetHeader({
   onMouseDown, 
   onDoubleClick, 
   onSelectAll, 
+  onCycleSelectAll,
+  selectCycleMode = 'none',
   isAllSelected, 
   onFocusColumn, 
   focusColumn, 
@@ -183,12 +187,32 @@ export function TodaySheetHeader({
             {!isAction && (
               <div className="flex items-center justify-center gap-1.5 w-full">
                 {isSelect ? (
-                  <input 
-                    type="checkbox" 
-                    checked={isAllSelected}
-                    onChange={(e) => onSelectAll(e.target.checked)}
-                    className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (onCycleSelectAll) onCycleSelectAll();
+                      else onSelectAll(!isAllSelected);
+                    }}
+                    className={`w-4 h-4 rounded border flex items-center justify-center transition-all cursor-pointer ${
+                      selectCycleMode === 'all' || (isAllSelected && selectCycleMode === 'none')
+                        ? 'border-blue-500 bg-blue-600 text-white'
+                        : selectCycleMode === 'elective'
+                        ? 'border-amber-500 bg-amber-500 text-black font-black'
+                        : selectCycleMode === 'regular'
+                        ? 'border-cyan-500 bg-cyan-600 text-white'
+                        : 'border-white/20 bg-white/5 hover:border-white/40'
+                    }`}
+                    title={
+                      selectCycleMode === 'none' ? '전체 선택 (클릭 1회: 전체 선택)' :
+                      selectCycleMode === 'all' ? '선택과목만 선택 (클릭 2회: 선택과목만)' :
+                      selectCycleMode === 'elective' ? '정규수업만 선택 (클릭 3회: 정규수업만)' :
+                      '전체 해제 (클릭 4회: 전체 해제)'
+                    }
+                  >
+                    {(selectCycleMode !== 'none' || isAllSelected) && (
+                      <span className="text-[10px] font-black leading-none">✓</span>
+                    )}
+                  </button>
                 ) : (
                 <>
                   <div className={`flex items-center gap-1.5 ${col.id === 'review' ? 'italic' : ''}`}>

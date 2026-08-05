@@ -131,18 +131,18 @@ const updateTimerPreset = async (index: number, value: number) => {
   // 💡 탭 정의 배열 (권한별 역할(roles) 기반으로 접근 제어 고도화)
   const TABS = useMemo(() => [
     { id: 'notices', label: 'Notices', color: 'text-amber-500', roles: ['admin', 'master'] },
-    { id: 'exams', label: 'Exams', color: 'text-rose-500', roles: ['admin', 'master'] },
+    { id: 'exams', label: 'Exams', color: 'text-rose-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'teachers', label: 'Teachers', color: 'text-blue-500', roles: ['admin', 'master'] },
-    { id: 'holidays', label: 'Holidays', color: 'text-emerald-500', roles: ['admin', 'master'] },
+    { id: 'holidays', label: 'Holidays', color: 'text-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-500', roles: ['admin', 'master'] },
     { id: 'textbooks', label: 'Textbook PDFs', color: 'text-indigo-500', roles: ['admin', 'master'] },
-    { id: 'timetables', label: 'Weekly Timetable', color: 'text-emerald-500', roles: ['admin', 'master'] },
+    { id: 'timetables', label: 'Weekly Timetable', color: 'text-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'manual', label: 'Manual', color: 'text-purple-500', roles: ['admin', 'master', 'teacher'] },
-    // 💡 My Account는 향후 일반 선생님('teacher')에게도 개방 가능하도록 설계
     { id: 'account', label: 'My Account', color: 'text-blue-500', roles: ['admin', 'master', 'teacher'] }
   ], []);
 
   const userRole = currentUser?.role || 'teacher';
+  const isAdmin = userRole === 'admin' || userRole === 'master';
   const availableTabs = useMemo(() => TABS.filter(tab => tab.roles.includes(userRole)), [TABS, userRole]);
 
   // 💡 [추가] 현재 선택된 탭이 권한 밖의 탭일 경우 첫 번째 가용 탭으로 자동 보정
@@ -210,6 +210,7 @@ const updateTimerPreset = async (index: number, value: number) => {
             holidays={opSettings.holidays || []} 
             onAddHoliday={handleAddHoliday} 
             onDeleteHoliday={handleDeleteHoliday} 
+            isAdmin={isAdmin}
           />
         )}
 
@@ -277,6 +278,7 @@ const updateTimerPreset = async (index: number, value: number) => {
             academyInfo={academyInfo}
             teachers={teachers}
             students={students}
+            currentUser={currentUser}
             isLight={false}
           />
         )}

@@ -167,17 +167,41 @@ export default function HokmaJournalPrintModal({
     else if (nextScore === '4점') newAchievement = 40;
     else if (nextScore === '0점' || nextScore === '-') newAchievement = 0;
 
+    // 3. 인메모리 학생 세션 로그 동기화 (즉시 고정 복원되도록 보장)
+    const targetStudent = (selectedStudents || []).find(s => s.id === studentId) || (allStudents || []).find(s => s.id === studentId);
+    if (targetStudent) {
+      const formattedDate = dateKey.replace(/\./g, '-');
+      const formattedDotDate = dateKey.replace(/-/g, '.');
+      (targetStudent.allLogs || []).forEach((l: any) => {
+        const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
+        if (lDate === formattedDate || l.date === formattedDotDate || l.session_date === formattedDotDate) {
+          const lCourse = l.course_name || '정규';
+          if (!targetCourse || targetCourse === '정규' ? (lCourse === '정규' || !l.course_name) : lCourse === targetCourse) {
+            l.todo_achievement = newAchievement;
+          }
+        }
+      });
+      if (targetStudent.todaySession) {
+        const sDate = (targetStudent.todaySession.date || targetStudent.todaySession.session_date || '').replace(/\./g, '-');
+        if (sDate === formattedDate) {
+          targetStudent.todaySession.todo_achievement = newAchievement;
+        }
+      }
+    }
+
     try {
-      // Supabase ams_daily_sheets 세션 테이블 업데이트
+      // Supabase ams_session_logs 세션 테이블 업데이트
       const formattedDate = dateKey.replace(/\./g, '-');
       let query = supabase
-        .from('ams_daily_sheets')
+        .from('ams_session_logs')
         .update({ todo_achievement: newAchievement })
         .eq('student_id', studentId)
-        .or(`date.eq.${formattedDate},session_date.eq.${formattedDate}`);
+        .or(`session_date.eq.${formattedDate},date.eq.${formattedDate}`);
 
       if (targetCourse && targetCourse !== '정규') {
         query = query.eq('course_name', targetCourse);
+      } else {
+        query = query.or('course_name.eq.정규,course_name.is.null');
       }
 
       await query;
@@ -970,14 +994,15 @@ export default function HokmaJournalPrintModal({
                   hwScore = hwOverrides[overrideKey];
                 } else if (attStatus.includes('결석')) {
                   hwScore = '-';
+                } else if (log.todo_achievement !== undefined && log.todo_achievement !== null && String(log.todo_achievement).trim() !== '') {
+                  const numAch = Number(log.todo_achievement);
+                  if (numAch >= 100) hwScore = '10점';
+                  else if (numAch >= 70) hwScore = '7점';
+                  else if (numAch >= 40) hwScore = '4점';
+                  else if (numAch > 0) hwScore = '4점';
+                  else hwScore = '0점';
                 } else if (log.hw_checked_today === true || log.hw_passed_today === true) {
                   hwScore = '10점';
-                } else if (log.todo_achievement !== undefined) {
-                  if (log.todo_achievement >= 100) hwScore = '10점';
-                  else if (log.todo_achievement >= 70) hwScore = '7점';
-                  else if (log.todo_achievement >= 40) hwScore = '4점';
-                  else if (log.todo_achievement > 0) hwScore = '4점';
-                  else hwScore = '0점';
                 }
 
                 let classworkText = log.completed_classwork_text || '';

@@ -37,6 +37,9 @@ export default function SystemManualLight() {
               <li className="text-gray-400 font-bold italic mt-2 border-t border-amber-200 pt-1.5">
                 * 쉼표(,) 뒤에 쓰거나 줄을 바꿔서 쓰는 글은 학생 리포트에는 노출되지 않는 '선생님 전용 비밀 메모'가 됩니다.
               </li>
+              <li className="text-emerald-800 font-bold mt-2 border-t border-amber-200 pt-1.5">
+                ⚡ <b>과제확인 키보드 단축키</b>: 팝업이 뜬 상태에서 키보드 <b>[A]~[F]</b> (또는 <b>[1]~[6]</b>)를 누르면 마우스 클릭 없이 바로 평가 입력! (잘못된 키 누르면 <b>좌우 쉐이크 경고</b> 표시)
+              </li>
             </ul>
           </div>
         </div>

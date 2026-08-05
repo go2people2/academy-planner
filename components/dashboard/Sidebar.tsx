@@ -398,10 +398,7 @@ export default function Sidebar({
           <span className="text-[11px]">Dark Mode</span>
         </button>
 
-        {/* 💡 [수정] 관리자 전용 메뉴로 제한 */}
-        {isAdmin && (
-          <SidebarLink icon={<Settings size={14} />} label="Settings" active={viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />
-        )}
+        <SidebarLink icon={<Settings size={14} />} label="Settings" active={viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />
         <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-all group font-bold">
           <LogOut size={14} />
           <span className="text-[11px]">Log Out</span>

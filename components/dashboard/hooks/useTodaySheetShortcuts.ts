@@ -4,6 +4,7 @@ import { useEffect, useCallback, useRef } from 'react';
 import { mapColumnToProp, COLUMN_TO_FIELD_MAP } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetClipboard } from './useTodaySheetClipboard';
+import { matchRowIdentity } from '@/lib/rowIdentity';
 
 interface UseTodaySheetShortcutsProps {
   activeCell: { studentId: string; columnId: string } | null;
@@ -577,7 +578,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
           // 1. 로컬 학생 데이터 즉시 덮어쓰기
           setStudents((prev: any[]) => prev.map(s => {
-            if (s.id === activeCell.studentId) {
+            if (matchRowIdentity(s, activeCell.studentId)) {
               if (colId === 'mission') {
                 return { ...s, recent_mission: initialChar };
               } else {

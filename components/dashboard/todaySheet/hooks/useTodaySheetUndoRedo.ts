@@ -1,5 +1,6 @@
 import { useRef, useCallback } from 'react';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
+import { matchRowIdentity, extractRealStudentId } from '@/lib/rowIdentity';
 
 interface UndoRedoUpdate {
   studentId: string;
@@ -53,7 +54,7 @@ export function useTodaySheetUndoRedo({
     });
 
     setStudents((prev: any[]) => prev.map(s => {
-      const update = undoUpdates.find((u: any) => u.studentId === s.id);
+      const update = undoUpdates.find((u: any) => matchRowIdentity(s, u.studentId));
       if (update) {
         const hasMission = 'mission' in update.newData;
         return {
@@ -100,7 +101,7 @@ export function useTodaySheetUndoRedo({
       const savePayload = { ...u.newData };
       delete savePayload.mission;
       if (Object.keys(savePayload).length > 0) {
-        await onSave(u.studentId, savePayload);
+        await onSave(extractRealStudentId(u.studentId), savePayload);
       }
     }));
   }, [setStudents, onSave, onUpdateStudentInfo]);
@@ -111,7 +112,7 @@ export function useTodaySheetUndoRedo({
     if (!updates || updates.length === 0) return;
 
     setStudents((prev: any[]) => prev.map(s => {
-      const update = updates.find((u: any) => u.studentId === s.id);
+      const update = updates.find((u: any) => matchRowIdentity(s, u.studentId));
       if (update) {
         const hasMission = 'mission' in update.newData;
         return {
@@ -158,7 +159,7 @@ export function useTodaySheetUndoRedo({
       const savePayload = { ...u.newData };
       delete savePayload.mission;
       if (Object.keys(savePayload).length > 0) {
-        await onSave(u.studentId, savePayload);
+        await onSave(extractRealStudentId(u.studentId), savePayload);
       }
     }));
   }, [setStudents, onSave, onUpdateStudentInfo]);

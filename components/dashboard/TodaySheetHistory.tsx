@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { Student } from '@/types/dashboard';
 import { getDayOfWeek, parseInlineTests, parseBookCourseValue } from '@/lib/utils';
 import { supabase } from '@/lib/supabase';
@@ -95,6 +95,26 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
 
   // 💡 추가: 단원/쪽수 조회 드로어용 상태
   const [selectedBookForDrawer, setSelectedBookForDrawer] = useState<string | null>(null);
+
+  // 💡 [교재 저장 버퍼] TextbookSystem에 전달할 ccw/hw 최신값을 독립 ref로 관리
+  const ccwBookBuf = useRef(student.todaySession?.completed_classwork_text || '');
+  const hwBookBuf = useRef(student.todaySession?.homework_text || '');
+
+  const incomingCcw = student.todaySession?.completed_classwork_text || '';
+  const incomingHw = student.todaySession?.homework_text || '';
+
+  useEffect(() => {
+    if (incomingCcw && !ccwBookBuf.current.includes(incomingCcw)) {
+      ccwBookBuf.current = incomingCcw;
+    }
+  }, [incomingCcw]);
+
+  useEffect(() => {
+    if (incomingHw && !hwBookBuf.current.includes(incomingHw)) {
+      hwBookBuf.current = incomingHw;
+    }
+  }, [incomingHw]);
+
   const [bookUnits, setBookUnits] = useState<any[]>([]);
   const [selectedDrawerUnits, setSelectedDrawerUnits] = useState<any[]>([]);
   const [isLoadingUnits, setIsLoadingUnits] = useState(false);
@@ -757,16 +777,28 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                         availableTextbooks={masterTextbooks || []}
                         allLogs={student.allLogs || []}
                         initialBookCode={selectedBookForDrawer}
-                        localCompletedClasswork={student.todaySession?.completed_classwork_text || ''}
+                        localCompletedClasswork={ccwBookBuf.current}
                         setLocalCompletedClasswork={(val) => {
-                          if (onSave) onSave(student.id, { completed_classwork_text: val });
+                          const nextVal = typeof val === 'function' ? (val as any)(ccwBookBuf.current) : val;
+                          ccwBookBuf.current = nextVal;
                         }}
-                        localHomework={student.todaySession?.homework_text || ''}
+                        localHomework={hwBookBuf.current}
                         setLocalHomework={(val) => {
-                          if (onSave) onSave(student.id, { homework_text: val });
+                          const nextVal = typeof val === 'function' ? (val as any)(hwBookBuf.current) : val;
+                          hwBookBuf.current = nextVal;
                         }}
                         todayPlan={student.todaySession?.classwork_text || ''}
                         handleManualSave={async (field, val) => {
+                          const saveValueMap: any = {
+                            completed_classwork: typeof val === 'string' && val ? val : ccwBookBuf.current,
+                            homework: typeof val === 'string' && val ? val : hwBookBuf.current,
+                          };
+                          if (field === 'completed_classwork' && typeof val === 'string' && val) {
+                            ccwBookBuf.current = val;
+                          }
+                          if (field === 'homework' && typeof val === 'string' && val) {
+                            hwBookBuf.current = val;
+                          }
                           const keyMap: any = {
                             completed_classwork: 'completed_classwork_text',
                             homework: 'homework_text',
@@ -774,8 +806,9 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                             special_notes: 'special_notes'
                           };
                           const targetKey = keyMap[field] || field;
+                          const saveValue = field in saveValueMap ? saveValueMap[field] : val;
                           if (onSave) {
-                            await onSave(student.id, { [targetKey]: val });
+                            await onSave(student.id, { [targetKey]: saveValue });
                           }
                         }}
                         isSaving={false}

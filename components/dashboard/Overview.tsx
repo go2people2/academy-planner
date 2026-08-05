@@ -22,7 +22,7 @@ interface OverviewProps {
   selectedFilter: string;
   isBatchMode: boolean;
   setIsBatchMode: (val: boolean) => void;
-  onBatchAdd: (ids: string[], reasons: Record<string, string>, makeupHours: Record<string, number>) => Promise<void>;
+  onBatchAdd: (ids: string[], reasons: Record<string, string>, makeupHours: Record<string, number>, makeupCourses?: Record<string, string>) => Promise<void>;
   onRemoveFromToday: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
   onBatchAddStudents?: (newStudents: any[]) => Promise<boolean>; // 💡 추가
@@ -304,16 +304,13 @@ export default function Overview({
   
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [makeupHours, setMakeupHours] = useState<Record<string, number>>({});
+  const [makeupCourses, setMakeupCourses] = useState<Record<string, string>>({});
 
   const isArchiveMode = useMemo(() => selectedFilter?.toLowerCase() === 'discharged', [selectedFilter]);
 
   const studentsToDisplay = useMemo(() => {
-    if (isArchiveMode) {
-      return filteredAllStudents || [];
-    } else {
-      return (filteredAllStudents || []).filter(s => !allTodayIds.includes(s.id));
-    }
-  }, [filteredAllStudents, allTodayIds, isArchiveMode]);
+    return filteredAllStudents || [];
+  }, [filteredAllStudents]);
 
   const toggleSelection = (id: string) => {
     setSelectedForBatch(prev => 
@@ -373,7 +370,7 @@ export default function Overview({
 
   const confirmReason = async () => {
     if (reasonModal.type === 'add') {
-      await onBatchAdd(reasonModal.studentIds, reasons, makeupHours);
+      await onBatchAdd(reasonModal.studentIds, reasons, makeupHours, makeupCourses);
       setSelectedForBatch([]);
     } else {
       await Promise.all(reasonModal.studentIds.map(id => onRemoveFromToday(id, reasons[id] || '수업 취소')));
@@ -383,6 +380,7 @@ export default function Overview({
     setReasonModal({ ...reasonModal, isOpen: false });
     setReasons({});
     setMakeupHours({});
+    setMakeupCourses({});
     setIsBatchMode(false);
   };
 
@@ -780,47 +778,82 @@ export default function Overview({
 
                 <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar-v">
                   <label className="text-[9px] font-black uppercase text-gray-500 tracking-widest px-1 block mb-1">학생별 사유 및 시간 입력</label>
-                  {reasonModal.studentIds.map((id) => (
-                    <div key={id} className="space-y-2 bg-white/[0.02] p-3 rounded-[2px] border border-white/5">
-                      <div className="flex justify-between items-center px-1">
-                        <span className="text-[11px] font-black text-gray-300">{getStudentName(id)}</span>
-                      </div>
-                      
-                      <div className={reasonModal.type === 'add' ? "grid grid-cols-2 gap-2" : "w-full"}>
-                        <div className="space-y-1">
-                          {reasonModal.type === 'add' && <label className="text-[8px] font-bold uppercase text-gray-600 tracking-widest px-0.5 block">보강 사유</label>}
-                          <input 
-                            type="text" 
-                            value={reasons[id] || ''} 
-                            onChange={(e) => updateIndividualReason(id, e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && confirmReason()}
-                            placeholder="사유를 입력하세요"
-                            className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all"
-                          />
+                  {reasonModal.studentIds.map((id) => {
+                    const stObj = filteredAllStudents.find(s => s.id === id) || todayStudents.find(s => s.id === id);
+                    const rawElective = stObj?.book_courses?.['__elective_courses'];
+                    let electiveCourses: any[] = [];
+                    if (rawElective) {
+                      try {
+                        electiveCourses = typeof rawElective === 'string' ? JSON.parse(rawElective) : Array.isArray(rawElective) ? rawElective : [];
+                      } catch (e) {}
+                    }
+
+                    return (
+                      <div key={id} className="space-y-2 bg-white/[0.02] p-3 rounded-[2px] border border-white/5">
+                        <div className="flex justify-between items-center px-1">
+                          <span className="text-[11px] font-black text-gray-300">{getStudentName(id)}</span>
+                          {reasonModal.type === 'add' && electiveCourses.length > 0 && (
+                            <span className="text-[9px] font-bold text-amber-400">선택과목 수강생</span>
+                          )}
                         </div>
                         
-                        {reasonModal.type === 'add' && (
+                        <div className={reasonModal.type === 'add' ? "grid grid-cols-3 gap-2" : "w-full"}>
                           <div className="space-y-1">
-                            <label className="text-[8px] font-bold uppercase text-gray-600 tracking-widest px-0.5 block">보강 시간</label>
-                            <select 
-                              value={makeupHours[id] || 15}
-                              onChange={(e) => updateIndividualHour(id, parseInt(e.target.value))}
-                              className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-amber-500 outline-none focus:border-blue-500 transition-all cursor-pointer"
-                            >
-                              {hourOptions.map(h => (
-                                <option key={h} value={h} className="bg-[#121212]">
-                                  {h >= 12 
-                                    ? (h === 12 ? `오후 12:${displayMinute}` : `오후 ${h - 12}:${displayMinute}`)
-                                    : `오전 ${h}:${displayMinute}`
-                                  }
-                                </option>
-                              ))}
-                            </select>
+                            {reasonModal.type === 'add' && <label className="text-[8px] font-bold uppercase text-gray-600 tracking-widest px-0.5 block">보강 사유</label>}
+                            <input 
+                              type="text" 
+                              value={reasons[id] || ''} 
+                              onChange={(e) => updateIndividualReason(id, e.target.value)}
+                              onKeyDown={(e) => e.key === 'Enter' && confirmReason()}
+                              placeholder="사유를 입력하세요"
+                              className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-white outline-none focus:border-blue-500 transition-all"
+                            />
                           </div>
-                        )}
+
+                          {reasonModal.type === 'add' && (
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-bold uppercase text-gray-600 tracking-widest px-0.5 block">보강 과목</label>
+                              <select 
+                                value={makeupCourses[id] || '정규'}
+                                onChange={(e) => setMakeupCourses(prev => ({ ...prev, [id]: e.target.value }))}
+                                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-2 text-[10px] font-bold text-sky-400 outline-none focus:border-blue-500 transition-all cursor-pointer"
+                              >
+                                <option value="정규">정규 수업</option>
+                                {electiveCourses.map((c: any, cIdx: number) => {
+                                  const subject = c.subject?.trim() || `특강 ${cIdx + 1}`;
+                                  return (
+                                    <option key={cIdx} value={subject} className="bg-[#121212]">
+                                      {subject}
+                                    </option>
+                                  );
+                                })}
+                              </select>
+                            </div>
+                          )}
+                          
+                          {reasonModal.type === 'add' && (
+                            <div className="space-y-1">
+                              <label className="text-[8px] font-bold uppercase text-gray-600 tracking-widest px-0.5 block">보강 시간</label>
+                              <select 
+                                value={makeupHours[id] || 15}
+                                onChange={(e) => updateIndividualHour(id, parseInt(e.target.value))}
+                                className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-[11px] font-bold text-amber-500 outline-none focus:border-blue-500 transition-all cursor-pointer"
+                              >
+                                {hourOptions.map(h => (
+                                  <option key={h} value={h} className="bg-[#121212]">
+                                    {h >= 12 
+                                      ? (h === 12 ? `오후 12:${displayMinute}` : `오후 ${h - 12}:${displayMinute}`)
+                                      : `오전 ${h}:${displayMinute}`
+                                    }
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 <div className="flex gap-2 pt-2">
@@ -890,11 +923,27 @@ function StudentRowItem({
     return { needs: false };
   }, [student.last_consulted_at]);
 
-  return (
-    <motion.div 
-      layout 
-      onClick={onClick} 
-      className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
+    const handleCardClick = (e: React.MouseEvent) => {
+      try {
+        onClick();
+      } catch (err) {
+        console.error('Card click execution error:', err);
+      }
+    };
+
+    return (
+      <motion.div 
+        layout 
+        onClick={handleCardClick}
+        tabIndex={0}
+        role="button"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            handleCardClick(e as any);
+          }
+        }}
+        className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
         isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg' : 
         isBatchMode 
           ? isSelectionMode 

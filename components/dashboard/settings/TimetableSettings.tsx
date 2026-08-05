@@ -10,6 +10,7 @@ interface TimetableSettingsProps {
   academyInfo: any;
   teachers: any[];
   students: any[];
+  currentUser?: any;
   isLight?: boolean;
 }
 
@@ -280,7 +281,7 @@ const COLOR_CLASSES: Record<string, { dark: string; light: string; label: string
   cyan: { dark: 'bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 font-black', light: 'bg-[#4CD5FF] text-gray-900 font-extrabold', label: '하늘색(특강)' }
 };
 
-export default function TimetableSettings({ academyInfo, teachers = [], students = [], isLight = false }: TimetableSettingsProps) {
+export default function TimetableSettings({ academyInfo, teachers = [], students = [], currentUser, isLight = false }: TimetableSettingsProps) {
   // 1. 상태 관리
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>('');
   const [gridData, setGridData] = useState<Record<string, TimetableCell>>({}); // 키: "요일-교시-행번호"
@@ -288,6 +289,14 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isVacationMode, setIsVacationMode] = useState(false);
+
+  // 💡 [권한 통제] 원장/마스터이거나, 본인 담당 시간표를 선택했을 때만 편집 및 저장 허용
+  const canEdit = useMemo(() => {
+    if (!currentUser) return true;
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'master';
+    const isMyTimetable = selectedTeacherId === currentUser.id;
+    return isAdmin || isMyTimetable;
+  }, [currentUser, selectedTeacherId]);
 
   // 💡 선택된 선생님 학생들의 실제 수업시간에 맞춰 10~11, 11~12교시 슬롯을 유연하게 감지 및 노출
   const activeSlots = useMemo(() => {
@@ -695,12 +704,14 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
   };
   // 5. 셀 더블클릭 시 편집 전환
   const handleCellDoubleClick = (key: string) => {
+    if (!canEdit) return;
     setEditingKey(key);
     setContextMenu(null);
   };
 
   // 6. 셀 내부 학생 정보 변경 반영
   const handleSelectStudent = (key: string, day: string, slot: string, rowIdx: number, studentId: string) => {
+    if (!canEdit) return;
     const prevCell = gridData[key];
     const updatedCell: TimetableCell = {
       day_of_week: day,
@@ -717,6 +728,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
   // 7. 셀 우클릭 컨텍스트 메뉴 활성화 (색상 설정용)
   const handleCellContextMenu = (e: React.MouseEvent, key: string) => {
     e.preventDefault();
+    if (!canEdit) return;
     setContextMenu({
       x: e.clientX,
       y: e.clientY,
@@ -988,15 +1000,25 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
                 <option key={t.id} value={t.id}>{t.name} 선생님 ({t.role === 'admin' ? '원장' : '강사'})</option>
               ))}
             </select>
+            {/* 권한 상태 표시 배지 */}
+            {!canEdit ? (
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded tracking-wide border ${
+                isLight 
+                  ? 'bg-amber-50 text-amber-700 border-amber-200' 
+                  : 'bg-amber-500/10 text-amber-400 border border-amber-500/30'
+              }`}>
+                🔒 읽기 전용 (타 선생님 시간표)
+              </span>
+            ) : (
+              <span className={`text-[9px] font-black px-2 py-0.5 rounded tracking-wide border ${
+                isLight 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
+                  : 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/30'
+              }`}>
+                ✏️ 편집 가능 (본인 시간표)
+              </span>
+            )}
           </div>
-          {/* 단축키 힌트 뱃지 */}
-          <span className={`text-[9px] font-black px-2 py-0.5 rounded tracking-wide ${
-            isLight 
-              ? 'bg-gray-100 text-gray-500 border border-gray-200/80' 
-              : 'bg-white/5 text-gray-400 border border-white/5'
-          }`}>
-            Shift + Alt + T
-          </span>
         </div>
 
         {/* 2. 가운데 오늘 날짜 및 방학 모드 토글 (기존 헤더 빈 공간 활용) */}
@@ -1027,8 +1049,9 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
         <div className="flex items-center gap-2">
           <button
             onClick={handleAutoPopulate}
-            disabled={isLoading || isSaving || !selectedTeacherId}
+            disabled={isLoading || isSaving || !selectedTeacherId || !canEdit}
             className={`px-3 py-2 rounded-[2px] text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 border ${
+              !canEdit ? 'opacity-30 cursor-not-allowed' :
               isLight
                 ? 'bg-blue-50 border-blue-200 text-blue-700 hover:bg-blue-100/50'
                 : 'bg-blue-500/5 border-blue-500/10 text-blue-400 hover:bg-blue-500 hover:text-white'
@@ -1040,8 +1063,9 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
 
           <button
             onClick={handleSaveAll}
-            disabled={isLoading || isSaving || !selectedTeacherId}
+            disabled={isLoading || isSaving || !selectedTeacherId || !canEdit}
             className={`px-4 py-2 rounded-[2px] text-[10px] font-black uppercase tracking-wider transition-all flex items-center gap-1.5 border ${
+              !canEdit ? 'opacity-30 cursor-not-allowed' :
               isSaving
                 ? 'opacity-50 cursor-wait'
                 : isLight
@@ -1215,15 +1239,13 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
         </div>
       )}
       {/* 🖨️ 시간표 인쇄용 스타일 (가로 landscape, A4 피팅) */}
-      <style>{`
+      <style dangerouslySetInnerHTML={{ __html: `
         @media print {
-          /* 1. 가로 방향 인쇄 및 여백 강제 */
           @page {
             size: A4 landscape;
             margin: 6mm !important;
           }
           
-          /* 2. 바깥 껍데기 레이아웃 숨기기 및 배경/그림자 투명화 */
           body, html, #__next, main, div, header, aside, section {
             background: white !important;
             color: black !important;
@@ -1232,22 +1254,16 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
             padding: 0 !important;
           }
           
-          /* 프린트하지 않을 UI 일체 숨기기 (헤더 바, 버튼, 대시보드 껍데기 등) */
           .no-print,
           header,
           aside,
           nav,
           button,
-          select,
-          .fixed.inset-0.z-\[9999\] > div > div:first-child, /* 모달 헤더 바 */
-          .bg-black\\/10,
-          .bg-black\\/40,
-          .fixed.inset-0.bg-black\\/60 {
+          select {
             display: none !important;
             visibility: hidden !important;
           }
           
-          /* 3. 시간표 테이블을 A4 1페이지 전체화면으로 강제 고정 */
           .print-timetable-container {
             position: fixed !important;
             left: 0 !important;
@@ -1271,17 +1287,15 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
             border-collapse: collapse !important;
           }
 
-          /* 격자 경계선 인쇄 시 뚜렷하게 회색선으로 강제 렌더링 */
           th, td {
             color: black !important;
-            border-color: #9ca3af !important; /* gray-400 선색 */
+            border-color: #9ca3af !important;
             font-size: 8.5px !important;
             font-weight: bold !important;
             -webkit-print-color-adjust: exact !important;
             print-color-adjust: exact !important;
           }
 
-          /* 선생님 칸 세로 병합 스타일 강제 */
           td[rowspan] {
             background-color: #f3f4f6 !important;
             color: black !important;
@@ -1289,7 +1303,6 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
             font-size: 9.5px !important;
           }
 
-          /* 배경색 칠해진 칸들 엑셀처럼 100% 출력 강제 (box-shadow inset 기법 적용) */
           .cell-color-green {
             background-color: #D9EAD3 !important;
             box-shadow: inset 0 0 0 1000px #D9EAD3 !important;
@@ -1319,7 +1332,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
             overflow: visible !important;
           }
         }
-      `}</style>
+      ` }} />
     </div>
   );
 }

@@ -230,7 +230,9 @@ export function useTodaySheetRowLogic({
       prevSessionRef.current = student.todaySession;
       const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
 
-      if (!isUserTyping) {
+      // 💡 방금 저장한 직후(recentlySavedRef)에는 외부 세션 변경으로 formData를 덮어쓰지 않음
+      // → 교재 드로어 저장 후 다시 열 때 이전 입력 내용이 날아가는 현상 방지
+      if (!isUserTyping && !recentlySavedRef.current) {
         const newData = getInitialFormData(selectedDate);
         setFormData(newData);
       }
@@ -354,11 +356,11 @@ export function useTodaySheetRowLogic({
     
     const success = await onSave(student.id, savePayload);
     setIsSaving(false);
-    // 💡 [안정화] 저장이 완료된 후, 부모의 Props(학생 정보)가 자식 컴포넌트에 정상 도달할 때까지 
-    // 로컬 상태가 옛날 데이터로 덮어씌워지는 현상을 방지하기 위해 락(recentlySavedRef) 해제 시점을 한 프레임 지연시킵니다!
-    requestAnimationFrame(() => {
+    // 💡 [안정화] 저장이 완료된 후 부모 DB 비동기 네트워크 상태 반영이 지연되어
+    // 로컬 상태가 옛날 데이터로 덮어씌워지는 현상을 완전히 방지하기 위해 락(recentlySavedRef)을 1.5초간 유지합니다.
+    setTimeout(() => {
       recentlySavedRef.current = false;
-    });
+    }, 1500);
     setSaveStatus(success ? 'success' : 'error');
     setTimeout(() => setSaveStatus('idle'), 2000);
     return success;
@@ -438,7 +440,7 @@ export function useTodaySheetRowLogic({
       });
       setFormData((prev: any) => ({ ...prev, special_notes: updatedNotes }));
       if (notesRef.current) notesRef.current.value = updatedNotes;
-      handleSave({ special_notes: updatedNotes });
+      handleSave('notes', updatedNotes);
       setIsFeedbackOpen(false);
       return;
     }
@@ -452,7 +454,7 @@ export function useTodaySheetRowLogic({
     
     setFormData((prev: any) => ({ ...prev, special_notes: updatedNotes }));
     if (notesRef.current) notesRef.current.value = updatedNotes;
-    handleSave({ special_notes: updatedNotes });
+    handleSave('notes', updatedNotes);
     setIsFeedbackOpen(false);
   };
 

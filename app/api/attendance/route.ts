@@ -131,16 +131,24 @@ export async function POST(request: NextRequest) {
 
   // 💡 [시스템적 RLS 해결책] 세션 로그 완전 삭제 분기
   if (action === 'delete_session') {
-    const { studentId, sessionDate } = body;
+    const { studentId, sessionDate, courseName } = body;
     if (!studentId || !sessionDate) {
       return Response.json({ error: 'studentId와 sessionDate가 필수입니다.' }, { status: 400 });
     }
     const supabase = getSupabase();
-    const { error } = await supabase
+    let query = supabase
       .from('ams_session_logs')
       .delete()
       .eq('student_id', studentId)
       .eq('session_date', sessionDate);
+
+    if (courseName && courseName !== '정규') {
+      query = query.eq('course_name', courseName);
+    } else if (courseName === '정규') {
+      query = query.or('course_name.eq.정규,course_name.is.null');
+    }
+
+    const { error } = await query;
     if (error) {
       return Response.json({ error: error.message }, { status: 500 });
     }

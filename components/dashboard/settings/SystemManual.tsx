@@ -39,6 +39,39 @@ export default function SystemManual() {
               </li>
             </ul>
           </div>
+
+          <div className="p-3 bg-blue-950/20 rounded-[4px] border border-blue-500/20 shadow-inner leading-relaxed mt-3">
+            <p className="text-blue-400 font-black mb-1.5 flex items-center gap-1.5 tracking-wide"><Sparkles size={12}/> 🔄 순환형(Cyclic) 스마트 버튼 완벽 매뉴얼</p>
+            <ul className="space-y-2 text-[11px] text-gray-300">
+              <li>
+                <span className="text-white font-bold bg-blue-600/30 border border-blue-500/30 px-1.5 py-0.5 rounded mr-1">1. 시트 헤더 스마트 체크박스 (4단계 순환)</span>
+                <p className="text-gray-400 text-[10.5px] mt-0.5 pl-2">
+                  테이블 좌측 맨 첫 번째 헤더 체크박스를 누를 때마다 단 1개 버튼으로 순환됩니다:<br/>
+                  <b>[ ] (전체 해제)</b> ➜ <b>[✓ 파란색] (전체 선택)</b> ➜ <b>[✓ 주황색] (선택과목만 선택)</b> ➜ <b>[✓ 청록색] (정규수업만 선택)</b> ➜ <b>[ ] (전체 해제)</b>
+                </p>
+              </li>
+              <li>
+                <span className="text-white font-bold bg-purple-600/30 border border-purple-500/30 px-1.5 py-0.5 rounded mr-1">2. Sort 정렬 통합 버튼 (4단계 순환)</span>
+                <p className="text-gray-400 text-[10.5px] mt-0.5 pl-2">
+                  우측 상단 툴바의 Sort 버튼 1개를 누를 때마다 정렬 모드가 즉시 바뀝니다:<br/>
+                  <b>⏰ 시간순</b> ➜ <b>🔤 이름순</b> ➜ <b>🎓 학년순</b> ➜ <b>🏫 학교순</b> (옆의 UP/DOWN 버튼으로 오름차순/내림차순 유지)
+                </p>
+              </li>
+              <li>
+                <span className="text-white font-bold bg-amber-600/30 border border-amber-500/30 px-1.5 py-0.5 rounded mr-1">3. 보강 모달 과목 필터 토글 (상호 배타적)</span>
+                <p className="text-gray-400 text-[10.5px] mt-0.5 pl-2">
+                  보강 학생 선택 모달에서 <b>[정규만]</b> 또는 <b>[선택과목만]</b> 체크 시 상대방은 자동 해제되어 실수 없이 원하는 과목 학생만 깔끔하게 검색/선택할 수 있습니다.
+                </p>
+              </li>
+              <li>
+                <span className="text-white font-bold bg-emerald-600/30 border border-emerald-500/30 px-1.5 py-0.5 rounded mr-1">4. ⚡ 과제확인 키보드 초고속 평가 단축키</span>
+                <p className="text-gray-400 text-[10.5px] mt-0.5 pl-2">
+                  과제확인 팝업이 뜬 상태에서 키보드 <b>[A]~[F]</b> (또는 숫자 <b>[1]~[6]</b>)를 누르면 마우스 클릭 없이 번개처럼 평가가 즉시 입력됩니다!<br/>
+                  * <b>[Esc]</b> 누름 ➜ 팝업 취소 / * 잘못된 키 입력 시 <b>좌우 쉐이크 경고 효과</b>로 시각 피드백 제공
+                </p>
+              </li>
+            </ul>
+          </div>
         </div>
       )
     },
