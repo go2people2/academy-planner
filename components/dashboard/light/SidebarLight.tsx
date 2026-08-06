@@ -39,7 +39,7 @@ interface SidebarProps {
 const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
 
 const DEFAULT_MENU_ORDER = [
-  'live', 'board', 'todayTable', 'pdfLibrary', 'teacherTask', 'studentEdit',
+  'live', 'board', 'todayTable', 'pdfLibrary', 'videoTest', 'teacherTask', 'studentEdit',
   'progress', 'monthlyChanges', 'exams', 'problemErrors', 'wrongAnswersAdmin'
 ];
 
