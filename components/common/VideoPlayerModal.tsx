@@ -261,6 +261,18 @@ export default function VideoPlayerModal({
             onPlaying={() => setIsLoading(false)}
           />
 
+          {/* 중앙 거대 재생(Play) 버튼 오버레이 */}
+          {!isPlaying && !isLoading && (
+            <div 
+              onClick={togglePlay}
+              className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 cursor-pointer group/play transition-all"
+            >
+              <div className="w-20 h-20 rounded-full bg-indigo-600/90 group-hover/play:bg-indigo-500 text-white flex items-center justify-center shadow-2xl shadow-indigo-500/50 group-hover/play:scale-110 transition-all border-2 border-indigo-400/50">
+                <Play size={36} className="ml-1 fill-current text-white" />
+              </div>
+            </div>
+          )}
+
           {/* 하단 재생 컨트롤 바 */}
           <div className={`absolute bottom-0 inset-x-0 z-20 p-4 bg-gradient-to-t from-black/90 via-black/50 to-transparent transition-opacity duration-300 space-y-3 ${
             showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'

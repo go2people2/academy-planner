@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Bell, Table, ClipboardCheck, Activity, 
   UserCog, ArrowLeftRight, Settings, Info, Keyboard, 
-  Sparkles, ChevronDown 
+  Sparkles, ChevronDown, Play 
 } from 'lucide-react';
 
 import VideoPlayerModal from '@/components/common/VideoPlayerModal';
@@ -200,27 +200,45 @@ export default function SystemManual() {
         </div>
       </div>
 
-      {/* 🎬 [임시 바로가기] 학생 비디오 플레이어 & 문항별 타임스탬프 실험실 */}
-      <div className="p-4 rounded-xl bg-gradient-to-r from-purple-900/40 via-indigo-900/40 to-slate-900 border border-purple-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2">
-            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-500 text-white uppercase tracking-wider">
-              임시 테스트
-            </span>
-            <h4 className="font-black text-sm text-white flex items-center gap-1.5">
-              🎬 학생 비디오 플레이어 & 문항별 타임스탬프 실험실
-            </h4>
+      {/* 🎬 [비디오 매뉴얼 가이드 카드] 클릭 시 영상 모달 팝업 실행 */}
+      <div 
+        onClick={() => setIsVideoModalOpen(true)}
+        className="group relative p-5 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/30 hover:border-purple-400/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 shadow-2xl transition-all cursor-pointer overflow-hidden"
+      >
+        <div className="flex items-center gap-4 relative z-10 min-w-0">
+          {/* 섬네일 미리보기 프리뷰 박스 */}
+          <div className="relative w-24 h-16 sm:w-28 sm:h-18 rounded-lg bg-black/80 border border-purple-500/40 flex items-center justify-center shrink-0 overflow-hidden group-hover:scale-105 transition-transform shadow-lg">
+            <div className="absolute inset-0 bg-cover bg-center opacity-60" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&q=80')" }} />
+            <div className="relative z-10 w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg group-hover:bg-indigo-500 transition-colors">
+              <Play size={18} className="ml-0.5 fill-current" />
+            </div>
           </div>
-          <p className="text-xs text-slate-300 font-bold">
-            맥미니 로컬 스트리밍 서버(`8080`) 및 **27번~49번 문항별 타임스탬프 바로가기 버튼** 테스트
-          </p>
+
+          <div className="space-y-1 min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-500 text-white uppercase tracking-wider shadow-sm">
+                영상 매뉴얼
+              </span>
+              <h4 className="font-black text-sm text-white flex items-center gap-1.5 truncate">
+                🎬 [수능/기출] 27번~49번 문항별 타임스탬프 해설 플레이어
+              </h4>
+            </div>
+            <p className="text-xs text-slate-300 font-bold truncate">
+              버튼을 누르면 영상 팝업이 실행되며, **우측 문항 번호 클릭 시 해당 문제 위치로 시원하게 이동**합니다.
+            </p>
+          </div>
         </div>
 
         <button
-          onClick={() => setIsVideoModalOpen(true)}
-          className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all shrink-0 shadow-lg shadow-indigo-600/30 active:scale-95"
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            setIsVideoModalOpen(true);
+          }}
+          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all shrink-0 shadow-lg shadow-indigo-600/30 flex items-center gap-2 group-hover:scale-105"
         >
-          실험실 플레이어 실행 ➔
+          <Play size={14} className="fill-current" />
+          <span>▶ 동영상 가이드 실행</span>
         </button>
       </div>
 
