@@ -170,7 +170,7 @@ export function useTodaySheetRows({
 
       const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
       const regularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
-      const makeupLogs = todayLogs.filter((l: any) => l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+      const makeupLogs = todayLogs.filter((l: any) => (!l.course_name || l.course_name === '정규') && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
 
       const allElectiveDaysForStudent = new Set<string>();
       if (rawElective) {

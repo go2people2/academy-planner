@@ -423,7 +423,8 @@ export function useTodaySheetRowLogic({
     const update: any = { 
       attendance_status: ATTENDANCE_STATUS.BEFORE, 
       moved_to_hour: isOriginalRegularHour ? null : hour,
-      attendance_reason: isOriginalRegularHour ? null : '시간 변경'
+      attendance_reason: isOriginalRegularHour ? null : '시간 변경',
+      course_name: student.courseName || (student.isSpecialClass ? student.electiveCourse?.subject : '정규')
     };
 
     setFormData((prev: any) => ({ ...prev, ...update }));
