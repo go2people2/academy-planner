@@ -370,7 +370,7 @@ export async function POST(request: NextRequest) {
       .from('ams_session_logs')
       .upsert(
         [{ student_id: student.id, student_name: student.name, session_date: today, course_name: '정규', attendance_status: attendanceStatus, check_in_at: nowISO }],
-        { onConflict: 'student_id,session_date,course_name' }
+        { onConflict: 'student_id,session_date,course_name,moved_to_hour' }
       );
     if (error) return Response.json({ error: error.message }, { status: 500 });
 

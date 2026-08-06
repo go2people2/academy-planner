@@ -111,6 +111,23 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       return 999;
     }
 
+    // 1.5. 보강 코스 카드로 쪼개진 원생인 경우 보강 교시만 검출
+    if (student.__courseType === 'makeup') {
+      if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
+        const mVal = student.todaySession.moved_to_hour;
+        let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+        if (h < 10) h += 12;
+        return h;
+      }
+      const status = student.todaySession?.attendance_status || '';
+      if (status.includes(':')) {
+        const parts = status.split(':');
+        const val = parseInt(parts[parts.length - 1]);
+        if (!isNaN(val) && val < 24) return val;
+      }
+      return 999;
+    }
+
     // 2. 특강 코스 카드로 쪼개진 원생인 경우 특강 스케줄만 검출
     if (student.__courseType === 'elective') {
       if (student.electiveCourse?.schedules?.[day]) {
@@ -197,9 +214,11 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     const isElective = student.__courseType === 'elective';
     const courseName = isElective ? (student.__courseSubject || '특강') : '정규';
     const realId = student.originalId || student.id;
+    const movedHour = data.moved_to_hour !== undefined ? data.moved_to_hour : (student.todaySession?.moved_to_hour ?? null);
     const payload = {
       ...data,
-      course_name: courseName
+      course_name: courseName,
+      moved_to_hour: movedHour
     };
     return await onSave(realId, payload);
   };
@@ -231,7 +250,15 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     const day = getDayOfWeek(selectedDate);
     const expandedResult: any[] = [];
 
-    students.forEach(s => {
+    const uniqueOriginalStudents = new Map<string, any>();
+    students.forEach((s: any) => {
+      const realId = s.originalId || s.id;
+      if (!uniqueOriginalStudents.has(realId) || s.__courseType === 'regular') {
+        uniqueOriginalStudents.set(realId, s);
+      }
+    });
+
+    Array.from(uniqueOriginalStudents.values()).forEach(s => {
       if (s.is_deleted) return;
       const session = s.todaySession;
       if (session) {
@@ -277,27 +304,40 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
         } catch (e) {}
       }
 
-      const hasSessionForToday = !!session;
-      const isMakeup = status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || 
-                       (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null) ||
-                       hasSessionForToday;
+      const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
+      const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
+      const makeupLogs = todayLogs.filter((l: any) => l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
 
-      // 💡 [이중 가드 가상 팽창] 정규와 특강 수강 일정이 동시에 잡힌 복수 수강생은 분할 출력합니다.
+      // 1. 정규 수업 카드 (정규 등원일인 경우)
       if (hasRegularSession) {
         expandedResult.push({
           ...s,
           __courseType: 'regular',
-          todaySession: (s.allLogs || []).find((l: any) => 
-            (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
-          ) || (session?.course_name === '정규' || !session?.course_name ? session : null)
+          todaySession: regularSession || (s.todaySession && (s.todaySession.moved_to_hour === null || s.todaySession.moved_to_hour === undefined) ? s.todaySession : {
+            id: 'temp', date: selectedDate, status: 'none', attendance_status: ATTENDANCE_STATUS.BEFORE, course_name: '정규'
+          })
         });
       }
 
+      // 2. 보강 수업 카드들 (보강 세션 로그가 별도 존재하는 경우)
+      makeupLogs.forEach((mLog: any) => {
+        const makeupHour = mLog.moved_to_hour;
+        const makeupCardId = `${s.originalId || s.id}_makeup_${makeupHour}`;
+        if (!expandedResult.some(card => card.id === makeupCardId)) {
+          expandedResult.push({
+            ...s,
+            id: makeupCardId,
+            originalId: s.originalId || s.id,
+            __courseType: 'makeup',
+            todaySession: mLog
+          });
+        }
+      });
+
+      // 3. 선택과목/특강 카드
       activeElectives.forEach((c: any, cIdx: number) => {
         const courseSubject = c.subject?.trim() || '특강';
-        const electiveLog = (s.allLogs || []).find((l: any) => 
-          (l.date || l.session_date) === selectedDate && l.course_name === courseSubject
-        );
+        const electiveLog = todayLogs.find((l: any) => l.course_name === courseSubject);
         const specialId = `${s.id}_special_${c.id || courseSubject}_${cIdx}`;
         
         expandedResult.push({
@@ -311,7 +351,8 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
         });
       });
 
-      if (!hasRegularSession && activeElectives.length === 0 && isMakeup) {
+      // 4. 정규 등원일이 아니지만 보강만 있는 학생 (정규 카드/특강 카드가 없는 경우)
+      if (!hasRegularSession && activeElectives.length === 0 && makeupLogs.length === 0 && (status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || session)) {
         expandedResult.push({
           ...s,
           __courseType: 'regular',
@@ -640,7 +681,8 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       <div className="flex-1 overflow-y-auto custom-scrollbar-v pr-2 pb-20 px-4">
         <div className="grid grid-cols-3 md:grid-cols-5 lg:grid-cols-7 xl:grid-cols-9 gap-3">
           {allTodayStudents.map((s, idx) => {
-            const status = s.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
+            const currentSession = s.todaySession;
+            const status = currentSession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
             const currentHour = currentTime.getHours();
             const studentHour = getStudentHour(s);
             const studentElapsed = getElapsedMinutesForHour(studentHour);
@@ -657,11 +699,14 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
               showHourDivider = !!(!assignedTimerId && (prevAssignedTimerId || studentHour !== prevStudentHour));
             }
 
-            const isPureAttend = status.startsWith(ATTENDANCE_STATUS.PRESENT), isLate = status.startsWith(ATTENDANCE_STATUS.LATE), isAbsent = status.startsWith(ATTENDANCE_STATUS.ABSENT);
+            const hasMovedHour = currentSession?.moved_to_hour !== undefined && currentSession?.moved_to_hour !== null && currentSession?.moved_to_hour > 0;
+            const isPureAttend = status.startsWith(ATTENDANCE_STATUS.PRESENT);
+            const isLate = status.startsWith(ATTENDANCE_STATUS.LATE);
+            const isAbsent = status.startsWith(ATTENDANCE_STATUS.ABSENT);
             const isAnyMarked = isPureAttend || isLate || isAbsent;
-            const isMakeupActive = (status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null)) && !isAnyMarked;
+            const isMakeupActive = (status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || hasMovedHour) && !isAnyMarked;
             const isBeforeClass = status === ATTENDANCE_STATUS.BEFORE;
-            const isSupplementPending = status === ATTENDANCE_STATUS.SUPPLEMENT && !(s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null);
+            const isSupplementPending = status === ATTENDANCE_STATUS.SUPPLEMENT && !hasMovedHour;
             const isTimePassed = studentHour !== 999 && studentHour <= currentHour;
             const isLateWarning = isTimePassed && !isAnyMarked && !isSupplementPending && studentElapsed >= (settings.late_threshold || 10);
             const isCriticalWarning = isTimePassed && !isAnyMarked && !isSupplementPending && studentElapsed >= (settings.alert_threshold || 15);
@@ -848,8 +893,26 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                               ); 
                             })()}
                           </div></div>
-                          {isAnyMarked && <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isMakeupActive ? (s.isScheduledToday ? 'bg-purple-500/20 text-purple-300' : 'bg-blue-500/20 text-blue-400') : 'bg-white/10 text-gray-400'}`}>{isMakeupActive ? (s.isScheduledToday ? '이동' : '보강') : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status)}</div>}
-                          {isBeforeClass && <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">수업전</div>}
+                          {(() => {
+                            const isMakeupCard = s.__courseType === 'makeup';
+                            const badgeText = isMakeupCard 
+                              ? '보강' 
+                              : (isMakeupActive ? '이동' : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status));
+                            const badgeStyle = isAbsent 
+                              ? 'bg-red-500 text-white' 
+                              : (isLate 
+                                ? 'bg-amber-500 text-black' 
+                                : (isMakeupCard 
+                                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                                  : (isMakeupActive 
+                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
+                                    : 'bg-white/10 text-gray-400')));
+
+                            if (isBeforeClass && !isMakeupCard) {
+                              return <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">수업전</div>;
+                            }
+                            return <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${badgeStyle}`}>{badgeText}</div>;
+                          })()}
                           {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isCriticalWarning ? 'bg-red-500 text-white' : 'bg-amber-500 text-black'}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
                         </>
                       )}

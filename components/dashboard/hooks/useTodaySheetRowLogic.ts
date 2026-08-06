@@ -157,7 +157,7 @@ export function useTodaySheetRowLogic({
           }
           if (!resolvedTestCut && parsed.cut) resolvedTestCut = parsed.cut;
           if (!resolvedTodoAchievement && parsed.todo_achievement) resolvedTodoAchievement = parsed.todo_achievement;
-          if (!resolvedMission && parsed.mission) resolvedMission = parsed.mission;
+          // 💡 [학생미션 자동채우기 완전 금지] 옛날 JSON의 mission 역승계 전면 차단
           if (parsed.hw_checked_today !== undefined) resolvedHwChecked = parsed.hw_checked_today === true;
           if (parsed.hw_passed_today !== undefined) resolvedHwPassed = parsed.hw_passed_today === true;
           if (parsed.score_type) resolvedTestScoreType = parsed.score_type;
@@ -166,13 +166,10 @@ export function useTodaySheetRowLogic({
       } catch (e) {}
     }
 
-    const sessionMission = resolvedMission || session?.mission;
     const sessionNotes = session?.management_notes;
 
-    // 💡 [규칙] 학생미션(mission)은 과거 기록을 당겨오지 않고 당일 기록만 사용
-    const initialMission = (sessionMission !== undefined && sessionMission !== null)
-      ? sessionMission
-      : '';
+    // 💡 [단순명확 원칙] 학생미션(mission)은 과거/기존 JSON 기록을 절대 당겨오지 않고 '당일 직저' 입력된 session.mission 만 사용!
+    const initialMission = session?.mission || '';
 
     // 💡 [규칙] 주의점(management_notes)은 당일 작성 내용만 표시하며, 자동 이월은 수동 버튼(🪄)을 통해 선택 실행
     const initialNotes = (sessionNotes !== undefined && sessionNotes !== null)
@@ -230,9 +227,8 @@ export function useTodaySheetRowLogic({
       prevSessionRef.current = student.todaySession;
       const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
 
-      // 💡 방금 저장한 직후(recentlySavedRef)에는 외부 세션 변경으로 formData를 덮어쓰지 않음
-      // → 교재 드로어 저장 후 다시 열 때 이전 입력 내용이 날아가는 현상 방지
-      if (!isUserTyping && !recentlySavedRef.current) {
+      // 💡 [DAILY_SHEET_AUTOFILL_RULES.md] isBatchSaving / recentlySavedRef 락 없이 !isUserTyping 일 때 무조건 formData 갱신
+      if (!isUserTyping) {
         const newData = getInitialFormData(selectedDate);
         setFormData(newData);
       }
@@ -406,9 +402,23 @@ export function useTodaySheetRowLogic({
     const regularHours = student.day_schedules?.[day] || [];
     const isOriginalRegularHour = regularHours.some(val => {
       let h = val >= 100 ? Math.floor(val / 100) : val;
-      if (h <= 12) h += 12;
+      if (h < 10) h += 12;
       return h === hour;
     });
+
+    if (!isOriginalRegularHour && regularHours.length > 0) {
+      const firstVal = regularHours[0];
+      let regH = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+      if (regH < 10) regH += 12;
+      const formattedRegH = regH >= 12 ? (regH === 12 ? '오후 12시' : `오후 ${regH - 12}시`) : `오전 ${regH}시`;
+      const formattedTargetH = hour >= 12 ? (hour === 12 ? '오후 12시' : `오후 ${hour - 12}시`) : `오전 ${hour}시`;
+
+      const confirmText = `⚠️ [수업 시간 중복 안내]\n\n${student.name} 학생은 오늘 원래 정규 수업시간(${formattedRegH})이 있습니다.\n선택하신 ${formattedTargetH}로 시간변경/보강을 추가하시겠습니까?`;
+      if (!confirm(confirmText)) {
+        setIsSupplementTimePickerOpen(false);
+        return;
+      }
+    }
 
     const update: any = { 
       attendance_status: ATTENDANCE_STATUS.BEFORE, 

@@ -78,6 +78,7 @@ export interface Student {
   isRedLight: boolean;
   lastSession?: SessionLog;
   todaySession?: SessionLog;
+  todaySessions?: SessionLog[];
   allLogs: SessionLog[];
   is_deleted?: boolean; // 💡 추가 (퇴원 여부)
   isTodayClassDay?: boolean; // 💡 추가 (오늘 수업 여부)
@@ -91,6 +92,7 @@ export interface Student {
   originalId?: string; // 💡 추가 (원래 학생 ID)
   electiveCourse?: any; // 💡 추가 (방학특강 과목 정보)
   courseName?: string; // 💡 추가 (과목명 - 정규 또는 특강과목명)
+  __courseType?: string; // 💡 추가 (수업 카테고리: regular, makeup, elective)
 }
 
 export interface Teacher {

@@ -605,9 +605,17 @@ export default function TodaySheet({
     await Promise.all(updates.map(async (u) => {
       const rowStudent = filteredStudents.find((s: any) => String(s.id) === String(u.studentId));
       const realId = rowStudent?.originalId || u.studentId.replace(/_special.*$/, '');
-      const courseName = rowStudent?.courseName || '정규';
+      const courseName = u.newData?.course_name || rowStudent?.courseName || '정규';
+      const movedToHour = u.newData?.moved_to_hour !== undefined 
+        ? u.newData.moved_to_hour 
+        : (rowStudent?.todaySession?.moved_to_hour ?? (rowStudent as any)?.moved_to_hour ?? null);
 
-      const savePayload = { ...u.newData, course_name: courseName, session_date: saveDate };
+      const savePayload = { 
+        ...u.newData, 
+        course_name: courseName, 
+        session_date: saveDate,
+        ...(movedToHour !== null ? { moved_to_hour: movedToHour } : {})
+      };
       
       const success = await onSave(realId, savePayload);
       if (success && sendSaveEvent) {
@@ -1487,48 +1495,34 @@ export default function TodaySheet({
 
               return filteredStudents.map((s: any, idx: number) => {
                 const getStartTime = (st: any) => {
-                  // 1. 시간 이동 필드(moved_to_hour) 우선 사용
+                  const normalizeHour = (val: number) => {
+                    let h = val >= 100 ? Math.floor(val / 100) : val;
+                    if (h < 10) h += 12;
+                    return h;
+                  };
+
                   if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-                    const mVal = st.todaySession.moved_to_hour;
-                    let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
-                    let m = mVal >= 100 ? (mVal % 100) : 0;
-                    if (h < 10) h += 12;
-                    return h * 100 + m;
+                    return normalizeHour(st.todaySession.moved_to_hour);
                   }
 
-                  // 2. 출결 상태 내 기입된 시각 파싱
-                  const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-                  if (stat.includes(':')) { 
-                    const match = stat.match(/(\d{1,2}):/);
-                    if (match) {
-                      let val = parseInt(match[1], 10);
-                      if (!isNaN(val) && val < 24) {
-                        if (val < 8) val += 12;
-                        return val * 100;
-                      }
-                    }
-                  }
-
-                  // 3. 현재 행의 스케줄 적용 (특강/정규 개별 적용)
-                  let timeVal = 99900;
                   const hours = st.day_schedules?.[dayKey] || [];
-                  if (hours.length > 0) {
-                    const firstVal = hours[0];
-                    let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-                    let m = firstVal >= 100 ? (firstVal % 100) : 0;
-                    if (h < 10) h += 12;
-                    timeVal = h * 100 + m;
+
+                  if (st.isSpecialClass) {
+                    if (hours.length > 0) return normalizeHour(hours[0]);
+                    return 999;
                   }
 
-                  return timeVal;
+                  if (hours.length > 0) {
+                    return normalizeHour(hours[0]);
+                  }
+                  return 999;
                 };
                 const currentStartTime = getStartTime(s);
                 const prevStartTime = idx > 0 ? getStartTime(filteredStudents[idx - 1]) : null;
                 const isNewSection = sortMode === 'time' && currentStartTime !== prevStartTime && !focusColumn;
 
-                const currentHour = currentStartTime !== 99900 ? Math.floor(currentStartTime / 100) : 999;
-                const currentMin = currentStartTime !== 99900 ? (currentStartTime % 100) : 0;
-                const formattedMin = currentMin.toString().padStart(2, '0');
+                const currentHour = currentStartTime;
+                const formattedMin = displayMinute;
 
                 const timeSectionLabel = isNewSection 
                   ? (currentHour === 999 

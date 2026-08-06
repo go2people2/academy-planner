@@ -8,7 +8,7 @@ interface SimpleTextCellProps {
   currentText: string;
   isEditing: boolean;
   isActive: boolean;
-  onSave: (field: string, value: string) => void;
+  onSave: (field: string, value: string, options?: any) => void;
   handleKeyDown: (e: React.KeyboardEvent, colId: string) => void;
   handleLocalInput: (e: React.FormEvent<HTMLTextAreaElement>, field: string) => void;
   handleCellInteraction: (e: React.MouseEvent, colId: string, type: 'click' | 'dblclick') => void;
@@ -51,7 +51,7 @@ export const SimpleTextCell = React.forwardRef<HTMLTextAreaElement, SimpleTextCe
             }
             handleKeyDown(e, colId);
           }} 
-          onBlur={(e) => onSave(colId, e.target.value)} 
+          onBlur={(e) => onSave(colId, e.target.value, { isBlur: true })} 
           placeholder="-" 
           className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`} 
           onInput={(e) => handleLocalInput(e, colId)} 

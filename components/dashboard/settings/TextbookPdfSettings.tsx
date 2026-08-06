@@ -14,6 +14,10 @@ interface BookLinks {
   pdfUrl: string;
   answerUrl: string;
   explanationUrl: string;
+  quiz1Url?: string;
+  quiz2Url?: string;
+  quiz3Url?: string;
+  unitPdfUrl?: string;
 }
 
 export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [], isLight = false }: TextbookPdfSettingsProps) {
@@ -47,7 +51,11 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
           mapped[p.bookcode] = {
             pdfUrl: p.pdf_url || '',
             answerUrl: p.answer_url || '',
-            explanationUrl: p.explanation_url || ''
+            explanationUrl: p.explanation_url || '',
+            quiz1Url: p.quiz1_url || '',
+            quiz2Url: p.quiz2_url || '',
+            quiz3Url: p.quiz3_url || '',
+            unitPdfUrl: p.unit_pdf_url || ''
           };
         });
         setPdfsMap(mapped);
@@ -64,9 +72,9 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
     fetchPdfLinks();
   }, [academyInfo?.id]);
 
-  // 2. 구글 드라이브 주소 변경 핸들러
-  const handleUrlChange = (bookcode: string, field: 'pdfUrl' | 'answerUrl' | 'explanationUrl', val: string) => {
-    const base = inputMap[bookcode] || pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
+  // 2. 주소 변경 핸들러
+  const handleUrlChange = (bookcode: string, field: 'pdfUrl' | 'answerUrl' | 'explanationUrl' | 'quiz1Url' | 'quiz2Url' | 'quiz3Url' | 'unitPdfUrl', val: string) => {
+    const base = inputMap[bookcode] || pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '' };
     setInputMap(prev => ({
       ...prev,
       [bookcode]: {
@@ -78,7 +86,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
 
   // 3. 링크 등록 및 저장 (POST)
   const handleSave = async (bookcode: string) => {
-    const current = inputMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
+    const current = inputMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '' };
     
     if (submittingBook) return;
     setSubmittingBook(bookcode);
@@ -98,24 +106,32 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
         body: JSON.stringify({
           academyId: academyInfo.id,
           bookcode,
-          pdfUrl: current.pdfUrl.trim(),
-          answerUrl: current.answerUrl.trim(),
-          explanationUrl: current.explanationUrl.trim()
+          pdfUrl: (current.pdfUrl || '').trim(),
+          answerUrl: (current.answerUrl || '').trim(),
+          explanationUrl: (current.explanationUrl || '').trim(),
+          quiz1Url: (current.quiz1Url || '').trim(),
+          quiz2Url: (current.quiz2Url || '').trim(),
+          quiz3Url: (current.quiz3Url || '').trim(),
+          unitPdfUrl: (current.unitPdfUrl || '').trim()
         })
       });
 
       if (res.ok) {
         const resData = await res.json();
-        const savedLinks = {
-          pdfUrl: current.pdfUrl.trim(),
-          answerUrl: current.answerUrl.trim(),
-          explanationUrl: current.explanationUrl.trim()
+        const savedLinks: BookLinks = {
+          pdfUrl: (current.pdfUrl || '').trim(),
+          answerUrl: (current.answerUrl || '').trim(),
+          explanationUrl: (current.explanationUrl || '').trim(),
+          quiz1Url: (current.quiz1Url || '').trim(),
+          quiz2Url: (current.quiz2Url || '').trim(),
+          quiz3Url: (current.quiz3Url || '').trim(),
+          unitPdfUrl: (current.unitPdfUrl || '').trim()
         };
         setPdfsMap(prev => ({ ...prev, [bookcode]: savedLinks }));
         if (resData.warning) {
           alert(`⚠️ ${resData.warning}`);
         } else {
-          alert('구글 드라이브 교재 3종 링크가 안전하게 저장되었습니다.');
+          alert('교재 PDF 3종 링크가 안전하게 저장되었습니다.');
         }
       } else {
         const errData = await res.json();
@@ -172,13 +188,21 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
 
   // 학교급/학년 분류 헬퍼
   const getGradeCategory = (b: any) => {
-    const g = (b.grade || b.grade_type || b.category || '').toString().trim();
-    const title = (b.title || '').toString().trim();
-    const code = (b.bookcode || '').toString().trim();
+    const g = (b.grade || b.grade_type || b.category || b.grade_category || '').toString().trim().toLowerCase();
+    const title = (b.title || '').toString().trim().toLowerCase();
+    const code = (b.bookcode || '').toString().trim().toLowerCase();
 
-    if (g.includes('초') || title.includes('초등') || code.startsWith('E_') || code.startsWith('E-')) return 'elementary';
-    if (g.includes('중') || title.includes('중등') || code.startsWith('M_') || code.startsWith('M-')) return 'middle';
-    if (g.includes('고') || title.includes('고등') || code.startsWith('H_') || code.startsWith('H-')) return 'high';
+    if (g.includes('초') || title.includes('초등') || code.startsWith('e_') || code.startsWith('e-')) return 'elementary';
+    if (g.includes('중') || title.includes('중등') || code.startsWith('m_') || code.startsWith('m-')) return 'middle';
+
+    const isHighSchool = [
+      '고등', '고1', '고2', '고3', 'h_', 'h-',
+      '공수', '공통수학', '수학(상)', '수학(하)', '수상', '수하',
+      '수1', '수2', '수학1', '수학2', '확통', '확률', '기하', '미적', '대수'
+    ].some(kw => title.includes(kw) || code.includes(kw) || g.includes(kw));
+
+    if (g.includes('고') || isHighSchool) return 'high';
+
     return 'etc';
   };
 
@@ -203,9 +227,9 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
         <div className="flex items-start gap-3">
           <BookOpen className="text-blue-500 shrink-0 mt-0.5" size={18} />
           <div className="space-y-1 text-xs">
-            <p className="font-bold text-sm">📖 교재별 구글 드라이브 3종 링크 연동 (본문 / 빠른답 / 정답해설)</p>
+            <p className="font-bold text-sm">📖 교재별 3종 PDF 링크 연동 (본문 / 빠른답 / 정답해설)</p>
             <p className="opacity-80">
-              학원에서 사용하는 각 마스터 교재별로 **교재 본문, 빠른 답, 정답 및 해설** 구글 드라이브 공유 링크(URL)를 등록해 두시면, 수업 및 숙제 작성 시 개별 버튼으로 즉시 열어보실 수 있습니다.
+              학원에서 사용하는 각 마스터 교재별로 **교재 본문, 빠른 답, 정답 및 해설** 웹 PDF 공유 링크(URL)를 등록해 두시면, 수업 및 숙제 작성 시 개별 버튼으로 즉시 열어보실 수 있습니다.
             </p>
           </div>
         </div>
@@ -281,7 +305,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                 isLight ? 'bg-gray-50 border-gray-200 text-gray-500' : 'border-white/5 text-gray-500 bg-black/20'
               }`}>
                 <th className="py-3 px-4 w-[220px]">교재명 (코드)</th>
-                <th className="py-3 px-4">구글 드라이브 3종 연동 주소</th>
+                <th className="py-3 px-4">교재 3종 PDF 연동 주소 (URL)</th>
                 <th className="py-3 px-4 text-center w-[110px] no-print">작업</th>
               </tr>
             </thead>
@@ -329,7 +353,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                             type="text"
                             value={current.pdfUrl}
                             onChange={(e) => handleUrlChange(book.bookcode, 'pdfUrl', e.target.value)}
-                            placeholder="https://drive.google.com/file/d/... (본문 PDF URL)"
+                            placeholder="https://... (본문 PDF URL)"
                             disabled={isPending}
                             className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
                               isLight 
@@ -348,7 +372,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                             type="text"
                             value={current.answerUrl}
                             onChange={(e) => handleUrlChange(book.bookcode, 'answerUrl', e.target.value)}
-                            placeholder="https://drive.google.com/file/d/... (빠른답 PDF URL)"
+                            placeholder="https://... (빠른답 PDF URL)"
                             disabled={isPending}
                             className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
                               isLight 
@@ -367,12 +391,88 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                             type="text"
                             value={current.explanationUrl}
                             onChange={(e) => handleUrlChange(book.bookcode, 'explanationUrl', e.target.value)}
-                            placeholder="https://drive.google.com/file/d/... (정답/해설 PDF URL)"
+                            placeholder="https://... (정답/해설 PDF URL)"
                             disabled={isPending}
                             className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
                               isLight 
                                 ? 'bg-white border-gray-250 text-gray-800 focus:border-emerald-500' 
                                 : 'bg-black/30 border-white/10 text-white focus:border-emerald-500/50'
+                            }`}
+                          />
+                        </div>
+
+                        {/* 4. 1차 퀴즈 링크 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-[10px] font-bold text-purple-500 flex items-center gap-1 shrink-0">
+                            🎯 1차 퀴즈
+                          </span>
+                          <input 
+                            type="text"
+                            value={current.quiz1Url || ''}
+                            onChange={(e) => handleUrlChange(book.bookcode, 'quiz1Url', e.target.value)}
+                            placeholder="https://... (1차 퀴즈 URL / 구글 드라이브 폴더)"
+                            disabled={isPending}
+                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                              isLight 
+                                ? 'bg-white border-gray-250 text-gray-800 focus:border-purple-500' 
+                                : 'bg-black/30 border-white/10 text-white focus:border-purple-500/50'
+                            }`}
+                          />
+                        </div>
+
+                        {/* 5. 2차 퀴즈 링크 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-[10px] font-bold text-purple-400 flex items-center gap-1 shrink-0">
+                            🎯 2차 퀴즈
+                          </span>
+                          <input 
+                            type="text"
+                            value={current.quiz2Url || ''}
+                            onChange={(e) => handleUrlChange(book.bookcode, 'quiz2Url', e.target.value)}
+                            placeholder="https://... (2차 퀴즈 URL)"
+                            disabled={isPending}
+                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                              isLight 
+                                ? 'bg-white border-gray-250 text-gray-800 focus:border-purple-500' 
+                                : 'bg-black/30 border-white/10 text-white focus:border-purple-500/50'
+                            }`}
+                          />
+                        </div>
+
+                        {/* 6. 3차 퀴즈 링크 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-[10px] font-bold text-purple-300 flex items-center gap-1 shrink-0">
+                            🎯 3차 퀴즈
+                          </span>
+                          <input 
+                            type="text"
+                            value={current.quiz3Url || ''}
+                            onChange={(e) => handleUrlChange(book.bookcode, 'quiz3Url', e.target.value)}
+                            placeholder="https://... (3차 퀴즈 URL)"
+                            disabled={isPending}
+                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                              isLight 
+                                ? 'bg-white border-gray-250 text-gray-800 focus:border-purple-500' 
+                                : 'bg-black/30 border-white/10 text-white focus:border-purple-500/50'
+                            }`}
+                          />
+                        </div>
+
+                        {/* 7. 단원별 PDF 링크 */}
+                        <div className="flex items-center gap-2">
+                          <span className="w-20 text-[10px] font-bold text-sky-400 flex items-center gap-1 shrink-0">
+                            📂 단원 PDF
+                          </span>
+                          <input 
+                            type="text"
+                            value={current.unitPdfUrl || ''}
+                            onChange={(e) => handleUrlChange(book.bookcode, 'unitPdfUrl', e.target.value)}
+                            placeholder="https://... (단원별 PDF / 교재 자료 URL)"
+                            disabled={isPending}
+                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                              isLight 
+                                ? 'bg-white border-gray-250 text-gray-800 focus:border-sky-500' 
+                                : 'bg-black/30 border-white/10 text-white focus:border-sky-500/50'
                             }`}
                           />
                         </div>

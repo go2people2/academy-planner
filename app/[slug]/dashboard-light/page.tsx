@@ -20,6 +20,8 @@ import ProblemErrorManager from '@/components/dashboard/light/ProblemErrorManage
 import WrongAnswerManager from '@/components/dashboard/WrongAnswerManager';
 import ExamPaperManager from '@/components/dashboard/exam/light/ExamPaperManagerLight';
 import TimetableSettings from '@/components/dashboard/settings/TimetableSettings';
+import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
+import VideoPlayerTestView from '@/components/dashboard/VideoPlayerTestView';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
@@ -34,7 +36,18 @@ import { getEnrichedStudentData, evaluateTodayStatus } from '@/lib/studentDataEn
 
 // 1. 학생의 오늘 수업 시작 시각 계산 (정렬용)
 const getStudentStartTime = (student: any, day: string) => {
-  // 1. 시간 이동 필드(moved_to_hour) 우선 사용
+  // 오늘이 원래 정규 수업일이면 원래 시간표 교시를 최우선으로 사용하여 정규자리가 지워지는 현상 방지
+  const regularHours = student.day_schedules?.[day] || [];
+  const isRegularClassDay = (student.class_days || []).includes(day);
+
+  if (isRegularClassDay && regularHours.length > 0) {
+    const firstVal = regularHours[0];
+    let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
+    if (h < 10) h += 12;
+    return h;
+  }
+
+  // 1. 시간 이동 필드(moved_to_hour) 사용
   if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
     const mVal = student.todaySession.moved_to_hour;
     let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
@@ -191,14 +204,23 @@ const filterStudentList = (params: {
         } catch (e) {}
       }
 
-      // 💡 보강/시간이동 학생 매칭 검사
+      // 💡 보강/시간이동 학생 매칭 검사 (모든 당일 세션 목록 순회)
       let hasMovedMatch = false;
-      if (s.todaySession?.moved_to_hour !== undefined && s.todaySession?.moved_to_hour !== null) {
-        const mVal = s.todaySession.moved_to_hour;
-        let hourVal = typeof mVal === 'number' ? mVal : parseInt(mVal, 10);
-        if (hourVal >= 100) hourVal = Math.floor(hourVal / 100);
-        if (hourVal < 10) hourVal += 12;
-        if (hourVal === matchHour) hasMovedMatch = true;
+      const targetSessions = Array.isArray(s.todaySessions) && s.todaySessions.length > 0 
+        ? s.todaySessions 
+        : (s.todaySession ? [s.todaySession] : []);
+
+      for (const sess of targetSessions) {
+        if (sess?.moved_to_hour !== undefined && sess?.moved_to_hour !== null) {
+          const mVal = sess.moved_to_hour;
+          let hourVal = typeof mVal === 'number' ? mVal : parseInt(mVal, 10);
+          if (hourVal >= 100) hourVal = Math.floor(hourVal / 100);
+          if (hourVal < 10) hourVal += 12;
+          if (hourVal === matchHour) {
+            hasMovedMatch = true;
+            break;
+          }
+        }
       }
 
       if (!hasRegMatch && !hasElectiveMatch && !hasMovedMatch) return false;
@@ -757,15 +779,24 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   const student = students.find(s => s.id === realStudentId);
   if (!student || !academy) return false;
 
+  const targetSaveDate = sessionData.session_date || selectedDate;
   const targetCourseName = sessionData.course_name || '정규';
-  const existingLog = (student.allLogs || []).find((l: any) => 
-    (l.date || l.session_date) === selectedDate && 
-    (l.course_name === targetCourseName || (targetCourseName === '정규' && !l.course_name))
-  );
-  let sessionId = existingLog?.id || (targetCourseName === '정규' ? student.todaySession?.id : undefined);
+  const targetMovedHour = sessionData.moved_to_hour !== undefined ? sessionData.moved_to_hour : null;
 
-  // 💡 [독립 세션 참조] targetCourseName에 따른 특정 세션 객체 지정 (정규 vs 특강 세션 분리)
-  const targetSession = existingLog || (targetCourseName === '정규' ? student.todaySession : undefined);
+  const existingLog = (student.allLogs || []).find((l: any) => 
+    (l.date || l.session_date) === targetSaveDate && 
+    (l.course_name === targetCourseName || (targetCourseName === '정규' && !l.course_name)) &&
+    ((l.moved_to_hour ?? null) === (targetMovedHour ?? null))
+  );
+  let sessionId = existingLog?.id;
+  if (!sessionId && targetCourseName === '정규' && targetMovedHour === null) {
+    if (student.todaySession && (student.todaySession.moved_to_hour === null || student.todaySession.moved_to_hour === undefined)) {
+      sessionId = student.todaySession.id;
+    }
+  }
+
+  // 💡 [독립 세션 참조] targetCourseName 및 moved_to_hour에 따른 특정 세션 객체 지정
+  const targetSession = existingLog || (targetCourseName === '정규' && targetMovedHour === null ? student.todaySession : undefined);
 
   // 💡 [추가] 관리 주의점(management_notes) 수정 시, 학생 마스터 정보 테이블도 함께 연동 갱신
   if ('management_notes' in sessionData && sessionData.management_notes !== undefined) {
@@ -822,14 +853,11 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   }
   const hasAnyScheduleToday = regularHours.length > 0 || hasElectiveToday;
 
-  // 💡 [좀비 보강 박멸] 새로 지정된 출결 상태가 '보강'이 아니고, 오늘 실제로 기본 등원 시간표(스케줄)가 존재하는 학생인 경우에만 기존 보강 정보(moved_to_hour)를 null로 정리합니다.
-  // 오늘 아무 스케줄도 없이 보강으로 수동 등원한 학생인 경우에는 출결 처리가 되더라도 등원 교시 정보를 유지해야 라이브 모드 명단에서 사라지지 않습니다.
-  if (newAttendanceStatus && !isSupplementStatus && hasAnyScheduleToday) {
-    filteredData.moved_to_hour = null;
+  // 💡 기존에 저장된 시간이동 정보(moved_to_hour)가 있는 경우, 출석/지각 등 상태를 바꾸더라도 시간이동 정보를 함부로 초기화하지 않고 보존합니다.
+  if (dataToSave.moved_to_hour !== undefined) {
+    filteredData.moved_to_hour = dataToSave.moved_to_hour;
   } else if (existingMovedHour !== undefined && existingMovedHour !== null) {
-    if (filteredData.moved_to_hour === undefined) {
-      filteredData.moved_to_hour = existingMovedHour;
-    }
+    filteredData.moved_to_hour = existingMovedHour;
   }
 
   // 2. 예정 테스트 정보 가공 (homework_to)
@@ -943,13 +971,21 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       };
       let targetId = (sessionId && sessionId !== 'temp') ? sessionId : undefined;
       if (!targetId) {
-        const { data: existingDbLog } = await supabase
+        const targetMovedHour = payload.moved_to_hour !== undefined ? payload.moved_to_hour : null;
+        let query = supabase
           .from('ams_session_logs')
           .select('id')
           .eq('student_id', realStudentId)
           .eq('session_date', selectedDate)
-          .eq('course_name', targetCourseName)
-          .maybeSingle();
+          .eq('course_name', targetCourseName);
+
+        if (targetMovedHour === null) {
+          query = query.is('moved_to_hour', null);
+        } else {
+          query = query.eq('moved_to_hour', targetMovedHour);
+        }
+
+        const { data: existingDbLog } = await query.maybeSingle();
         if (existingDbLog?.id) {
           targetId = existingDbLog.id;
         }
@@ -966,7 +1002,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       // 💡 [개선] PKEY 충돌 방지 및 안전한 upsert 갱신
       const { data: savedLog, error } = await supabase
         .from('ams_session_logs')
-        .upsert([payload], { onConflict: 'student_id,session_date,course_name' })
+        .upsert([payload], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
         .select()
         .maybeSingle();
 
@@ -979,17 +1015,17 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
             const testRes = savedLog.test_result ? (typeof savedLog.test_result === 'string' ? JSON.parse(savedLog.test_result) : savedLog.test_result) : {};
             
             const savedCourseName = savedLog.course_name || '정규';
-            const isRegularCourse = savedCourseName === '정규' || !savedCourseName;
+            const isTrueRegularSession = (savedCourseName === '정규' || !savedCourseName) && (savedLog.moved_to_hour === null || savedLog.moved_to_hour === undefined);
 
             const finalSavedTodaySession = {
               ...savedLog,
               // 💡 [지연 상태 덮어쓰기 방지] DB 비동기 저장이 지연되어 완료되었을 때, 
               // 그 사이 사용자가 수정/복구해 둔 로컬 상태 텍스트 필드가 존재한다면 이를 최우선 보존 (정규 과목만 적용)
-              ...(isRegularCourse && s.todaySession?.classwork_text !== undefined ? { classwork_text: s.todaySession.classwork_text } : {}),
-              ...(isRegularCourse && s.todaySession?.completed_classwork_text !== undefined ? { completed_classwork_text: s.todaySession.completed_classwork_text } : {}),
-              ...(isRegularCourse && s.todaySession?.homework_text !== undefined ? { homework_text: s.todaySession.homework_text } : {}),
-              ...(isRegularCourse && s.todaySession?.special_notes !== undefined ? { special_notes: s.todaySession.special_notes } : {}),
-              ...(isRegularCourse && s.todaySession?.test_score !== undefined ? { test_score: s.todaySession.test_score } : {}),
+              ...(isTrueRegularSession && !('classwork_text' in dataToSave) && s.todaySession?.classwork_text !== undefined ? { classwork_text: s.todaySession.classwork_text } : {}),
+              ...(isTrueRegularSession && !('completed_classwork_text' in dataToSave) && s.todaySession?.completed_classwork_text !== undefined ? { completed_classwork_text: s.todaySession.completed_classwork_text } : {}),
+              ...(isTrueRegularSession && !('homework_text' in dataToSave) && s.todaySession?.homework_text !== undefined ? { homework_text: s.todaySession.homework_text } : {}),
+              ...(isTrueRegularSession && !('special_notes' in dataToSave) && s.todaySession?.special_notes !== undefined ? { special_notes: s.todaySession.special_notes } : {}),
+              ...(isTrueRegularSession && !('test_score' in dataToSave) && s.todaySession?.test_score !== undefined ? { test_score: s.todaySession.test_score } : {}),
               
               date: savedLog.session_date,
               status: savedLog.status || 'none',
@@ -1015,7 +1051,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
             let updatedAllLogs = s.allLogs || [];
             const logIndex = updatedAllLogs.findIndex(l =>
               (l.date || l.session_date) === selectedDate &&
-              (l.course_name === savedCourseName || (savedCourseName === '정규' && !l.course_name))
+              (l.course_name === savedCourseName || (savedCourseName === '정규' && !l.course_name)) &&
+              ((l.moved_to_hour ?? null) === (savedLog.moved_to_hour ?? null))
             );
             if (logIndex !== -1) {
               updatedAllLogs = updatedAllLogs.map((l, i) => i === logIndex ? { ...l, ...finalSavedTodaySession } : l);
@@ -1025,7 +1062,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
             return {
               ...s,
-              ...(isRegularCourse ? { todaySession: finalSavedTodaySession } : {}),
+              ...(isTrueRegularSession ? { todaySession: finalSavedTodaySession } : {}),
               allLogs: updatedAllLogs
             };
           }
@@ -1131,7 +1168,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
       const { data: savedLogs, error } = await supabase
         .from('ams_session_logs')
-        .upsert(payloads, { onConflict: 'student_id,session_date,course_name' })
+        .upsert(payloads, { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
         .select();
 
       if (error) throw error;
@@ -1386,32 +1423,77 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
       return;
     }
+    if (!academy) return;
     const student = students.find(s => s.id === studentId);
     if (!student) return;
 
     // 오늘이 정규 수업 요일인지 판정
     const { isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, student.class_days || [], academy?.operation_settings?.holidays);
 
-    if (isScheduledToday) {
-      // 💡 정규 수업 요일인 학생은 "수업전"으로 온전히 복구
-      await saveTodaySession(studentId, { 
-        attendance_status: ATTENDANCE_STATUS.BEFORE, 
-        homework_text: student.lastSession?.homework_text || '',
-        moved_to_hour: null,
-        attendance_reason: null
-      });
-    } else {
-      // 정규 요일이 아닌 학생은 기존처럼 "보강"으로 추가
-      const settings = academy?.operation_settings || {};
-      const baseTime = settings.first_period_time || "";
-      const baseHour = baseTime ? parseInt(baseTime.split(':')[0]) : 15;
+    const newStatus = isScheduledToday ? ATTENDANCE_STATUS.BEFORE : '보강';
+    const newReason = isScheduledToday ? null : '보강 수업';
 
-      await saveTodaySession(studentId, { 
-        attendance_status: '보강', 
-        homework_text: student.lastSession?.homework_text || '',
-        moved_to_hour: baseHour,
-        attendance_reason: '보강 수업'
-      });
+    // '수업취소', '수업제외' 잔상 텍스트 제거
+    const cleanNotes = (student.todaySession?.special_notes || '')
+      .replace(/\[수업취소\]|\[수업제외\]|수업취소|수업제외/g, '')
+      .trim();
+
+    // 1. 로컬 상태 즉시 낙관적 업데이트 (화면 즉시 반영)
+    setStudents(prev => prev.map(s => {
+      if (s.id === studentId) {
+        return {
+          ...s,
+          todaySession: s.todaySession ? {
+            ...s.todaySession,
+            attendance_status: newStatus,
+            attendance_reason: newReason,
+            special_notes: cleanNotes,
+          } : s.todaySession
+        };
+      }
+      return s;
+    }));
+
+    // 2. DB 직접 업데이트 (saveTodaySession 우회)
+    try {
+      const targetSaveDate = selectedDate;
+      const targetCourseName = '정규';
+      let targetId = (student.todaySession?.id && student.todaySession.id !== 'temp') ? student.todaySession.id : undefined;
+      if (!targetId) {
+        const { data: existing } = await supabase
+          .from('ams_session_logs')
+          .select('id')
+          .eq('student_id', studentId)
+          .eq('session_date', targetSaveDate)
+          .eq('course_name', targetCourseName)
+          .maybeSingle();
+        if (existing?.id) targetId = existing.id;
+      }
+
+      const payload: any = {
+        student_id: studentId,
+        student_name: student.name,
+        academy_id: academy.id,
+        session_date: targetSaveDate,
+        course_name: targetCourseName,
+        attendance_status: newStatus,
+        attendance_reason: newReason,
+        special_notes: cleanNotes,
+      };
+      if (targetId) payload.id = targetId;
+      if (!isScheduledToday) {
+        const settings = academy?.operation_settings || {};
+        const baseHour = parseInt((settings.first_period_time || '15:00').split(':')[0]);
+        payload.moved_to_hour = baseHour;
+      }
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .upsert([payload], { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
+
+      if (error) throw error;
+    } catch (e: any) {
+      console.error('수업 복구 저장 오류:', e);
     }
   };
 
@@ -1460,7 +1542,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         return;
       }
 
-      const { error } = await supabase.from('ams_session_logs').upsert(newLogs, { onConflict: 'student_id,session_date,course_name' });
+      const { error } = await supabase.from('ams_session_logs').upsert(newLogs, { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
       if (error) throw error;
       await fetchAllData(false); 
       setIsBatchMode(false);
@@ -1519,59 +1601,47 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           throw new Error(resData.error || '백엔드 세션 삭제 실패');
         }
       } else {
-        // 📝 기존 결석/수업취소 이력 보존 방식 유지 (UPSERT)
-        const payload: any = { 
-          student_id: realStudentId, 
-          student_name: student.name, 
-          academy_id: academy.id, 
-          session_date: selectedDate, 
-          attendance_status: '결석', 
-          status: null,
-          attendance_reason: reason || '결석 공지',
-          moved_to_hour: null,
-          course_name: targetCourseName
-        };
+        // 💡 [수업취소/제외 시 원위치 복구 명확화]
+        // 원래 오늘 등원 시간표가 없던 원생(isScheduledToday === false)이 수업 취소를 누른 경우:
+        // DB 세션을 삭제하여 하단(Bottom) 명단으로 100% 원위치 즉시 복귀시킵니다!
+        const { isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, student.class_days || [], academy?.operation_settings?.holidays);
 
-        const exist = student.todaySession?.special_notes || ''; 
-        payload.special_notes = (exist && !exist.includes('[temp]')) ? exist : '';
-
-        // 💡 [낙관적 상태 변경] 클릭 즉시 특강/정규 행 세션의 attendance_status를 '결석'으로 전환하여 화면에서 0.1초 만에 감춤
-        const isCourseMatch = (c1: string, c2: string) => {
-          const clean1 = (c1 || '정규').replace(/\s+/g, '').toLowerCase();
-          const clean2 = (c2 || '정규').replace(/\s+/g, '').toLowerCase();
-          return clean1 === clean2 || clean1.includes(clean2) || clean2.includes(clean1);
-        };
-
-        setStudents((prev: any[]) => (prev || []).map((s: any) => {
-          if (s.id === realStudentId || s.originalId === realStudentId) {
-            let updatedLogs = (s.allLogs || []).map((l: any) => {
-              const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
-              const lCourse = l.course_name || '정규';
-              if (lDate === selectedDate && isCourseMatch(lCourse, targetCourseName)) {
-                return { ...l, attendance_status: '결석', attendance_reason: reason || '결석 공지' };
-              }
-              return l;
-            });
-            const hasLogMatch = (s.allLogs || []).some((l: any) => {
-              const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
-              const lCourse = l.course_name || '정규';
-              return lDate === selectedDate && isCourseMatch(lCourse, targetCourseName);
-            });
-            if (!hasLogMatch) {
-              updatedLogs = [{ student_id: realStudentId, session_date: selectedDate, course_name: targetCourseName, attendance_status: '결석', attendance_reason: reason || '결석 공지' }, ...updatedLogs];
-            }
-            return {
-              ...s,
-              allLogs: updatedLogs,
-              ...(targetCourseName === '정규' ? { todaySession: { ...s.todaySession, attendance_status: '결석', attendance_reason: reason || '결석 공지' } } : {})
-            };
+        if (!isScheduledToday) {
+          const res = await fetch('/api/attendance', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              action: 'delete_session',
+              studentId: realStudentId,
+              sessionDate: selectedDate,
+              courseName: targetCourseName
+            })
+          });
+          const resData = await res.json();
+          if (!res.ok || !resData.success) {
+            throw new Error(resData.error || '백엔드 세션 삭제 실패');
           }
-          return s;
-        }));
+        } else {
+          // 원래 오늘 정규 시간표에 있던 원생은 '수업취소' 상태로 상단 이력 보존
+          const payload: any = { 
+            student_id: realStudentId, 
+            student_name: student.name, 
+            academy_id: academy.id, 
+            session_date: selectedDate, 
+            attendance_status: '수업취소', 
+            status: null,
+            attendance_reason: reason || '수업 취소',
+            moved_to_hour: null,
+            course_name: targetCourseName
+          };
 
-        if (hasLog && targetCourseName === '정규') payload.id = logId;
-        const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date,course_name' });
-        if (error) throw error;
+          const exist = student.todaySession?.special_notes || ''; 
+          payload.special_notes = (exist && !exist.includes('[temp]')) ? exist : '';
+          if (hasLog && targetCourseName === '정규') payload.id = logId;
+
+          const { error } = await supabase.from('ams_session_logs').upsert([payload], { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
+          if (error) throw error;
+        }
       }
 
       await fetchAllData(false);
@@ -1808,7 +1878,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     return Array.from(hoursSet).sort((a, b) => a - b);
   }, [students, selectedDayKey, selectedDate, academy]);
 
-  // 1. 오늘의 학생 리스트 (필터링 + 정렬 - Overview는 항상 이름순)
+  // 1. 오늘의 학생 리스트 (필터링 + 가상 분할 팽창 + 정렬 - Overview는 항상 이름순)
   const todayStudents = useMemo(() => {
     const list = filterStudentList({
       students, selectedDayKey, selectedDate, academy, searchQuery, 
@@ -1816,7 +1886,41 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       selectedHour
     });
 
-    return list.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
+    const expandedList: Student[] = [];
+    list.forEach(s => {
+      const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
+      const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
+      const makeupLogs = todayLogs.filter((l: any) => l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+
+      // 1. 정규 수업 행 (정규 등원일인 경우)
+      if (s.isScheduledToday) {
+        expandedList.push({
+          ...s,
+          __courseType: 'regular',
+          todaySession: regularSession || (s.todaySession && (s.todaySession.moved_to_hour === null || s.todaySession.moved_to_hour === undefined) ? s.todaySession : {
+            id: 'temp', date: selectedDate, status: 'none', attendance_status: ATTENDANCE_STATUS.BEFORE, course_name: '정규'
+          } as any)
+        });
+      }
+
+      // 2. 보강 수업 행들 (보강 세션이 있는 경우)
+      makeupLogs.forEach((mLog: any, mIdx: number) => {
+        expandedList.push({
+          ...s,
+          id: `${s.id}_makeup_${mLog.id || mLog.moved_to_hour}_${mIdx}`,
+          originalId: s.id,
+          __courseType: 'makeup',
+          todaySession: mLog
+        });
+      });
+
+      // 3. 정규 등원일이 아니지만 보강 로그가 있는 학생
+      if (!s.isScheduledToday && makeupLogs.length === 0 && s.isTodayClassDay) {
+        expandedList.push(s);
+      }
+    });
+
+    return expandedList.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
   }, [students, selectedDayKey, selectedFilter, selectedDays, isAndFilter, searchQuery, selectedTeacherId, sortMode, academy, selectedDate, selectedHour]);
 
   // 💡 [추가] 오늘 수업 예정이었으나 제외(취소)된 학생 목록
@@ -1903,8 +2007,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
         {isLoading ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><Loader2 className="animate-spin mb-4" size={32} /><p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Academy Data...</p></div>) : (
           <div className="h-full">
-             {viewMode === 'board' && <Overview todayStudents={todayStudents} excludedStudents={excludedStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} currentUser={currentUser} />}
+             {viewMode === 'board' && <Overview todayStudents={todayStudents} excludedStudents={excludedStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onRestoreStudent={addStudentToToday} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} currentUser={currentUser} />}
              {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onBatchAddStudents={handleBatchAddStudents} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} currentUser={currentUser} />}
+             {viewMode === 'pdfLibrary' && <PdfLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} isLight={true} />}
+             {viewMode === 'videoTest' && <VideoPlayerTestView isLight={true} />}
              {viewMode === 'todayTable' && (
               <TodaySheet 
                 students={todayStudents} 

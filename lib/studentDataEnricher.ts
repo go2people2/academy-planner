@@ -282,7 +282,8 @@ export const getEnrichedStudentData = (
   
   const history = calculateStudentHistory(logs, selectedDate);
   const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays, '정규');
-  const todayLog = logs.find(l => String(l.date) === String(selectedDate) && (l.course_name === '정규' || !l.course_name));
+  const todayLogs = logs.filter(l => String(l.date) === String(selectedDate));
+  const regularTodayLog = todayLogs.find(l => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
   
   let electiveDays: string[] = [];
   const rawElective = s.book_courses?.['__elective_courses'];
@@ -299,19 +300,31 @@ export const getEnrichedStudentData = (
   const allClassDays = Array.from(new Set([...(s.class_days || []), ...electiveDays]));
 
   const { isHoliday, isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, allClassDays, academy?.operation_settings?.holidays);
-  const isMakeup = todayLog?.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || 
-                   (todayLog?.moved_to_hour !== undefined && todayLog?.moved_to_hour !== null && todayLog?.moved_to_hour > 0);
-  const isSkipped = todayLog?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
   
-  const hasValidContentInLog = todayLog && isValidHistoryLog(todayLog);
-  const isTodayClassDay = (isScheduledToday || isMakeup || !!todayLog) && !isSkipped;
+  const targetLogForStatus = regularTodayLog || todayLogs[0];
+  const isMakeup = targetLogForStatus?.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || 
+                   (targetLogForStatus?.moved_to_hour !== undefined && targetLogForStatus?.moved_to_hour !== null && targetLogForStatus?.moved_to_hour > 0);
+  const isSkipped = targetLogForStatus?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
+  
+  const isTodayClassDay = (isScheduledToday || isMakeup || todayLogs.length > 0) && !isSkipped;
   
   const pastLogs = logs
     .filter(l => l.date < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))
     .sort((a, b) => b.date.localeCompare(a.date));
   const targetCourseName = (s as any).isSpecialClass ? ((s as any).electiveCourse?.subject || '특강') : '정규';
   const aggregatedHw = calculateAggregatedHw(pastLogs, academy, s, targetCourseName);
-  const todaySession = determineTodaySession(s, todayLog, baseSession, isTodayClassDay, selectedDate, academy);
+  
+  const regularTodaySession = determineTodaySession(s, regularTodayLog, baseSession, isScheduledToday, selectedDate, academy);
+  const todaySession = isScheduledToday ? regularTodaySession : determineTodaySession(s, targetLogForStatus, baseSession, isTodayClassDay, selectedDate, academy);
+
+  const sessionMap = new Map<string, SessionLog>();
+  if (isScheduledToday && regularTodaySession) {
+    sessionMap.set(regularTodaySession.id || 'temp', regularTodaySession);
+  }
+  todayLogs.forEach(l => {
+    if (l.id) sessionMap.set(l.id, l);
+  });
+  const allTodaySessions = Array.from(sessionMap.values());
 
   const tInfo = findTeacherInfo(teachers, s.teacher_id, s.teacher_name);
 
@@ -322,7 +335,7 @@ export const getEnrichedStudentData = (
     suggestions: (tasksData || []).filter(t => t.title === `[건의] ${s.name}`),
     history, isRedLight: history.includes('poor') || history.includes('bad'),
     lastSession: baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', homework_text: aggregatedHw } as any : undefined), 
-    todaySession, allLogs: logs,
+    todaySession, todaySessions: allTodaySessions as SessionLog[], allLogs: logs,
     isTodayClassDay,
     isScheduledToday: !!isScheduledToday,
     isSkipped: !!isSkipped

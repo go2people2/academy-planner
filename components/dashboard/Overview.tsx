@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, StickyNote, Target, ExternalLink, Search, X, Download, Upload, Trash2 } from 'lucide-react';
+import { Users, ChevronRight, UserPlus, Check, MousePointer2, MinusCircle, Calendar, TrendingUp, StickyNote, Target, ExternalLink, Search, X, Download, Upload, Trash2, RefreshCw } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
@@ -25,19 +25,20 @@ interface OverviewProps {
   onBatchAdd: (ids: string[], reasons: Record<string, string>, makeupHours: Record<string, number>, makeupCourses?: Record<string, string>) => Promise<void>;
   onRemoveFromToday: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
-  onBatchAddStudents?: (newStudents: any[]) => Promise<boolean>; // 💡 추가
+  onRestoreStudent?: (studentId: string) => Promise<void>; // 💡 수업취소 복구 전용
+  onBatchAddStudents?: (newStudents: any[]) => Promise<boolean>;
   masterTextbooks: TextbookOption[];
-  teachers?: any[]; 
+  teachers?: any[];
   title?: string;
   showAddButton?: boolean;
   hideTodaySection?: boolean;
   consultationCycle?: number;
   onStartClass?: () => void;
   academyInfo?: any;
-  searchQuery?: string; // 💡 추가
-  onSearchChange?: (val: string) => void; // 💡 추가
-  currentUser?: any; // 💡 추가
-  showDuplicateWarning?: boolean; // 💡 추가 (중복 로그인 경보 노출 제어)
+  searchQuery?: string;
+  onSearchChange?: (val: string) => void;
+  currentUser?: any;
+  showDuplicateWarning?: boolean;
 }
 
 export default function Overview({ 
@@ -45,7 +46,7 @@ export default function Overview({
   onViewProgress,
   selectedDate, onDateChange,
   todayKey,
-  selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, onBatchAddStudents, masterTextbooks = [],
+  selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, onRestoreStudent, onBatchAddStudents, masterTextbooks = [],
   teachers = [],
   title,
   showAddButton = false,
@@ -516,7 +517,7 @@ export default function Overview({
             {todayStudents.map((s, idx) => {
               const isChecked = selectedToRemove.includes(s.id);
               return (
-                <StudentRowItem
+              <StudentRowItem
                   key={s.id || idx}
                   student={s}
                   isSelected={selectedStudentId === s.id && !isBatchMode}
@@ -529,6 +530,8 @@ export default function Overview({
                   onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)}
                   academyInfo={academyInfo}
                   onRemoveFromToday={onRemoveFromToday}
+                  onAddNewStudent={onAddNewStudent}
+                  onRestoreStudent={onRestoreStudent}
                 />
               );
             })}
@@ -560,6 +563,8 @@ export default function Overview({
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)}
                 academyInfo={academyInfo}
                 onRemoveFromToday={onRemoveFromToday}
+                onAddNewStudent={onAddNewStudent}
+                onRestoreStudent={onRestoreStudent}
               />
             ))}
           </div>
@@ -714,6 +719,8 @@ export default function Overview({
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)} 
                 academyInfo={academyInfo}
                 onRemoveFromToday={onRemoveFromToday}
+                onAddNewStudent={onAddNewStudent}
+                onRestoreStudent={onRestoreStudent}
               />
             );
           })}
@@ -895,13 +902,13 @@ export default function Overview({
 }
 
 function StudentRowItem({ 
-  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21, academyInfo, onRemoveFromToday
+  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21, academyInfo, onRemoveFromToday, onAddNewStudent, onRestoreStudent
 }: { 
-  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number, academyInfo?: any, onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number, academyInfo?: any, onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>, onAddNewStudent?: (data: any) => Promise<void>, onRestoreStudent?: (studentId: string) => Promise<void>
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   const isMakeup = student.todaySession?.attendance_status?.startsWith('보강');
-  const isAbsent = student.todaySession?.attendance_status === '결석';
+  const isAbsent = ['수업취소', '수업제외', '결석'].includes(student.todaySession?.attendance_status || '');
   
   const settings = academyInfo?.operation_settings || {};
   const baseTime = settings.first_period_time || "";
@@ -923,57 +930,99 @@ function StudentRowItem({
     return { needs: false };
   }, [student.last_consulted_at]);
 
-    const handleCardClick = (e: React.MouseEvent) => {
+  // 💡 오늘 정규 수업 및 선택과목(특강) 수강 판별 로직
+  const courseBadgeText = useMemo(() => {
+    const rawElective = student.book_courses?.['__elective_courses'];
+    let electiveSubjects: string[] = [];
+    if (rawElective) {
       try {
-        onClick();
-      } catch (err) {
-        console.error('Card click execution error:', err);
-      }
-    };
+        const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+        if (Array.isArray(parsed)) {
+          parsed.forEach((c: any) => {
+            if (!c) return;
+            const subject = c.subject || c.course_name || c.name;
+            if (!subject) return;
+            const days = c.days;
+            const matchesDay = currentDay && days && (
+              Array.isArray(days)
+                ? days.some((d: any) => typeof d === 'string' && d.trim() === currentDay)
+                : (typeof days === 'string' && days.includes(currentDay))
+            );
+            if (matchesDay && !electiveSubjects.includes(subject)) {
+              electiveSubjects.push(subject);
+            }
+          });
+        }
+      } catch (e) {}
+    }
 
-    return (
-      <motion.div 
-        layout 
-        onClick={handleCardClick}
-        tabIndex={0}
-        role="button"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleCardClick(e as any);
-          }
-        }}
-        className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
-        isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg' : 
-        isBatchMode 
-          ? isSelectionMode 
-            ? 'hover:border-blue-500/50 hover:bg-blue-500/5 bg-[#0f0f0f] border-white/5' 
-            : 'hover:border-red-500/50 hover:bg-red-500/5 bg-[#0f0f0f] border-white/5'
-          : isMakeup 
-            ? 'bg-emerald-500/15 border-emerald-500/40 hover:border-emerald-500/60 hover:bg-emerald-500/20'
-            : isAbsent
-              ? 'bg-red-500/15 border-red-500/30 opacity-[0.75] hover:opacity-95 hover:border-red-500/20'
-              : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
-      }`}
-    >
-      <div className="flex flex-col gap-1 overflow-hidden flex-1">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <h4 className={`text-[13px] tracking-tight shrink-0 ${
-            isSelected || isChecked 
-              ? 'text-white font-black' 
-              : isBatchMode 
-                ? (isSelectionMode ? 'group-hover:text-blue-400 font-black' : 'group-hover:text-red-400 font-black') 
-                : isAbsent
-                  ? 'text-white font-black'
-                  : 'text-gray-100 font-black'
-          }`}>
-            {student.name}
-          </h4>
-          {consultationStatus.needs && !isBatchMode && (
-            <span className={`${consultationStatus.bg} ${consultationStatus.color} ${consultationStatus.border} text-[8px] font-black px-1 py-0.5 rounded border uppercase tracking-tighter shrink-0 animate-pulse`}>
-              상담
-            </span>
-          )}
+    if (electiveSubjects.length === 0) return null; // 선택과목 없으면 뱃지 없음
+
+    const hasRegular = student.isScheduledToday || (student.class_days || []).includes(currentDay || '');
+
+    if (hasRegular) {
+      return `정규, ${electiveSubjects.join(', ')}`;
+    } else {
+      return electiveSubjects.join(', ');
+    }
+  }, [student, currentDay]);
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    try {
+      onClick();
+    } catch (err) {
+      console.error('Card click execution error:', err);
+    }
+  };
+
+  return (
+    <motion.div 
+      layout 
+      onClick={handleCardClick}
+      tabIndex={0}
+      role="button"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick(e as any);
+        }
+      }}
+      className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
+      isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg' : 
+      isBatchMode 
+        ? isSelectionMode 
+          ? 'hover:border-blue-500/50 hover:bg-blue-500/5 bg-[#0f0f0f] border-white/5' 
+          : 'hover:border-red-500/50 hover:bg-red-500/5 bg-[#0f0f0f] border-white/5'
+        : isMakeup 
+          ? 'bg-emerald-500/15 border-emerald-500/40 hover:border-emerald-500/60 hover:bg-emerald-500/20'
+          : isAbsent
+            ? 'bg-red-500/15 border-red-500/30 opacity-[0.75] hover:opacity-95 hover:border-red-500/20'
+            : 'bg-[#0f0f0f] border-white/5 hover:border-white/10 hover:bg-[#151515]'
+    }`}
+  >
+    <div className="flex flex-col gap-1 overflow-hidden flex-1">
+      <div className="flex items-center gap-1.5 overflow-hidden flex-wrap">
+        <h4 className={`text-[13px] tracking-tight shrink-0 ${
+          isSelected || isChecked 
+            ? 'text-white font-black' 
+            : isBatchMode 
+              ? (isSelectionMode ? 'group-hover:text-blue-400 font-black' : 'group-hover:text-red-400 font-black') 
+              : isAbsent
+                ? 'text-white font-black'
+                : 'text-gray-100 font-black'
+        }`}>
+          {student.name}
+        </h4>
+        {courseBadgeText && (
+          <span className="bg-purple-500/20 text-purple-300 text-[8px] font-black px-1 py-0.5 rounded border border-purple-500/30 uppercase tracking-tighter shrink-0">
+            {courseBadgeText}
+          </span>
+        )}
+        {consultationStatus.needs && !isBatchMode && (
+          <span className={`${consultationStatus.bg} ${consultationStatus.color} ${consultationStatus.border} text-[8px] font-black px-1 py-0.5 rounded border uppercase tracking-tighter shrink-0 animate-pulse`}>
+            상담
+          </span>
+        )}
           {!isBatchMode && (
             <div className="flex items-center gap-1">
               {onViewProgress && (
@@ -1000,17 +1049,31 @@ function StudentRowItem({
               >
                 <ExternalLink size={10} strokeWidth={3} />
               </button>
-              {/* 💡 오늘 수업 제외/삭제 버튼 추가 */}
-              <button 
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onRemoveFromToday?.(student.id, '수업 취소', 'delete');
-                }}
-                className="p-1 rounded bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all shadow-sm shadow-red-900/20"
-                title="오늘 수업 제외/삭제"
-              >
-                <Trash2 size={10} />
-              </button>
+              {/* 💡 수업취소 상태일 때: 수업취소 해제(복구) 버튼 / 정상 상태일 때: 수업제외/삭제 버튼 */}
+              {isAbsent ? (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // 💡 수업 복구 전용 함수(onRestoreStudent)에 학생 ID를 직접 전달
+                    onRestoreStudent?.(student.id);
+                  }}
+                  className="p-1 rounded bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500 hover:text-white transition-all shadow-sm shadow-emerald-900/20"
+                  title="수업취소 해제 (원래 수업으로 복구)"
+                >
+                  <RefreshCw size={10} />
+                </button>
+              ) : (
+                <button 
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onRemoveFromToday?.(student.id, '수업 취소', 'delete');
+                  }}
+                  className="w-4 h-4 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 transition-all shadow-sm flex items-center justify-center text-[9px] font-black leading-none"
+                  title="기록 리셋 / 보강 제외 (R)"
+                >
+                  R
+                </button>
+              )}
             </div>
           )}
           {isMakeup && !isSelected && !isChecked && (

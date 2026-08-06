@@ -8,6 +8,7 @@ import {
   Edit, Users, MessageSquare, CheckCircle2, Circle, FileText, Edit2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { getTodayStr } from '@/lib/utils';
 import { SessionLog, Student, Teacher } from '@/types/dashboard';
 import TaskLinksTab from './TaskLinksTab';
@@ -34,6 +35,35 @@ interface TeacherTaskItem {
   created_at: string;
   type?: string; // 💡 링크/일반 업무 구분용 타입 추가
 }
+
+export const buildMakeupPayload = (params: {
+  studentId: string;
+  studentName?: string;
+  academyId: string;
+  makeupDate: string;
+  makeupTime: string;
+  makeupEndTime: string;
+  makeupType: string;
+  makeupReason?: string;
+  courseName?: string;
+}) => {
+  const { studentId, studentName, academyId, makeupDate, makeupTime, makeupEndTime, makeupType, makeupReason, courseName = '정규' } = params;
+  const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
+  const noteText = makeupReason && makeupReason.trim() ? `[${makeupType}] (${makeupReason.trim()})` : `[${makeupType}]`;
+
+  return {
+    student_id: studentId,
+    student_name: studentName || '학생',
+    academy_id: academyId,
+    session_date: makeupDate,
+    attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
+    attendance_reason: '보강 수업',
+    moved_to_hour: hour,
+    status: 'none',
+    completed_classwork_text: noteText,
+    course_name: courseName
+  };
+};
 
 export default function TeacherTasks({
   academyInfo,
@@ -77,7 +107,7 @@ export default function TeacherTasks({
   const [makeupDate, setMakeupDate] = useState(getTodayStr());
   const [makeupTime, setMakeupTime] = useState<string>('19:00'); // 디폴트 19:00
   const [makeupEndTime, setMakeupEndTime] = useState<string>('21:00'); // 보강 종료 시간
-  const [makeupType, setMakeupType] = useState<string>('진도 보강'); // 보강 유형
+  const [makeupType, setMakeupType] = useState<string>('결석 보강'); // 보강 유형
   const [makeupReason, setMakeupReason] = useState<string>('');
   const [makeupSearch, setMakeupSearch] = useState('');
   const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
@@ -283,11 +313,11 @@ export default function TeacherTasks({
         
         // 1. 그룹에 포함된 기존 학생의 세션 로그를 일괄 업데이트합니다.
         const updatePromises = editMakeupGroup.items.map((item: any) => {
-          const currentNotes = item.special_notes || '';
+          const currentNotes = item.completed_classwork_text || item.special_notes || '';
           const pureNotes = currentNotes.startsWith('[') && currentNotes.includes(']')
             ? currentNotes.slice(currentNotes.indexOf(']') + 1).trim()
             : currentNotes;
-          const newNotes = `[${makeupType}] ${pureNotes}`.trim();
+          const newNotes = makeupReason && makeupReason.trim() ? `[${makeupType}] (${makeupReason.trim()})` : `[${makeupType}]`;
           const studentObj = students.find(s => s.id === item.student_id);
           const isScheduledToday = checkIsScheduledOnDate(studentObj, makeupDate);
 
@@ -298,7 +328,7 @@ export default function TeacherTasks({
               attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
               attendance_reason: '보강 수업',
               moved_to_hour: hour,
-              special_notes: newNotes
+              completed_classwork_text: newNotes
             })
             .eq('id', item.id);
         });
@@ -308,25 +338,22 @@ export default function TeacherTasks({
         if (selectedStudentIds.length > 0) {
           const payloads = selectedStudentIds.map(studentId => {
             const student = students.find(s => s.id === studentId);
-            const isScheduledToday = checkIsScheduledOnDate(student, makeupDate);
-            return {
-              student_id: studentId,
-              student_name: student?.name || '학생',
-              academy_id: academyInfo.id,
-              session_date: makeupDate,
-              attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
-              attendance_reason: '보강 수업',
-              moved_to_hour: hour,
-              status: 'none',
-              special_notes: `[${makeupType}]`,
-              course_name: '정규'
-            };
+            return buildMakeupPayload({
+              studentId,
+              studentName: student?.name,
+              academyId: academyInfo.id,
+              makeupDate,
+              makeupTime,
+              makeupEndTime,
+              makeupType,
+              courseName: '정규'
+            });
           });
 
           insertPromise = (async () => {
             const { error } = await supabase
               .from('ams_session_logs')
-              .upsert(payloads, { onConflict: 'student_id,session_date,course_name' });
+              .upsert(payloads, { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
             if (error) throw error;
           })();
         }
@@ -337,7 +364,7 @@ export default function TeacherTasks({
         setEditMakeupGroup(null);
         setSelectedStudentIds([]);
         setMakeupSearch('');
-        setMakeupType('진도 보강');
+        setMakeupType('결석 보강');
         setMakeupEndTime('21:00');
         
         await fetchMakeups();
@@ -379,26 +406,22 @@ export default function TeacherTasks({
           }
 
           const student = students.find(s => s.id === realStudentId);
-          const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
-
-          const noteText = makeupReason.trim() ? `[${makeupType}] (${makeupReason.trim()})` : `[${makeupType}]`;
-          return {
-            student_id: realStudentId,
-            student_name: student?.name || '학생',
-            academy_id: academyInfo.id,
-            session_date: makeupDate,
-            attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
-            attendance_reason: '보강 수업',
-            moved_to_hour: hour,
-            status: 'none',
-            special_notes: noteText,
-            course_name: courseName
-          };
+          return buildMakeupPayload({
+            studentId: realStudentId,
+            studentName: student?.name,
+            academyId: academyInfo.id,
+            makeupDate,
+            makeupTime,
+            makeupEndTime,
+            makeupType,
+            makeupReason,
+            courseName
+          });
         });
 
         const { error } = await supabase
           .from('ams_session_logs')
-          .upsert(payloads, { onConflict: 'student_id,session_date,course_name' });
+          .upsert(payloads, { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
 
         if (error) throw error;
 
@@ -406,7 +429,7 @@ export default function TeacherTasks({
         setMakeupSearch('');
         setMakeupGradeFilter('all');
         setMakeupDayFilter('all');
-        setMakeupType('진도 보강');
+        setMakeupType('결석 보강');
         setMakeupReason('');
         setMakeupEndTime('21:00');
         setShowOnlyMyStudentsInMakeup(true);
@@ -444,7 +467,7 @@ export default function TeacherTasks({
 
     // 보강 유형 및 결석 원인 날짜 파싱
     const firstItem = group.items[0];
-    const notes = firstItem?.special_notes || '';
+    const notes = firstItem?.completed_classwork_text || firstItem?.special_notes || '';
     const typeMatch = notes.match(/^\[(.*?)\]/);
     const type = typeMatch ? typeMatch[1] : '진도 보강';
     const reasonMatch = notes.match(/\((.*?)\)/);
@@ -485,6 +508,17 @@ export default function TeacherTasks({
     if (!confirm('이 보강 스케줄 예약을 취소하시겠습니까?')) return;
     try {
       setMakeups(prev => prev.filter(m => m.id !== logId));
+
+      // 💡 1. 먼저 DB 상의 attendance_status와 attendance_reason에서 '보강' 문구를 완전히 비우고 '시간 이동'으로 리셋
+      await supabase
+        .from('ams_session_logs')
+        .update({ 
+          attendance_status: ATTENDANCE_STATUS.BEFORE, 
+          attendance_reason: null
+        })
+        .eq('id', logId);
+
+      // 💡 2. 해당 세션 로그 완전 삭제
       const { error } = await supabase
         .from('ams_session_logs')
         .delete()
@@ -492,7 +526,7 @@ export default function TeacherTasks({
 
       if (error) throw error;
 
-      await onRefreshStudents(false);
+      if (onRefreshStudents) await onRefreshStudents(true);
       fetchMakeups();
     } catch (err) {
       console.error('Error deleting makeup:', err);
@@ -509,6 +543,16 @@ export default function TeacherTasks({
       const idsToDelete = makeupsInGroup.map(m => m.id);
       setMakeups(prev => prev.filter(m => !idsToDelete.includes(m.id)));
 
+      // 💡 1. DB 상의 '보강' 상태 문구 완벽 초기화
+      await supabase
+        .from('ams_session_logs')
+        .update({ 
+          attendance_status: ATTENDANCE_STATUS.BEFORE, 
+          attendance_reason: null
+        })
+        .in('id', idsToDelete);
+
+      // 💡 2. 해당 세션 로그 일괄 삭제
       const { error } = await supabase
         .from('ams_session_logs')
         .delete()
@@ -516,7 +560,7 @@ export default function TeacherTasks({
 
       if (error) throw error;
 
-      await onRefreshStudents(false);
+      if (onRefreshStudents) await onRefreshStudents(true);
       fetchMakeups();
     } catch (err) {
       console.error('Error deleting group makeups:', err);
@@ -687,8 +731,9 @@ export default function TeacherTasks({
       // 2. 학생 / 검색어 필터링
       if (makeupCardSearch.trim()) {
         const q = makeupCardSearch.toLowerCase().replace(/\s+/g, '');
+        const noteTextVal = makeup.completed_classwork_text || makeup.special_notes || '';
         const nameMatch = makeup.student_name ? makeup.student_name.toLowerCase().replace(/\s+/g, '').includes(q) : false;
-        const noteMatch = makeup.special_notes ? makeup.special_notes.toLowerCase().replace(/\s+/g, '').includes(q) : false;
+        const noteMatch = noteTextVal ? noteTextVal.toLowerCase().replace(/\s+/g, '').includes(q) : false;
         const studentObj = students.find(s => s.id === makeup.student_id);
         const gradeMatch = studentObj?.grade ? studentObj.grade.toLowerCase().replace(/\s+/g, '').includes(q) : false;
         if (!(nameMatch || noteMatch || gradeMatch)) return false;
@@ -1069,7 +1114,7 @@ export default function TeacherTasks({
                                           담당: {teacherName}
                                         </span>
                                         {(() => {
-                                          const notes = makeup.special_notes || '';
+                                          const notes = makeup.completed_classwork_text || makeup.special_notes || '';
                                           const rMatch = notes.match(/\((.*?)\)/);
                                           const reasonText = rMatch ? rMatch[1] : null;
                                           if (!reasonText) return null;
@@ -1451,9 +1496,9 @@ export default function TeacherTasks({
                       onChange={(e) => setMakeupType(e.target.value)}
                       className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
                     >
+                      <option value="결석 보강">결석 보강</option>
                       <option value="진도 보강">진도 보강</option>
                       <option value="시험 보강">시험 보강</option>
-                      <option value="결석 보강">결석 보강</option>
                       <option value="기타 보강">기타 보강</option>
                     </select>
                   </div>

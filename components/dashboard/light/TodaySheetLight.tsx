@@ -1618,31 +1618,25 @@ export default function TodaySheet({
 
               return filteredStudents.map((s: any, idx: number) => {
                 const getStartTime = (st: any) => {
-                  if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-                    const mVal = st.todaySession.moved_to_hour;
-                    let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+                  const normalizeHour = (val: number) => {
+                    let h = val >= 100 ? Math.floor(val / 100) : val;
                     if (h < 10) h += 12;
                     return h;
-                  }
-                  const stat = st.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-                  if (stat.includes(':')) { 
-                    const match = stat.match(/(\d{1,2}):/);
-                    if (match) {
-                      let val = parseInt(match[1], 10);
-                      if (!isNaN(val) && val < 24) {
-                        if (val < 8) val += 12;
-                        return val;
-                      }
-                    }
+                  };
+
+                  if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
+                    return normalizeHour(st.todaySession.moved_to_hour);
                   }
 
-                  // 현재 행 스케줄 적용 (특강/정규 개별 적용)
                   const hours = st.day_schedules?.[dayKey] || [];
+
+                  if (st.isSpecialClass) {
+                    if (hours.length > 0) return normalizeHour(hours[0]);
+                    return 999;
+                  }
+
                   if (hours.length > 0) {
-                    const firstVal = hours[0];
-                    let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-                    if (h < 10) h += 12;
-                    return h;
+                    return normalizeHour(hours[0]);
                   }
                   return 999;
                 };

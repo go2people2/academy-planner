@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { academyId, bookcode, pdfUrl, answerUrl, explanationUrl } = body;
+    const { academyId, bookcode, pdfUrl, answerUrl, explanationUrl, quiz1Url, quiz2Url, quiz3Url, unitPdfUrl } = body;
 
     if (!academyId || !bookcode) {
       return NextResponse.json({ error: '필수 파라미터(academyId, bookcode)가 누락되었습니다.' }, { status: 400 });
@@ -124,7 +124,11 @@ export async function POST(req: NextRequest) {
       bookcode,
       pdf_url: pdfUrl ?? '',
       answer_url: answerUrl ?? '',
-      explanation_url: explanationUrl ?? ''
+      explanation_url: explanationUrl ?? '',
+      quiz1_url: quiz1Url ?? '',
+      quiz2_url: quiz2Url ?? '',
+      quiz3_url: quiz3Url ?? '',
+      unit_pdf_url: unitPdfUrl ?? ''
     };
 
     let { data, error: upsertErr } = await supabaseAdmin
@@ -137,25 +141,25 @@ export async function POST(req: NextRequest) {
 
     if (upsertErr) {
       console.error('[API POST PDF] Upsert error:', upsertErr.message);
-      // 컬럼 미존재시 fallback 시도
-      if (upsertErr.message?.includes('answer_url') || upsertErr.message?.includes('column')) {
-        const fallbackData = {
-          academy_id: academyId,
-          bookcode,
-          pdf_url: pdfUrl ?? ''
-        };
-        const { data: fbData, error: fbErr } = await supabaseAdmin
-          .from('ams_textbook_pdfs')
-          .upsert(fallbackData, { onConflict: 'academy_id,bookcode' })
-          .select();
-        
-        if (!fbErr) {
-          return NextResponse.json({ 
-            success: true, 
-            data: fbData?.[0], 
-            warning: 'DB에 answer_url/explanation_url 컬럼이 아직 없어 본문 링크만 저장되었습니다. Supabase에서 컬럼 추가 SQL을 실행해 주세요.' 
-          });
-        }
+      // 컬럼 미존재시 fallback 시도 (quiz1_url 등 컬럼이 없는 DB 대비)
+      const fallbackData = {
+        academy_id: academyId,
+        bookcode,
+        pdf_url: pdfUrl ?? '',
+        answer_url: answerUrl ?? '',
+        explanation_url: explanationUrl ?? ''
+      };
+      const { data: fbData, error: fbErr } = await supabaseAdmin
+        .from('ams_textbook_pdfs')
+        .upsert(fallbackData, { onConflict: 'academy_id,bookcode' })
+        .select();
+      
+      if (!fbErr) {
+        return NextResponse.json({ 
+          success: true, 
+          data: fbData?.[0], 
+          warning: '기본 교재 3종 PDF 링크만 저장되었습니다. (퀴즈 컬럼 미존재시 Supabase에 quiz1_url, quiz2_url, quiz3_url 컬럼을 추가해 주세요)' 
+        });
       }
       return NextResponse.json({ error: `교재 링크 저장 실패: ${upsertErr.message}` }, { status: 500 });
     }

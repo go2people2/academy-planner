@@ -64,7 +64,7 @@ export function useTodaySheetRows({
     const uniqueOriginalStudents = new Map<string, any>();
     result.forEach((s: any) => {
       const realId = s.originalId || s.id;
-      if (!uniqueOriginalStudents.has(realId) || !s.isSpecialClass) {
+      if (!uniqueOriginalStudents.has(realId) || (!s.isSpecialClass && !s.isMakeupRow)) {
         uniqueOriginalStudents.set(realId, s);
       }
     });
@@ -168,10 +168,9 @@ export function useTodaySheetRows({
         }
       });
 
-      // (2) 정규 수업 행 추가
-      const regularLog = (s.allLogs || []).find((l: any) => 
-        (l.date || l.session_date) === selectedDate && (l.course_name === '정규' || !l.course_name)
-      );
+      const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
+      const regularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
+      const makeupLogs = todayLogs.filter((l: any) => l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
 
       const allElectiveDaysForStudent = new Set<string>();
       if (rawElective) {
@@ -193,11 +192,19 @@ export function useTodaySheetRows({
       const hasAnyElective = allElectiveDaysForStudent.size > 0;
       const isElectiveDay = allElectiveDaysForStudent.has(dayKey);
       const isRegularClassDay = (s.class_days || []).includes(dayKey);
+      const realId = s.originalId || s.id;
+      const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
+      const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);
 
       let shouldShowRegular = false;
+      const rawAtt = regularTodaySession?.attendance_status || '';
+      const isCanceled = rawAtt.includes('수업취소') || rawAtt.includes('수업제외');
+
       if (isRegularClassDay) {
+        // 원래 오늘 정규 수업일인 경우 상단 배치
         shouldShowRegular = true;
-      } else if (regularLog) {
+      } else if (regularLog && !isCanceled && (rawAtt.includes('보강') || ['출석', '지각', '출석전'].some(st => rawAtt.startsWith(st)))) {
+        // 원래 수업일이 아니었지만 오늘 수업/보강으로 추가된 학생은 취소되지 않은 동안에만 상단 배치
         shouldShowRegular = true;
       } else if (!hasAnyElective) {
         shouldShowRegular = true;
@@ -221,9 +228,6 @@ export function useTodaySheetRows({
           })
           .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
 
-        const realId = s.originalId || s.id;
-        const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
-        const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);
         const rawRegularLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
         const formatLastSessionHomework = (log: any) => {
           if (!log || !log.homework_text || !log.homework_text.trim()) return log;
@@ -274,6 +278,23 @@ export function useTodaySheetRows({
           todaySession: regularTodaySession
         });
       }
+
+      // (3) 보강 전용 독립 행 추가
+      makeupLogs.forEach((mLog: any) => {
+        const makeupHour = mLog.moved_to_hour;
+        const makeupId = `${realId}_makeup_${makeupHour}`;
+        if (!expandedResult.some(item => item.id === makeupId)) {
+          expandedResult.push({
+            ...s,
+            id: makeupId,
+            originalId: realId,
+            isSpecialClass: false,
+            isMakeupRow: true,
+            courseName: '정규',
+            todaySession: mLog
+          });
+        }
+      });
     });
 
     result = expandedResult;
@@ -297,20 +318,34 @@ export function useTodaySheetRows({
       result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
     }
 
-    // 💡 4. 시간대 계산 헬퍼
+    // 💡 4. 시간대 계산 헬퍼 (시간 보정: 1~9시는 오후 시각으로 보정, 10시 이상은 그대로 유지)
+    const normalizeHour = (val: number) => {
+      let h = val >= 100 ? Math.floor(val / 100) : val;
+      if (h < 10) h += 12;
+      return h;
+    };
+
     const getStartTime = (st: any) => {
-      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-        const mVal = st.todaySession.moved_to_hour;
-        let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
-        if (h <= 12) h += 12;
-        return h;
-      }
       const hours = st.day_schedules?.[dayKey] || [];
+
+      // 💡 1. 정규 수업 행인 경우 원래 정규 수업 교시를 최우선 적용하여 3교시 위치 보존
+      if (!st.isSpecialClass && !st.isMakeupRow) {
+        if (hours.length > 0) return normalizeHour(hours[0]);
+      }
+
+      // 💡 2. 보강 행 또는 명시적 시간이동 정보(moved_to_hour)가 있으면 해당 보강 교시 적용
+      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
+        return normalizeHour(st.todaySession.moved_to_hour);
+      }
+
+      // 💡 3. 특강/선택과목 행인 경우: 자신의 특강 교시 적용
+      if (st.isSpecialClass) {
+        if (hours.length > 0) return normalizeHour(hours[0]);
+        return 99;
+      }
+
       if (hours.length > 0) {
-        const firstVal = hours[0];
-        let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-        if (h <= 12) h += 12;
-        return h;
+        return normalizeHour(hours[0]);
       }
       return 99;
     };
@@ -341,11 +376,19 @@ export function useTodaySheetRows({
       }
     });
 
-    // 💡 6. 시작 시간대 필터 ('15:00', '16:00' 등)
+    // 💡 6. 시작 시간대 필터 ('15:00', '16:00' 등) - 정규시간 또는 보강시간 어느 하나라도 일치하면 표시
     if (selectedHour && selectedHour !== 'All') {
       const targetH = parseInt(selectedHour, 10);
       if (!isNaN(targetH)) {
-        result = result.filter(st => getStartTime(st) === targetH);
+        result = result.filter(st => {
+          const regH = getStartTime(st);
+          if (regH === targetH) return true;
+          if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
+            const h = normalizeHour(st.todaySession.moved_to_hour);
+            if (h === targetH) return true;
+          }
+          return false;
+        });
       }
     }
 

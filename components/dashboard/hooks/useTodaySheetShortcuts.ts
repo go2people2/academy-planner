@@ -440,6 +440,15 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             });
 
             if (chg) {
+              const rowMovedHour = sess.moved_to_hour !== undefined && sess.moved_to_hour !== null ? sess.moved_to_hour : ((st as any).moved_to_hour !== undefined && (st as any).moved_to_hour !== null ? (st as any).moved_to_hour : null);
+              const rowCourseName = st.courseName || sess.course_name || '정규';
+              if (rowMovedHour !== null) {
+                nD['moved_to_hour'] = rowMovedHour;
+              }
+              if (rowCourseName) {
+                nD['course_name'] = rowCourseName;
+              }
+
               const prevD: any = {};
               Object.keys(nD).forEach(k => {
                 if (k === 'mission') prevD[k] = st.recent_mission || sess.mission || '';

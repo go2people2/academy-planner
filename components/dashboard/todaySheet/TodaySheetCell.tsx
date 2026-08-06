@@ -15,6 +15,22 @@ import { SimpleTextCell } from './cells/SimpleTextCell';
 import { FeedbackKeyboardPopup } from './FeedbackKeyboardPopup';
 import TextbookSystem from '@/components/student/TextbookSystem';
 
+export const resolveTargetSession = (student?: any, hour?: number | null, courseName?: string) => {
+  if (!student) return undefined;
+  if (Array.isArray(student.todaySessions) && student.todaySessions.length > 0) {
+    if (hour !== undefined && hour !== null) {
+      const matchByHour = student.todaySessions.find((s: any) => s.moved_to_hour === hour);
+      if (matchByHour) return matchByHour;
+    }
+    if (courseName) {
+      const matchByCourse = student.todaySessions.find((s: any) => s.course_name === courseName);
+      if (matchByCourse) return matchByCourse;
+    }
+    return student.todaySessions[0];
+  }
+  return student.todaySession;
+};
+
 interface TodaySheetCellProps {
   col: any;
   styles: React.CSSProperties;
@@ -80,7 +96,7 @@ interface TodaySheetCellProps {
   onSetNextQuizCut: (val: number) => void;
   onSetTodayTestCut: (val: number) => void; // 💡 추가
   onSetNextQuizTrial: (num: number) => void;
-  onSave: (data?: any, directValue?: any) => void;
+  onSave: (data?: any, directValue?: any, options?: any) => void;
   onInputChange?: (field: string, value: string) => void;
   rowIndex?: number;
   onApplyTestPreset?: (preset: any, colId: 'test_id' | 'next_quiz') => void;
@@ -147,15 +163,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const incomingHw = formData?.homework_text ?? student.todaySession?.homework_text ?? '';
   
   useEffect(() => {
-    if (incomingCcw && !ccwBookBuf.current.includes(incomingCcw)) {
-      ccwBookBuf.current = incomingCcw;
-    }
+    ccwBookBuf.current = incomingCcw;
   }, [incomingCcw]);
 
   useEffect(() => {
-    if (incomingHw && !hwBookBuf.current.includes(incomingHw)) {
-      hwBookBuf.current = incomingHw;
-    }
+    hwBookBuf.current = incomingHw;
   }, [incomingHw]);
 
   // 🧲 [추가] 도구 드래그앤드롭 이벤트 핸들러
@@ -1586,7 +1598,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   }
                   handleKeyDown(e, colId);
                 }} 
-                onBlur={(e) => onSave(colId, e.target.value)} 
+                onBlur={(e) => onSave(colId, e.target.value, { isBlur: true })} 
                 placeholder="-" 
                 className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`} 
                 onInput={(e) => handleLocalInput(e, colId)} 

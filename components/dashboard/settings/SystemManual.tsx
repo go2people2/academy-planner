@@ -6,8 +6,36 @@ import {
   Sparkles, ChevronDown 
 } from 'lucide-react';
 
+import VideoPlayerModal from '@/components/common/VideoPlayerModal';
+
+const DEFAULT_TIMESTAMPS_TEXT = `[00:00] 시작
+[00:05] 27번
+[02:10] 28번
+[04:46] 29번
+[05:57] 30번
+[06:58] 31번
+[07:47] 32번
+[08:49] 33번
+[10:33] 34번
+[12:53] 35번
+[13:16] 36번
+[14:22] 37번
+[15:44] 38번
+[17:20] 39번
+[18:50] 40번
+[20:14] 41번
+[21:11] 42번
+[22:24] 43번
+[23:27] 44번
+[25:15] 45번
+[26:33] 46번
+[28:03] 47번
+[30:52] 48번
+[34:03] 49번`;
+
 export default function SystemManual() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
   const manuals = [
     {
@@ -162,13 +190,48 @@ export default function SystemManual() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3 mb-6 pb-4 border-b border-white/10">
-        <Info size={24} className="text-purple-400" />
-        <div>
-          <h3 className="text-xl font-black text-white">시스템 가이드북 (Manual)</h3>
-          <p className="text-sm text-gray-400">사이드바 메뉴별 기능과 활용 방법을 아코디언으로 안내합니다.</p>
+      <div className="flex items-center justify-between gap-3 mb-6 pb-4 border-b border-white/10">
+        <div className="flex items-center gap-3">
+          <Info size={24} className="text-purple-400" />
+          <div>
+            <h3 className="text-xl font-black text-white">시스템 가이드북 (Manual)</h3>
+            <p className="text-sm text-gray-400">사이드바 메뉴별 기능과 활용 방법을 아코디언으로 안내합니다.</p>
+          </div>
         </div>
       </div>
+
+      {/* 🎬 [임시 바로가기] 학생 비디오 플레이어 & 문항별 타임스탬프 실험실 */}
+      <div className="p-4 rounded-xl bg-gradient-to-r from-purple-900/40 via-indigo-900/40 to-slate-900 border border-purple-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 shadow-xl">
+        <div className="space-y-1">
+          <div className="flex items-center gap-2">
+            <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-500 text-white uppercase tracking-wider">
+              임시 테스트
+            </span>
+            <h4 className="font-black text-sm text-white flex items-center gap-1.5">
+              🎬 학생 비디오 플레이어 & 문항별 타임스탬프 실험실
+            </h4>
+          </div>
+          <p className="text-xs text-slate-300 font-bold">
+            맥미니 로컬 스트리밍 서버(`8080`) 및 **27번~49번 문항별 타임스탬프 바로가기 버튼** 테스트
+          </p>
+        </div>
+
+        <button
+          onClick={() => setIsVideoModalOpen(true)}
+          className="px-4 py-2 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all shrink-0 shadow-lg shadow-indigo-600/30 active:scale-95"
+        >
+          실험실 플레이어 실행 ➔
+        </button>
+      </div>
+
+      {/* 비디오 모달 */}
+      <VideoPlayerModal
+        isOpen={isVideoModalOpen}
+        videoUrl="http://192.168.0.13:8080/video/sample.mp4"
+        title="[수능/모의고사 기출] 27번~49번 문항별 해설강의 (실험실 테스트)"
+        timestampsText={DEFAULT_TIMESTAMPS_TEXT}
+        onClose={() => setIsVideoModalOpen(false)}
+      />
 
       <div className="space-y-3">
         {manuals.map((item, i) => {

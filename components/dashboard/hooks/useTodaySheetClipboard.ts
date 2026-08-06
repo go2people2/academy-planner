@@ -192,7 +192,13 @@ export function useTodaySheetClipboard({
             const prop = mapColumnToProp(colId);
             if (String(session[prop] || '') !== value) { upds[prop] = value; changed = true; }
           });
-          if (changed) updates.push({ studentId: currentStudent.id, newData: upds, prevData: { ...session } });
+          if (changed) {
+            const rowMovedHour = session.moved_to_hour !== undefined && session.moved_to_hour !== null ? session.moved_to_hour : ((currentStudent as any).moved_to_hour !== undefined && (currentStudent as any).moved_to_hour !== null ? (currentStudent as any).moved_to_hour : null);
+            const rowCourseName = currentStudent.courseName || session.course_name || '정규';
+            if (rowMovedHour !== null) upds['moved_to_hour'] = rowMovedHour;
+            if (rowCourseName) upds['course_name'] = rowCourseName;
+            updates.push({ studentId: currentStudent.id, newData: upds, prevData: { ...session } });
+          }
         });
       }
 

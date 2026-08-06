@@ -25,6 +25,7 @@ interface OverviewProps {
   onBatchAdd: (ids: string[], reasons: Record<string, string>, makeupHours: Record<string, number>) => Promise<void>;
   onRemoveFromToday: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
   onAddNewStudent: (data: any) => Promise<void>;
+  onRestoreStudent?: (studentId: string) => Promise<void>;
   onBatchAddStudents?: (newStudents: any[]) => Promise<boolean>; // 💡 추가
   masterTextbooks: TextbookOption[];
   teachers?: any[]; 
@@ -44,7 +45,7 @@ export default function Overview({
   onViewProgress,
   selectedDate, onDateChange,
   todayKey,
-  selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, onBatchAddStudents, masterTextbooks = [],
+  selectedFilter = 'All', isBatchMode, setIsBatchMode, onBatchAdd, onRemoveFromToday, onAddNewStudent, onRestoreStudent, onBatchAddStudents, masterTextbooks = [],
   teachers = [],
   title,
   showAddButton = false,
@@ -410,6 +411,8 @@ export default function Overview({
                   onClick={() => isBatchMode ? toggleRemoveSelection(s.id) : onSelectStudent(s.id)}
                   academyInfo={academyInfo}
                   onRemoveFromToday={onRemoveFromToday}
+                  onAddNewStudent={onAddNewStudent}
+                  onRestoreStudent={onRestoreStudent}
                 />
               );
             })}
@@ -441,6 +444,8 @@ export default function Overview({
                 onClick={() => isBatchMode ? toggleSelection(s.id) : onSelectStudent(s.id)}
                 academyInfo={academyInfo}
                 onRemoveFromToday={onRemoveFromToday}
+                onAddNewStudent={onAddNewStudent}
+                onRestoreStudent={onRestoreStudent}
               />
             ))}
           </div>
@@ -741,13 +746,13 @@ export default function Overview({
 }
 
 function StudentRowItem({ 
-  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21, academyInfo, onRemoveFromToday
+  student, isSelected, isChecked, isBatchMode, onClick, onViewProgress, currentDay, masterTextbooks, consultationCycle = 21, academyInfo, onRemoveFromToday, onAddNewStudent, onRestoreStudent
 }: { 
-  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number, academyInfo?: any, onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>
+  student: Student, isSelected: boolean, isChecked?: boolean, isBatchMode: boolean, onClick: () => void, onViewProgress?: (id: string) => void, currentDay?: string, masterTextbooks: TextbookOption[], consultationCycle?: number, academyInfo?: any, onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>, onAddNewStudent?: (data: any) => Promise<void>, onRestoreStudent?: (studentId: string) => Promise<void>
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   const isMakeup = student.todaySession?.attendance_status?.startsWith('보강');
-  const isAbsent = student.todaySession?.attendance_status === '결석';
+  const isAbsent = ['수업취소', '수업제외', '결석'].includes(student.todaySession?.attendance_status || '');
   
   const settings = academyInfo?.operation_settings || {};
   const baseTime = settings.first_period_time || "";
@@ -769,57 +774,99 @@ function StudentRowItem({
     return { needs: false };
   }, [student.last_consulted_at]);
 
-    const handleCardClick = (e: React.MouseEvent) => {
+  // 💡 오늘 정규 수업 및 선택과목(특강) 수강 판별 로직
+  const courseBadgeText = useMemo(() => {
+    const rawElective = student.book_courses?.['__elective_courses'];
+    let electiveSubjects: string[] = [];
+    if (rawElective) {
       try {
-        onClick();
-      } catch (err) {
-        console.error('Card click execution error:', err);
-      }
-    };
+        const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+        if (Array.isArray(parsed)) {
+          parsed.forEach((c: any) => {
+            if (!c) return;
+            const subject = c.subject || c.course_name || c.name;
+            if (!subject) return;
+            const days = c.days;
+            const matchesDay = currentDay && days && (
+              Array.isArray(days)
+                ? days.some((d: any) => typeof d === 'string' && d.trim() === currentDay)
+                : (typeof days === 'string' && days.includes(currentDay))
+            );
+            if (matchesDay && !electiveSubjects.includes(subject)) {
+              electiveSubjects.push(subject);
+            }
+          });
+        }
+      } catch (e) {}
+    }
 
-    return (
-      <motion.div 
-        layout 
-        onClick={handleCardClick}
-        tabIndex={0}
-        role="button"
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            handleCardClick(e as any);
-          }
-        }}
-        className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
-        isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg text-white' : 
-        isBatchMode 
-          ? isSelectionMode 
-            ? 'hover:border-blue-500/50 hover:bg-blue-500/5 bg-white border-[#edece9]' 
-            : 'hover:border-red-500/50 hover:bg-red-500/5 bg-white border-[#edece9]'
-          : isMakeup 
-            ? 'bg-emerald-500/15 border-emerald-500/40 hover:border-emerald-500/60 hover:bg-emerald-500/20'
-            : isAbsent
-              ? 'bg-red-500/15 border-red-500/30 opacity-[0.75] hover:opacity-95 hover:border-red-500/20'
-              : 'bg-white border-[#edece9] hover:border-blue-500/50 hover:bg-[#fbfbfa]'
-      }`}
-    >
-      <div className="flex flex-col gap-1 overflow-hidden flex-1">
-        <div className="flex items-center gap-2 overflow-hidden">
-          <h4 className={`text-[13px] tracking-tight shrink-0 ${
-            isSelected || isChecked 
-              ? 'text-white font-semibold' 
-              : isBatchMode 
-                ? (isSelectionMode ? 'group-hover:text-blue-400 font-semibold' : 'group-hover:text-red-400 font-semibold') 
-                : isAbsent
-                  ? 'text-black font-black'
-                  : 'text-[#37352f] font-semibold'
-          }`}>
-            {student.name}
-          </h4>
-          {consultationStatus.needs && !isBatchMode && (
-            <span className={`${consultationStatus.bg} ${consultationStatus.color} ${consultationStatus.border} text-[8px] font-black px-1 py-0.5 rounded border uppercase tracking-tighter shrink-0 animate-pulse`}>
-              상담
-            </span>
-          )}
+    if (electiveSubjects.length === 0) return null; // 선택과목 없으면 뱃지 없음
+
+    const hasRegular = student.isScheduledToday || (student.class_days || []).includes(currentDay || '');
+
+    if (hasRegular) {
+      return `정규, ${electiveSubjects.join(', ')}`;
+    } else {
+      return electiveSubjects.join(', ');
+    }
+  }, [student, currentDay]);
+
+  const handleCardClick = (e: React.MouseEvent) => {
+    try {
+      onClick();
+    } catch (err) {
+      console.error('Card click execution error:', err);
+    }
+  };
+
+  return (
+    <motion.div 
+      layout 
+      onClick={handleCardClick}
+      tabIndex={0}
+      role="button"
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick(e as any);
+        }
+      }}
+      className={`flex items-center justify-between p-2.5 rounded-[2px] border cursor-pointer transition-all duration-300 group ${
+      isSelected || isChecked ? 'bg-blue-600 border-blue-400 shadow-lg text-white' : 
+      isBatchMode 
+        ? isSelectionMode 
+          ? 'hover:border-blue-500/50 hover:bg-blue-500/5 bg-white border-[#edece9]' 
+          : 'hover:border-red-500/50 hover:bg-red-500/5 bg-white border-[#edece9]'
+        : isMakeup 
+          ? 'bg-emerald-500/15 border-emerald-500/40 hover:border-emerald-500/60 hover:bg-emerald-500/20'
+          : isAbsent
+            ? 'bg-red-500/15 border-red-500/30 opacity-[0.75] hover:opacity-95 hover:border-red-500/20'
+            : 'bg-white border-[#edece9] hover:border-blue-500/50 hover:bg-[#fbfbfa]'
+    }`}
+  >
+    <div className="flex flex-col gap-1 overflow-hidden flex-1">
+      <div className="flex items-center gap-1.5 overflow-hidden flex-wrap">
+        <h4 className={`text-[13px] tracking-tight shrink-0 ${
+          isSelected || isChecked 
+            ? 'text-white font-semibold' 
+            : isBatchMode 
+              ? (isSelectionMode ? 'group-hover:text-blue-400 font-semibold' : 'group-hover:text-red-400 font-semibold') 
+              : isAbsent
+                ? 'text-black font-black'
+                : 'text-[#37352f] font-semibold'
+        }`}>
+          {student.name}
+        </h4>
+        {courseBadgeText && (
+          <span className="bg-purple-100 text-purple-700 text-[8px] font-black px-1 py-0.5 rounded border border-purple-200 uppercase tracking-tighter shrink-0">
+            {courseBadgeText}
+          </span>
+        )}
+        {consultationStatus.needs && !isBatchMode && (
+          <span className={`${consultationStatus.bg} ${consultationStatus.color} ${consultationStatus.border} text-[8px] font-black px-1 py-0.5 rounded border uppercase tracking-tighter shrink-0 animate-pulse`}>
+            상담
+          </span>
+        )}
           {!isBatchMode && (
             <div className="flex items-center gap-1">
               {onViewProgress && (

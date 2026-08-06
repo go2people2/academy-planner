@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { 
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
   ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck, Zap, AlertTriangle,
-  BookOpen, FileText, GripVertical
+  BookOpen, FileText, GripVertical, Library, Film
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
@@ -39,7 +39,7 @@ interface SidebarProps {
 const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
 
 const DEFAULT_MENU_ORDER = [
-  'live', 'board', 'todayTable', 'teacherTask', 'studentEdit',
+  'live', 'board', 'todayTable', 'pdfLibrary', 'teacherTask', 'studentEdit',
   'progress', 'monthlyChanges', 'exams', 'problemErrors', 'wrongAnswersAdmin'
 ];
 
@@ -212,6 +212,8 @@ export default function Sidebar({
               live: <SidebarLink key="live" id="live" icon={<Zap size={14} className={isClassroomModeOpen ? "text-amber-500 fill-current animate-pulse" : "text-amber-400"} />} label="수업 시작 (LIVE)" active={isClassroomModeOpen} onClick={() => onStartClass()} variant="blue" isDragging={draggedId === 'live'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               board: <SidebarLink key="board" id="board" icon={<LayoutDashboard size={14} className="text-purple-400" />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} isDragging={draggedId === 'board'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               todayTable: <SidebarLink key="todayTable" id="todayTable" icon={<TableIcon size={14} className="text-sky-400" />} label="Daily Sheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} isDragging={draggedId === 'todayTable'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
+              pdfLibrary: <SidebarLink key="pdfLibrary" id="pdfLibrary" icon={<Library size={14} className="text-indigo-400" />} label="교재 PDF 자료실" active={viewMode === 'pdfLibrary'} onClick={() => { setViewMode('pdfLibrary'); setSelectedFilter('All'); }} isDragging={draggedId === 'pdfLibrary'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
+              videoTest: <SidebarLink key="videoTest" id="videoTest" icon={<Film size={14} className="text-purple-400" />} label="비디오 플레이어 실험실" active={viewMode === 'videoTest'} onClick={() => { setViewMode('videoTest'); setSelectedFilter('All'); }} isDragging={draggedId === 'videoTest'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               teacherTask: <SidebarLink key="teacherTask" id="teacherTask" icon={<ClipboardCheck size={14} className="text-pink-400" />} label="업무/보강/설문" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} isDragging={draggedId === 'teacherTask'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               problemErrors: <SidebarLink key="problemErrors" id="problemErrors" icon={<AlertTriangle size={14} className="text-orange-400" />} label="교재 오류 관리" active={viewMode === 'problemErrors'} onClick={() => { setViewMode('problemErrors'); setSelectedFilter('All'); }} isDragging={draggedId === 'problemErrors'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               progress: <SidebarLink key="progress" id="progress" icon={<Activity size={14} className="text-teal-400" />} label="교재별진도" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} isDragging={draggedId === 'progress'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,

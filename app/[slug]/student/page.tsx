@@ -493,7 +493,7 @@ export default function StudentPortal() {
       
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -524,7 +524,7 @@ export default function StudentPortal() {
       
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -596,7 +596,7 @@ export default function StudentPortal() {
       
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -638,7 +638,7 @@ export default function StudentPortal() {
       };
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name' })
+        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -687,7 +687,7 @@ export default function StudentPortal() {
         if (error) throw error;
         if (data && data[0]) savedLog = data[0];
       } else { 
-        const { data, error } = await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name' }).select(); 
+        const { data, error } = await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' }).select(); 
         if (error) throw error;
         if (data && data[0]) savedLog = data[0];
       }
@@ -720,7 +720,7 @@ export default function StudentPortal() {
       const updateData: any = { student_id: student.id, student_name: student.name, session_date: selectedDate, course_name: selectedCourse, test_status: testId || todaySession?.test_status };
       if (calculatedScore !== undefined) updateData.test_score = calculatedScore;
       if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
-      else { await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name' }); }
+      else { await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' }); }
       alert('테스트 답안이 제출되었습니다.'); setIsTestModalOpen(false); fetchAllStudentData(student.id);
     } catch (e) { console.error(e); alert('제출 중 오류 발생'); } finally { setIsSaving(false); }
   };

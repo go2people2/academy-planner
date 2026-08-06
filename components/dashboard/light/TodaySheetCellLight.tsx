@@ -14,6 +14,7 @@ import { ScoreCell } from './ScoreCellLight';
 import { SimpleTextCell } from './SimpleTextCellLight';
 import { FeedbackKeyboardPopup } from '../todaySheet/FeedbackKeyboardPopup';
 import TextbookSystem from '@/components/student/TextbookSystem';
+import { resolveTargetSession } from '../todaySheet/TodaySheetCell';
 
 interface TodaySheetCellProps {
   col: any;
@@ -145,15 +146,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const incomingHw = formData?.homework_text ?? student.todaySession?.homework_text ?? '';
   
   useEffect(() => {
-    if (incomingCcw && !ccwBookBuf.current.includes(incomingCcw)) {
-      ccwBookBuf.current = incomingCcw;
-    }
+    ccwBookBuf.current = incomingCcw;
   }, [incomingCcw]);
 
   useEffect(() => {
-    if (incomingHw && !hwBookBuf.current.includes(incomingHw)) {
-      hwBookBuf.current = incomingHw;
-    }
+    hwBookBuf.current = incomingHw;
   }, [incomingHw]);
 
   // 🧲 [추가] 도구 드래그앤드롭 이벤트 핸들러
