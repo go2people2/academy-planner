@@ -637,7 +637,7 @@ export const ChecklistTabLight = forwardRef<any, ChecklistTabLightProps>(({
       {/* 컨트롤 영역 */}
       <div className="flex justify-between items-center bg-[#fcfcfc] border border-[#edece9] p-3 rounded-[3px] shadow-sm">
         <div className="flex flex-col gap-0.5">
-          <h4 className="text-[12px] font-black text-[#37352f]">📋 실시간 진척도 체크리스트</h4>
+          <h4 className="text-[12px] font-black text-[#37352f]">📋 체크리스트</h4>
           <p className="text-[9px] text-[#37352f]/50 font-bold">학생 개별로 기말고사, 오답노트, 안내문 수거 등의 완료 현황을 기록하세요.</p>
         </div>
         <div className="flex items-center gap-2">

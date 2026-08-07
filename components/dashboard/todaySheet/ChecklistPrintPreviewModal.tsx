@@ -55,9 +55,9 @@ export default function ChecklistPrintPreviewModal({
   // academyInfo 로드 시 최초 1회 기본 타이틀 설정
   useEffect(() => {
     if (academyInfo?.name) {
-      setCustomTitle(`${academyInfo.name} 진척도 체크리스트`);
+      setCustomTitle(`${academyInfo.name} 체크리스트`);
     } else {
-      setCustomTitle('학원 진척도 체크리스트');
+      setCustomTitle('학원 체크리스트');
     }
   }, [academyInfo]);
 
