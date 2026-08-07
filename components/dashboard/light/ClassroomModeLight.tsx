@@ -888,7 +888,27 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
                       ) : (
                         <>
                           <div className="absolute top-1.5 left-1.5 flex items-center gap-1 opacity-45"><div className={`w-1 h-1 rounded-full ${studentHour === 999 ? 'bg-indigo-500' : (studentHour < currentHour ? 'bg-gray-400' : studentHour === currentHour ? 'bg-emerald-500' : 'bg-blue-550')}`} /><span className="text-[6px] font-black uppercase text-gray-500">{studentHour === 999 ? 'SUP' : (studentHour >= 12 ? (studentHour === 12 ? '12p' : `${studentHour-12}p`) : `${studentHour}a`)}</span></div>
-                          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1"><div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isPureAttend ? 'bg-[#edece9] text-[#37352f]' : isMakeupActive ? 'bg-blue-500 text-white' : isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isCriticalWarning ? 'bg-red-500 text-white' : isLateWarning ? 'bg-amber-555 text-white' : isSupplementPending ? 'bg-indigo-100 text-indigo-650 border border-indigo-200' : 'bg-blue-600 text-white'}`}>{isPureAttend ? <Check size={10} strokeWidth={4} /> : isAbsent ? <LogOut size={10} /> : isLate ? <Clock size={10} strokeWidth={3} /> : isMakeupActive ? <CalendarClock size={10} /> : isSupplementPending ? <Plus size={10} strokeWidth={4} /> : <User size={10} />}</div><button onClick={(e) => { e.stopPropagation(); setActiveStudent(s); setIsTimeShiftOpen(false); }} className="p-1 hover:bg-[#edece9]/55 rounded transition-colors text-gray-400 hover:text-[#37352f]"><MoreHorizontal size={12} /></button></div>
+                          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
+                            <div className="flex items-center gap-1">
+                              {/* ⚡ 겉면 직통 시간이동 퀵 버튼 (원클릭으로 즉시 시간이동 피커 노출) */}
+                              <button
+                                type="button"
+                                title="시간 이동 (교시 변경)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setActiveStudent(s);
+                                  setIsTimeShiftOpen(true); // 즉시 피커 열기!
+                                }}
+                                className="p-1 rounded bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-600 border border-blue-200 transition-all flex items-center gap-0.5 shadow-sm"
+                              >
+                                <CalendarClock size={12} />
+                                <span className="text-[8px] font-black">이동</span>
+                              </button>
+
+                              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isPureAttend ? 'bg-[#edece9] text-[#37352f]' : isMakeupActive ? 'bg-blue-500 text-white' : isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isCriticalWarning ? 'bg-red-500 text-white' : isLateWarning ? 'bg-amber-555 text-white' : isSupplementPending ? 'bg-indigo-100 text-indigo-650 border border-indigo-200' : 'bg-blue-600 text-white'}`}>{isPureAttend ? <Check size={10} strokeWidth={4} /> : isAbsent ? <LogOut size={10} /> : isLate ? <Clock size={10} strokeWidth={3} /> : isMakeupActive ? <CalendarClock size={10} /> : isSupplementPending ? <Plus size={10} strokeWidth={4} /> : <User size={10} />}</div>
+                              <button onClick={(e) => { e.stopPropagation(); setActiveStudent(s); setIsTimeShiftOpen(false); }} className="p-1 hover:bg-[#edece9]/55 rounded transition-colors text-gray-400 hover:text-[#37352f]"><MoreHorizontal size={12} /></button>
+                            </div>
+                          </div>
                           <div className="text-center px-1"><h3 className={`text-2xl font-black tracking-tighter leading-none ${isPureAttend ? 'text-[#37352f]/45 font-normal' : 'text-[#37352f]'}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
                             {(() => { 
                               const isES = s.grade.includes('초'); 
