@@ -304,14 +304,16 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
       const makeupLogs = todayLogs.filter((l: any) => (!l.course_name || l.course_name === '정규') && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
 
-      // 1. 정규 수업 카드 (정규 등원일인 경우)
+      // 1. 정규 수업 카드 (정규 등원일인 경우 - 시간이동 세션 존재 시 이동 세션 연동하여 2중 카드 생성 차단)
       if (hasRegularSession) {
+        const activeSession = regularSession || s.todaySession || {
+          id: 'temp', date: selectedDate, status: 'none', attendance_status: ATTENDANCE_STATUS.BEFORE, course_name: '정규'
+        };
+
         expandedResult.push({
           ...s,
           __courseType: 'regular',
-          todaySession: regularSession || (s.todaySession && (s.todaySession.moved_to_hour === null || s.todaySession.moved_to_hour === undefined) ? s.todaySession : {
-            id: 'temp', date: selectedDate, status: 'none', attendance_status: ATTENDANCE_STATUS.BEFORE, course_name: '정규'
-          })
+          todaySession: activeSession
         });
       }
 

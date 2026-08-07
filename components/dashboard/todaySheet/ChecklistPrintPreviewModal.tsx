@@ -232,6 +232,21 @@ export default function ChecklistPrintPreviewModal({
     }
   };
 
+  // 💡 진도파악 객체/문자열 데이터 안전 변환 헬퍼 (Objects are not valid as a React child 방지)
+  const formatBookProgress = (prog: any): string => {
+    if (!prog) return '-';
+    if (typeof prog === 'string') return prog.trim() || '-';
+    if (typeof prog === 'object') {
+      const keys = Object.keys(prog);
+      if (keys.length === 0) return '-';
+      return keys.map(k => {
+        const v = prog[k];
+        return v ? `${k}: ${v}` : k;
+      }).join(', ');
+    }
+    return String(prog);
+  };
+
   // SheetJS 활용 엑셀 저장 처리
   const handleSaveAsExcel = () => {
     const XLSX = (window as any).XLSX;
@@ -249,7 +264,7 @@ export default function ChecklistPrintPreviewModal({
       excelData.push([]); // 빈 칸 행
 
       // 2. 표 헤더 행 추가
-      const headerRow = ['학생 이름', '진도파악'];
+      const headerRow = ['학생 이름'];
       displayTopics.forEach(t => {
         headerRow.push(`${t.title} - 완료`);
         headerRow.push(`${t.title} - 메모`);
@@ -258,8 +273,7 @@ export default function ChecklistPrintPreviewModal({
 
       // 3. 학생 데이터 행 추가
       students.forEach(student => {
-        const prog = student.todaySession?.book_progress || student.book_progress || '';
-        const row = [student.name, prog];
+        const row = [student.name];
         displayTopics.forEach(t => {
           const cellData = items[student.id]?.[t.id] || { status: 'none', memo: '' };
           row.push(getStatusSymbol(cellData.status));
@@ -270,7 +284,7 @@ export default function ChecklistPrintPreviewModal({
 
       // 4. 완료 인원 합계 행 추가
       if (students.length > 0 && displayTopics.length > 0) {
-        const sumRow = ['완료 인원', '-'];
+        const sumRow = ['완료 인원'];
         displayTopics.forEach(t => {
           const count = getCheckedCount(t.id);
           sumRow.push(`${count}명`);
@@ -283,7 +297,7 @@ export default function ChecklistPrintPreviewModal({
       const worksheet = XLSX.utils.aoa_to_sheet(excelData);
 
       // 열 가로 폭 자동 정의
-      const colsWidth = [{ wch: 15 }, { wch: 25 }]; // 이름 열, 진도파악 열
+      const colsWidth = [{ wch: 15 }]; // 이름 열
       displayTopics.forEach(() => {
         colsWidth.push({ wch: 10 }); // 완료 기호 열
         colsWidth.push({ wch: 25 }); // 메모 열
@@ -520,9 +534,6 @@ export default function ChecklistPrintPreviewModal({
                     <th rowSpan={2} className="py-2.5 px-3 border-r border-black font-bold text-center w-[80px]">
                       학생 이름
                     </th>
-                    <th rowSpan={2} className="py-2.5 px-3 border-r border-black font-bold text-center w-[120px]">
-                      진도파악
-                    </th>
                     {displayTopics.map(t => (
                       <th key={t.id} colSpan={2} className="py-2 px-3 border-r border-black font-bold text-center text-[10px]">
                         {t.title}
@@ -542,49 +553,42 @@ export default function ChecklistPrintPreviewModal({
                 <tbody>
                   {students.length === 0 ? (
                     <tr>
-                      <td colSpan={2 + displayTopics.length * 2} className="py-8 text-center text-gray-400 font-bold italic">
+                      <td colSpan={1 + displayTopics.length * 2} className="py-8 text-center text-gray-400 font-bold italic">
                         학생이 존재하지 않습니다.
                       </td>
                     </tr>
                   ) : (
-                    students.map(student => {
-                      const prog = student.todaySession?.book_progress || student.book_progress || '-';
-                      return (
-                        <tr key={student.id} className="border-b border-black">
-                          {/* 학생 이름 */}
-                          <td className="py-2 px-2.5 border-r border-black font-bold text-left text-[11px]">
-                            {student.isSpecialClass ? `${student.electiveCourse?.subject?.trim() || '특강'}-` : ''}{student.name}
-                          </td>
-                          {/* 진도파악 */}
-                          <td className="py-2 px-2 border-r border-black text-[10px] text-gray-800 font-medium break-all leading-tight">
-                            {prog}
-                          </td>
-                          {/* 주제별 완료/메모 */}
-                          {displayTopics.map(t => {
-                            const cellData = items[student.id]?.[t.id] || { status: 'none', memo: '' };
-                            const symbol = getStatusSymbol(cellData.status);
-                            return (
-                              <React.Fragment key={`${student.id}-${t.id}`}>
-                                {/* 완료 기호 */}
-                                <td className={`py-2 px-1 border-r border-black text-center text-xs font-black ${getStatusColor(cellData.status)}`}>
-                                  {symbol}
-                                </td>
-                                {/* 메모 */}
-                                <td className="py-2 px-2 border-r border-black text-[10px] text-gray-700 break-all leading-tight">
-                                  {cellData.memo || '-'}
-                                </td>
-                              </React.Fragment>
-                            );
-                          })}
-                        </tr>
-                      );
-                    })
+                    students.map(student => (
+                      <tr key={student.id} className="border-b border-black">
+                        {/* 학생 이름 */}
+                        <td className="py-2 px-2.5 border-r border-black font-bold text-left text-[11px]">
+                          {student.isSpecialClass ? `${student.electiveCourse?.subject?.trim() || '특강'}-` : ''}{student.name}
+                        </td>
+                        {/* 주제별 완료/메모 */}
+                        {displayTopics.map(t => {
+                          const cellData = items[student.id]?.[t.id] || { status: 'none', memo: '' };
+                          const symbol = getStatusSymbol(cellData.status);
+                          return (
+                            <React.Fragment key={`${student.id}-${t.id}`}>
+                              {/* 완료 기호 */}
+                              <td className={`py-2 px-1 border-r border-black text-center text-xs font-black ${getStatusColor(cellData.status)}`}>
+                                {symbol}
+                              </td>
+                              {/* 메모 */}
+                              <td className="py-2 px-2 border-r border-black text-[10px] text-gray-700 break-all leading-tight">
+                                {cellData.memo || '-'}
+                              </td>
+                            </React.Fragment>
+                          );
+                        })}
+                      </tr>
+                    ))
                   )}
 
                   {/* 합계 행 */}
                   {students.length > 0 && displayTopics.length > 0 && (
                     <tr className="bg-gray-50 font-bold border-b border-black">
-                      <td colSpan={2} className="py-2 px-2.5 border-r border-black text-center font-bold text-gray-600">
+                      <td className="py-2 px-2.5 border-r border-black text-center font-bold text-gray-600">
                         완료 인원
                       </td>
                       {displayTopics.map(t => {
