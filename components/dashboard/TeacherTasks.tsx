@@ -436,7 +436,7 @@ export default function TeacherTasks({
         setIsMakeupModalOpen(false);
         
         await fetchMakeups();
-        await onRefreshStudents(false);
+        await onRefreshStudents(true);
         alert('보강 예약이 추가되었습니다. 당일 Overview에 자동으로 반영됩니다.');
       } catch (err) {
         console.error('Error adding makeup sessions:', err);

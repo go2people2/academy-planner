@@ -319,6 +319,9 @@ export default function ClassroomModeLight({ students, onSave, onClose, selected
       makeupLogs.forEach((mLog: any) => {
         const makeupHour = mLog.moved_to_hour;
         const makeupCardId = `${s.originalId || s.id}_makeup_${makeupHour}`;
+        // 정규 수업일인 경우 정규 카드에서 커버되므로 2중 카드 중복 생성 차단
+        if (hasRegularSession) return;
+
         if (!expandedResult.some(card => card.id === makeupCardId)) {
           expandedResult.push({
             ...s,

@@ -39,7 +39,7 @@ interface SidebarProps {
 const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
 
 const DEFAULT_MENU_ORDER = [
-  'live', 'board', 'todayTable', 'pdfLibrary', 'videoTest', 'teacherTask', 'studentEdit',
+  'live', 'board', 'todayTable', 'pdfLibrary', 'digitalLibrary', 'videoTest', 'teacherTask', 'studentEdit',
   'progress', 'monthlyChanges', 'exams', 'problemErrors', 'wrongAnswersAdmin'
 ];
 
@@ -213,6 +213,7 @@ export default function Sidebar({
               board: <SidebarLink key="board" id="board" icon={<LayoutDashboard size={14} className="text-purple-500" />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} isDragging={draggedId === 'board'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               todayTable: <SidebarLink key="todayTable" id="todayTable" icon={<TableIcon size={14} className="text-sky-500" />} label="Daily Sheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} isDragging={draggedId === 'todayTable'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               pdfLibrary: <SidebarLink key="pdfLibrary" id="pdfLibrary" icon={<Library size={14} className="text-indigo-500" />} label="교재 PDF 자료실" active={viewMode === 'pdfLibrary'} onClick={() => { setViewMode('pdfLibrary'); setSelectedFilter('All'); }} isDragging={draggedId === 'pdfLibrary'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
+              digitalLibrary: <SidebarLink key="digitalLibrary" id="digitalLibrary" icon={<BookOpen size={14} className="text-emerald-500" />} label="디지털 수학 서재" active={viewMode === 'digitalLibrary'} onClick={() => { setViewMode('digitalLibrary'); setSelectedFilter('All'); }} isDragging={draggedId === 'digitalLibrary'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               videoTest: <SidebarLink key="videoTest" id="videoTest" icon={<Film size={14} className="text-purple-500" />} label="비디오 플레이어 실험실" active={viewMode === 'videoTest'} onClick={() => { setViewMode('videoTest'); setSelectedFilter('All'); }} isDragging={draggedId === 'videoTest'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               teacherTask: <SidebarLink key="teacherTask" id="teacherTask" icon={<ClipboardCheck size={14} className="text-pink-500" />} label="업무/보강/설문" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} isDragging={draggedId === 'teacherTask'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               problemErrors: <SidebarLink key="problemErrors" id="problemErrors" icon={<AlertTriangle size={14} className="text-orange-500" />} label="교재 오류 관리" active={viewMode === 'problemErrors'} onClick={() => { setViewMode('problemErrors'); setSelectedFilter('All'); }} isDragging={draggedId === 'problemErrors'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,

@@ -20,6 +20,7 @@ import WrongAnswerManager from '@/components/dashboard/WrongAnswerManager';
 import ExamPaperManager from '@/components/dashboard/exam/ExamPaperManager';
 import TimetableSettings from '@/components/dashboard/settings/TimetableSettings';
 import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
+import DigitalMathLibraryView from '@/components/dashboard/DigitalMathLibraryView';
 import VideoPlayerTestView from '@/components/dashboard/VideoPlayerTestView';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
@@ -165,9 +166,14 @@ const filterStudentList = (params: {
       return s.is_deleted === true && s.name.toLowerCase().includes(searchQuery.toLowerCase());
     }
     if (s.is_deleted) return false;
-    if (s.isSkipped && filterTarget === 'rest') return false;
+    const hasTodayMakeup = (s.allLogs || []).some((l: any) => 
+      (l.date || l.session_date) === selectedDate && 
+      l.moved_to_hour !== null && 
+      l.moved_to_hour !== undefined && 
+      l.moved_to_hour > 0
+    );
 
-    const isTodaySession = s.isTodayClassDay;
+    const isTodaySession = s.isTodayClassDay || hasTodayMakeup;
 
     // 검색어 필터
     if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -1560,7 +1566,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       return;
     }
     
-    // 💡 [선택과목/특강 파생 ID 대응] 'student_123_special_방학특강_0' 형식일 경우 realStudentId와 course_name 파싱
+    // 💡 [선택과목/특강/보강 파생 ID 대응] 'student_123_special_방학특강_0' 또는 'student_123_makeup_16' 형식일 경우 realStudentId와 course_name 파싱
     let realStudentId = studentId;
     let targetCourseName = '정규';
     if (studentId.includes('_special_')) {
@@ -1570,6 +1576,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         const subParts = parts[1].split('_');
         targetCourseName = subParts[0] || '특강';
       }
+    } else if (studentId.includes('_makeup_')) {
+      const parts = studentId.split('_makeup_');
+      realStudentId = parts[0];
+      targetCourseName = '정규';
     }
 
     const student = students.find(s => s.id === realStudentId || s.originalId === realStudentId); 
@@ -2022,6 +2032,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
              {viewMode === 'board' && <Overview todayStudents={todayStudents} excludedStudents={excludedStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onRestoreStudent={addStudentToToday} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} currentUser={currentUser} />}
              {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onBatchAddStudents={handleBatchAddStudents} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} currentUser={currentUser} showDuplicateWarning={true} />}
              {viewMode === 'pdfLibrary' && <PdfLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} isLight={false} />}
+             {viewMode === 'digitalLibrary' && <DigitalMathLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} currentUser={currentUser} isLight={false} />}
              {viewMode === 'videoTest' && <VideoPlayerTestView isLight={false} />}
              {viewMode === 'todayTable' && (
               <TodaySheet 

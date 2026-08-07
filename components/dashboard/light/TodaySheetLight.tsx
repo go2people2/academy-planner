@@ -685,12 +685,16 @@ export default function TodaySheet({
 
   // 💡 [리팩토링 Step 2-1] 라이트 버전 행 확장 및 필터링 커스텀 훅 적용
   const baseStudents = useMemo(() => {
-    let result = students.filter((s: any) => !s.isSpecialClass && !s.originalId);
+    let result = (students || []).filter((s: any) => {
+      if (selectedFilter === 'Discharged') return s.is_deleted === true;
+      if (s.is_deleted) return false;
+      return !s.isSpecialClass;
+    });
     if (hiddenStudentIds.length > 0) {
       result = result.filter((s: any) => !hiddenStudentIds.includes(s.id));
     }
     return result;
-  }, [students, hiddenStudentIds]);
+  }, [students, selectedFilter, hiddenStudentIds]);
 
   const filteredStudents = useTodaySheetRows({
     students: baseStudents,

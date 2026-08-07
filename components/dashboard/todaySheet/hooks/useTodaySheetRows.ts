@@ -201,14 +201,10 @@ export function useTodaySheetRows({
       const isCanceled = rawAtt.includes('수업취소') || rawAtt.includes('수업제외');
 
       if (isRegularClassDay) {
-        // 원래 오늘 정규 수업일인 경우 상단 배치
+        // 원래 오늘 정규 수업일인 경우 상단 정규 행배치
         shouldShowRegular = true;
-      } else if (regularLog && !isCanceled && (rawAtt.includes('보강') || ['출석', '지각', '출석전'].some(st => rawAtt.startsWith(st)))) {
-        // 원래 수업일이 아니었지만 오늘 수업/보강으로 추가된 학생은 취소되지 않은 동안에만 상단 배치
-        shouldShowRegular = true;
-      } else if (!hasAnyElective) {
-        shouldShowRegular = true;
-      } else if (!isElectiveDay) {
+      } else if (regularLog && !isCanceled) {
+        // 원래 수업일이 아니었지만 오늘 정규 수업세션이 명시적으로 작성된 경우
         shouldShowRegular = true;
       }
 
@@ -279,11 +275,28 @@ export function useTodaySheetRows({
         });
       }
 
-      // (3) 보강 전용 독립 행 추가
+      // (3) 보강 전용 독립 행 추가 (중복 방지 및 비요일 보강 지원)
       makeupLogs.forEach((mLog: any) => {
         const makeupHour = mLog.moved_to_hour;
         const makeupId = `${realId}_makeup_${makeupHour}`;
+        // 정규 수업일에 시간이동만 한 경우 정규 행에서 표현되므로 독립 보강 행 중복 생성을 차단
+        if (isRegularClassDay && shouldShowRegular) {
+          // 정규 행이 이미 있다면 정규 행의 todaySession으로 커버되므로 건너뜀
+          return;
+        }
+
         if (!expandedResult.some(item => item.id === makeupId)) {
+          const pastRegularLogs = (s.allLogs || [])
+            .filter((l: any) => {
+              const lDate = l.date || l.session_date || '';
+              if (lDate >= selectedDate) return false;
+              const course = l.course_name ? l.course_name.trim() : '정규';
+              return course === '정규' && !((l.attendance_status || '').startsWith('결석'));
+            })
+            .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
+
+          const makeupLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
+
           expandedResult.push({
             ...s,
             id: makeupId,
@@ -291,6 +304,11 @@ export function useTodaySheetRows({
             isSpecialClass: false,
             isMakeupRow: true,
             courseName: '정규',
+            day_schedules: {
+              ...s.day_schedules,
+              [dayKey]: [makeupHour]
+            },
+            lastSession: makeupLastSession,
             todaySession: mLog
           });
         }

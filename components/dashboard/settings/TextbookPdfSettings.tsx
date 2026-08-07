@@ -18,6 +18,7 @@ interface BookLinks {
   quiz2Url?: string;
   quiz3Url?: string;
   unitPdfUrl?: string;
+  unitQuizzesMap?: Record<number, { quiz1Path?: string; quiz2Path?: string; quiz3Path?: string; unitPdfPath?: string }>;
 }
 
 export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [], isLight = false }: TextbookPdfSettingsProps) {
@@ -27,6 +28,40 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
   const [submittingBook, setSubmittingBook] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState<'all' | 'elementary' | 'middle' | 'high' | 'etc'>('all');
+
+  // 💡 펼쳐진 단원별 퀴즈 관리 교재 코드
+  const [expandedQuizBookcode, setExpandedBookCode] = useState<string | null>(null);
+
+  // 💡 학원 내부 서버 기본 주소 (Base Server URL)
+  const [baseServerUrl, setBaseServerUrl] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('ams_base_server_url');
+      if (saved) return saved;
+    }
+    return 'http://192.168.0.207:8080';
+  });
+  const [isCopiedBaseUrl, setIsCopiedBaseUrl] = useState(false);
+
+  const handleSaveBaseServerUrl = async (url: string) => {
+    setBaseServerUrl(url);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ams_base_server_url', url);
+    }
+    // DB 세팅에도 백업 저장
+    if (academyInfo?.id) {
+      try {
+        const opSettings = { ...(academyInfo.operation_settings || {}), base_server_url: url };
+        await supabase.from('ams_academies').update({ operation_settings: opSettings }).eq('id', academyInfo.id);
+      } catch (e) {}
+    }
+  };
+
+  const handleCopyBaseUrl = () => {
+    if (!baseServerUrl) return;
+    navigator.clipboard.writeText(baseServerUrl);
+    setIsCopiedBaseUrl(true);
+    setTimeout(() => setIsCopiedBaseUrl(false), 2000);
+  };
 
   // 1. 등록된 PDF 링크 데이터 로드
   const fetchPdfLinks = async () => {
@@ -48,6 +83,13 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
         const data = await res.json();
         const mapped: Record<string, BookLinks> = {};
         (data.pdfs || []).forEach((p: any) => {
+          let parsedUnitMap = {};
+          if (p.unit_quizzes_json) {
+            try {
+              parsedUnitMap = typeof p.unit_quizzes_json === 'string' ? JSON.parse(p.unit_quizzes_json) : p.unit_quizzes_json;
+            } catch (e) {}
+          }
+
           mapped[p.bookcode] = {
             pdfUrl: p.pdf_url || '',
             answerUrl: p.answer_url || '',
@@ -55,11 +97,12 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
             quiz1Url: p.quiz1_url || '',
             quiz2Url: p.quiz2_url || '',
             quiz3Url: p.quiz3_url || '',
-            unitPdfUrl: p.unit_pdf_url || ''
+            unitPdfUrl: p.unit_pdf_url || '',
+            unitQuizzesMap: parsedUnitMap
           };
         });
         setPdfsMap(mapped);
-        setInputMap(mapped); // 입력 폼에도 동기화
+        setInputMap(mapped);
       }
     } catch (e) {
       console.error('Failed to load textbook PDFs:', e);
@@ -72,14 +115,42 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
     fetchPdfLinks();
   }, [academyInfo?.id]);
 
+  // 입력 주소에서 기본 서버 주소를 감지하여 뒷경로만 산뜻하게 추출하는 유틸
+  const cleanPath = (rawVal: string) => {
+    if (!rawVal) return '';
+    let val = rawVal.trim();
+    if (baseServerUrl && val.startsWith(baseServerUrl)) {
+      val = val.substring(baseServerUrl.length);
+    }
+    return val;
+  };
+
   // 2. 주소 변경 핸들러
   const handleUrlChange = (bookcode: string, field: 'pdfUrl' | 'answerUrl' | 'explanationUrl' | 'quiz1Url' | 'quiz2Url' | 'quiz3Url' | 'unitPdfUrl', val: string) => {
-    const base = inputMap[bookcode] || pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '' };
+    const base = inputMap[bookcode] || pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {} };
     setInputMap(prev => ({
       ...prev,
       [bookcode]: {
         ...base,
-        [field]: val
+        [field]: cleanPath(val)
+      }
+    }));
+  };
+
+  // 💡 단원별 퀴즈 상대경로 변경 핸들러
+  const handleUnitQuizPathChange = (bookcode: string, unitIdx: number, field: 'quiz1Path' | 'quiz2Path' | 'quiz3Path' | 'unitPdfPath', val: string) => {
+    const base = inputMap[bookcode] || pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {} };
+    const currentUnitMap = { ...(base.unitQuizzesMap || {}) };
+    const unitData = { ...(currentUnitMap[unitIdx] || {}) };
+    
+    unitData[field] = cleanPath(val);
+    currentUnitMap[unitIdx] = unitData;
+
+    setInputMap(prev => ({
+      ...prev,
+      [bookcode]: {
+        ...base,
+        unitQuizzesMap: currentUnitMap
       }
     }));
   };
@@ -112,7 +183,8 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
           quiz1Url: (current.quiz1Url || '').trim(),
           quiz2Url: (current.quiz2Url || '').trim(),
           quiz3Url: (current.quiz3Url || '').trim(),
-          unitPdfUrl: (current.unitPdfUrl || '').trim()
+          unitPdfUrl: (current.unitPdfUrl || '').trim(),
+          unitQuizzesMap: current.unitQuizzesMap || {}
         })
       });
 
@@ -125,7 +197,8 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
           quiz1Url: (current.quiz1Url || '').trim(),
           quiz2Url: (current.quiz2Url || '').trim(),
           quiz3Url: (current.quiz3Url || '').trim(),
-          unitPdfUrl: (current.unitPdfUrl || '').trim()
+          unitPdfUrl: (current.unitPdfUrl || '').trim(),
+          unitQuizzesMap: current.unitQuizzesMap || {}
         };
         setPdfsMap(prev => ({ ...prev, [bookcode]: savedLinks }));
         if (resData.warning) {
@@ -220,17 +293,44 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
 
   return (
     <div className="space-y-6">
-      {/* 💡 헤더 안내 영역 */}
-      <div className={`p-4 rounded-[4px] border ${
-        isLight ? 'bg-blue-50/50 border-blue-200 text-blue-900' : 'bg-blue-500/5 border-blue-500/20 text-blue-200'
+      {/* 💡 학원 내부 서버 기본 주소 세팅 및 복사 헤더 */}
+      <div className={`p-4 rounded-[6px] border shadow-sm ${
+        isLight ? 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200 text-indigo-950' : 'bg-gradient-to-r from-indigo-950/40 to-slate-900 border-indigo-500/20 text-indigo-100'
       }`}>
-        <div className="flex items-start gap-3">
-          <BookOpen className="text-blue-500 shrink-0 mt-0.5" size={18} />
-          <div className="space-y-1 text-xs">
-            <p className="font-bold text-sm">📖 교재별 3종 PDF 링크 연동 (본문 / 빠른답 / 정답해설)</p>
-            <p className="opacity-80">
-              학원에서 사용하는 각 마스터 교재별로 **교재 본문, 빠른 답, 정답 및 해설** 웹 PDF 공유 링크(URL)를 등록해 두시면, 수업 및 숙제 작성 시 개별 버튼으로 즉시 열어보실 수 있습니다.
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2">
+              <span className="text-xs font-black px-2 py-0.5 rounded bg-indigo-600 text-white uppercase tracking-wider">
+                Internal Server
+              </span>
+              <h3 className="font-bold text-sm">🖥️ 학원 내부 서버 기본 주소 (Base Server URL)</h3>
+            </div>
+            <p className="text-xs opacity-75">
+              학원 로컬 맥미니/파일 서버 주소를 저장하고 복사합니다. 각 입력창에는 <strong>뒷부분 파일 경로</strong>만 적으시면 자동 합성됩니다.
             </p>
+          </div>
+
+          <div className="flex items-center gap-2 w-full sm:w-auto">
+            <input 
+              type="text"
+              value={baseServerUrl}
+              onChange={(e) => handleSaveBaseServerUrl(e.target.value)}
+              placeholder="http://192.168.0.207:8080"
+              className={`px-3 py-1.5 text-xs font-mono font-bold rounded border outline-none w-full sm:w-64 ${
+                isLight ? 'bg-white border-indigo-250 text-indigo-900 focus:border-indigo-600' : 'bg-slate-900 border-indigo-500/40 text-indigo-200'
+              }`}
+            />
+            <button
+              type="button"
+              onClick={handleCopyBaseUrl}
+              className={`px-3 py-1.5 rounded text-xs font-bold shrink-0 transition-all flex items-center gap-1 border shadow-sm ${
+                isCopiedBaseUrl
+                  ? 'bg-emerald-600 text-white border-emerald-700'
+                  : 'bg-indigo-600 hover:bg-indigo-700 text-white border-indigo-700'
+              }`}
+            >
+              {isCopiedBaseUrl ? '✓ 복사됨!' : '📋 기본 주소 복사'}
+            </button>
           </div>
         </div>
       </div>
@@ -305,7 +405,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                 isLight ? 'bg-gray-50 border-gray-200 text-gray-500' : 'border-white/5 text-gray-500 bg-black/20'
               }`}>
                 <th className="py-3 px-4 w-[220px]">교재명 (코드)</th>
-                <th className="py-3 px-4">교재 3종 PDF 연동 주소 (URL)</th>
+                <th className="py-3 px-4">교재 PDF & 단원별 퀴즈 뒷경로 연동</th>
                 <th className="py-3 px-4 text-center w-[110px] no-print">작업</th>
               </tr>
             </thead>
@@ -318,14 +418,23 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                 </tr>
               ) : (
                 filteredTextbooks.map((book) => {
-                  const saved = pdfsMap[book.bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
-                  const current = inputMap[book.bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '' };
+                  const saved = pdfsMap[book.bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', unitQuizzesMap: {} };
+                  const current = inputMap[book.bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', unitQuizzesMap: {} };
                   const isPending = submittingBook === book.bookcode;
+                  const isQuizExpanded = expandedQuizBookcode === book.bookcode;
+
                   const isModified = 
-                    current.pdfUrl.trim() !== saved.pdfUrl.trim() ||
-                    current.answerUrl.trim() !== saved.answerUrl.trim() ||
-                    current.explanationUrl.trim() !== saved.explanationUrl.trim();
-                  const hasAnySaved = !!(saved.pdfUrl || saved.answerUrl || saved.explanationUrl);
+                    (current.pdfUrl || '').trim() !== (saved.pdfUrl || '').trim() ||
+                    (current.answerUrl || '').trim() !== (saved.answerUrl || '').trim() ||
+                    (current.explanationUrl || '').trim() !== (saved.explanationUrl || '').trim() ||
+                    JSON.stringify(current.unitQuizzesMap || {}) !== JSON.stringify(saved.unitQuizzesMap || {});
+
+                  const hasAnySaved = !!(saved.pdfUrl || saved.answerUrl || saved.explanationUrl || (saved.unitQuizzesMap && Object.keys(saved.unitQuizzesMap).length > 0));
+
+                  // 단원 리스트 구하기
+                  const units = Array.isArray(book.units) && book.units.length > 0 ? book.units :
+                                Array.isArray(book.unit_list) && book.unit_list.length > 0 ? book.unit_list :
+                                Array.from({ length: 8 }, (_, i) => ({ title: `단원 ${i + 1}` }));
 
                   return (
                     <tr key={book.bookcode} className={`transition-colors font-bold ${
@@ -342,139 +451,190 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
                         </div>
                       </td>
 
-                      {/* 3종 링크 주소 입력 칸 */}
+                      {/* 3종 링크 주소 및 단원 퀴즈 뒷경로 입력 칸 */}
                       <td className="py-3 px-4 space-y-2">
-                        {/* 1. 교재 본문 링크 */}
+                        {/* 1. 교재 본문 뒷경로 */}
                         <div className="flex items-center gap-2">
                           <span className="w-20 text-[10px] font-bold text-indigo-500 flex items-center gap-1 shrink-0">
                             <FileText size={11} /> 📖 본문
                           </span>
-                          <input 
-                            type="text"
-                            value={current.pdfUrl}
-                            onChange={(e) => handleUrlChange(book.bookcode, 'pdfUrl', e.target.value)}
-                            placeholder="https://... (본문 PDF URL)"
-                            disabled={isPending}
-                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
-                              isLight 
-                                ? 'bg-white border-gray-250 text-gray-800 focus:border-indigo-500' 
-                                : 'bg-black/30 border-white/10 text-white focus:border-indigo-500/50'
-                            }`}
-                          />
+                          <div className="flex items-center flex-1 rounded border overflow-hidden">
+                            <span className={`px-2 py-1 text-[10px] font-mono border-r opacity-60 shrink-0 ${
+                              isLight ? 'bg-gray-100 border-gray-250 text-gray-600' : 'bg-slate-800 border-white/10 text-slate-400'
+                            }`}>
+                              {baseServerUrl}
+                            </span>
+                            <input 
+                              type="text"
+                              value={current.pdfUrl || ''}
+                              onChange={(e) => handleUrlChange(book.bookcode, 'pdfUrl', e.target.value)}
+                              placeholder="/pdf/m_concept/main.pdf"
+                              disabled={isPending}
+                              className={`w-full px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                                isLight 
+                                  ? 'bg-white text-gray-800' 
+                                  : 'bg-black/30 text-white'
+                              }`}
+                            />
+                          </div>
                         </div>
 
-                        {/* 2. 빠른 답 링크 */}
+                        {/* 2. 빠른 답 뒷경로 */}
                         <div className="flex items-center gap-2">
                           <span className="w-20 text-[10px] font-bold text-amber-500 flex items-center gap-1 shrink-0">
                             <Zap size={11} /> ⚡ 빠른답
                           </span>
-                          <input 
-                            type="text"
-                            value={current.answerUrl}
-                            onChange={(e) => handleUrlChange(book.bookcode, 'answerUrl', e.target.value)}
-                            placeholder="https://... (빠른답 PDF URL)"
-                            disabled={isPending}
-                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
-                              isLight 
-                                ? 'bg-white border-gray-250 text-gray-800 focus:border-amber-500' 
-                                : 'bg-black/30 border-white/10 text-white focus:border-amber-500/50'
-                            }`}
-                          />
+                          <div className="flex items-center flex-1 rounded border overflow-hidden">
+                            <span className={`px-2 py-1 text-[10px] font-mono border-r opacity-60 shrink-0 ${
+                              isLight ? 'bg-gray-100 border-gray-250 text-gray-600' : 'bg-slate-800 border-white/10 text-slate-400'
+                            }`}>
+                              {baseServerUrl}
+                            </span>
+                            <input 
+                              type="text"
+                              value={current.answerUrl || ''}
+                              onChange={(e) => handleUrlChange(book.bookcode, 'answerUrl', e.target.value)}
+                              placeholder="/pdf/m_concept/ans.pdf"
+                              disabled={isPending}
+                              className={`w-full px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                                isLight 
+                                  ? 'bg-white text-gray-800' 
+                                  : 'bg-black/30 text-white'
+                              }`}
+                            />
+                          </div>
                         </div>
 
-                        {/* 3. 정답 및 해설 링크 */}
+                        {/* 3. 정답 및 해설 뒷경로 */}
                         <div className="flex items-center gap-2">
                           <span className="w-20 text-[10px] font-bold text-emerald-500 flex items-center gap-1 shrink-0">
                             <HelpCircle size={11} /> 📝 해설
                           </span>
-                          <input 
-                            type="text"
-                            value={current.explanationUrl}
-                            onChange={(e) => handleUrlChange(book.bookcode, 'explanationUrl', e.target.value)}
-                            placeholder="https://... (정답/해설 PDF URL)"
-                            disabled={isPending}
-                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
-                              isLight 
-                                ? 'bg-white border-gray-250 text-gray-800 focus:border-emerald-500' 
-                                : 'bg-black/30 border-white/10 text-white focus:border-emerald-500/50'
-                            }`}
-                          />
+                          <div className="flex items-center flex-1 rounded border overflow-hidden">
+                            <span className={`px-2 py-1 text-[10px] font-mono border-r opacity-60 shrink-0 ${
+                              isLight ? 'bg-gray-100 border-gray-250 text-gray-600' : 'bg-slate-800 border-white/10 text-slate-400'
+                            }`}>
+                              {baseServerUrl}
+                            </span>
+                            <input 
+                              type="text"
+                              value={current.explanationUrl || ''}
+                              onChange={(e) => handleUrlChange(book.bookcode, 'explanationUrl', e.target.value)}
+                              placeholder="/pdf/m_concept/exp.pdf"
+                              disabled={isPending}
+                              className={`w-full px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
+                                isLight 
+                                  ? 'bg-white text-gray-800' 
+                                  : 'bg-black/30 text-white'
+                              }`}
+                            />
+                          </div>
                         </div>
 
-                        {/* 4. 1차 퀴즈 링크 */}
-                        <div className="flex items-center gap-2">
-                          <span className="w-20 text-[10px] font-bold text-purple-500 flex items-center gap-1 shrink-0">
-                            🎯 1차 퀴즈
-                          </span>
-                          <input 
-                            type="text"
-                            value={current.quiz1Url || ''}
-                            onChange={(e) => handleUrlChange(book.bookcode, 'quiz1Url', e.target.value)}
-                            placeholder="https://... (1차 퀴즈 URL / 구글 드라이브 폴더)"
-                            disabled={isPending}
-                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
-                              isLight 
-                                ? 'bg-white border-gray-250 text-gray-800 focus:border-purple-500' 
-                                : 'bg-black/30 border-white/10 text-white focus:border-purple-500/50'
+                        {/* 🎯 단원별 1차·2차·3차 퀴즈 뒷경로 개별 설정 서브 아코디언 */}
+                        <div className="pt-2">
+                          <button
+                            type="button"
+                            onClick={() => setExpandedBookCode(prev => prev === book.bookcode ? null : book.bookcode)}
+                            className={`w-full py-1.5 px-3 rounded text-xs font-black flex items-center justify-between transition-all border ${
+                              isQuizExpanded
+                                ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
+                                : isLight
+                                  ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'
+                                  : 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border-purple-500/30'
                             }`}
-                          />
-                        </div>
+                          >
+                            <span>🎯 단원별 1차·2차·3차 퀴즈 & 단원PDF 뒷경로 설정 ({units.length}개 단원)</span>
+                            <span className="text-[10px] font-bold">{isQuizExpanded ? '▲ 닫기' : '▼ 펼치기'}</span>
+                          </button>
 
-                        {/* 5. 2차 퀴즈 링크 */}
-                        <div className="flex items-center gap-2">
-                          <span className="w-20 text-[10px] font-bold text-purple-400 flex items-center gap-1 shrink-0">
-                            🎯 2차 퀴즈
-                          </span>
-                          <input 
-                            type="text"
-                            value={current.quiz2Url || ''}
-                            onChange={(e) => handleUrlChange(book.bookcode, 'quiz2Url', e.target.value)}
-                            placeholder="https://... (2차 퀴즈 URL)"
-                            disabled={isPending}
-                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
-                              isLight 
-                                ? 'bg-white border-gray-250 text-gray-800 focus:border-purple-500' 
-                                : 'bg-black/30 border-white/10 text-white focus:border-purple-500/50'
-                            }`}
-                          />
-                        </div>
+                          {isQuizExpanded && (
+                            <div className={`p-3 rounded-md border space-y-3 mt-2 text-xs animate-fadeIn ${
+                              isLight ? 'bg-purple-50/30 border-purple-200' : 'bg-slate-950/50 border-purple-500/20'
+                            }`}>
+                              <p className="text-[11px] opacity-75 font-normal">
+                                💡 각 단원별로 로컬 서버 상의 <strong>1차, 2차, 3차 퀴즈 및 단원 PDF 파일 상대경로</strong>를 입력하세요. (기본 서버 주소는 자동 연결됩니다)
+                              </p>
 
-                        {/* 6. 3차 퀴즈 링크 */}
-                        <div className="flex items-center gap-2">
-                          <span className="w-20 text-[10px] font-bold text-purple-300 flex items-center gap-1 shrink-0">
-                            🎯 3차 퀴즈
-                          </span>
-                          <input 
-                            type="text"
-                            value={current.quiz3Url || ''}
-                            onChange={(e) => handleUrlChange(book.bookcode, 'quiz3Url', e.target.value)}
-                            placeholder="https://... (3차 퀴즈 URL)"
-                            disabled={isPending}
-                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
-                              isLight 
-                                ? 'bg-white border-gray-250 text-gray-800 focus:border-purple-500' 
-                                : 'bg-black/30 border-white/10 text-white focus:border-purple-500/50'
-                            }`}
-                          />
-                        </div>
+                              <div className="space-y-2 max-h-80 overflow-y-auto pr-1 custom-scrollbar-v">
+                                {units.map((unit: any, uIdx: number) => {
+                                  const unitName = typeof unit === 'string' ? unit : (unit.title || unit.name || `단원 ${uIdx + 1}`);
+                                  const unitMap = current.unitQuizzesMap?.[uIdx] || {};
 
-                        {/* 7. 단원별 PDF 링크 */}
-                        <div className="flex items-center gap-2">
-                          <span className="w-20 text-[10px] font-bold text-sky-400 flex items-center gap-1 shrink-0">
-                            📂 단원 PDF
-                          </span>
-                          <input 
-                            type="text"
-                            value={current.unitPdfUrl || ''}
-                            onChange={(e) => handleUrlChange(book.bookcode, 'unitPdfUrl', e.target.value)}
-                            placeholder="https://... (단원별 PDF / 교재 자료 URL)"
-                            disabled={isPending}
-                            className={`w-full border rounded-[2px] px-2.5 py-1 text-xs outline-none font-bold placeholder:text-gray-400 ${
-                              isLight 
-                                ? 'bg-white border-gray-250 text-gray-800 focus:border-sky-500' 
-                                : 'bg-black/30 border-white/10 text-white focus:border-sky-500/50'
-                            }`}
-                          />
+                                  return (
+                                    <div 
+                                      key={uIdx}
+                                      className={`p-2.5 rounded border space-y-1.5 ${
+                                        isLight ? 'bg-white border-purple-150' : 'bg-slate-900 border-slate-800'
+                                      }`}
+                                    >
+                                      <div className="font-bold text-xs text-purple-600 dark:text-purple-300 flex items-center justify-between">
+                                        <span>{uIdx + 1}. {unitName}</span>
+                                      </div>
+
+                                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                        {/* 1차 퀴즈 */}
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-12 font-bold text-purple-500 shrink-0">1차 퀴즈:</span>
+                                          <input 
+                                            type="text"
+                                            value={unitMap.quiz1Path || ''}
+                                            onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'quiz1Path', e.target.value)}
+                                            placeholder="/pdf/u1_q1.pdf"
+                                            className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                              isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                            }`}
+                                          />
+                                        </div>
+
+                                        {/* 2차 퀴즈 */}
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-12 font-bold text-purple-400 shrink-0">2차 퀴즈:</span>
+                                          <input 
+                                            type="text"
+                                            value={unitMap.quiz2Path || ''}
+                                            onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'quiz2Path', e.target.value)}
+                                            placeholder="/pdf/u1_q2.pdf"
+                                            className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                              isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                            }`}
+                                          />
+                                        </div>
+
+                                        {/* 3차 퀴즈 */}
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-12 font-bold text-purple-300 shrink-0">3차 퀴즈:</span>
+                                          <input 
+                                            type="text"
+                                            value={unitMap.quiz3Path || ''}
+                                            onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'quiz3Path', e.target.value)}
+                                            placeholder="/pdf/u1_q3.pdf"
+                                            className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                              isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                            }`}
+                                          />
+                                        </div>
+
+                                        {/* 단원 PDF */}
+                                        <div className="flex items-center gap-1.5">
+                                          <span className="w-12 font-bold text-sky-400 shrink-0">단원PDF:</span>
+                                          <input 
+                                            type="text"
+                                            value={unitMap.unitPdfPath || ''}
+                                            onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'unitPdfPath', e.target.value)}
+                                            placeholder="/pdf/u1_main.pdf"
+                                            className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                              isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                            }`}
+                                          />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       </td>
 

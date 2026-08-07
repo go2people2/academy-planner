@@ -20,6 +20,7 @@ interface BookLinks {
   quiz2Url?: string;
   quiz3Url?: string;
   unitPdfUrl?: string;
+  unitQuizzesMap?: Record<number, { quiz1Path?: string; quiz2Path?: string; quiz3Path?: string; unitPdfPath?: string }>;
 }
 
 export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLight = false }: PdfLibraryViewProps) {
@@ -31,6 +32,23 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
   
   // 💡 펼쳐진 교재 코드 (아코디언 토글)
   const [expandedBookCode, setExpandedBookCode] = useState<string | null>(null);
+
+  // 💡 학원 내부 서버 기본 주소
+  const [baseServerUrl, setBaseServerUrl] = useState<string>(() => {
+    if (academyInfo?.operation_settings?.base_server_url) {
+      return academyInfo.operation_settings.base_server_url;
+    }
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ams_base_server_url') || 'http://192.168.0.207:8080';
+    }
+    return 'http://192.168.0.207:8080';
+  });
+
+  useEffect(() => {
+    if (academyInfo?.operation_settings?.base_server_url) {
+      setBaseServerUrl(academyInfo.operation_settings.base_server_url);
+    }
+  }, [academyInfo?.operation_settings?.base_server_url]);
 
   // 1. 등록된 교재 PDF 링크 불러오기
   useEffect(() => {
@@ -50,6 +68,13 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
           const data = await res.json();
           const mapped: Record<string, BookLinks> = {};
           (data.pdfs || []).forEach((p: any) => {
+            let parsedUnitMap = {};
+            if (p.unit_quizzes_json) {
+              try {
+                parsedUnitMap = typeof p.unit_quizzes_json === 'string' ? JSON.parse(p.unit_quizzes_json) : p.unit_quizzes_json;
+              } catch (e) {}
+            }
+
             mapped[p.bookcode] = {
               pdfUrl: p.pdf_url || '',
               answerUrl: p.answer_url || '',
@@ -57,7 +82,8 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
               quiz1Url: p.quiz1_url || '',
               quiz2Url: p.quiz2_url || '',
               quiz3Url: p.quiz3_url || '',
-              unitPdfUrl: p.unit_pdf_url || ''
+              unitPdfUrl: p.unit_pdf_url || '',
+              unitQuizzesMap: parsedUnitMap
             };
           });
           setPdfLinks(mapped);
@@ -109,18 +135,23 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
     });
   }, [masterTextbooks, activeCategory, searchQuery]);
 
-  // 구글 드라이브 뷰어 주소 변환
-  const formatPdfUrl = (url: string) => {
-    if (!url) return '';
-    if (url.includes('drive.google.com') && url.includes('/view')) {
-      return url.replace('/view', '/preview');
+  // 학원 내부 서버 풀 주소 합성 헬퍼
+  const getFullServerUrl = (path?: string) => {
+    if (!path || !path.trim()) return '';
+    const cleanP = path.trim();
+    if (cleanP.startsWith('http://') || cleanP.startsWith('https://')) {
+      return cleanP;
     }
-    return url;
+    const base = (baseServerUrl || '').replace(/\/+$/, '');
+    const relative = cleanP.startsWith('/') ? cleanP : `/${cleanP}`;
+    return `${base}${relative}`;
   };
 
-  const openPdf = (title: string, url: string) => {
-    if (!url) return;
-    setActivePdfUrl({ title, url: formatPdfUrl(url) });
+  const openPdf = (title: string, rawUrlOrPath: string) => {
+    if (!rawUrlOrPath) return;
+    const fullUrl = getFullServerUrl(rawUrlOrPath);
+    if (!fullUrl) return;
+    window.open(fullUrl, '_blank');
   };
 
   const toggleExpand = (bookcode: string) => {
@@ -156,25 +187,31 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
     return `${idx + 1}. ${cleanTitle || rawTitle}`;
   };
 
-  const handleQuizClick = (book: any, unitTitle: string, round: number) => {
+  const handleQuizClick = (book: any, unitIdx: number, unitTitle: string, round: number) => {
     const links = pdfLinks[book.bookcode];
-    const quizUrl = round === 1 ? links?.quiz1Url : round === 2 ? links?.quiz2Url : links?.quiz3Url;
+    const unitMap = links?.unitQuizzesMap?.[unitIdx];
+    const unitPath = round === 1 ? unitMap?.quiz1Path : round === 2 ? unitMap?.quiz2Path : unitMap?.quiz3Path;
+    
+    // 단원별 세부 경로가 없으면 교재 대표 경로 fallback
+    const fallbackPath = round === 1 ? links?.quiz1Url : round === 2 ? links?.quiz2Url : links?.quiz3Url;
+    const finalPath = unitPath || fallbackPath;
 
-    if (quizUrl && quizUrl.trim() !== '') {
-      openPdf(`${book.title} - ${unitTitle} (${round}차 퀴즈)`, quizUrl);
+    if (finalPath && finalPath.trim() !== '') {
+      openPdf(`${book.title} - ${unitTitle} (${round}차 퀴즈)`, finalPath);
     } else {
-      alert(`🎯 [${book.title}]\n${unitTitle} - ${round}차 퀴즈 링크가 아직 연결되지 않았습니다.\n(설정(Settings) ➔ 'Textbook PDFs'에서 ${round}차 퀴즈 URL을 등록하시면 바로 열람 가능합니다)`);
+      alert(`🎯 [${book.title}]\n${unitTitle} - ${round}차 퀴즈 학원 서버 경로가 아직 연결되지 않았습니다.\n(설정(Settings) ➔ '교재 PDF/퀴즈 관리'에서 상대 경로를 입력하시면 바로 열람 가능합니다)`);
     }
   };
 
-  const handleUnitPdfClick = (book: any, unitTitle: string) => {
+  const handleUnitPdfClick = (book: any, unitIdx: number, unitTitle: string) => {
     const links = pdfLinks[book.bookcode];
-    const unitUrl = links?.unitPdfUrl;
+    const unitMap = links?.unitQuizzesMap?.[unitIdx];
+    const unitPath = unitMap?.unitPdfPath || links?.unitPdfUrl;
 
-    if (unitUrl && unitUrl.trim() !== '') {
-      openPdf(`${book.title} - ${unitTitle} (단원 PDF)`, unitUrl);
+    if (unitPath && unitPath.trim() !== '') {
+      openPdf(`${book.title} - ${unitTitle} (단원 PDF)`, unitPath);
     } else {
-      alert(`📂 [${book.title}]\n${unitTitle} - 단원별 PDF 링크가 아직 연결되지 않았습니다.\n(설정(Settings) ➔ 'Textbook PDFs'에서 단원 PDF URL을 등록하시면 바로 열람 가능합니다)`);
+      alert(`📂 [${book.title}]\n${unitTitle} - 단원별 PDF 학원 서버 경로가 아직 연결되지 않았습니다.\n(설정(Settings) ➔ '교재 PDF/퀴즈 관리'에서 상대 경로를 입력하시면 바로 열람 가능합니다)`);
     }
   };
 
@@ -395,6 +432,7 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
                     <div className="max-h-64 overflow-y-auto space-y-2 pr-1 custom-scrollbar-v">
                       {units.map((unit: any, idx: number) => {
                         const unitTitle = formatUnitTitle(unit, idx);
+                        const unitMap = links.unitQuizzesMap?.[idx];
 
                         return (
                           <div 
@@ -410,13 +448,14 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
                             {/* 1차, 2차, 3차 퀴즈 및 단원 PDF 버튼 (링크 미등록 시 비활성화 회색) */}
                             <div className="flex items-center gap-1 shrink-0">
                               {[1, 2, 3].map(round => {
-                                const url = round === 1 ? links.quiz1Url : round === 2 ? links.quiz2Url : links.quiz3Url;
-                                const hasUrl = !!(url && url.trim());
+                                const unitPath = round === 1 ? unitMap?.quiz1Path : round === 2 ? unitMap?.quiz2Path : unitMap?.quiz3Path;
+                                const fallbackPath = round === 1 ? links.quiz1Url : round === 2 ? links.quiz2Url : links.quiz3Url;
+                                const hasUrl = !!((unitPath && unitPath.trim()) || (fallbackPath && fallbackPath.trim()));
 
                                 return (
                                   <button
                                     key={round}
-                                    onClick={() => handleQuizClick(book, unitTitle, round)}
+                                    onClick={() => handleQuizClick(book, idx, unitTitle, round)}
                                     className={`px-2 py-0.5 rounded text-[10px] font-black transition-all border ${
                                       hasUrl
                                         ? isLight
@@ -435,10 +474,11 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
 
                               {/* 4번째 버튼: 단원 PDF */}
                               {(() => {
-                                const hasUnitPdf = !!(links.unitPdfUrl && links.unitPdfUrl.trim());
+                                const unitPdfPath = unitMap?.unitPdfPath || links.unitPdfUrl;
+                                const hasUnitPdf = !!(unitPdfPath && unitPdfPath.trim());
                                 return (
                                   <button
-                                    onClick={() => handleUnitPdfClick(book, unitTitle)}
+                                    onClick={() => handleUnitPdfClick(book, idx, unitTitle)}
                                     className={`px-2 py-0.5 rounded text-[10px] font-black transition-all border flex items-center gap-0.5 ${
                                       hasUnitPdf
                                         ? isLight
