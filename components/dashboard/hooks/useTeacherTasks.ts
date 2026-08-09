@@ -417,6 +417,118 @@ export function useTeacherTasks({
     }
   };
 
+  const handleOpenEditGroupMakeup = useCallback((group: any) => {
+    setEditMakeupGroup(group);
+    setMakeupDate(group.date);
+    
+    const timeRange = group.time;
+    let startTime = '19:00';
+    let endTime = '21:00';
+    if (timeRange.includes('~')) {
+      const parts = timeRange.split('~');
+      startTime = parts[0];
+      endTime = parts[1];
+    } else {
+      startTime = timeRange;
+      endTime = '';
+    }
+    setMakeupTime(startTime);
+    setMakeupEndTime(endTime || `${String(parseInt(startTime.split(':')[0]) + 3).padStart(2, '0')}:00`);
+
+    const firstItem = group.items[0];
+    const notes = firstItem?.completed_classwork_text || firstItem?.special_notes || '';
+    const typeMatch = notes.match(/^\[(.*?)\]/);
+    const type = typeMatch ? typeMatch[1] : '진도 보강';
+    const reasonMatch = notes.match(/\((.*?)\)/);
+    const reason = reasonMatch ? reasonMatch[1] : '';
+
+    setMakeupType(type);
+    setMakeupReason(reason);
+    setIsMakeupModalOpen(true);
+  }, []);
+
+  const handleMakeupAttendance = useCallback(async (logId: string, studentId: string, date: string, status: string) => {
+    try {
+      setMakeups(prev => prev.map(m => m.id === logId ? { ...m, attendance_status: status } : m));
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .update({ 
+          attendance_status: status,
+          attendance_reason: '보강 수업'
+        })
+        .eq('id', logId);
+
+      if (error) throw error;
+
+      if (onRefreshStudents) await onRefreshStudents(false);
+      fetchMakeups();
+    } catch (err) {
+      console.error('Error updating makeup attendance:', err);
+      fetchMakeups();
+    }
+  }, [fetchMakeups, onRefreshStudents]);
+
+  const handleDeleteMakeup = useCallback(async (logId: string) => {
+    if (!confirm('이 보강 스케줄 예약을 취소하시겠습니까?')) return;
+    try {
+      setMakeups(prev => prev.filter(m => m.id !== logId));
+
+      await supabase
+        .from('ams_session_logs')
+        .update({ 
+          attendance_status: 'BEFORE', 
+          attendance_reason: null
+        })
+        .eq('id', logId);
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .delete()
+        .eq('id', logId);
+
+      if (error) throw error;
+
+      if (onRefreshStudents) await onRefreshStudents(true);
+      fetchMakeups();
+    } catch (err) {
+      console.error('Error deleting makeup:', err);
+      fetchMakeups();
+    }
+  }, [fetchMakeups, onRefreshStudents]);
+
+  const handleDeleteGroupMakeups = useCallback(async (makeupsInGroup: any[]) => {
+    if (makeupsInGroup.length === 0) return;
+    const count = makeupsInGroup.length;
+    if (!confirm(`이 시간대의 보강 예약(${count}명)을 모두 취소하시겠습니까?`)) return;
+
+    try {
+      const idsToDelete = makeupsInGroup.map(m => m.id);
+      setMakeups(prev => prev.filter(m => !idsToDelete.includes(m.id)));
+
+      await supabase
+        .from('ams_session_logs')
+        .update({ 
+          attendance_status: 'BEFORE', 
+          attendance_reason: null
+        })
+        .in('id', idsToDelete);
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .delete()
+        .in('id', idsToDelete);
+
+      if (error) throw error;
+
+      if (onRefreshStudents) await onRefreshStudents(true);
+      fetchMakeups();
+    } catch (err) {
+      console.error('Error deleting group makeups:', err);
+      fetchMakeups();
+    }
+  }, [fetchMakeups, onRefreshStudents]);
+
   const handleDeleteSingleMakeup = async (makeupId: string, studentName: string) => {
     if (!confirm(`[${studentName}] 학생의 보강 예약을 삭제하시겠습니까?`)) return;
 
@@ -509,6 +621,10 @@ export function useTeacherTasks({
     handleHideTask,
     handleAddMakeups,
     handleOpenEditMakeupModal,
+    handleOpenEditGroupMakeup,
+    handleMakeupAttendance,
+    handleDeleteMakeup,
+    handleDeleteGroupMakeups,
     handleDeleteMakeupGroup,
     handleDeleteSingleMakeup,
   };

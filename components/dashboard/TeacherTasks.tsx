@@ -105,7 +105,10 @@ export default function TeacherTasks({
     handleDeleteTask,
     handleHideTask,
     handleAddMakeups,
-    handleOpenEditMakeupModal,
+    handleOpenEditGroupMakeup,
+    handleMakeupAttendance,
+    handleDeleteMakeup,
+    handleDeleteGroupMakeups,
     handleDeleteMakeupGroup,
     handleDeleteSingleMakeup,
   } = useTeacherTasks({
@@ -115,129 +118,6 @@ export default function TeacherTasks({
     currentUser,
     onRefreshStudents,
   });
-
-  // 6.5 보강 그룹 수정 모달 트리거
-  const handleOpenEditGroupMakeup = (group: any) => {
-    setEditMakeupGroup(group);
-    setMakeupDate(group.date);
-    
-    // 시간 정보 파싱 ("19:00~21:00" -> 시작 19:00, 종료 21:00)
-    const timeRange = group.time;
-    let startTime = '19:00';
-    let endTime = '21:00';
-    if (timeRange.includes('~')) {
-      const parts = timeRange.split('~');
-      startTime = parts[0];
-      endTime = parts[1];
-    } else {
-      startTime = timeRange;
-      endTime = '';
-    }
-    setMakeupTime(startTime);
-    setMakeupEndTime(endTime || `${String(parseInt(startTime.split(':')[0]) + 3).padStart(2, '0')}:00`);
-
-    // 보강 유형 및 결석 원인 날짜 파싱
-    const firstItem = group.items[0];
-    const notes = firstItem?.completed_classwork_text || firstItem?.special_notes || '';
-    const typeMatch = notes.match(/^\[(.*?)\]/);
-    const type = typeMatch ? typeMatch[1] : '진도 보강';
-    const reasonMatch = notes.match(/\((.*?)\)/);
-    const reason = reasonMatch ? reasonMatch[1] : '';
-
-    setMakeupType(type);
-    setMakeupReason(reason);
-
-    setIsMakeupModalOpen(true);
-  };
-
-  // 7. Change Makeup Attendance Status (완료 처리)
-  const handleMakeupAttendance = async (logId: string, studentId: string, date: string, status: string) => {
-    try {
-      // 로컬 즉시 반영 (낙관적 업데이트)
-      setMakeups(prev => prev.map(m => m.id === logId ? { ...m, attendance_status: status } : m));
-
-      const { error } = await supabase
-        .from('ams_session_logs')
-        .update({ 
-          attendance_status: status,
-          attendance_reason: '보강 수업'
-        })
-        .eq('id', logId);
-
-      if (error) throw error;
-
-      await onRefreshStudents(false);
-      fetchMakeups();
-    } catch (err) {
-      console.error('Error updating makeup attendance:', err);
-      fetchMakeups();
-    }
-  };
-
-  // 8. Delete Makeup Session
-  const handleDeleteMakeup = async (logId: string) => {
-    if (!confirm('이 보강 스케줄 예약을 취소하시겠습니까?')) return;
-    try {
-      setMakeups(prev => prev.filter(m => m.id !== logId));
-
-      // 💡 1. 먼저 DB 상의 attendance_status와 attendance_reason에서 '보강' 문구를 완전히 비우고 '시간 이동'으로 리셋
-      await supabase
-        .from('ams_session_logs')
-        .update({ 
-          attendance_status: ATTENDANCE_STATUS.BEFORE, 
-          attendance_reason: null
-        })
-        .eq('id', logId);
-
-      // 💡 2. 해당 세션 로그 완전 삭제
-      const { error } = await supabase
-        .from('ams_session_logs')
-        .delete()
-        .eq('id', logId);
-
-      if (error) throw error;
-
-      if (onRefreshStudents) await onRefreshStudents(true);
-      fetchMakeups();
-    } catch (err) {
-      console.error('Error deleting makeup:', err);
-      fetchMakeups();
-    }
-  };
-
-  const handleDeleteGroupMakeups = async (makeupsInGroup: any[]) => {
-    if (makeupsInGroup.length === 0) return;
-    const count = makeupsInGroup.length;
-    if (!confirm(`이 시간대의 보강 예약(${count}명)을 모두 취소하시겠습니까?`)) return;
-
-    try {
-      const idsToDelete = makeupsInGroup.map(m => m.id);
-      setMakeups(prev => prev.filter(m => !idsToDelete.includes(m.id)));
-
-      // 💡 1. DB 상의 '보강' 상태 문구 완벽 초기화
-      await supabase
-        .from('ams_session_logs')
-        .update({ 
-          attendance_status: ATTENDANCE_STATUS.BEFORE, 
-          attendance_reason: null
-        })
-        .in('id', idsToDelete);
-
-      // 💡 2. 해당 세션 로그 일괄 삭제
-      const { error } = await supabase
-        .from('ams_session_logs')
-        .delete()
-        .in('id', idsToDelete);
-
-      if (error) throw error;
-
-      if (onRefreshStudents) await onRefreshStudents(true);
-      fetchMakeups();
-    } catch (err) {
-      console.error('Error deleting group makeups:', err);
-      fetchMakeups();
-    }
-  };
 
   // --- Filtering & Memos ---
   const visibleTasks = useMemo(() => {
