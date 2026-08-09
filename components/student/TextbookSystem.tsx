@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { TextbookOption } from '@/types/dashboard';
 import { parseBookCourseValue } from '@/lib/utils';
+import { useTextbookSystemState } from './hooks/useTextbookSystemState';
 
 interface TextbookSystemProps {
   student: any;
@@ -47,99 +48,53 @@ export default function TextbookSystem({
   academy,
   initialBookCode
 }: TextbookSystemProps) {
-  const [activeBook, setActiveBook] = useState<any>(() => {
-    if (initialBookCode) {
-      return (availableTextbooks || []).find(b => b.bookcode === initialBookCode) || { bookcode: initialBookCode, title: initialBookCode };
-    }
-    return null;
+  const {
+    activeBook,
+    setActiveBook,
+    activeUnit,
+    setActiveUnit,
+    units,
+    setUnits,
+    selectedUnits,
+    setSelectedUnits,
+    isMergedViewActive,
+    setIsMergedViewActive,
+    isLoadingUnits,
+    setIsLoadingUnits,
+    selectedPages,
+    setSelectedPages,
+    selectionRange,
+    setSelectionRange,
+    lastClickedUnitIdx,
+    setLastClickedUnitIdx,
+    isTeacher,
+    showAddBookModal,
+    setShowAddBookModal,
+    selectedCategory,
+    setSelectedCategory,
+    touchStart,
+    setTouchStart,
+    touchEnd,
+    setTouchEnd,
+    showToast,
+    toastMessage,
+    localAssigned,
+    setLocalAssigned,
+    unassignedBooks,
+    bookCategories,
+    filteredUnassignedBooks,
+    fetchUnits,
+    pageStatusMap,
+  } = useTextbookSystemState({
+    student,
+    availableTextbooks,
+    allLogs,
+    localCompletedClasswork,
+    localHomework,
+    selectedDate,
+    academy,
+    initialBookCode,
   });
-  const [activeUnit, setActiveUnit] = useState<any>(null);
-  const [units, setUnits] = useState<any[]>([]);
-  const [selectedUnits, setSelectedUnits] = useState<any[]>([]); 
-  const [isMergedViewActive, setIsMergedViewActive] = useState(false); 
-  const [isLoadingUnits, setIsLoadingUnits] = useState(false);
-  const [selectedPages, setSelectedPages] = useState<number[]>([]);
-  const [selectionRange, setSelectionRange] = useState<{ start: number | null, end: number | null }>({ start: null, end: null });
-  const [lastClickedUnitIdx, setLastClickedUnitIdx] = useState<number | null>(null);
-  const [isTeacher, setIsTeacher] = useState(false);
-  const [showAddBookModal, setShowAddBookModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('전체');
-
-  // 💡 모바일 스와이프 제스처를 위한 상태
-  const [touchStart, setTouchStart] = useState<number | null>(null);
-  const [touchEnd, setTouchEnd] = useState<number | null>(null);
-
-  // 💡 장수 계산 팝업 애니메이션을 위한 상태
-  const [showToast, setShowToast] = useState(false);
-  const [toastMessage, setToastMessage] = useState({ sheets: 0, pages: 0 });
-
-  // 💡 [실시간 동기화] 방금 추가한 교재가 비동기 DB 리턴 지연 없이 즉시 목록에 뜨도록 로컬 state 관리
-  const [localAssigned, setLocalAssigned] = useState<string[]>(() => student?.assigned_books || []);
-  useEffect(() => {
-    if (student?.assigned_books) {
-      setLocalAssigned(prev => {
-        const merged = Array.from(new Set([...(student.assigned_books || []), ...prev]));
-        return merged;
-      });
-    }
-  }, [student?.assigned_books]);
-
-  // 💡 미배정 교재 리스트 필터링
-  const unassignedBooks = useMemo(() => {
-    return (availableTextbooks || []).filter(b => !localAssigned.includes(b.bookcode) && b.status !== '비활성');
-  }, [availableTextbooks, localAssigned]);
-
-  // 💡 학원 설정의 대분류 목록 가져오기 (없으면 기본값)
-  const bookCategories = useMemo(() => {
-    const customCats = academy?.operation_settings?.textbook_categories;
-    if (Array.isArray(customCats) && customCats.length > 0) {
-      return ['전체', ...customCats];
-    }
-    return ['전체', '초5', '초6', '중1', '중2', '중3', '공수1', '공수2', '대수', '미적분1', '미적분2', '확통', '기하'];
-  }, [academy]);
-
-  // 💡 선택된 대분류 칩 필터에 맞게 필터링된 미배정 교재 리스트
-  const filteredUnassignedBooks = useMemo(() => {
-    if (!selectedCategory || selectedCategory === '전체') return unassignedBooks;
-    const query = selectedCategory.toLowerCase();
-    return unassignedBooks.filter(b => 
-      b.title.toLowerCase().includes(query) || 
-      (b.grade || '').toLowerCase().includes(query)
-    );
-  }, [unassignedBooks, selectedCategory]);
-
-  // 💡 initialBookCode가 설정되어 들어오면 즉시 단원 목록 가져오기
-  useEffect(() => {
-    if (initialBookCode) {
-      const foundBook = (availableTextbooks || []).find(b => b.bookcode === initialBookCode) || { bookcode: initialBookCode, title: initialBookCode };
-      setActiveBook(foundBook);
-      fetchUnits(initialBookCode);
-    }
-    // 🔍 디버그: TextbookSystem 마운트 시 실제로 받는 초기값 확인
-    console.log('[TextbookSystem MOUNT] localCompletedClasswork:', JSON.stringify(localCompletedClasswork), '| localHomework:', JSON.stringify(localHomework));
-  }, [initialBookCode, availableTextbooks]);
-
-  // 💡 activeBook이 null이 되면 모달을 닫지 않고 배정된 전체 교재 목록 화면을 보여줍니다.
-  // 모달 닫기는 사용자가 X 버튼을 누를 때 수행됩니다.
-
-  useEffect(() => {
-    if (selectedPages.length > 1 && (activeUnit || isMergedViewActive)) {
-      setToastMessage({
-        sheets: selectedPages.length / 2,
-        pages: selectedPages.length
-      });
-      setShowToast(true);
-      
-      const timer = setTimeout(() => {
-        setShowToast(false);
-      }, 1500); // 1.5초 후 자연스럽게 사라짐
-
-      return () => clearTimeout(timer);
-    } else {
-      // 💡 상세페이지를 나가거나 선택이 풀렸을 때 애니메이션 강제 종료
-      setShowToast(false);
-    }
-  }, [selectedPages, activeUnit, isMergedViewActive]); 
 
   const onTouchStart = (e: React.TouchEvent) => {
     setTouchEnd(null);
@@ -167,93 +122,6 @@ export default function TextbookSystem({
       setSelectedPages([]);
     }
   };
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const teacherToken = localStorage.getItem('ams_user');
-      if (teacherToken) setIsTeacher(true);
-    }
-  }, []);
-
-  // 💡 데이터 추출 및 병합 로직 (각 페이지별 상태: classwork, wrong, homework)
-  const pageStatusMap = useMemo(() => {
-    if (!activeBook) return new Map<number, 'classwork' | 'wrong' | 'homework'>();
-    const map = new Map<number, 'classwork' | 'wrong' | 'homework'>();
-    
-    const setStatus = (start: number, end: number, status: 'classwork' | 'wrong' | 'homework') => {
-      for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
-        const current = map.get(i);
-        if (status === 'wrong') map.set(i, 'wrong');
-        else if (status === 'classwork' && current !== 'wrong') map.set(i, 'classwork');
-        else if (status === 'homework' && !current) map.set(i, 'homework');
-      }
-    };
-
-    const processJson = (arr: any[], type: 'classwork' | 'homework') => {
-      arr.forEach(h => {
-        if (h.book_name === activeBook.bookcode && h.range) {
-          h.range.split(',').forEach((seg: string) => {
-            const matches = seg.match(/p(\d+)\s*[~-]\s*p?(\d+)/i) || seg.match(/p(\d+)/i);
-            if (matches) {
-              const s = parseInt(matches[1]); const e = matches[2] ? parseInt(matches[2]) : s;
-              if (!isNaN(s) && !isNaN(e)) setStatus(s, e, type);
-            }
-          });
-        }
-      });
-    };
-
-    const processText = (t: string | undefined | null, baseType: 'classwork' | 'homework') => {
-      if (!t) return;
-      const displayTitle = activeBook.title;
-      const cleanTitle = displayTitle.replace(/\s+/g, '').toLowerCase();
-      const cleanBookCode = activeBook.bookcode.replace(/\s+/g, '').toLowerCase();
-      t.split('\n').forEach(line => {
-        const cleanLine = line.replace(/\s+/g, '').toLowerCase();
-        if (cleanLine.includes(cleanTitle) || cleanLine.includes(cleanBookCode)) {
-          const isWrong = cleanLine.includes('[오답]');
-          const isCancel = cleanLine.includes('[취소]');
-          const status = baseType === 'classwork' ? (isWrong ? 'wrong' : 'classwork') : (isCancel ? 'cancel' : 'homework');
-          const regex = /p(\d+)[~-]?p?(\d+)?/gi;
-          let match;
-          while ((match = regex.exec(cleanLine)) !== null) {
-            const s = parseInt(match[1]); const e = match[2] ? parseInt(match[2]) : s;
-            if (!isNaN(s) && !isNaN(e)) {
-              for (let i = Math.min(s, e); i <= Math.max(s, e); i++) {
-                const current = map.get(i);
-                if (status === 'cancel') {
-                  if (current === 'homework') map.delete(i);
-                } else if (status === 'wrong') {
-                  map.set(i, 'wrong');
-                } else if (status === 'classwork' && current !== 'wrong') {
-                  map.set(i, 'classwork');
-                } else if (status === 'homework' && !current) {
-                  map.set(i, 'homework');
-                }
-              }
-            }
-          }
-        }
-      });
-    };
-
-    if (allLogs) {
-      allLogs.forEach(log => {
-        if (log.session_date === selectedDate) return;
-        processJson(log.classwork_json || [], 'classwork');
-        processJson(log.homework_json || [], 'homework');
-        processText(log.classwork_text, 'classwork');
-        processText(log.completed_classwork_text, 'classwork');
-        processText(log.homework_text, 'homework');
-      });
-    }
-
-    // 💡 방금 추가한 텍스트 값 즉시 반영 (낙관적 업데이트)
-    processText(localCompletedClasswork, 'classwork');
-    processText(localHomework, 'homework');
-
-    return map;
-  }, [activeBook, allLogs, localCompletedClasswork, localHomework]);
 
   const mergedPageRange = useMemo(() => {
     if (selectedUnits.length === 0) return null;
@@ -291,13 +159,7 @@ export default function TextbookSystem({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [activeBook, activeUnit, isMergedViewActive, selectedUnits]);
 
-  const fetchUnits = async (bookCode: string) => {
-    setIsLoadingUnits(true);
-    try {
-      const res = await fetch(`/api/textbooks/${bookCode}`);
-      if (res.ok) { setUnits(await res.json() || []); }
-    } catch (e) { console.error(e); } finally { setIsLoadingUnits(false); }
-  };
+
 
   const handleUnitToggle = (e: React.MouseEvent, u: any, idx: number) => {
     e.stopPropagation();
