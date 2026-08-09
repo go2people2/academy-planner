@@ -46,250 +46,37 @@ function getNowKSTTimeString(): string {
   return `${h}:${mi}:${s}`;
 }
 
+import { useAttendanceKiosk } from './hooks/useAttendanceKiosk';
+
 export default function AttendancePage() {
   const { slug } = useParams();
   const slugStr = Array.isArray(slug) ? slug[0] : slug || '';
 
-  const [digits, setDigits] = useState('');
-  const [academyName, setAcademyName] = useState('');
-  const [recentRecords, setRecentRecords] = useState<RecentRecord[]>([]);
-  const [dateText, setDateText] = useState('');
-  const [timeText, setTimeText] = useState('');
-  const [feedback, setFeedback] = useState<FeedbackState>('idle');
-  const [feedbackMsg, setFeedbackMsg] = useState('');
-  const [feedbackSub, setFeedbackSub] = useState('');
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [replyPhone, setReplyPhone] = useState('0322620911'); // 기본 회신번호
-  const [footerMemo, setFooterMemo] = useState(''); // 기본 꼬릿말
-  const [isModalOpen, setIsModalOpen] = useState(false); // 💡 전체기록 팝업 상태 추가
-  const [searchTerm, setSearchTerm] = useState(''); // 💡 실시간 이름 검색어 상태 추가
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [isFullscreen, setIsFullscreen] = useState(false);
+  const {
+    digits,
+    setDigits,
+    academyName,
+    recentRecords,
+    dateText,
+    timeText,
+    feedback,
+    feedbackMsg,
+    feedbackSub,
+    isSubmitting,
+    replyPhone,
+    footerMemo,
+    isModalOpen,
+    setIsModalOpen,
+    searchTerm,
+    setSearchTerm,
+    isFullscreen,
+    toggleFullscreen,
+    handleKey,
+    handleSubmit,
+    handleUndo,
+  } = useAttendanceKiosk(slugStr);
 
-  useEffect(() => {
-    const handleFullscreenChange = () => {
-      setIsFullscreen(!!document.fullscreenElement);
-    };
-    document.addEventListener('fullscreenchange', handleFullscreenChange);
-    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, []);
 
-  const toggleFullscreen = () => {
-    if (!document.fullscreenElement) {
-      document.documentElement.requestFullscreen().catch(err => {
-        console.error(`Error attempting to enable fullscreen mode: ${err.message}`);
-      });
-    } else {
-      document.exitFullscreen();
-    }
-  };
-
-  // 시계 업데이트
-  useEffect(() => {
-    setDateText(getNowKSTDateString());
-    setTimeText(getNowKSTTimeString());
-    const id = setInterval(() => {
-      setDateText(getNowKSTDateString());
-      setTimeText(getNowKSTTimeString());
-    }, 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  // 학원 정보 + 최근 출결 로드
-  const loadInfo = useCallback(async () => {
-    if (!slugStr) return;
-    try {
-      const res = await fetch(`/api/attendance?slug=${slugStr}`);
-      if (!res.ok) return;
-      const data = await res.json();
-      const loadedAcademyName = data.academyName || '';
-      setAcademyName(loadedAcademyName);
-      setRecentRecords(data.recentRecords || []);
-
-      if (data.operationSettings && data.operationSettings.naver_cafe_title) {
-        setFooterMemo(data.operationSettings.naver_cafe_title);
-      } else {
-        setFooterMemo(loadedAcademyName);
-      }
-    } catch {}
-  }, [slugStr]);
-
-  useEffect(() => {
-    loadInfo();
-
-    // 💡 [실시간 동기화] ams_session_logs 테이블의 변화를 감지하여 즉시 동기화
-    const channel = supabase
-      .channel('kiosk-attendance-sync')
-      .on(
-        'postgres_changes',
-        {
-          event: '*', // INSERT, UPDATE, DELETE 모두 감지
-          schema: 'public',
-          table: 'ams_session_logs'
-        },
-        () => {
-          // 데이터가 실제로 바뀌었을 때만 API를 호출해 목록 갱신
-          loadInfo();
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [loadInfo]);
-
-  // 💡 [뒤로가기 대응 1단계] 브라우저 뒤로가기(BFCache) 복원 시 먹통이 되지 않도록 상태 클린 리셋
-  useEffect(() => {
-    const handlePageShow = (e: PageTransitionEvent) => {
-      // e.persisted가 true이거나 브라우저 뒤로가기(Back/Forward) 복원 상황일 때 리셋
-      if (e.persisted || (window.performance && window.performance.navigation.type === 2)) {
-        setDigits('');
-        setFeedback('idle');
-        setFeedbackMsg('');
-        setFeedbackSub('');
-        setIsSubmitting(false);
-        loadInfo();
-      }
-    };
-    window.addEventListener('pageshow', handlePageShow);
-    return () => window.removeEventListener('pageshow', handlePageShow);
-  }, [loadInfo]);
-
-  // 💡 [뒤로가기 대응 2단계] BFCache 강제 얼리기 캐시를 방지하기 위해 unload 감지 센서 작동
-  useEffect(() => {
-    const handleUnload = () => {};
-    window.addEventListener('unload', handleUnload);
-    return () => window.removeEventListener('unload', handleUnload);
-  }, []);
-
-  // 피드백 초기화
-  const resetFeedback = useCallback(() => {
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    feedbackTimer.current = setTimeout(() => {
-      setFeedback('idle');
-      setFeedbackMsg('');
-      setFeedbackSub('');
-      setDigits('');
-    }, 3000);
-  }, []);
-
-  // 번호 입력
-  const handleKey = useCallback((key: string) => {
-    if (feedback !== 'idle') return;
-    if (key === 'clear') {
-      setDigits('');
-      return;
-    }
-    if (key === 'backspace') {
-      setDigits(prev => prev.slice(0, -1));
-      return;
-    }
-    if (digits.length >= 4) return;
-    setDigits(prev => prev + key);
-  }, [digits, feedback]);
-
-  // 제출
-  const handleSubmit = useCallback(async () => {
-    if (digits.length !== 4 || isSubmitting || feedback !== 'idle') return;
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: slugStr, digits }),
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        if (data.isTeacher) {
-          // 💡 교직원 출퇴근 대응
-          if (data.type === '출근') {
-            setFeedback('success-teacher-in');
-            setFeedbackMsg(`${data.teacherName} 선생님`);
-            setFeedbackSub(`출근 완료 · ${data.time}`);
-          } else {
-            setFeedback('success-teacher-out');
-            setFeedbackMsg(`${data.teacherName} 선생님`);
-            setFeedbackSub(`퇴근 완료 · ${data.time} (근무: ${data.duration}분)`);
-          }
-        } else {
-          // 학생 출결
-          if (data.type === '하원') {
-            setFeedback('success-checkout');
-            setFeedbackMsg(`${data.studentName} 학생`);
-            setFeedbackSub(`하원 · ${data.time}`);
-          } else {
-            const isLate = data.attendanceStatus === '지각';
-            setFeedback(isLate ? 'success-late' : 'success-checkin');
-            setFeedbackMsg(`${data.studentName} 학생`);
-            setFeedbackSub(`${data.attendanceStatus} · ${data.time}`);
-          }
-        }
-        await loadInfo();
-        resetFeedback();
-      } else if (res.status === 409) {
-        setFeedback('already-done');
-        setFeedbackMsg(data.error || '이미 완료되었습니다.');
-        setFeedbackSub('관리자에게 문의해주세요');
-        resetFeedback();
-      } else {
-        setFeedback('error');
-        setFeedbackMsg(data.error || '등록된 정보를 찾을 수 없습니다.');
-        setFeedbackSub('다시 시도해주세요');
-        resetFeedback();
-      }
-    } catch {
-      setFeedback('error');
-      setFeedbackMsg('네트워크 오류가 발생했습니다');
-      setFeedbackSub('다시 시도해주세요');
-      resetFeedback();
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [digits, isSubmitting, feedback, slugStr, loadInfo, resetFeedback]);
-
-  const handleUndo = useCallback(async (e: React.MouseEvent) => {
-    e.stopPropagation(); // 오버레이 클릭 전파 방지
-    if (!digits || digits.length !== 4 || isSubmitting) return;
-    
-    setIsSubmitting(true);
-    try {
-      const res = await fetch('/api/attendance', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ slug: slugStr, digits, action: 'undo' }),
-      });
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        setFeedback('error'); // 빨간색 오버레이로 변경하여 취소 알림
-        if (data.isTeacher) {
-          setFeedbackMsg(`${data.teacherName} 선생님`);
-          setFeedbackSub(`${data.type === '퇴근취소' ? '퇴근' : '출근'} 취소 완료`);
-        } else {
-          setFeedbackMsg(`${data.studentName} 학생`);
-          setFeedbackSub(`${data.type === '하원취소' ? '하원' : '등원'} 취소 완료`);
-        }
-        await loadInfo();
-        
-        // 1.5초 뒤 완전히 리셋
-        if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-        feedbackTimer.current = setTimeout(() => {
-          setFeedback('idle');
-          setFeedbackMsg('');
-          setFeedbackSub('');
-          setDigits('');
-        }, 1500);
-      } else {
-        alert(data.error || '취소 중 오류가 발생했습니다.');
-      }
-    } catch {
-      alert('네트워크 오류가 발생했습니다.');
-    } finally {
-      setIsSubmitting(false);
-    }
-  }, [digits, isSubmitting, slugStr, loadInfo]);
 
   // 키보드 지원
   useEffect(() => {
