@@ -24,57 +24,10 @@ interface StudentStudyReportDrawerProps {
 
 type TabType = 'summary' | 'history' | 'stats' | 'roadmap' | 'journal' | 'ai-briefing' | 'school-scores';
 
+import { useStudentStudyReport } from './hooks/useStudentStudyReport';
+
 export default function StudentStudyReportDrawer({ student, availableTextbooks, onClose, onEditMode, onRefreshStudents, isLight = false }: StudentStudyReportDrawerProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('summary');
-
-  // 💡 실데이터 기반 통계 계산
-  const stats = useMemo(() => {
-    const logs = student.allLogs || [];
-    // 💡 [안정화] 수업제외, 수업취소 등 학생 결석과 무관하게 수업이 미진행된 날은 출석률 모수(분모)에서 제외한 뒤 최근 20회를 가져옵니다.
-    const validLogs = logs.filter(l => l.attendance_status && !['수업제외', '수업취소'].includes(l.attendance_status));
-    const recentLogs = validLogs.slice(0, 20);
-    
-    // 1. 출석률 계산 (보강:시간 형태도 누락 없이 출석으로 인정)
-    const attendances = recentLogs.filter(l => 
-      l.attendance_status === '출석' || 
-      l.attendance_status === '온라인' || 
-      l.attendance_status.startsWith('bo강') || // 보강 오타 방지
-      l.attendance_status.startsWith('보강')
-    );
-    const attendanceRate = recentLogs.length > 0 ? Math.round((attendances.length / recentLogs.length) * 100) : 0;
-
-    // 2. 숙제 이행률 (등급 기반)
-    const statusWeight = { 'perfect': 100, 'good': 85, 'neutral': 70, 'poor': 40, 'bad': 20, 'none': 0 };
-    const validHomeworkLogs = recentLogs.filter(l => l.status && l.status !== 'none');
-    const totalHwScore = validHomeworkLogs.reduce((acc, l) => acc + (statusWeight[l.status as keyof typeof statusWeight] || 0), 0);
-    const homeworkRate = validHomeworkLogs.length > 0 ? Math.round(totalHwScore / validHomeworkLogs.length) : 0;
-
-    // 3. 테스트 평균 (최근 5회)
-    const testLogs = logs.filter(l => l.test_score !== null && l.test_score !== undefined).slice(0, 5);
-    const avgTestScore = testLogs.length > 0 ? Math.round(testLogs.reduce((acc, l) => acc + (Number(l.test_score) || 0), 0) / testLogs.length) : 0;
-
-    // 4. 이번 달 결석 / 보강 횟수 계산
-    const now = new Date();
-    const currentYear = now.getFullYear();
-    const currentMonth = now.getMonth();
-    const currentMonthStr = String(currentMonth + 1).padStart(2, '0');
-    const currentMonthPrefix = `${currentYear}-${currentMonthStr}`;
-
-    const thisMonthLogs = logs.filter(l => l.date && l.date.startsWith(currentMonthPrefix));
-    const absencesCount = thisMonthLogs.filter(l => l.attendance_status === '결석').length;
-    const makeupsCount = thisMonthLogs.filter(l => l.attendance_status && l.attendance_status.startsWith('보강')).length;
-    const currentMonthName = `${currentMonth + 1}월`;
-
-    return { 
-      attendanceRate, 
-      homeworkRate, 
-      avgTestScore, 
-      testCount: testLogs.length,
-      absencesCount,
-      makeupsCount,
-      currentMonthName
-    };
-  }, [student.allLogs]);
+  const { activeTab, setActiveTab, stats } = useStudentStudyReport(student);
 
   return (
     <motion.div 

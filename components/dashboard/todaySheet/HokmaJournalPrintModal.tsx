@@ -18,90 +18,12 @@ interface HokmaJournalPrintModalProps {
   academyInfo?: any; // 💡 학원 정보 데이터 전달
 }
 
-// 🎨 다채로운 인쇄 테마 정의
-const JOURNAL_THEMES = {
-  slateBlue: {
-    name: '슬레이트 인디고 블루 (추천)',
-    bg: '#ffffff',
-    border: '#333333',
-    headerBg: '#7387A5',
-    headerText: '#ffffff',
-    titleColor: '#111827',
-    lineColor: '#111827',
-    descColor: '#374151',
-    metaTextColor: '#1f2937',
-    logoFilter: 'invert(52%) sepia(21%) saturate(718%) hue-rotate(177deg) brightness(91%) contrast(87%)',
-  },
-  indigo: {
-    name: '보라 인디고',
-    bg: '#ffffff',
-    border: '#333333',
-    headerBg: '#f3e8ff',
-    headerText: '#6b21a8',
-    titleColor: '#111827',
-    lineColor: '#111827',
-    descColor: '#7e22ce',
-    metaTextColor: '#1f2937',
-    logoFilter: 'invert(18%) sepia(85%) saturate(3000%) hue-rotate(260deg) brightness(85%) contrast(100%)', // 보라 인디고
-  },
-  amber: {
-    name: '호박색',
-    bg: '#ffffff',
-    border: '#333333',
-    headerBg: '#fef3e2',
-    headerText: '#9a3412',
-    titleColor: '#111827',
-    lineColor: '#111827',
-    descColor: '#c2410c',
-    metaTextColor: '#27272a',
-    logoFilter: 'invert(12%) sepia(85%) saturate(1600%) hue-rotate(350deg) brightness(85%) contrast(110%)', // 짙은 초콜릿 앰버
-  },
-  rose: {
-    name: '핑크 로즈',
-    bg: '#ffffff',
-    border: '#333333',
-    headerBg: '#fff0f2',
-    headerText: '#9f1239',
-    titleColor: '#111827',
-    lineColor: '#111827',
-    descColor: '#be123c',
-    metaTextColor: '#1f2937',
-    logoFilter: 'invert(13%) sepia(85%) saturate(4000%) hue-rotate(335deg) brightness(85%) contrast(100%)', // 짙은 로즈 핑크
-  },
-  sage: {
-    name: '포레스트 세이지',
-    bg: '#ffffff',
-    border: '#333333',
-    headerBg: '#f0f4f0',
-    headerText: '#166534',
-    titleColor: '#111827',
-    lineColor: '#111827',
-    descColor: '#15803d',
-    metaTextColor: '#27272a',
-    logoFilter: 'invert(22%) sepia(80%) saturate(1200%) hue-rotate(110deg) brightness(80%) contrast(100%)', // 짙은 세이지 포레스트 그린
-  },
-  classic: {
-    name: '클래식 그레이',
-    bg: '#ffffff',
-    border: '#333333',
-    headerBg: '#f3f4f6',
-    headerText: '#1f2937',
-    titleColor: '#111827',
-    lineColor: '#111827',
-    descColor: '#4b5563',
-    metaTextColor: '#1f2937',
-    logoFilter: 'grayscale(1) brightness(0.6) contrast(1.2)', // 원본 무채색 그레이스케일
-  }
-};
-
-type ThemeKey = keyof typeof JOURNAL_THEMES;
-
-// 🖊️ 볼펜 잉크 색상 옵션 정의
-const PEN_COLORS = [
-  { val: '#1e3a8a', label: '청색 볼펜 (Blue)' },
-  { val: '#111827', label: '흑색 볼펜 (Black)' },
-  { val: '#be123c', label: '적색 볼펜 (Red)' }
-];
+import { 
+  useHokmaJournalPrint, 
+  JOURNAL_THEMES, 
+  ThemeKey, 
+  PEN_COLORS 
+} from './hooks/useHokmaJournalPrint';
 
 export default function HokmaJournalPrintModal({
   isOpen,
@@ -115,100 +37,29 @@ export default function HokmaJournalPrintModal({
 }: HokmaJournalPrintModalProps) {
   const academyName = academyInfo?.academy_name || academyInfo?.name || '호크마';
   const logoSrc = academyInfo?.logo_url || '';
-  // 현재 날짜 기준 기본 연월 설정 ('YYYY-MM')
-  const defaultMonth = useMemo(() => {
-    if (initialMonth) return initialMonth;
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    return `${now.getFullYear()}-${mm}`;
-  }, [initialMonth]);
 
-  const [dateMode, setDateMode] = useState<'month' | 'custom'>('month'); // 'month': 월별, 'custom': 직접 지정
-  const [selectedMonth, setSelectedMonth] = useState(defaultMonth);
-  
-  // 직접 지정 시작일 / 종료일 기본값 (현재월 1일 ~ 말일)
-  const [customStartDate, setCustomStartDate] = useState(() => {
-    const now = new Date();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    return `${now.getFullYear()}-${mm}-01`;
-  });
-  const [customEndDate, setCustomEndDate] = useState(() => {
-    const now = new Date();
-    const lastDay = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
-    const mm = String(now.getMonth() + 1).padStart(2, '0');
-    const dd = String(lastDay).padStart(2, '0');
-    return `${now.getFullYear()}-${mm}-${dd}`;
+  const {
+    dateMode,
+    setDateMode,
+    selectedMonth,
+    setSelectedMonth,
+    customStartDate,
+    setCustomStartDate,
+    customEndDate,
+    setCustomEndDate,
+    selectedTheme,
+    setSelectedTheme,
+    selectedPenColor,
+    setSelectedPenColor,
+    hwOverrides,
+    setHwOverrides,
+    handleToggleHwScore,
+  } = useHokmaJournalPrint({
+    initialMonth,
+    selectedStudents,
+    allStudents,
   });
 
-  const [selectedTheme, setSelectedTheme] = useState<ThemeKey>('amber'); // 💡 기본 테마 (호박색)
-  const [selectedPenColor, setSelectedPenColor] = useState<string>('#1e3a8a'); // 기본 펜색상: 청색 볼펜
-  
-  // 💡 [원장님 기능] 인쇄 모달 내에서 특정 학생/날짜의 숙제 점수(완성도) 손쉽게 직접 수정
-  // Key: `${studentId}_${dateKey}` -> Value: '10점' | '7점' | '4점' | '0점' | '-'
-  const [hwOverrides, setHwOverrides] = useState<Record<string, string>>({});
-
-  const handleToggleHwScore = async (studentId: string, dateKey: string, currentScore: string, targetCourse?: string) => {
-    if (!dateKey || !studentId) return;
-    const scoreOrder = ['10점', '7점', '4점', '0점', '-'];
-    const curIdx = scoreOrder.indexOf(currentScore);
-    const nextScore = scoreOrder[(curIdx + 1) % scoreOrder.length];
-    const overrideKey = `${studentId}_${dateKey}`;
-    
-    // 1. 화면 UI 즉시 변경 (낙관적 업데이트)
-    setHwOverrides(prev => ({
-      ...prev,
-      [overrideKey]: nextScore
-    }));
-
-    // 2. 점수별 todo_achievement (0~100%) 매핑
-    let newAchievement = 0;
-    if (nextScore === '10점') newAchievement = 100;
-    else if (nextScore === '7점') newAchievement = 70;
-    else if (nextScore === '4점') newAchievement = 40;
-    else if (nextScore === '0점' || nextScore === '-') newAchievement = 0;
-
-    // 3. 인메모리 학생 세션 로그 동기화 (즉시 고정 복원되도록 보장)
-    const targetStudent = (selectedStudents || []).find(s => s.id === studentId) || (allStudents || []).find(s => s.id === studentId);
-    if (targetStudent) {
-      const formattedDate = dateKey.replace(/\./g, '-');
-      const formattedDotDate = dateKey.replace(/-/g, '.');
-      (targetStudent.allLogs || []).forEach((l: any) => {
-        const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
-        if (lDate === formattedDate || l.date === formattedDotDate || l.session_date === formattedDotDate) {
-          const lCourse = l.course_name || '정규';
-          if (!targetCourse || targetCourse === '정규' ? (lCourse === '정규' || !l.course_name) : lCourse === targetCourse) {
-            l.todo_achievement = newAchievement;
-          }
-        }
-      });
-      if (targetStudent.todaySession) {
-        const sDate = (targetStudent.todaySession.date || targetStudent.todaySession.session_date || '').replace(/\./g, '-');
-        if (sDate === formattedDate) {
-          targetStudent.todaySession.todo_achievement = newAchievement;
-        }
-      }
-    }
-
-    try {
-      // Supabase ams_session_logs 세션 테이블 업데이트
-      const formattedDate = dateKey.replace(/\./g, '-');
-      let query = supabase
-        .from('ams_session_logs')
-        .update({ todo_achievement: newAchievement })
-        .eq('student_id', studentId)
-        .or(`session_date.eq.${formattedDate},date.eq.${formattedDate}`);
-
-      if (targetCourse && targetCourse !== '정규') {
-        query = query.eq('course_name', targetCourse);
-      } else {
-        query = query.or('course_name.eq.정규,course_name.is.null');
-      }
-
-      await query;
-    } catch (err) {
-      console.error('Supabase 숙제 점수 저장 실패:', err);
-    }
-  };
   // 💡 오늘 시트 원생이 없거나 휴일인 경우 자동으로 전체 학생 보기(true) 활성화
   const [includeOtherDays, setIncludeOtherDays] = useState(() => {
     return !selectedStudents || selectedStudents.length === 0;
