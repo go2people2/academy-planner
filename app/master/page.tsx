@@ -1,330 +1,62 @@
 'use client';
 
-import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X, Sparkles } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
+import { useMasterDashboard } from './hooks/useMasterDashboard';
+
 export default function MasterDashboard() {
-  const [mounted, setMounted] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [academies, setAcademies] = useState<any[]>([]);
-  const [isLoadingList, setIsLoadingList] = useState(false);
-  
-  // 💡 [추가] 학원 수정 상태
-  const [editingAcademy, setEditingAcademy] = useState<any>(null);
-  const [editAcademyName, setEditAcademyName] = useState('');
-  const [editSlug, setEditSlug] = useState('');
-  const [editIsSuspended, setEditIsSuspended] = useState(false);
-  const [isUpdating, setIsUpdating] = useState(false);
-  
-  // 💡 [추가] AI 설정 상태
-  const [editAiSettings, setEditAiSettings] = useState<{ active_models: string[]; default_model: string }>({ active_models: ['openai'], default_model: 'openai' });
-  
-  // 💡 [추가] 학원 삭제 상태 관리
-  const [isDeleting, setIsDeleting] = useState(false);
-  const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
-  const [showDeleteSection, setShowDeleteSection] = useState(false);
-
-  // Form fields (Create Academy)
-  const [academyName, setAcademyName] = useState('');
-  const [slug, setSlug] = useState('');
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
-  
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error' | null, text: string }>({ type: null, text: '' });
-  
-  // Master Login Fields
-  const [masterId, setMasterId] = useState('');
-  const [masterPw, setMasterPw] = useState('');
-  const [loginError, setLoginError] = useState('');
-  const [isLoggingIn, setIsLoggingIn] = useState(false);
-
-  const router = useRouter();
-
-  useEffect(() => {
-    setMounted(true);
-    checkAuth();
-  }, []);
-
-  const checkAuth = async () => {
-    const userStr = localStorage.getItem('ams_user');
-    if (!userStr) {
-      setIsAuthorized(false);
-      return;
-    }
-    try {
-      const user = JSON.parse(userStr);
-      if (user.role !== 'master') {
-        setIsAuthorized(false);
-        return;
-      }
-      
-      // 💡 [개선] 마스터가 시스템 포털(/master)에 돌아오면 임시 타 학원 접속 상태를 해제하고 실제 DB상 소속(가상 관리국)으로 복원
-      const { data: profile, error } = await supabase
-        .from('ams_teachers')
-        .select('academy_id')
-        .eq('id', user.id)
-        .maybeSingle();
-
-      if (!error && profile) {
-        const restoredUser = {
-          ...user,
-          academy_id: profile.academy_id
-        };
-        localStorage.setItem('ams_user', JSON.stringify(restoredUser));
-        localStorage.removeItem('ams_is_warp'); // 💡 임시 원격 접속(워프) 플래그 제거
-      }
-
-      setIsAuthorized(true);
-      fetchAcademies();
-    } catch (e) {
-      setIsAuthorized(false);
-    }
-  };
-
-  const handleMasterLogin = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoginError('');
-    setIsLoggingIn(true);
-
-    try {
-      let email = masterId.trim().toLowerCase();
-      if (!email.includes('@')) {
-        email = `${email}@hokma-academy.com`;
-      }
-
-      const { data, error: authError } = await supabase.auth.signInWithPassword({
-        email: email,
-        password: masterPw,
-      });
-
-      if (authError) {
-        setLoginError('아이디 또는 비밀번호가 올바르지 않습니다.');
-        setIsLoggingIn(false);
-        return;
-      }
-
-      if (data?.user) {
-        const { data: profile, error: pErr } = await supabase
-          .from('ams_teachers')
-          .select('id, name, role, academy_id')
-          .eq('user_id', data.user.id)
-          .maybeSingle();
-
-        if (pErr || !profile) {
-          await supabase.auth.signOut();
-          setLoginError('사용자 프로필을 가져올 수 없습니다.');
-          setIsLoggingIn(false);
-          return;
-        }
-
-        if (profile.role !== 'master') {
-          await supabase.auth.signOut();
-          setLoginError('접근 권한이 없습니다. 마스터 계정만 접근 가능합니다.');
-          setIsLoggingIn(false);
-          return;
-        }
-
-        // 로그인 성공 처리
-        const masterUser = {
-          role: profile.role,
-          id: profile.id,
-          name: profile.name,
-          academy_id: profile.academy_id
-        };
-        localStorage.setItem('ams_user', JSON.stringify(masterUser));
-        setIsAuthorized(true);
-        fetchAcademies();
-      }
-    } catch (err) {
-      console.error('Master login exception:', err);
-      setLoginError('로그인 중 알 수 없는 오류가 발생했습니다.');
-    } finally {
-      setIsLoggingIn(false);
-    }
-  };
-
-  const fetchAcademies = async () => {
-    setIsLoadingList(true);
-    try {
-      const { data, error } = await supabase
-        .from('ams_academies')
-        .select('id, academy_name, slug, created_at, operation_settings')
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        setAcademies(data);
-      }
-    } catch (e) {
-      console.error('Fetch academies error:', e);
-    } finally {
-      setIsLoadingList(false);
-    }
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    setStatusMsg({ type: null, text: '' });
-
-    // 간단한 프론트엔드 포맷 검증
-    if (!/^[a-zA-Z0-9-]+$/.test(slug)) {
-      setStatusMsg({
-        type: 'error',
-        text: '슬러그는 오직 영문자, 숫자, 하이픈(-)만 포함할 수 있습니다.'
-      });
-      setIsSubmitting(false);
-      return;
-    }
-
-    try {
-      const res = await fetch('/api/master/create-academy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ academyName, slug, username, password })
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        setStatusMsg({
-          type: 'success',
-          text: `[${academyName}] 학원이 성공적으로 자동 개설되었습니다! 로그인 ID: ${username}`
-        });
-        // 폼 리셋
-        setAcademyName('');
-        setSlug('');
-        setUsername('');
-        setPassword('');
-        fetchAcademies();
-      } else {
-        setStatusMsg({
-          type: 'error',
-          text: data.error || '학원 개설에 실패했습니다.'
-        });
-      }
-    } catch (err: any) {
-      setStatusMsg({
-        type: 'error',
-        text: '서버 통신 오류가 발생했습니다.'
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleUpdateAcademy = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingAcademy?.id) return;
-    
-    const targetId = editingAcademy.id;
-    const oldSlug = editingAcademy.slug;
-    const cleanSlug = editSlug.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-    const cleanName = editAcademyName.trim();
-    
-    if (!cleanSlug) { alert('슬러그는 공백으로 지정할 수 없습니다.'); return; }
-    if (!cleanName) { alert('학원 이름은 필수입니다.'); return; }
-    
-    setIsUpdating(true);
-    try {
-      const res = await fetch('/api/master/update-academy', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          academyId: targetId, 
-          academyName: cleanName, 
-          slug: cleanSlug, 
-          oldSlug, 
-          isSuspended: editIsSuspended,
-          aiSettings: editAiSettings 
-        })
-      });
-      const data = await res.json();
-      
-      if (data.success) {
-        alert('학원 정보가 정상적으로 변경되었습니다.');
-        setEditingAcademy(null);
-        fetchAcademies();
-      } else {
-        alert(data.error || '학원 정보 수정에 실패했습니다.');
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert('변경 실패: ' + err.message);
-    } finally {
-      setIsUpdating(false);
-    }
-  };
-
-  // 💡 [추가] 학원 영구 삭제 API 연동 핸들러
-  const handleDeleteAcademy = async () => {
-    if (!editingAcademy?.id) return;
-    if (editingAcademy.slug !== deleteConfirmInput.trim().toLowerCase()) {
-      alert('확인용 학원 주소 슬러그가 일치하지 않습니다.');
-      return;
-    }
-
-    if (!confirm('🚨 경고: 이 학원의 모든 정보(선생님, 학생, 일지, 인증 계정 포함)가 영구 파괴됩니다. 정말로 진행하시겠습니까?')) {
-      return;
-    }
-
-    setIsDeleting(true);
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
-
-      const res = await fetch('/api/master/delete-academy', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-        },
-        body: JSON.stringify({
-          academyId: editingAcademy.id,
-          confirmSlug: deleteConfirmInput.trim()
-        })
-      });
-      const data = await res.json();
-
-      if (data.success) {
-        alert(data.message || '학원이 완벽하게 삭제되었습니다.');
-        setEditingAcademy(null);
-        fetchAcademies();
-      } else {
-        alert(data.error || '학원 삭제에 실패했습니다.');
-      }
-    } catch (err: any) {
-      console.error(err);
-      alert('삭제 처리 중 에러 발생: ' + err.message);
-    } finally {
-      setIsDeleting(false);
-    }
-  };
-
+  const {
+    mounted,
+    isAuthorized,
+    academies,
+    isLoadingList,
+    editingAcademy,
+    setEditingAcademy,
+    editAcademyName,
+    setEditAcademyName,
+    editSlug,
+    setEditSlug,
+    editIsSuspended,
+    setEditIsSuspended,
+    isUpdating,
+    editAiSettings,
+    setEditAiSettings,
+    isDeleting,
+    deleteConfirmInput,
+    setDeleteConfirmInput,
+    showDeleteSection,
+    setShowDeleteSection,
+    academyName,
+    setAcademyName,
+    slug,
+    setSlug,
+    username,
+    setUsername,
+    password,
+    setPassword,
+    isSubmitting,
+    statusMsg,
+    masterId,
+    setMasterId,
+    masterPw,
+    setMasterPw,
+    loginError,
+    isLoggingIn,
+    handleMasterLogin,
+    handleSubmit,
+    handleUpdateAcademy,
+    handleDeleteAcademy,
+    handleWarpToAcademy,
+    openEditModal,
+  } = useMasterDashboard();
   const handleLogout = () => {
     localStorage.removeItem('ams_user');
-    setIsAuthorized(false);
+    window.location.reload();
   };
 
-  const handleWarpToAcademy = (targetAcademyId: string, targetSlug: string) => {
-    const userStr = localStorage.getItem('ams_user');
-    if (!userStr) return;
-    try {
-      const user = JSON.parse(userStr);
-      if (user.role === 'master') {
-        const tempUser = {
-          ...user,
-          academy_id: targetAcademyId
-        };
-        localStorage.setItem('ams_user', JSON.stringify(tempUser));
-        localStorage.setItem('ams_is_warp', 'true'); // 💡 임시 원격 접속(워프) 플래그 설정
-        router.push(`/${targetSlug}/dashboard`);
-      }
-    } catch (e) {
-      console.error('Warp error:', e);
-    }
-  };
 
   if (!mounted) {
     return (
