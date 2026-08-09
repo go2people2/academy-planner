@@ -78,11 +78,13 @@ export interface TodaySheetProps {
   isLight?: boolean;
 }
 
+import { useTodaySheetState } from './todaySheet/hooks/useTodaySheetState';
+
 export default function TodaySheet({
   students, allStudents, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, onRemoveFromToday, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange,
   sortDirection = 'asc', onSortDirectionChange,
-  onOpenBriefing, // 💡 추가
+  onOpenBriefing,
   selectedFilter, setSelectedFilter,
   selectedTeacherId, setSelectedTeacherId,
   selectedDays, setSelectedDays,
@@ -90,9 +92,36 @@ export default function TodaySheet({
   teachers = [],
   isFullScreen = false,
   onToggleFullScreen,
-  selectedHour = 'All', // 💡 시작 시간대 필터 추가
+  selectedHour = 'All',
   isLight = false
 }: TodaySheetProps) {
+  const {
+    showAllTools,
+    setShowAllTools,
+    isToolsEditMode,
+    setIsToolsEditMode,
+    toolsOrder,
+    setToolsOrder,
+    handleReorderTools,
+    activeTab,
+    setActiveTab,
+    historyLimit,
+    setHistoryLimit,
+    colWidths,
+    setColWidths,
+    presets,
+    setPresets,
+    activeSet,
+    setActiveSet,
+    isSettingsOpen,
+    setIsSettingsOpen,
+    expandedHistory,
+    setExpandedHistory,
+    isSendingReport,
+    setIsSendingReport,
+    isReportVisible,
+    setIsReportVisible,
+  } = useTodaySheetState({ currentUser });
 
   // Undo/Redo hook
   const {
@@ -107,56 +136,7 @@ export default function TodaySheet({
     onUpdateStudentInfo,
   });
 
-
   // 1. States
-  const [showAllTools, setShowAllTools] = useState(false); // 💡 [추가] 7개 도구 일괄 접기/펼치기 상태
-  const [isToolsEditMode, setIsToolsEditMode] = useState(false); // 💡 도구 편집 모드 상태
-  const [toolsOrder, setToolsOrder] = useState<string[]>(() => {
-    const defaultOrder = ['timeshift', 'profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ams_tools_order');
-      if (saved) {
-        try {
-          const parsed = JSON.parse(saved);
-          if (Array.isArray(parsed)) {
-            if (!parsed.includes('timeshift')) {
-              return ['timeshift', ...parsed];
-            }
-            return parsed;
-          }
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-    return defaultOrder;
-  });
-
-  const handleReorderTools = useCallback((draggedId: string, targetId: string) => {
-    setToolsOrder(prev => {
-      const newOrder = [...prev];
-      const draggedIdx = newOrder.indexOf(draggedId);
-      const targetIdx = newOrder.indexOf(targetId);
-      if (draggedIdx !== -1 && targetIdx !== -1) {
-        newOrder.splice(draggedIdx, 1);
-        newOrder.splice(targetIdx, 0, draggedId);
-        localStorage.setItem('ams_tools_order', JSON.stringify(newOrder));
-      }
-      return newOrder;
-    });
-  }, []);
-
-  const [activeTab, setActiveTab] = useState<'daily' | 'checklist'>('daily');
-  const [historyLimit, setHistoryLimit] = useState(3);
-  
-  useEffect(() => {
-    const saved = localStorage.getItem('ams_history_limit');
-    if (saved) {
-      const parsed = parseInt(saved, 10);
-      if (!isNaN(parsed)) setHistoryLimit(parsed);
-    }
-  }, []);
-
   const [hiddenStudentIds, setHiddenStudentIds] = useState<string[]>([]);
   const [lastSelectedId, setLastSelectedId] = useState<string | null>(null);
   const [selectedRange, setSelectedRange] = useState<{
@@ -166,46 +146,6 @@ export default function TodaySheet({
     endColId: string
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
-  const [colWidths, setColWidths] = useState<Record<string, number>>(() => {
-    const defaultWidths = Object.fromEntries(DEFAULT_COLUMNS.map(col => [col.id, col.minWidth]));
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('todaySheetColWidths');
-      if (saved) { try { const parsed = JSON.parse(saved); return { ...defaultWidths, ...parsed }; } catch (e) { console.error(e); } }
-    }
-    return defaultWidths;
-  });
-
-  const [presets, setPresets] = useState<Record<string, string[]>>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem(`todaySheetPresets_${currentUser?.id || 'default'}`);
-      if (saved) return JSON.parse(saved);
-    }
-    return {
-      '1': ['select', 'name', 'review', 'classwork', 'completed_classwork', 'assign', 'mission', 'action'],
-      '2': ['select', 'name', 'test_id', 'test_score', 'notes', 'action'],
-      '3': ['select', 'name', 'next_quiz', 'action'],
-      '4': DEFAULT_COLUMNS.map(c => c.id)
-    };
-  });
-
-  const [activeSet, setActiveSet] = useState<string>(() => {
-    if (typeof window !== 'undefined') return localStorage.getItem(`todaySheetActiveSet_${currentUser?.id || 'default'}`) || '1';
-    return '1';
-  });
-
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  
-  // 모달 ESC 닫기 공통 처리 (Column Settings)
-  useEffect(() => {
-    if (isSettingsOpen) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') setIsSettingsOpen(false);
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isSettingsOpen]);
-
   const [isScrolled, setIsScrolled] = useState(false);
 
   // 스크롤 감지 (z-index 동적 조절용)
@@ -215,9 +155,6 @@ export default function TodaySheet({
 
   const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
-  const [expandedHistory, setExpandedHistory] = useState<Record<string, number>>({});
-  const [isSendingReport, setIsSendingReport] = useState<string | null>(null);
-  const [isReportVisible, setIsReportVisible] = useState(false);
 
   // 💡 [추가] 다른 조교 기기로부터 저장 이벤트 수신 시, 로컬 상태 및 DOM을 즉시 갱신하는 핸들러
   const handleRemoteCellSave = useCallback((studentId: string, colId: string, value: string) => {
