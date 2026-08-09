@@ -14,6 +14,8 @@ import { SessionLog, Student, Teacher } from '@/types/dashboard';
 import TaskLinksTab from './TaskLinksTab';
 import SurveyManagement from './SurveyManagement';
 
+import { useTeacherTasks } from './hooks/useTeacherTasks';
+
 export interface TeacherTasksProps {
   academyInfo: any;
   students: Student[];
@@ -23,49 +25,6 @@ export interface TeacherTasksProps {
   isLight?: boolean;
 }
 
-interface TeacherTaskItem {
-  id: string;
-  academy_id: string;
-  title: string;
-  content: string;
-  start_date: string;
-  target_date: string;
-  display_period_type: 'custom' | 'weekly' | 'monthly';
-  is_completed: boolean;
-  created_by: string; // 담당 선생님 ID
-  created_at: string;
-  type?: string; // 💡 링크/일반 업무 구분용 타입 추가
-}
-
-export const buildMakeupPayload = (params: {
-  studentId: string;
-  studentName?: string;
-  academyId: string;
-  makeupDate: string;
-  makeupTime: string;
-  makeupEndTime: string;
-  makeupType: string;
-  makeupReason?: string;
-  courseName?: string;
-}) => {
-  const { studentId, studentName, academyId, makeupDate, makeupTime, makeupEndTime, makeupType, makeupReason, courseName = '정규' } = params;
-  const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
-  const noteText = makeupReason && makeupReason.trim() ? `[${makeupType}] (${makeupReason.trim()})` : `[${makeupType}]`;
-
-  return {
-    student_id: studentId,
-    student_name: studentName || '학생',
-    academy_id: academyId,
-    session_date: makeupDate,
-    attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
-    attendance_reason: '보강 수업',
-    moved_to_hour: hour,
-    status: 'none',
-    completed_classwork_text: noteText,
-    course_name: courseName
-  };
-};
-
 export default function TeacherTasks({
   academyInfo,
   students,
@@ -74,378 +33,88 @@ export default function TeacherTasks({
   onRefreshStudents,
   isLight = false
 }: TeacherTasksProps) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>('makeups');
-  const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
-  const [makeups, setMakeups] = useState<any[]>([]);
-  const [isTaskLoading, setIsTaskLoading] = useState(false);
-  const [isMakeupLoading, setIsMakeupLoading] = useState(false);
-  const [showOnlyMyTasks, setShowOnlyMyTasks] = useState<boolean>(false);
-  const [hiddenTaskIds, setHiddenTaskIds] = useState<string[]>([]);
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('ams_hidden_task_ids');
-      if (stored) {
-        try {
-          setHiddenTaskIds(JSON.parse(stored));
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-  }, []);
-
-  // --- Task Form States ---
-  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
-  const [taskTitle, setTaskTitle] = useState('');
-  const [taskContent, setTaskContent] = useState('');
-  const [taskTargetDate, setTaskTargetDate] = useState(getTodayStr());
-  const [taskAssignee, setTaskAssignee] = useState(currentUser?.id || '');
-  const [isPermanentTask, setIsPermanentTask] = useState(false);
-
-  // --- Makeup Form States ---
-  const [isMakeupModalOpen, setIsMakeupModalOpen] = useState(false);
-  const [editMakeupGroup, setEditMakeupGroup] = useState<any | null>(null); // 카드(그룹) 단위 수정용 state로 변경
-  const [makeupDate, setMakeupDate] = useState(getTodayStr());
-  const [makeupTime, setMakeupTime] = useState<string>('19:00'); // 디폴트 19:00 (7:00)
-  const [makeupEndTime, setMakeupEndTime] = useState<string>('22:00'); // 디폴트 22:00 (10:00)
-  const [makeupType, setMakeupType] = useState<string>('결석 보강'); // 보강 유형
-  const [makeupReason, setMakeupReason] = useState<string>('');
-  const [makeupSearch, setMakeupSearch] = useState('');
-  const [selectedStudentIds, setSelectedStudentIds] = useState<string[]>([]);
-  const [makeupGradeFilter, setMakeupGradeFilter] = useState<string>('all');
-  const [makeupDayFilter, setMakeupDayFilter] = useState<string>('all');
-  const [showOnlyMyStudentsInMakeup, setShowOnlyMyStudentsInMakeup] = useState<boolean>(true);
-  const [courseFilterMode, setCourseFilterMode] = useState<'all' | 'regularOnly' | 'electiveOnly'>('all');
-
-  // 보강 카드 검색 및 기간 필터 state
-  const [makeupCardSearch, setMakeupCardSearch] = useState<string>('');
-  const [makeupCardPeriod, setMakeupCardPeriod] = useState<'today' | 'month' | 'all' | 'custom'>('today');
-  const [makeupCardStartDate, setMakeupCardStartDate] = useState<string>(getTodayStr());
-  const [makeupCardEndDate, setMakeupCardEndDate] = useState<string>(getTodayStr());
-
-  // 메모 인라인 수정 state
-  const [editingMemoId, setEditingMemoId] = useState<string | null>(null);
-  const [editingMemoText, setEditingMemoText] = useState<string>('');
-
-  // 이번 달 몇 번째 보강인지 계산
-  const getMonthlyMakeupCount = useCallback((studentId: string, sessionDate: string, makeupId?: string) => {
-    if (!studentId || !sessionDate) return 1;
-    const monthKey = sessionDate.slice(0, 7);
-    const studentMonthMakeups = makeups
-      .filter(m => m.student_id === studentId && m.session_date && m.session_date.startsWith(monthKey))
-      .sort((a, b) => a.session_date.localeCompare(b.session_date) || (a.created_at || '').localeCompare(b.created_at || ''));
-
-    const index = studentMonthMakeups.findIndex(m => m.id === makeupId || m.session_date === sessionDate);
-    return index >= 0 ? index + 1 : 1;
-  }, [makeups]);
-
-  // 보강 메모 저장 (attendance_reason 사용, special_notes/숙제평가 보호)
-  const handleSaveMemo = async (makeupId: string) => {
-    try {
-      setMakeups(prev => prev.map(m => m.id === makeupId ? { ...m, attendance_reason: editingMemoText } : m));
-      setEditingMemoId(null);
-
-      const { error } = await supabase
-        .from('ams_session_logs')
-        .update({ attendance_reason: editingMemoText })
-        .eq('id', makeupId);
-
-      if (error) throw error;
-      if (onRefreshStudents) onRefreshStudents(false);
-    } catch (err) {
-      console.error('Error saving memo:', err);
-      alert('메모 저장 중 오류가 발생했습니다.');
-      fetchMakeups();
-    }
-  };
-
-  // 1. Fetch Tasks
-  const fetchTasks = useCallback(async () => {
-    if (!academyInfo?.id) return;
-    setIsTaskLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('ams_tasks')
-        .select('*')
-        .eq('academy_id', academyInfo.id)
-        .or('type.is.null,type.in.(manual,link)') // 💡 설문(survey) 제외, 업무 및 링크 보드용 데이터만 가져옴
-        .order('target_date', { ascending: true });
-
-      if (error) throw error;
-      setTasks(data || []);
-    } catch (err) {
-      console.error('Error fetching tasks:', err);
-    } finally {
-      setIsTaskLoading(false);
-    }
-  }, [academyInfo?.id]);
-
-  // 2. Fetch Makeup Sessions
-  const fetchMakeups = useCallback(async () => {
-    if (!academyInfo?.id) return;
-    setIsMakeupLoading(true);
-    try {
-      const { data, error } = await supabase
-        .from('ams_session_logs')
-        .select('*')
-        .eq('academy_id', academyInfo.id)
-        .or('attendance_status.ilike.보강%,special_notes.ilike.%보강%,attendance_reason.ilike.%보강%')
-        .order('session_date', { ascending: false });
-
-      if (error) throw error;
-      setMakeups(data || []);
-    } catch (err) {
-      console.error('Error fetching makeups:', err);
-    } finally {
-      setIsMakeupLoading(false);
-    }
-  }, [academyInfo?.id]);
-
-  useEffect(() => {
-    fetchTasks();
-    fetchMakeups();
-  }, [fetchTasks, fetchMakeups]);
-
-  // 3. Add Task
-  const handleAddTask = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!taskTitle.trim() || !academyInfo?.id) return;
-
-    try {
-      const newTask = {
-        academy_id: academyInfo.id,
-        title: taskTitle.trim(),
-        content: taskContent.trim(),
-        start_date: getTodayStr(),
-        target_date: taskTargetDate,
-        display_period_type: 'custom',
-        is_completed: false,
-        created_by: taskAssignee || currentUser?.id || '',
-        type: 'manual'
-      };
-
-      const { error } = await supabase
-        .from('ams_tasks')
-        .insert([newTask]);
-
-      if (error) throw error;
-
-      setTaskTitle('');
-      setTaskContent('');
-      setTaskTargetDate(getTodayStr());
-      setTaskAssignee(currentUser?.id || '');
-      setIsPermanentTask(false);
-      setIsTaskModalOpen(false);
-      fetchTasks();
-    } catch (err) {
-      console.error('Error adding task:', err);
-      alert('업무 등록에 실패했습니다.');
-    }
-  };
-
-  // 4. Toggle Task Completion
-  const handleToggleTask = async (taskId: string, currentStatus: boolean) => {
-    try {
-      // 낙관적 업데이트
-      setTasks(prev => prev.map(t => t.id === taskId ? { ...t, is_completed: !currentStatus } : t));
-
-      const { error } = await supabase
-        .from('ams_tasks')
-        .update({ is_completed: !currentStatus })
-        .eq('id', taskId);
-
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error toggling task:', err);
-      fetchTasks();
-    }
-  };
-
-  // 5. Delete Task
-  const handleDeleteTask = async (taskId: string) => {
-    if (!confirm('해당 업무를 삭제하시겠습니까?')) return;
-    try {
-      setTasks(prev => prev.filter(t => t.id !== taskId));
-      const { error } = await supabase
-        .from('ams_tasks')
-        .delete()
-        .eq('id', taskId);
-
-      if (error) throw error;
-    } catch (err) {
-      console.error('Error deleting task:', err);
-      fetchTasks();
-    }
-  };
-
-  const handleHideTask = (taskId: string) => {
-    setHiddenTaskIds(prev => {
-      const next = [...prev, taskId];
-      localStorage.setItem('ams_hidden_task_ids', JSON.stringify(next));
-      return next;
-    });
-  };
-
-  // 6. Add or Edit Makeup Sessions
-  const handleAddMakeups = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!academyInfo?.id) return;
-
-    if (editMakeupGroup) {
-      // 💡 [수정 모드 - 그룹 카드 단위 일괄 수정]
-      try {
-        const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
-
-        const checkIsScheduledOnDate = (student: Student | undefined, dateStr: string) => {
-          if (!student || !dateStr) return false;
-          try {
-            const d = new Date(dateStr + 'T00:00:00');
-            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-            const dayName = dayNames[d.getDay()];
-            if (student.class_days && Array.isArray(student.class_days) && student.class_days.includes(dayName)) {
-              return true;
-            }
-            if (student.day_schedules && student.day_schedules[dayName] && Array.isArray(student.day_schedules[dayName]) && student.day_schedules[dayName].length > 0) {
-              return true;
-            }
-          } catch (e) {}
-          return false;
-        };
-        
-        // 1. 그룹에 포함된 기존 학생의 세션 로그를 일괄 업데이트합니다.
-        const updatePromises = editMakeupGroup.items.map((item: any) => {
-          const currentNotes = item.completed_classwork_text || item.special_notes || '';
-          const pureNotes = currentNotes.startsWith('[') && currentNotes.includes(']')
-            ? currentNotes.slice(currentNotes.indexOf(']') + 1).trim()
-            : currentNotes;
-          const newNotes = makeupReason && makeupReason.trim() ? `[${makeupType}] (${makeupReason.trim()})` : `[${makeupType}]`;
-          const studentObj = students.find(s => s.id === item.student_id);
-          const isScheduledToday = checkIsScheduledOnDate(studentObj, makeupDate);
-
-          return supabase
-            .from('ams_session_logs')
-            .update({
-              session_date: makeupDate,
-              attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
-              attendance_reason: '보강 수업',
-              moved_to_hour: hour,
-              completed_classwork_text: newNotes
-            })
-            .eq('id', item.id);
-        });
-
-        // 2. 추가 선택된 새로운 학생이 있을 경우 신규 예약 추가 쿼리
-        let insertPromise: Promise<void> = Promise.resolve();
-        if (selectedStudentIds.length > 0) {
-          const payloads = selectedStudentIds.map(studentId => {
-            const student = students.find(s => s.id === studentId);
-            return buildMakeupPayload({
-              studentId,
-              studentName: student?.name,
-              academyId: academyInfo.id,
-              makeupDate,
-              makeupTime,
-              makeupEndTime,
-              makeupType,
-              courseName: '정규'
-            });
-          });
-
-          insertPromise = (async () => {
-            const { error } = await supabase
-              .from('ams_session_logs')
-              .upsert(payloads, { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
-            if (error) throw error;
-          })();
-        }
-
-        await Promise.all([...updatePromises, insertPromise]);
-
-        setIsMakeupModalOpen(false);
-        setEditMakeupGroup(null);
-        setSelectedStudentIds([]);
-        setMakeupSearch('');
-        setMakeupType('결석 보강');
-        setMakeupEndTime('21:00');
-        
-        await fetchMakeups();
-        await onRefreshStudents(false);
-        alert('보강 정보가 일괄 수정되었습니다.');
-      } catch (err) {
-        console.error('Error updating group makeup sessions:', err);
-        alert('보강 수정에 실패했습니다.');
-      }
-    } else {
-      // 💡 [신규 등록 모드]
-      if (selectedStudentIds.length === 0) return;
-      try {
-        const checkIsScheduledOnDate = (student: Student | undefined, dateStr: string) => {
-          if (!student || !dateStr) return false;
-          try {
-            const d = new Date(dateStr + 'T00:00:00');
-            const dayNames = ['일', '월', '화', '수', '목', '금', '토'];
-            const dayName = dayNames[d.getDay()];
-            if (student.class_days && Array.isArray(student.class_days) && student.class_days.includes(dayName)) {
-              return true;
-            }
-            if (student.day_schedules && student.day_schedules[dayName] && Array.isArray(student.day_schedules[dayName]) && student.day_schedules[dayName].length > 0) {
-              return true;
-            }
-          } catch (e) {}
-          return false;
-        };
-
-        const payloads = selectedStudentIds.map(itemKey => {
-          // itemKey 형식: "student_123" (정규) 또는 "student_123_special_기하" (특강)
-          let realStudentId = itemKey;
-          let courseName = '정규';
-
-          if (itemKey.includes('_special_')) {
-            const parts = itemKey.split('_special_');
-            realStudentId = parts[0];
-            courseName = parts[1] || '특강';
-          }
-
-          const student = students.find(s => s.id === realStudentId);
-          return buildMakeupPayload({
-            studentId: realStudentId,
-            studentName: student?.name,
-            academyId: academyInfo.id,
-            makeupDate,
-            makeupTime,
-            makeupEndTime,
-            makeupType,
-            makeupReason,
-            courseName
-          });
-        });
-
-        const { error } = await supabase
-          .from('ams_session_logs')
-          .upsert(payloads, { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
-
-        if (error) throw error;
-
-        setSelectedStudentIds([]);
-        setMakeupSearch('');
-        setMakeupGradeFilter('all');
-        setMakeupDayFilter('all');
-        setMakeupType('결석 보강');
-        setMakeupReason('');
-        setMakeupEndTime('21:00');
-        setShowOnlyMyStudentsInMakeup(true);
-        setIsMakeupModalOpen(false);
-        
-        await fetchMakeups();
-        await onRefreshStudents(true);
-        alert('보강 예약이 추가되었습니다. 당일 Overview에 자동으로 반영됩니다.');
-      } catch (err) {
-        console.error('Error adding makeup sessions:', err);
-        alert('보강 추가에 실패했습니다.');
-      }
-    }
-  };
+  const {
+    activeTab,
+    setActiveTab,
+    tasks,
+    setTasks,
+    makeups,
+    setMakeups,
+    isTaskLoading,
+    isMakeupLoading,
+    showOnlyMyTasks,
+    setShowOnlyMyTasks,
+    hiddenTaskIds,
+    setHiddenTaskIds,
+    isTaskModalOpen,
+    setIsTaskModalOpen,
+    taskTitle,
+    setTaskTitle,
+    taskContent,
+    setTaskContent,
+    taskTargetDate,
+    setTaskTargetDate,
+    taskAssignee,
+    setTaskAssignee,
+    isPermanentTask,
+    setIsPermanentTask,
+    isMakeupModalOpen,
+    setIsMakeupModalOpen,
+    editMakeupGroup,
+    setEditMakeupGroup,
+    makeupDate,
+    setMakeupDate,
+    makeupTime,
+    setMakeupTime,
+    makeupEndTime,
+    setMakeupEndTime,
+    makeupType,
+    setMakeupType,
+    makeupReason,
+    setMakeupReason,
+    makeupSearch,
+    setMakeupSearch,
+    selectedStudentIds,
+    setSelectedStudentIds,
+    makeupGradeFilter,
+    setMakeupGradeFilter,
+    makeupDayFilter,
+    setMakeupDayFilter,
+    showOnlyMyStudentsInMakeup,
+    setShowOnlyMyStudentsInMakeup,
+    courseFilterMode,
+    setCourseFilterMode,
+    makeupCardSearch,
+    setMakeupCardSearch,
+    makeupCardPeriod,
+    setMakeupCardPeriod,
+    makeupCardStartDate,
+    setMakeupCardStartDate,
+    makeupCardEndDate,
+    setMakeupCardEndDate,
+    editingMemoId,
+    setEditingMemoId,
+    editingMemoText,
+    setEditingMemoText,
+    getMonthlyMakeupCount,
+    handleSaveMemo,
+    fetchTasks,
+    fetchMakeups,
+    handleAddTask,
+    handleToggleTask,
+    handleDeleteTask,
+    handleHideTask,
+    handleAddMakeups,
+    handleOpenEditMakeupModal,
+    handleDeleteMakeupGroup,
+    handleDeleteSingleMakeup,
+  } = useTeacherTasks({
+    academyInfo,
+    students,
+    teachers,
+    currentUser,
+    onRefreshStudents,
+  });
 
   // 6.5 보강 그룹 수정 모달 트리거
   const handleOpenEditGroupMakeup = (group: any) => {
@@ -1163,6 +832,9 @@ export default function TeacherTasks({
                                     <div className="flex flex-col min-w-0 pr-2">
                                       <div className="flex items-center gap-1.5 min-w-0">
                                         <span className={`text-xs font-bold truncate ${isLight ? 'text-[#37352f]' : 'text-white'}`}>{makeup.student_name}</span>
+                                         <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded shrink-0 border ${makeup.course_name && makeup.course_name !== '정규' ? (isLight ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30') : (isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-500/20 text-blue-300 border-blue-500/30')}`}>
+                                           {makeup.course_name || '정규'}
+                                         </span>
                                         <span className="text-[8.5px] font-bold px-1.5 py-0.2 bg-blue-50 text-blue-700 border border-blue-200 rounded shrink-0">
                                           이번 달 {monthlyCount}회차
                                         </span>
