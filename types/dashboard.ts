@@ -40,6 +40,8 @@ export interface SessionLog {
   test_completed?: boolean; // 💡 추가 (테스트 완료 여부)
   approval_status?: string;
   report_sent_at?: string;
+  attendance_reason?: string | null;
+  is_pure_makeup?: boolean;
   management_notes?: string;
   timer_started_at?: number; // 💡 추가 (타이머 시작 시각)
   timer_duration?: number; // 💡 추가 (타이머 시간 - 분)
@@ -49,7 +51,6 @@ export interface SessionLog {
   hasHwTo?: boolean; // 💡 추가 (숙제 이월 여부)
   hasTestResult?: boolean; // 💡 추가 (테스트 결과 여부)
   test_answers?: any; // 💡 추가 (테스트 제출 상세 답안)
-  attendance_reason?: string | null; // 💡 추가 (출결 사유 전용)
 }
 
 export interface Student {
@@ -66,6 +67,7 @@ export interface Student {
   phone?: string;
   last_consulted_at?: string;
   created_at?: string;
+  registration_date?: string; // 💡 신규생 입학/등록일자 (수정 가능, 이 이전 날짜엔 시간표 노출 차단)
   status_changed_at?: string;
   class_days: string[];
   assigned_books: string[];

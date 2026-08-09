@@ -3,12 +3,13 @@ import { supabase } from '@/lib/supabase';
 import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare, Square, GripVertical, Archive, ArchiveRestore, Search } from 'lucide-react';
 import ChecklistPrintPreviewModal from './ChecklistPrintPreviewModal';
 
-interface ChecklistTabProps {
+export interface ChecklistTabProps {
   students: any[];
   allStudents?: any[];
   academyInfo: any;
   selectedFilter?: string;
   selectedTeacherId?: string;
+  isLight?: boolean;
 }
 
 export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({ 
@@ -16,7 +17,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
   allStudents = [], 
   academyInfo, 
   selectedFilter = 'All', 
-  selectedTeacherId = 'All' 
+  selectedTeacherId = 'All',
+  isLight = false 
 }, ref) => {
   const [topics, setTopics] = useState<any[]>([]);
   const [items, setItems] = useState<Record<string, Record<string, any>>>({});
@@ -223,7 +225,11 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       default:
         return (
           <div 
-            className="w-3.5 h-3.5 rounded-[3px] border border-white/20 hover:border-blue-400 hover:bg-blue-50/5 transition-all cursor-pointer flex items-center justify-center text-[8px] font-black text-white/30 hover:text-blue-400" 
+            className={`w-3.5 h-3.5 rounded-[3px] border transition-all cursor-pointer flex items-center justify-center text-[8px] font-black ${
+              isLight 
+                ? 'border-gray-400 text-gray-500 hover:border-blue-600 hover:bg-blue-50 hover:text-blue-600' 
+                : 'border-white/20 text-white/30 hover:border-blue-400 hover:bg-blue-50/5 hover:text-blue-400'
+            }`} 
             title="클릭하여 이 열 조건으로 학생 필터링"
           >
             F
@@ -234,7 +240,9 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
 
   useImperativeHandle(ref, () => ({
     openPrintPreview() {
-      setIsPrintOpen(true);
+      if (typeof window !== 'undefined') {
+        window.print();
+      }
     }
   }));
 
@@ -375,13 +383,19 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
 
     // 2) DB Upsert
     try {
+      const courseName = typeof studentObj === 'object' 
+        ? (studentObj.isSpecialClass ? (studentObj.electiveCourse?.subject?.trim() || studentObj.courseName || '특강') : '정규')
+        : '정규';
+
       const payload: any = {
         topic_id: topicId,
         student_id: realStudentUuid,
+        course_name: courseName,
         status: nextStatus,
         is_checked: nextStatus === 'checked',
         memo: currentVal.memo || ''
       };
+      if (academyInfo?.id) payload.academy_id = academyInfo.id;
       if (currentVal.id) payload.id = currentVal.id;
 
       let { data, error } = await supabase
@@ -425,7 +439,13 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       case 'na':
         return <MinusSquare className="text-gray-400 fill-gray-400/10 hover:opacity-80 transition-all animate-fade-in" size={16} strokeWidth={2.5} />;
       default:
-        return <div className="w-4 h-4 rounded-[3px] border border-white/10 hover:border-blue-500 hover:bg-blue-500/10 transition-all" />;
+        return (
+          <div className={`w-4 h-4 rounded-[3px] border transition-all ${
+            isLight 
+              ? 'border-gray-400 hover:border-blue-600 hover:bg-blue-50 shadow-sm' 
+              : 'border-white/20 hover:border-blue-500 hover:bg-blue-500/10'
+          }`} />
+        );
     }
   };
 
@@ -464,12 +484,19 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
 
     // 2) DB Upsert
     try {
+      const courseName = typeof studentObj === 'object' 
+        ? (studentObj.isSpecialClass ? (studentObj.electiveCourse?.subject?.trim() || studentObj.courseName || '특강') : '정규')
+        : '정규';
+
       const payload: any = {
         topic_id: topicId,
         student_id: realStudentUuid,
+        course_name: courseName,
+        status: currentVal.status || (currentVal.is_checked ? 'checked' : 'none'),
         is_checked: currentVal.is_checked || false,
         memo: nextMemo
       };
+      if (academyInfo?.id) payload.academy_id = academyInfo.id;
       if (currentVal.id) payload.id = currentVal.id;
 
       const { data, error } = await supabase
@@ -637,14 +664,14 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
   return (
     <div className="space-y-4">
       {/* 컨트롤 영역 */}
-      <div className="flex justify-between items-center bg-[#0d0d0d] border border-white/5 p-3 rounded-[3px] shadow-sm">
+      <div className={`flex justify-between items-center p-3 rounded-[3px] border shadow-sm ${isLight ? 'bg-white border-[#e3e2e0]' : 'bg-[#0d0d0d] border-white/5'}`}>
         <div className="flex flex-col gap-0.5">
-          <h4 className="text-[12px] font-black text-gray-200">📋 체크리스트</h4>
+          <h4 className={`text-[12px] font-black ${isLight ? 'text-[#37352f]' : 'text-gray-200'}`}>📋 체크리스트</h4>
           <p className="text-[9px] text-gray-500 font-bold">학생 개별로 기말고사, 오답노트, 안내문 수거 등의 완료 현황을 기록하세요.</p>
         </div>
         <div className="flex items-center gap-2">
           {/* 새 항목 추가 폼 (상단 툴바 통합) */}
-          <div className="flex items-center gap-1.5 mr-1 bg-[#141414] border border-white/10 p-1 rounded-[3px]">
+          <div className={`flex items-center gap-1.5 mr-1 p-1 rounded-[3px] border ${isLight ? 'bg-gray-100 border-[#e3e2e0]' : 'bg-[#141414] border-white/10'}`}>
             <input
               type="text"
               value={newTopicTitle}
@@ -653,12 +680,12 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                 if (e.key === 'Enter') handleAddTopic();
               }}
               placeholder="예: 6월 모의고사 오답노트"
-              className="bg-[#090909] border border-white/10 text-white px-2 py-1 text-[11px] rounded-[2px] outline-none focus:border-blue-500 w-44 font-bold"
+              className={`px-2 py-1 text-[11px] rounded-[2px] outline-none focus:border-blue-500 w-44 font-bold border ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#090909] border-white/10 text-white'}`}
             />
             <button
               onClick={handleAddTopic}
               disabled={isAddingTopic || !newTopicTitle.trim()}
-              className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-[2px] text-[10px] font-black hover:bg-blue-500 disabled:bg-gray-700 transition-all shadow-md shadow-blue-500/10 cursor-pointer"
+              className="flex items-center gap-1 px-2.5 py-1 bg-blue-600 text-white rounded-[2px] text-[10px] font-black hover:bg-blue-500 disabled:bg-gray-400 transition-all shadow-md cursor-pointer"
             >
               {isAddingTopic ? <Loader2 size={11} className="animate-spin" /> : <Plus size={11} />}
               추가
@@ -668,7 +695,11 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
           {/* 보관함 버튼 */}
           <button
             onClick={() => setIsArchiveModalOpen(true)}
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[10px] font-black border border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20 transition-all shadow-md cursor-pointer"
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[10px] font-black border transition-all shadow-md cursor-pointer ${
+              isLight 
+                ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100' 
+                : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
+            }`}
             title="보관 처리된 체크리스트 항목들을 확인 및 복구합니다."
           >
             <Archive size={12} />
@@ -679,7 +710,11 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
           {activeChecklistFilter.topicId !== null && (
             <button
               onClick={() => setActiveChecklistFilter({ topicId: null, status: 'none' })}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-[2px] text-[10px] font-black border border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white transition-all shadow-md cursor-pointer animate-fade-in"
+              className={`flex items-center gap-1 px-2.5 py-1.5 rounded-[2px] text-[10px] font-black border transition-all shadow-md cursor-pointer animate-fade-in ${
+                isLight 
+                  ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100' 
+                  : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white'
+              }`}
               title="활성화된 열 필터를 초기화합니다."
             >
               🧹 필터 해제
@@ -692,7 +727,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[10px] font-black border transition-all shadow-md cursor-pointer ${
               showAllDays 
                 ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white' 
-                : 'bg-[#151515] hover:bg-[#202020] border-white/5 text-gray-400'
+                : (isLight ? 'bg-gray-100 border-[#e3e2e0] text-gray-700 hover:bg-gray-200' : 'bg-[#151515] hover:bg-[#202020] border-white/5 text-gray-400')
             }`}
             title="오늘 요일 외의 모든 학생들을 체크리스트 명단에 소환합니다."
           >
@@ -703,7 +738,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       </div>
 
       {/* 테이블 래퍼 */}
-      <div className="border border-white/5 rounded-[3px] bg-[#090909] overflow-auto shadow-sm max-h-[calc(100vh-280px)] custom-scrollbar-h custom-scrollbar-v relative">
+      <div className={`border rounded-[3px] overflow-auto shadow-sm max-h-[calc(100vh-280px)] custom-scrollbar-h custom-scrollbar-v relative ${isLight ? 'bg-white border-[#e3e2e0]' : 'bg-[#090909] border-white/5'}`}>
         <table style={{ minWidth: getTableWidth(), width: '100%' }} className="w-full border-collapse table-fixed text-xs text-left">
           <colgroup>
             <col style={{ width: colWidths.name || 70, minWidth: colWidths.name || 70 }} />
@@ -721,12 +756,16 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
           </colgroup>
           <thead>
             {/* 1단 머지 헤더 */}
-            <tr className="border-b border-white/5 bg-[#121212] text-gray-400 uppercase tracking-widest text-[9.5px] font-black sticky top-0 z-30 shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
-              <th rowSpan={2} className="py-3 px-3 border-r border-white/5 text-left sticky left-0 top-0 bg-[#121212] z-50 shadow-[2px_2px_5px_rgba(0,0,0,0.3)] group relative">
+            <tr className={`border-b uppercase tracking-widest text-[9.5px] font-black sticky top-0 z-30 shadow-sm ${
+              isLight ? 'border-[#e3e2e0] bg-gray-100 text-gray-700' : 'border-white/5 bg-[#121212] text-gray-400'
+            }`}>
+              <th rowSpan={2} className={`py-3 px-3 border-r text-left sticky left-0 top-0 z-50 shadow-sm group relative ${
+                isLight ? 'border-[#e3e2e0] bg-gray-100 text-[#37352f]' : 'border-white/5 bg-[#121212] text-gray-200'
+              }`}>
                 학생 이름
                 <div 
                   onMouseDown={(e) => handleResizeStart(e, 'name')}
-                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-white/10 transition-colors z-40"
+                  className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40"
                   title="드래그하여 이름 열 너비 조절"
                 />
               </th>
@@ -751,27 +790,29 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                     }
                     setDraggedTopicId(null);
                   }}
-                  className={`py-2.5 px-3 border-r border-white/5 text-center group relative cursor-grab active:cursor-grabbing transition-colors ${
+                  className={`py-2.5 px-3 border-r text-center group relative cursor-grab active:cursor-grabbing transition-colors ${
+                    isLight ? 'border-[#e3e2e0]' : 'border-white/5'
+                  } ${
                     draggedTopicId === t.id ? 'bg-blue-600/30 border-blue-400' : ''
                   }`}
                 >
                   <div className="flex items-center justify-center gap-1.5 mr-2">
-                    <GripVertical size={13} className="text-gray-500 hover:text-white shrink-0 cursor-grab active:cursor-grabbing" />
+                    <GripVertical size={13} className="text-gray-400 hover:text-gray-700 shrink-0 cursor-grab active:cursor-grabbing" />
                     {/* 전역 열 필터 버튼 */}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleCycleColumnFilter(t.id); }}
-                      className="inline-flex items-center justify-center p-0.5 rounded hover:bg-white/10 transition-all cursor-pointer"
+                      className="inline-flex items-center justify-center p-0.5 rounded hover:bg-gray-200 transition-all cursor-pointer"
                       title="클릭하여 이 열의 체크 상태 기준 필터링 순환"
                     >
                       {renderColumnFilterIcon(t.id)}
                     </button>
-                    <span className="text-gray-100 text-[11px] font-black text-center break-all leading-tight" title={t.title}>
+                    <span className={`text-[11px] font-black text-center break-all leading-tight ${isLight ? 'text-[#37352f]' : 'text-gray-100'}`} title={t.title}>
                       {t.title}
                     </span>
                     {/* 보관 버튼 */}
                     <button
                       onClick={(e) => { e.stopPropagation(); handleArchiveTopic(t.id); }}
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-amber-400 hover:bg-white/5 transition-all cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-amber-600 hover:bg-amber-100 transition-all cursor-pointer"
                       title="체크 항목 보관함으로 이동"
                     >
                       <Archive size={11} strokeWidth={2.5} />
@@ -779,7 +820,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                     {/* 삭제 버튼 */}
                     <button 
                       onClick={(e) => { e.stopPropagation(); handleDeleteTopic(t.id); }} 
-                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-red-400 hover:bg-white/5 transition-all cursor-pointer"
+                      className="opacity-0 group-hover:opacity-100 p-1 rounded text-red-600 hover:bg-red-100 transition-all cursor-pointer"
                       title="체크 항목 영구 제거"
                     >
                       <Trash2 size={11} strokeWidth={2.5} />
@@ -787,7 +828,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                   </div>
                   <div 
                     onMouseDown={(e) => { e.stopPropagation(); handleResizeStart(e, `${t.id}-memo`); }}
-                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-white/10 transition-colors z-40"
+                    className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40"
                     title="드래그하여 이 주제의 가로 폭 조절"
                   />
                 </th>
@@ -795,11 +836,13 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
               <th rowSpan={2} className="py-3 px-3 text-center"></th>
             </tr>
             {/* 2단 상세 헤더 */}
-            <tr className="border-b border-white/5 bg-[#121212] text-gray-500 uppercase tracking-widest text-[8.5px] font-black sticky top-[37px] z-30 shadow-[0_1px_2px_rgba(0,0,0,0.2)]">
+            <tr className={`border-b uppercase tracking-widest text-[8.5px] font-black sticky top-[37px] z-30 shadow-sm ${
+              isLight ? 'border-[#e3e2e0] bg-gray-100 text-gray-600' : 'border-white/5 bg-[#121212] text-gray-500'
+            }`}>
               {activeTopics.map(t => (
                 <React.Fragment key={`sub-${t.id}`}>
-                  <th className="py-1.5 px-2 border-r border-white/5 text-center">완료</th>
-                  <th className="py-1.5 px-2 border-r border-white/5 text-left">메모 / 특이사항</th>
+                  <th className={`py-1.5 px-2 border-r text-center ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}>완료</th>
+                  <th className={`py-1.5 px-2 border-r text-left ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}>메모 / 특이사항</th>
                 </React.Fragment>
               ))}
             </tr>
@@ -814,11 +857,15 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
               </tr>
             ) : (
               displayStudents.map((student, idx) => {
-                const rowBg = idx % 2 === 0 ? "bg-[#0f0f0f]" : "bg-[#151515]";
+                const rowBg = isLight 
+                  ? (idx % 2 === 0 ? "bg-white hover:bg-blue-50/50" : "bg-[#f9f9f8] hover:bg-blue-50/50")
+                  : (idx % 2 === 0 ? "bg-[#0f0f0f] hover:bg-[#1a1a1a]" : "bg-[#151515] hover:bg-[#1a1a1a]");
                 return (
-                  <tr key={student.id} className={`${rowBg} border-b border-white/5 hover:bg-[#1a1a1a] transition-colors align-middle text-[11px]`}>
+                  <tr key={student.id} className={`${rowBg} border-b transition-colors align-middle text-[11px] ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}>
                     {/* 1열 고정 학생명 */}
-                    <td className="py-1 px-1.5 border-r border-white/5 font-black text-gray-200 sticky left-0 bg-inherit z-20 shadow-[2px_0_5px_rgba(0,0,0,0.2)]">
+                    <td className={`py-1 px-1.5 border-r font-black sticky left-0 bg-inherit z-20 shadow-sm ${
+                      isLight ? 'border-[#e3e2e0] text-[#37352f]' : 'border-white/5 text-gray-200'
+                    }`}>
                       <div className="leading-none py-1">
                         <span className="truncate max-w-[80px] text-[11px]" title={student.name}>{student.isSpecialClass ? `${student.electiveCourse?.subject?.trim() || '특강'}-` : ''}{student.name}</span>
                       </div>
@@ -830,17 +877,17 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                       return (
                         <React.Fragment key={`${student.id}-${t.id}`}>
                           {/* 체크 상태 순환 셀 */}
-                          <td className="py-1 px-2 border-r border-white/5 text-center">
+                          <td className={`py-1 px-2 border-r text-center ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}>
                             <button 
                               onClick={() => handleCycleStatus(student, t.id, cellData)}
-                              className="inline-flex items-center justify-center p-0.5 rounded hover:bg-white/5 transition-all cursor-pointer animate-fade-in"
+                              className="inline-flex items-center justify-center p-0.5 rounded hover:bg-gray-200/50 transition-all cursor-pointer animate-fade-in"
                               title="클릭하여 상태 순환 (공란 -> 완료 -> 보류 -> 제외)"
                             >
                               {renderStatusIcon(cellData.status)}
                             </button>
                           </td>
                           {/* 메모 입력 셀 */}
-                          <td className="py-0.5 px-1.5 border-r border-white/5 align-middle">
+                          <td className={`py-0.5 px-1.5 border-r align-middle ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}>
                             <input 
                               type="text"
                               defaultValue={cellData.memo}
@@ -851,7 +898,11 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                                 }
                               }}
                               placeholder="-"
-                              className="w-full bg-transparent border border-transparent hover:border-white/10 focus:border-blue-500 focus:bg-[#1a1a1a] rounded-[2px] px-1 py-0.5 text-[10px] font-bold text-gray-300 outline-none transition-all"
+                              className={`w-full bg-transparent border border-transparent rounded-[2px] px-1 py-0.5 text-[10px] font-bold outline-none transition-all ${
+                                isLight 
+                                  ? 'text-[#37352f] hover:border-[#e3e2e0] focus:border-blue-500 focus:bg-white' 
+                                  : 'text-gray-300 hover:border-white/10 focus:border-blue-500 focus:bg-[#1a1a1a]'
+                              }`}
                             />
                           </td>
                         </React.Fragment>
@@ -865,18 +916,24 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
             )}
             {/* 맨 아래 합계 행 */}
             {displayStudents.length > 0 && (
-              <tr className="bg-[#121212] border-t border-white/5 font-bold text-[11px] text-gray-400 align-middle sticky bottom-0 z-10 shadow-[0_-2px_5px_rgba(0,0,0,0.2)]">
-                <td className="py-2.5 px-1.5 border-r border-white/5 font-black sticky left-0 bg-[#121212] z-20 shadow-[2px_0_5px_rgba(0,0,0,0.2)] text-center text-gray-500">
+              <tr className={`border-t font-bold text-[11px] align-middle sticky bottom-0 z-10 shadow-sm ${
+                isLight ? 'bg-gray-100 border-[#e3e2e0] text-gray-700' : 'bg-[#121212] border-white/5 text-gray-400'
+              }`}>
+                <td className={`py-2.5 px-1.5 border-r font-black sticky left-0 z-20 text-center ${
+                  isLight ? 'bg-gray-100 border-[#e3e2e0] text-gray-700' : 'bg-[#121212] border-white/5 text-gray-500'
+                }`}>
                   완료 인원
                 </td>
                 {topics.map(t => {
                   const checkedCount = getCheckedCount(t.id);
                   return (
                     <React.Fragment key={`sum-${t.id}`}>
-                      <td className="py-2 px-2 border-r border-white/5 text-center font-black text-green-400 bg-green-500/5">
+                      <td className={`py-2 px-2 border-r text-center font-black ${
+                        isLight ? 'bg-emerald-50 border-[#e3e2e0] text-emerald-700' : 'bg-green-500/5 border-white/5 text-green-400'
+                      }`}>
                         {checkedCount}명
                       </td>
-                      <td className="py-2 px-2.5 border-r border-white/5"></td>
+                      <td className={`py-2 px-2.5 border-r ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}></td>
                     </React.Fragment>
                   );
                 })}
@@ -886,16 +943,6 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
           </tbody>
         </table>
       </div>
-      
-      <ChecklistPrintPreviewModal
-        isOpen={isPrintOpen}
-        onClose={() => setIsPrintOpen(false)}
-        students={displayStudents}
-        selectedDate={academyInfo?.selectedDate || new Date().toISOString().split('T')[0]}
-        academyInfo={academyInfo}
-        topics={activeTopics}
-        items={items}
-      />
 
       {/* 📦 보관함 모달 */}
       {isArchiveModalOpen && (

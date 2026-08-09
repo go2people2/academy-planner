@@ -222,7 +222,10 @@ export function useTodaySheetRowLogic({
     }
 
     // student.todaySession 이 부모로부터 변경되어 내려온 경우 실시간 동기화
-    const isSessionPropsChanged = prevSessionRef.current !== student.todaySession;
+    const isSessionPropsChanged = prevSessionRef.current !== student.todaySession || 
+      prevSessionRef.current?.moved_to_hour !== student.todaySession?.moved_to_hour ||
+      prevSessionRef.current?.attendance_status !== student.todaySession?.attendance_status;
+
     if (isSessionPropsChanged) {
       prevSessionRef.current = student.todaySession;
       const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
@@ -294,6 +297,7 @@ export function useTodaySheetRowLogic({
     // 💡 [개선] 출결 상태는 오직 출결 관련 액션에서만 저장되도록 보호
     // 명시적으로 mergedUpdates에 attendance_status가 포함된 경우에만 payload에 포함
     const isAttendanceUpdate = 'attendance_status' in mergedUpdates;
+    const isExplicitMovedHourUpdate = 'moved_to_hour' in mergedUpdates;
     
     const savePayload: any = { ...mergedUpdates };
     
@@ -302,7 +306,7 @@ export function useTodaySheetRowLogic({
       delete savePayload.attendance_status;
     }
 
-    const hasChange = Object.keys(mergedUpdates).some(key => {
+    const hasChange = isExplicitMovedHourUpdate || Object.keys(mergedUpdates).some(key => {
       const fVal = (finalData as any)[key];
       const iVal = (initial as any)[key];
       if (typeof fVal === 'boolean' || typeof iVal === 'boolean') return fVal !== iVal;
@@ -397,38 +401,68 @@ export function useTodaySheetRowLogic({
     handleSave(extraUpdate);
   };
 
-  const handleSupplementTimeSelect = (hour: number) => {
+  const handleSupplementTimeSelect = async (hour: number) => {
     const day = getDayOfWeek(rowDate);
     const regularHours = student.day_schedules?.[day] || [];
-    const isOriginalRegularHour = regularHours.some(val => {
-      let h = val >= 100 ? Math.floor(val / 100) : val;
-      if (h < 10) h += 12;
-      return h === hour;
-    });
+    
+    const isOriginalRegularHour = (() => {
+      if (regularHours.length === 0) return false;
+      const startVal = regularHours[0];
+      let origH = startVal >= 100 ? Math.floor(startVal / 100) : startVal;
+      if (origH > 0 && origH <= 12) origH += 12;
+      
+      let clickH = hour;
+      if (clickH > 0 && clickH <= 12) clickH += 12;
+      
+      return origH === clickH;
+    })();
 
-    if (!isOriginalRegularHour && regularHours.length > 0) {
-      const firstVal = regularHours[0];
-      let regH = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-      if (regH < 10) regH += 12;
-      const formattedRegH = regH >= 12 ? (regH === 12 ? '오후 12시' : `오후 ${regH - 12}시`) : `오전 ${regH}시`;
-      const formattedTargetH = hour >= 12 ? (hour === 12 ? '오후 12시' : `오후 ${hour - 12}시`) : `오전 ${hour}시`;
+    const isElective = (student as any).__courseType === 'elective' || student.isSpecialClass;
+    const courseName = student.courseName || (isElective ? ((student as any).__courseSubject || '특강') : '정규');
 
-      const confirmText = `⚠️ [수업 시간 중복 안내]\n\n${student.name} 학생은 오늘 원래 정규 수업시간(${formattedRegH})이 있습니다.\n선택하신 ${formattedTargetH}로 시간변경/보강을 추가하시겠습니까?`;
-      if (!confirm(confirmText)) {
-        setIsSupplementTimePickerOpen(false);
-        return;
-      }
+    if (isOriginalRegularHour) {
+      const currentStatus = formData.attendance_status || '';
+      const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:')) 
+        ? ATTENDANCE_STATUS.BEFORE 
+        : currentStatus;
+      
+      const payload: any = {
+        course_name: courseName,
+        moved_to_hour: null,
+        attendance_status: finalStatus,
+        attendance_reason: null
+      };
+      if (student.todaySession?.id) payload.id = student.todaySession.id;
+
+      setFormData((prev: any) => ({ 
+        ...prev, 
+        moved_to_hour: null, 
+        attendance_status: finalStatus,
+        attendance_reason: null
+      }));
+      await onSave(student.id, payload);
+    } else {
+      const formatHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+      const isPureMakeupDay = (student as any).__courseType === 'makeup' || (!student.isScheduledToday && formData.attendance_status?.startsWith('보강'));
+      
+      const newAttStatus = isPureMakeupDay 
+        ? `보강:${formatHour}` 
+        : (formData.attendance_status && formData.attendance_status !== '보강' && !formData.attendance_status.startsWith('보강:') ? formData.attendance_status : ATTENDANCE_STATUS.BEFORE);
+
+      const hhmmHour = hour >= 100 ? hour : hour;
+
+      const payload: any = {
+        course_name: courseName,
+        moved_to_hour: hhmmHour,
+        attendance_status: newAttStatus,
+        attendance_reason: '시간 변경'
+      };
+      if (student.todaySession?.id) payload.id = student.todaySession.id;
+
+      setFormData((prev: any) => ({ ...prev, ...payload }));
+      await onSave(student.id, payload);
     }
-
-    const update: any = { 
-      attendance_status: ATTENDANCE_STATUS.BEFORE, 
-      moved_to_hour: isOriginalRegularHour ? null : hour,
-      attendance_reason: isOriginalRegularHour ? null : '시간 변경',
-      course_name: student.courseName || (student.isSpecialClass ? student.electiveCourse?.subject : '정규')
-    };
-
-    setFormData((prev: any) => ({ ...prev, ...update }));
-    handleSave(update);
+    
     setIsSupplementTimePickerOpen(false);
   };
 

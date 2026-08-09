@@ -3,7 +3,7 @@
 import { useMemo } from 'react';
 import { Student } from '@/types/dashboard';
 import { getDayOfWeek } from '@/lib/utils';
-import { calculateAggregatedHw, selectBaseSession, determineTodaySession } from '@/lib/studentDataEnricher';
+import { calculateAggregatedHw, selectBaseSession, determineTodaySession, isValidHomeworkText } from '@/lib/studentDataEnricher';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 
 interface UseTodaySheetRowsParams {
@@ -31,7 +31,17 @@ export function useTodaySheetRows({
   const rows = useMemo(() => {
     if (!students || students.length === 0) return [];
 
-    let result = [...students];
+    let result = [...students].filter((s: any) => {
+      // 💡 [입학/등록일자 원천 차단] 신규생의 입학/등록일자(registration_date || created_at) 이전 날짜인 경우 시간표에서 완전 제외!!
+      const regDateRaw = s.registration_date || s.created_at;
+      if (regDateRaw) {
+        const regDateStr = regDateRaw.slice(0, 10);
+        if (regDateStr && regDateStr > selectedDate) {
+          return false;
+        }
+      }
+      return true;
+    });
 
     // 1. 학년순 정렬을 위한 헬퍼
     const getGradeWeight = (gradeStr: string) => {
@@ -68,6 +78,39 @@ export function useTodaySheetRows({
         uniqueOriginalStudents.set(realId, s);
       }
     });
+
+    const formatLastSessionHomework = (log: any) => {
+      if (!log || !log.homework_text || !log.homework_text.trim()) return log;
+      const hw = log.homework_text.trim();
+      if (hw === '결석') return log;
+
+      // 이미 08.04(화) 또는 (8/4) 같은 날짜가 앞에 붙어있으면 08.04(화) 서식으로 정규화
+      const oldSlashMatch = hw.match(/^\((\d{1,2})\/(\d{1,2})\)\s*(.*)/);
+      const dateVal = log.date || log.session_date;
+
+      if (oldSlashMatch) {
+        const mStr = String(parseInt(oldSlashMatch[1], 10)).padStart(2, '0');
+        const dStr = String(parseInt(oldSlashMatch[2], 10)).padStart(2, '0');
+        const dayName = dateVal ? getDayOfWeek(dateVal) : '';
+        const daySuffix = dayName ? `(${dayName})` : '';
+        return {
+          ...log,
+          homework_text: `${mStr}.${dStr}${daySuffix}\n${oldSlashMatch[3]}`
+        };
+      }
+
+      const hasStandardDate = /^\d{2}\.\d{2}\(/;
+      if (hasStandardDate.test(hw)) return log;
+
+      if (!dateVal) return log;
+
+      const dateStr = dateVal.slice(5).replace('-', '.');
+      const dayName = getDayOfWeek(dateVal);
+      return {
+        ...log,
+        homework_text: `${dateStr}(${dayName})\n${hw}`
+      };
+    };
 
     const expandedResult: any[] = [];
     Array.from(uniqueOriginalStudents.values()).forEach((s: any) => {
@@ -168,9 +211,21 @@ export function useTodaySheetRows({
         }
       });
 
+      const realId = s.originalId || s.id;
       const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
-      const regularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
-      const makeupLogs = todayLogs.filter((l: any) => (!l.course_name || l.course_name === '정규') && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+      
+      // 💡 [시간 이동 정밀 복원] 당일 정규 로그 중 시간이동(moved_to_hour)이 존재하는 로그를 최우선 채택
+      const movedRegularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+      const regularLog = movedRegularLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name));
+      const rawMakeupLogs = todayLogs.filter((l: any) => (!l.course_name || l.course_name === '정규') && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+
+      // 💡 [중복 완벽 차단] 동일 학생/날짜 보강 세션 중 가장 최신의 1개 보강 세션만 채택!
+      const uniqueMakeupMap = new Map<string, any>();
+      rawMakeupLogs.forEach((mLog: any) => {
+        const key = `${mLog.student_id || realId}_${mLog.course_name || '정규'}`;
+        uniqueMakeupMap.set(key, mLog);
+      });
+      const makeupLogs = Array.from(uniqueMakeupMap.values());
 
       const allElectiveDaysForStudent = new Set<string>();
       if (rawElective) {
@@ -192,7 +247,6 @@ export function useTodaySheetRows({
       const hasAnyElective = allElectiveDaysForStudent.size > 0;
       const isElectiveDay = allElectiveDaysForStudent.has(dayKey);
       const isRegularClassDay = (s.class_days || []).includes(dayKey);
-      const realId = s.originalId || s.id;
       const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
       const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);
 
@@ -200,11 +254,30 @@ export function useTodaySheetRows({
       const rawAtt = regularTodaySession?.attendance_status || '';
       const isCanceled = rawAtt.includes('수업취소') || rawAtt.includes('수업제외');
 
+      // 💡 [시간 이동 반영] 정규 세션에 시간이동(moved_to_hour) 정보가 있으면 해당 이동 시간을 정규 시간표로 대체 (순수 보강 로그는 정규 시간 변경 제외)
+      const isPureMakeup = regularTodaySession?.is_pure_makeup;
+      const activeMovedHour = (!isPureMakeup && regularTodaySession?.moved_to_hour !== undefined && regularTodaySession?.moved_to_hour !== null && regularTodaySession?.moved_to_hour > 0) ? regularTodaySession.moved_to_hour : null;
+      const normalizedMovedHour = (() => {
+        if (activeMovedHour === null) return null;
+        let h = activeMovedHour >= 100 ? Math.floor(activeMovedHour / 100) : activeMovedHour;
+        if (h > 0 && h <= 12) h += 12;
+        return h;
+      })();
+      const effectiveRegularHours = (normalizedMovedHour !== null)
+        ? [normalizedMovedHour]
+        : regularHours;
+
+      // 💡 [버그 원천 차단] 보강 전용 로그인지 판정
+      const isPureMakeupLog = !isRegularClassDay && regularLog && (
+        (regularLog.moved_to_hour !== null && regularLog.moved_to_hour !== undefined && regularLog.moved_to_hour > 0) ||
+        (regularLog.attendance_status && regularLog.attendance_status.startsWith('보강'))
+      );
+
       if (isRegularClassDay) {
-        // 원래 오늘 정규 수업일인 경우 상단 정규 행배치
+        // 1. 원래 오늘 정규 수업일인 경우 정규 행 배치
         shouldShowRegular = true;
-      } else if (regularLog && !isCanceled) {
-        // 원래 수업일이 아니었지만 오늘 정규 수업세션이 명시적으로 작성된 경우
+      } else if (regularLog && !isCanceled && !isPureMakeupLog) {
+        // 2. 원래 수업일이 아니었지만 보강이 아닌 일반 정규 세션이 명시적으로 작성된 경우 노출
         shouldShowRegular = true;
       }
 
@@ -217,47 +290,14 @@ export function useTodaySheetRows({
             if (course !== '정규') return false;
 
             const attStatus = l.attendance_status || '';
-            if (attStatus.startsWith('결석')) return false; // 💡 결석한 수업 세션은 이월 대상에서 제외하고 그 전 수업 계속 검색
+            if (attStatus.startsWith('결석')) return false;
 
             const hw = l.homework_text ? l.homework_text.trim() : '';
-            return hw !== '' && hw !== '결석'; // 💡 실제 숙제가 기록되어 있던 수업만 채택
+            return isValidHomeworkText(hw);
           })
           .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
 
         const rawRegularLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
-        const formatLastSessionHomework = (log: any) => {
-          if (!log || !log.homework_text || !log.homework_text.trim()) return log;
-          const hw = log.homework_text.trim();
-          if (hw === '결석') return log;
-
-          // 이미 08.04(화) 또는 (8/4) 같은 날짜가 앞에 붙어있으면 08.04(화) 서식으로 정규화
-          const oldSlashMatch = hw.match(/^\((\d{1,2})\/(\d{1,2})\)\s*(.*)/);
-          const dateVal = log.date || log.session_date;
-
-          if (oldSlashMatch) {
-            const mStr = String(parseInt(oldSlashMatch[1], 10)).padStart(2, '0');
-            const dStr = String(parseInt(oldSlashMatch[2], 10)).padStart(2, '0');
-            const dayName = dateVal ? getDayOfWeek(dateVal) : '';
-            const daySuffix = dayName ? `(${dayName})` : '';
-            return {
-              ...log,
-              homework_text: `${mStr}.${dStr}${daySuffix}\n${oldSlashMatch[3]}`
-            };
-          }
-
-          const hasStandardDate = /^\d{2}\.\d{2}\(/;
-          if (hasStandardDate.test(hw)) return log;
-
-          if (!dateVal) return log;
-
-          const dateStr = dateVal.slice(5).replace('-', '.');
-          const dayName = getDayOfWeek(dateVal);
-          return {
-            ...log,
-            homework_text: `${dateStr}(${dayName})\n${hw}`
-          };
-        };
-
         const regularLastSession = formatLastSessionHomework(rawRegularLastSession);
 
         expandedResult.push({
@@ -268,20 +308,21 @@ export function useTodaySheetRows({
           courseName: '정규',
           day_schedules: {
             ...s.day_schedules,
-            [dayKey]: regularHours
+            [dayKey]: effectiveRegularHours
           },
           lastSession: regularLastSession,
           todaySession: regularTodaySession
         });
       }
 
-      // (3) 보강 전용 독립 행 추가 (중복 방지 및 비요일 보강 지원)
+      // (3) 보강 전용 독립 행 추가 (독립 등록된 보강인 경우만 별도 행 생성, 정규 수업 시간이동은 정규 행 이동으로 처리)
       makeupLogs.forEach((mLog: any) => {
         const makeupHour = mLog.moved_to_hour;
-        const makeupId = `${realId}_makeup_${makeupHour}`;
-        // 정규 수업일에 시간이동만 한 경우 정규 행에서 표현되므로 독립 보강 행 중복 생성을 차단
-        if (isRegularClassDay && shouldShowRegular) {
-          // 정규 행이 이미 있다면 정규 행의 todaySession으로 커버되므로 건너뜀
+        const sessionId = mLog.id || mLog.created_at || makeupHour;
+        const makeupId = `${realId}_makeup_${sessionId}`;
+
+        const isPureMakeup = mLog.is_pure_makeup || mLog.attendance_reason?.includes('보강') || (!isRegularClassDay && mLog.attendance_status?.startsWith('보강'));
+        if (isRegularClassDay && shouldShowRegular && !isPureMakeup) {
           return;
         }
 
@@ -295,7 +336,8 @@ export function useTodaySheetRows({
             })
             .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
 
-          const makeupLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
+          const rawMakeupLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
+          const makeupLastSession = formatLastSessionHomework(rawMakeupLastSession);
 
           expandedResult.push({
             ...s,
@@ -336,32 +378,29 @@ export function useTodaySheetRows({
       result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
     }
 
-    // 💡 4. 시간대 계산 헬퍼 (시간 보정: 1~9시는 오후 시각으로 보정, 10시 이상은 그대로 유지)
+    // 💡 4. 시간대 계산 헬퍼 (1~12시는 오후 13~24시로 일관성 있게 통일)
     const normalizeHour = (val: number) => {
+      if (!val || val <= 0) return 99;
       let h = val >= 100 ? Math.floor(val / 100) : val;
-      if (h < 10) h += 12;
+      if (h > 0 && h <= 12) h += 12;
       return h;
     };
 
     const getStartTime = (st: any) => {
-      const hours = st.day_schedules?.[dayKey] || [];
-
-      // 💡 1. 정규 수업 행인 경우 원래 정규 수업 교시를 최우선 적용하여 3교시 위치 보존
-      if (!st.isSpecialClass && !st.isMakeupRow) {
-        if (hours.length > 0) return normalizeHour(hours[0]);
-      }
-
-      // 💡 2. 보강 행 또는 명시적 시간이동 정보(moved_to_hour)가 있으면 해당 보강 교시 적용
-      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
+      // 💡 1. 명시적 시간이동 정보(moved_to_hour)가 있으면 정규/보강 상관없이 이동된 교시 최우선 적용!!
+      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null && st.todaySession.moved_to_hour > 0) {
         return normalizeHour(st.todaySession.moved_to_hour);
       }
 
-      // 💡 3. 특강/선택과목 행인 경우: 자신의 특강 교시 적용
+      const hours = st.day_schedules?.[dayKey] || [];
+
+      // 💡 2. 특강/선택과목 행인 경우: 자신의 특강 교시 적용
       if (st.isSpecialClass) {
         if (hours.length > 0) return normalizeHour(hours[0]);
         return 99;
       }
 
+      // 💡 3. 정규 수업 행인 경우 원래 정규 수업 교시 적용
       if (hours.length > 0) {
         return normalizeHour(hours[0]);
       }

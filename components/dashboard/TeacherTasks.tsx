@@ -14,12 +14,13 @@ import { SessionLog, Student, Teacher } from '@/types/dashboard';
 import TaskLinksTab from './TaskLinksTab';
 import SurveyManagement from './SurveyManagement';
 
-interface TeacherTasksProps {
+export interface TeacherTasksProps {
   academyInfo: any;
   students: Student[];
   teachers: Teacher[];
   currentUser: any;
   onRefreshStudents: (showLoader?: boolean) => Promise<void>;
+  isLight?: boolean;
 }
 
 interface TeacherTaskItem {
@@ -70,7 +71,8 @@ export default function TeacherTasks({
   students,
   teachers,
   currentUser,
-  onRefreshStudents
+  onRefreshStudents,
+  isLight = false
 }: TeacherTasksProps) {
   const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>('makeups');
   const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
@@ -105,8 +107,8 @@ export default function TeacherTasks({
   const [isMakeupModalOpen, setIsMakeupModalOpen] = useState(false);
   const [editMakeupGroup, setEditMakeupGroup] = useState<any | null>(null); // 카드(그룹) 단위 수정용 state로 변경
   const [makeupDate, setMakeupDate] = useState(getTodayStr());
-  const [makeupTime, setMakeupTime] = useState<string>('19:00'); // 디폴트 19:00
-  const [makeupEndTime, setMakeupEndTime] = useState<string>('21:00'); // 보강 종료 시간
+  const [makeupTime, setMakeupTime] = useState<string>('19:00'); // 디폴트 19:00 (7:00)
+  const [makeupEndTime, setMakeupEndTime] = useState<string>('22:00'); // 디폴트 22:00 (10:00)
   const [makeupType, setMakeupType] = useState<string>('결석 보강'); // 보강 유형
   const [makeupReason, setMakeupReason] = useState<string>('');
   const [makeupSearch, setMakeupSearch] = useState('');
@@ -463,7 +465,7 @@ export default function TeacherTasks({
       endTime = '';
     }
     setMakeupTime(startTime);
-    setMakeupEndTime(endTime || `${String(parseInt(startTime.split(':')[0]) + 2).padStart(2, '0')}:00`);
+    setMakeupEndTime(endTime || `${String(parseInt(startTime.split(':')[0]) + 3).padStart(2, '0')}:00`);
 
     // 보강 유형 및 결석 원인 날짜 파싱
     const firstItem = group.items[0];
@@ -800,48 +802,74 @@ export default function TeacherTasks({
   };
 
   return (
-    <div className="h-full flex flex-col overflow-hidden bg-[#050505] p-6 space-y-6">
+    <div className={`h-full flex flex-col overflow-hidden p-6 space-y-6 ${isLight ? 'bg-[#f7f7f5] text-[#37352f]' : 'bg-[#050505] text-white'}`}>
       
       {/* 1. Header & Tab Switches */}
-      <div className="flex items-center justify-between shrink-0 bg-black/40 border border-white/10 rounded-xl p-4 backdrop-blur-2xl">
+      <div className={`flex items-center justify-between shrink-0 p-5 rounded-2xl border ${
+        isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-black/40 border-white/10 backdrop-blur-2xl'
+      }`}>
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500 border border-blue-500/20">
+          <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
+            isLight ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+          }`}>
             <ClipboardList size={20} />
           </div>
           <div>
-            <h2 className="text-sm font-black uppercase tracking-widest text-white">업무 및 보강 관리</h2>
-            <p className="text-[10px] text-gray-500 font-bold uppercase mt-1">Teacher Workboard & Makeup Scheduler</p>
+            <h2 className={`text-sm font-bold uppercase tracking-wider ${isLight ? 'text-[#37352f]' : 'text-white'}`}>업무 및 보강 관리</h2>
+            <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Teacher Workboard & Makeup Scheduler</p>
           </div>
         </div>
 
-        <div className="flex bg-white/5 border border-white/10 p-0.5 rounded-lg flex-wrap gap-0.5">
+        <div className={`flex p-1 rounded-xl flex-wrap gap-1 border ${
+          isLight ? 'bg-[#f0f0ed] border-[#e3e2e0]' : 'bg-white/5 border-white/10'
+        }`}>
           <button 
             onClick={() => setActiveTab('makeups')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'makeups' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+              activeTab === 'makeups' 
+                ? 'bg-blue-600 text-white shadow-sm' 
+                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+            }`}
           >
             <CalendarRange size={14} /> 보강 관리
           </button>
           <button 
             onClick={() => setActiveTab('tasks')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'tasks' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+              activeTab === 'tasks' 
+                ? 'bg-blue-600 text-white shadow-sm' 
+                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+            }`}
           >
             <Sparkles size={14} /> 업무 목록
           </button>
           <button 
             onClick={() => setActiveTab('suggestions')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'suggestions' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+              activeTab === 'suggestions' 
+                ? 'bg-blue-600 text-white shadow-sm' 
+                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+            }`}
           >
             <MessageSquare size={14} /> 학생 건의
           </button>
           <button 
             onClick={() => setActiveTab('surveys')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'surveys' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+              activeTab === 'surveys' 
+                ? 'bg-blue-600 text-white shadow-sm' 
+                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+            }`}
           >
             <Users size={14} /> 설문/수요조사
           </button>
           <button 
             onClick={() => setActiveTab('links')}
-            className={`flex items-center gap-1.5 px-3 py-2 text-xs font-black uppercase tracking-wider rounded-md transition-all ${activeTab === 'links' ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'text-gray-400 hover:text-white'}`}
+            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+              activeTab === 'links' 
+                ? 'bg-blue-600 text-white shadow-sm' 
+                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+            }`}
           >
             <ExternalLink size={14} /> 유용한 링크
           </button>
@@ -912,15 +940,21 @@ export default function TeacherTasks({
                       <motion.div 
                         key={task.id}
                         layout
-                        className={`group relative flex flex-col justify-between border rounded-xl p-4 bg-[#0a0a0a] transition-all ${task.is_completed ? 'border-emerald-500/20 opacity-60' : (isOverdue ? 'border-rose-500/30' : 'border-white/10 hover:border-white/20')}`}
+                        className={`group relative flex flex-col justify-between border rounded-2xl p-4 transition-all ${
+                          isLight ? 'bg-white border-[#e3e2e0] shadow-sm hover:border-blue-400' : 'bg-[#0a0a0a] border-white/10 hover:border-white/20'
+                        } ${task.is_completed ? 'opacity-60' : ''}`}
                       >
                         <div className="space-y-2.5">
                           <div className="flex items-start justify-between gap-2">
-                            <h4 className={`text-sm font-black leading-tight ${task.is_completed ? 'text-gray-500 line-through' : 'text-white'}`}>{task.title}</h4>
+                            <h4 className={`text-sm font-bold leading-tight ${
+                              task.is_completed ? 'text-gray-400 line-through' : (isLight ? 'text-[#37352f]' : 'text-white')
+                            }`}>{task.title}</h4>
                             <div className="flex items-center gap-1 shrink-0">
                               <button 
                                 onClick={() => handleToggleTask(task.id, task.is_completed)}
-                                className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${task.is_completed ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : 'border-white/20 hover:border-blue-500 hover:text-blue-500'}`}
+                                className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${
+                                  task.is_completed ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : (isLight ? 'border-gray-300 hover:border-blue-500 hover:text-blue-500' : 'border-white/20 hover:border-blue-500 hover:text-blue-500')
+                                }`}
                                 title="완료 처리"
                               >
                                 <Check size={10} strokeWidth={4} />
@@ -930,7 +964,9 @@ export default function TeacherTasks({
                               {task.title?.startsWith('[건의]') && (currentUser?.role === 'admin' || currentUser?.role === 'master') && (
                                 <button 
                                   onClick={() => handleHideTask(task.id)}
-                                  className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-amber-500 hover:text-amber-500 transition-all opacity-0 group-hover:opacity-100"
+                                  className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
+                                    isLight ? 'border-gray-300 text-gray-400 hover:border-amber-500 hover:text-amber-500' : 'border-white/10 text-gray-500 hover:border-amber-500 hover:text-amber-500'
+                                  }`}
                                   title="내 화면에서 숨기기"
                                 >
                                   <EyeOff size={10} />
@@ -939,14 +975,18 @@ export default function TeacherTasks({
 
                               <button 
                                 onClick={() => handleDeleteTask(task.id)}
-                                className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
+                                className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
+                                  isLight ? 'border-gray-300 text-gray-400 hover:border-rose-500 hover:text-rose-500' : 'border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500'
+                                }`}
                                 title="완전 삭제"
                               >
                                 <Trash2 size={10} />
                               </button>
                             </div>
                           </div>
-                          <p className={`text-xs leading-relaxed whitespace-pre-wrap ${task.is_completed ? 'text-gray-500 line-through' : 'text-gray-100'}`}>{task.content || '세부 설명이 없습니다.'}</p>
+                          <p className={`text-xs leading-relaxed whitespace-pre-wrap ${
+                            task.is_completed ? 'text-gray-400 line-through' : (isLight ? 'text-gray-600' : 'text-gray-100')
+                          }`}>{task.content || '세부 설명이 없습니다.'}</p>
                         </div>
 
                         <div className="mt-4 pt-3 border-t border-white/5 flex items-center justify-between text-[10px] font-bold">
@@ -990,17 +1030,21 @@ export default function TeacherTasks({
               exit={{ opacity: 0, y: -15 }}
               className="absolute inset-0 flex flex-col space-y-4 overflow-hidden"
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 shrink-0 bg-white/5 p-2.5 rounded-xl border border-white/10">
+              <div className={`flex flex-wrap items-center justify-between gap-3 shrink-0 p-3 rounded-2xl border ${
+                isLight ? 'bg-[#f2f1ee]/70 border-[#e3e2e0]' : 'bg-white/5 border-white/10'
+              }`}>
                 <div className="flex flex-wrap items-center gap-2 flex-1 min-w-0">
                   {/* 학생 / 보강 검색어 */}
                   <div className="relative w-48 shrink-0">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 text-gray-500" size={13} />
+                    <Search className={`absolute left-2.5 top-1/2 -translate-y-1/2 ${isLight ? 'text-gray-400' : 'text-gray-500'}`} size={13} />
                     <input
                       type="text"
                       placeholder="학생명/학년 검색..."
                       value={makeupCardSearch}
                       onChange={(e) => setMakeupCardSearch(e.target.value)}
-                      className="w-full bg-black/40 border border-white/10 rounded-lg pl-8 pr-2.5 py-1.5 text-xs text-white placeholder-gray-500 focus:outline-none focus:border-blue-500 transition-all"
+                      className={`w-full border rounded-xl pl-8 pr-2.5 py-1.5 text-xs outline-none focus:border-blue-500 transition-all ${
+                        isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] shadow-sm placeholder-gray-400' : 'bg-black/40 border-white/10 text-white placeholder-gray-500'
+                      }`}
                     />
                   </div>
 
@@ -1008,7 +1052,9 @@ export default function TeacherTasks({
                   <select
                     value={makeupCardPeriod}
                     onChange={(e) => setMakeupCardPeriod(e.target.value as any)}
-                    className="bg-black/40 border border-white/10 rounded-lg px-2.5 py-1.5 text-xs text-gray-300 font-bold focus:outline-none focus:border-blue-500 transition-all cursor-pointer [color-scheme:dark]"
+                    className={`border rounded-xl px-2.5 py-1.5 text-xs font-bold focus:outline-none focus:border-blue-500 transition-all cursor-pointer ${
+                      isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] shadow-sm' : 'bg-black/40 border-white/10 text-gray-300 [color-scheme:dark]'
+                    }`}
                   >
                     <option value="today">오늘 이후</option>
                     <option value="month">이번 달</option>
@@ -1023,26 +1069,30 @@ export default function TeacherTasks({
                         type="date"
                         value={makeupCardStartDate}
                         onChange={(e) => setMakeupCardStartDate(e.target.value)}
-                        className="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                        className={`border rounded-xl px-2 py-1 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                          isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-black/40 border-white/10 text-white [color-scheme:dark]'
+                        }`}
                       />
                       <span className="text-gray-500 text-xs">~</span>
                       <input
                         type="date"
                         value={makeupCardEndDate}
                         onChange={(e) => setMakeupCardEndDate(e.target.value)}
-                        className="bg-black/40 border border-white/10 rounded-lg px-2 py-1 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                        className={`border rounded-xl px-2 py-1 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                          isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-black/40 border-white/10 text-white [color-scheme:dark]'
+                        }`}
                       />
                     </div>
                   )}
 
-                  <span className="text-[10px] font-black text-gray-400">
+                  <span className="text-[10px] font-bold text-gray-500">
                     ({groupedMakeups.reduce((acc, g) => acc + g.items.length, 0)}명 / {groupedMakeups.length}개 카드)
                   </span>
                 </div>
 
                 <button 
                   onClick={() => setIsMakeupModalOpen(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10 shrink-0"
+                  className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10 shrink-0"
                 >
                   <Plus size={14} /> 보강 일정 예약
                 </button>
@@ -1060,32 +1110,36 @@ export default function TeacherTasks({
                       <motion.div 
                         key={`${group.date}-${group.time}`}
                         layout
-                        className="group relative flex flex-col justify-between border border-white/10 rounded-xl p-4 bg-[#0a0a0a] transition-all hover:border-white/20"
+                        className={`group relative flex flex-col justify-between border rounded-2xl p-4 transition-all ${
+                          isLight ? 'bg-white border-[#e3e2e0] shadow-sm hover:border-blue-400' : 'bg-[#0a0a0a] border-white/10 hover:border-white/20'
+                        }`}
                       >
                         <div className="space-y-3">
                           {/* 카드 헤더: 날짜와 시간 */}
-                          <div className="flex items-center justify-between pb-2 border-b border-white/5 gap-2">
+                          <div className={`flex items-center justify-between pb-2 border-b gap-2 ${
+                            isLight ? 'border-b-[#e3e2e0]' : 'border-b-white/5'
+                          }`}>
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <Calendar size={13} className="text-blue-400 shrink-0" />
-                              <span className="text-xs font-black text-white truncate">{formattedDate}</span>
-                              {isToday && <span className="text-blue-500 font-black text-[9px] shrink-0">(오늘)</span>}
+                              <Calendar size={13} className="text-blue-500 shrink-0" />
+                              <span className={`text-xs font-bold truncate ${isLight ? 'text-[#37352f]' : 'text-white'}`}>{formattedDate}</span>
+                              {isToday && <span className="text-blue-600 font-bold text-[9px] shrink-0">(오늘)</span>}
                             </div>
                             <div className="flex items-center gap-2 shrink-0">
-                              <div className="flex items-center gap-1 text-gray-400 text-[11px] font-bold">
-                                <Clock size={11} className="text-gray-500" />
+                              <div className="flex items-center gap-1 text-gray-500 text-[11px] font-bold">
+                                <Clock size={11} className="text-gray-400" />
                                 <span>{group.time} ({group.items.length}명)</span>
                               </div>
                               <button 
                                 type="button"
                                 onClick={() => handleOpenEditGroupMakeup(group)}
-                                className="text-[8.5px] font-black px-1.5 py-0.5 border border-blue-500/30 bg-blue-500/5 hover:bg-blue-500 text-blue-400 hover:text-white rounded transition-all"
+                                className="text-[8.5px] font-bold px-1.5 py-0.5 border border-blue-200 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white rounded transition-all"
                               >
                                 수정
                               </button>
                               <button 
                                 type="button"
                                 onClick={() => handleDeleteGroupMakeups(group.items)}
-                                className="text-[8.5px] font-black px-1.5 py-0.5 border border-rose-500/30 bg-rose-500/5 hover:bg-rose-500 text-rose-400 hover:text-white rounded transition-all"
+                                className="text-[8.5px] font-bold px-1.5 py-0.5 border border-rose-200 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white rounded transition-all"
                               >
                                 전체 취소
                               </button>
@@ -1102,15 +1156,17 @@ export default function TeacherTasks({
                               const monthlyCount = getMonthlyMakeupCount(makeup.student_id, makeup.session_date, makeup.id);
                               
                               return (
-                                <div key={makeup.id} className="py-2 border-b border-white/5 last:border-0 group/row space-y-1.5">
+                                <div key={makeup.id} className={`py-2 border-b last:border-0 group/row space-y-1.5 ${
+                                  isLight ? 'border-b-[#e3e2e0]' : 'border-b-white/5'
+                                }`}>
                                   <div className="flex items-center justify-between">
                                     <div className="flex flex-col min-w-0 pr-2">
                                       <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className="text-xs font-bold text-white truncate">{makeup.student_name}</span>
-                                        <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-blue-500/15 text-blue-400 border border-blue-500/30 rounded shrink-0">
+                                        <span className={`text-xs font-bold truncate ${isLight ? 'text-[#37352f]' : 'text-white'}`}>{makeup.student_name}</span>
+                                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 bg-blue-50 text-blue-700 border border-blue-200 rounded shrink-0">
                                           이번 달 {monthlyCount}회차
                                         </span>
-                                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 bg-purple-500/15 text-purple-300 border border-purple-500/30 rounded shrink-0">
+                                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 bg-purple-50 text-purple-700 border border-purple-200 rounded shrink-0">
                                           담당: {teacherName}
                                         </span>
                                         {(() => {
@@ -1262,6 +1318,7 @@ export default function TeacherTasks({
               teachers={teachers}
               currentUser={currentUser}
               onRefreshTasks={fetchTasks}
+              isLight={isLight}
             />
           )}
 
@@ -1279,6 +1336,7 @@ export default function TeacherTasks({
                 toggleTask={(t: any) => handleToggleTask(t.id, t.is_completed)} 
                 deleteTask={handleDeleteTask} 
                 isAdmin={currentUser?.role === 'admin' || currentUser?.role === 'master'} 
+                isLight={isLight}
               />
             </motion.div>
           )}
@@ -1433,10 +1491,12 @@ export default function TeacherTasks({
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="bg-[#1e1e24] border-2 border-white/20 rounded-2xl w-full max-w-md p-6 shadow-[0_0_30px_rgba(0,0,0,0.6)] space-y-4"
+              className={`border rounded-2xl w-full max-w-md p-6 shadow-2xl space-y-4 ${
+                isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#1e1e24] border-2 border-white/20 text-white'
+              }`}
             >
-              <div className="flex items-center justify-between pb-3 border-b border-white/5">
-                <h3 className="text-sm font-black text-white uppercase tracking-wider">
+              <div className={`flex items-center justify-between pb-3 border-b ${isLight ? 'border-b-[#e3e2e0]' : 'border-b-white/5'}`}>
+                <h3 className={`text-sm font-bold uppercase tracking-wider ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
                   {editMakeupGroup ? `보강 일정 수정` : '보강 일정 예약'}
                 </h3>
                 <button 
@@ -1445,7 +1505,7 @@ export default function TeacherTasks({
                     setEditMakeupGroup(null);
                     setSelectedStudentIds([]);
                   }} 
-                  className="text-gray-500 hover:text-white transition-all"
+                  className={`transition-all ${isLight ? 'text-gray-400 hover:text-black' : 'text-gray-500 hover:text-white'}`}
                 >
                   <X size={16} />
                 </button>
@@ -1460,7 +1520,9 @@ export default function TeacherTasks({
                       value={makeupDate}
                       onChange={(e) => setMakeupDate(e.target.value)}
                       required
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                      className={`w-full border rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                        isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-white/5 border-white/10 text-white [color-scheme:dark]'
+                      }`}
                     />
                   </div>
 
@@ -1471,7 +1533,9 @@ export default function TeacherTasks({
                       value={makeupTime}
                       onChange={(e) => setMakeupTime(e.target.value)}
                       required
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                      className={`w-full border rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                        isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-white/5 border-white/10 text-white [color-scheme:dark]'
+                      }`}
                     />
                   </div>
 
@@ -1482,7 +1546,9 @@ export default function TeacherTasks({
                       value={makeupEndTime}
                       onChange={(e) => setMakeupEndTime(e.target.value)}
                       required
-                      className="w-full bg-white/5 border border-white/10 rounded-lg px-2 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all [color-scheme:dark]"
+                      className={`w-full border rounded-lg px-2 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                        isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-white/5 border-white/10 text-white [color-scheme:dark]'
+                      }`}
                     />
                   </div>
                 </div>
@@ -1494,7 +1560,9 @@ export default function TeacherTasks({
                     <select 
                       value={makeupType}
                       onChange={(e) => setMakeupType(e.target.value)}
-                      className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-3 py-2 text-xs text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+                      className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all cursor-pointer ${
+                        isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#0a0a0a] border-white/10 text-white'
+                      }`}
                     >
                       <option value="결석 보강">결석 보강</option>
                       <option value="진도 보강">진도 보강</option>
@@ -1504,7 +1572,7 @@ export default function TeacherTasks({
                   </div>
 
                   <div className="space-y-1">
-                    <label className="text-[9px] font-black text-amber-400 uppercase tracking-widest flex items-center gap-1">
+                    <label className="text-[9px] font-black text-amber-500 uppercase tracking-widest flex items-center gap-1">
                       결석 원인 날짜 <span className="text-[8px] font-normal text-gray-500">(선택)</span>
                     </label>
                     <input
@@ -1512,18 +1580,20 @@ export default function TeacherTasks({
                       value={makeupReason}
                       onChange={(e) => setMakeupReason(e.target.value)}
                       placeholder="예: 8/2 결석분"
-                      className="w-full bg-white/5 border border-amber-500/30 rounded-lg px-3 py-2 text-xs text-amber-200 placeholder-gray-600 focus:outline-none focus:border-amber-500 transition-all"
+                      className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 transition-all ${
+                        isLight ? 'bg-white border-amber-500/40 text-[#37352f] placeholder-gray-400' : 'bg-white/5 border-amber-500/30 text-amber-200 placeholder-gray-600'
+                      }`}
                     />
                   </div>
                 </div>
 
                 {/* 수정 모드일 때 기존 학생 목록 표시 */}
                 {editMakeupGroup && (
-                  <div className="space-y-1 bg-white/5 border border-white/5 p-4 rounded-xl">
+                  <div className={`space-y-1 border p-4 rounded-xl ${isLight ? 'bg-gray-50 border-[#e3e2e0]' : 'bg-white/5 border-white/5'}`}>
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">기존 참여 학생 ({editMakeupGroup.items.length}명)</label>
                     <div className="max-h-24 overflow-y-auto pr-1 custom-scrollbar-v flex flex-wrap gap-1.5 mt-1.5">
                       {editMakeupGroup.items.map((item: any) => (
-                        <span key={item.id} className="bg-white/5 border border-white/10 px-2.5 py-0.5 rounded text-[10px] font-bold text-gray-300">
+                        <span key={item.id} className={`px-2.5 py-0.5 rounded text-[10px] font-bold border ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-white/5 border-white/10 text-gray-300'}`}>
                           {item.student_name}
                         </span>
                       ))}
@@ -1540,11 +1610,13 @@ export default function TeacherTasks({
                   {/* 학년/요일 필터 셀렉트 박스 */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
-                      <label className="text-[8px] font-black text-gray-600 uppercase tracking-widest">학년 필터</label>
+                      <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest">학년 필터</label>
                       <select 
                         value={makeupGradeFilter}
                         onChange={(e) => setMakeupGradeFilter(e.target.value)}
-                        className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+                        className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 transition-all cursor-pointer ${
+                          isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#0a0a0a] border-white/10 text-white'
+                        }`}
                       >
                         <option value="all">학년 전체</option>
                         <option value="중1">중1</option>
@@ -1558,11 +1630,13 @@ export default function TeacherTasks({
                     </div>
                     
                     <div className="space-y-1">
-                      <label className="text-[8px] font-black text-gray-600 uppercase tracking-widest">요일 필터</label>
+                      <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest">요일 필터</label>
                       <select 
                         value={makeupDayFilter}
                         onChange={(e) => setMakeupDayFilter(e.target.value)}
-                        className="w-full bg-[#0a0a0a] border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white focus:outline-none focus:border-blue-500 transition-all cursor-pointer"
+                        className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 transition-all cursor-pointer ${
+                          isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#0a0a0a] border-white/10 text-white'
+                        }`}
                       >
                         <option value="all">요일 전체</option>
                         <option value="월">월요일</option>
@@ -1577,7 +1651,7 @@ export default function TeacherTasks({
                   </div>
 
                   {/* 내 담당 학생만 보기 & 정규만 / 선택과목만 필터 체크박스 바 */}
-                  <div className="flex items-center justify-between px-1 pt-1 border-t border-white/5">
+                  <div className={`flex items-center justify-between px-1 pt-1 border-t ${isLight ? 'border-t-[#e3e2e0]' : 'border-t-white/5'}`}>
                     <div className="flex items-center gap-3">
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
                         <input 
@@ -1586,7 +1660,7 @@ export default function TeacherTasks({
                           onChange={(e) => setCourseFilterMode(e.target.checked ? 'regularOnly' : 'all')}
                           className="w-3.5 h-3.5 rounded border border-white/20 bg-black/40 text-blue-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-500"
                         />
-                        <span className="text-[10px] font-bold text-gray-300 hover:text-white transition-all">정규만</span>
+                        <span className={`text-[10px] font-bold transition-all ${isLight ? 'text-gray-600 hover:text-black' : 'text-gray-300 hover:text-white'}`}>정규만</span>
                       </label>
                       
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
@@ -1596,7 +1670,7 @@ export default function TeacherTasks({
                           onChange={(e) => setCourseFilterMode(e.target.checked ? 'electiveOnly' : 'all')}
                           className="w-3.5 h-3.5 rounded border border-white/20 bg-black/40 text-amber-500 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-amber-500"
                         />
-                        <span className="text-[10px] font-bold text-amber-400 hover:text-amber-300 transition-all">선택과목만</span>
+                        <span className="text-[10px] font-bold text-amber-500 hover:text-amber-600 transition-all">선택과목만</span>
                       </label>
                     </div>
 
@@ -1608,19 +1682,21 @@ export default function TeacherTasks({
                           onChange={(e) => setShowOnlyMyStudentsInMakeup(e.target.checked)}
                           className="w-3.5 h-3.5 rounded border border-white/20 bg-black/40 text-blue-600 focus:ring-0 focus:ring-offset-0 cursor-pointer accent-blue-600"
                         />
-                        <span className="text-[10px] font-black text-gray-400 hover:text-white transition-all uppercase tracking-wider">내 담당 학생만 보기</span>
+                        <span className={`text-[10px] font-black uppercase tracking-wider transition-all ${isLight ? 'text-gray-500 hover:text-black' : 'text-gray-400 hover:text-white'}`}>내 담당 학생만 보기</span>
                       </label>
                     )}
                   </div>
 
                   <div className="relative">
-                    <Search className="absolute left-3 top-2.5 text-gray-600" size={14} />
+                    <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
                     <input 
                       type="text" 
                       value={makeupSearch}
                       onChange={(e) => setMakeupSearch(e.target.value)}
                       placeholder="이름, 학년, 요일, 반 이름으로 검색..."
-                      className="w-full bg-white/5 border border-white/10 rounded-lg pl-9 pr-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-all"
+                      className={`w-full border rounded-lg pl-9 pr-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                        isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] placeholder-gray-400' : 'bg-white/5 border-white/10 text-white placeholder-gray-600'
+                      }`}
                     />
                   </div>
 
@@ -1632,14 +1708,16 @@ export default function TeacherTasks({
                           <button
                             type="button"
                             onClick={isAllFilteredSelected ? handleDeselectAllFiltered : handleSelectAllFiltered}
-                            className="text-[9px] font-black text-blue-400 hover:text-blue-300 transition-all uppercase tracking-wider"
+                            className="text-[9px] font-black text-blue-600 hover:text-blue-500 transition-all uppercase tracking-wider"
                           >
                             {isAllFilteredSelected ? '전체 해제' : '검색 결과 전체 선택'}
                           </button>
                         )}
                       </div>
 
-                      <div className="max-h-48 overflow-y-auto border border-white/10 rounded-lg p-1 bg-black/60 space-y-0.5 custom-scrollbar-v">
+                      <div className={`max-h-48 overflow-y-auto border rounded-lg p-1 space-y-0.5 custom-scrollbar-v ${
+                        isLight ? 'bg-white border-[#e3e2e0]' : 'bg-black/60 border-white/10'
+                      }`}>
                         {filteredStudents.map(s => {
                           const itemKey = s.itemKey || s.id;
                           const isSelected = selectedStudentIds.includes(itemKey);
@@ -1653,13 +1731,13 @@ export default function TeacherTasks({
                               }}
                               className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-xs font-bold transition-all ${
                                 isSelected 
-                                  ? (isSpecial ? 'bg-amber-500/10 text-amber-300 border border-amber-500/30' : 'bg-blue-600/20 text-blue-400 border border-blue-500/30') 
-                                  : 'hover:bg-white/5 text-gray-400 hover:text-white'
+                                  ? (isSpecial ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30' : 'bg-blue-50 text-blue-700 border border-blue-200') 
+                                  : (isLight ? 'hover:bg-gray-100 text-[#37352f]' : 'hover:bg-white/5 text-gray-400 hover:text-white')
                               }`}
                             >
                               <div className="flex items-center gap-1.5">
                                 {isSpecial && (
-                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                  <span className="text-[9px] font-black px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-600 border border-amber-500/30">
                                     {courseSubject}
                                   </span>
                                 )}
@@ -1670,8 +1748,8 @@ export default function TeacherTasks({
                               </div>
                               <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
                                 isSelected 
-                                  ? (isSpecial ? 'border-amber-500 bg-amber-500 text-black font-black' : 'border-blue-500 bg-blue-600 text-white') 
-                                  : 'border-white/20'
+                                  ? (isSpecial ? 'border-amber-500 bg-amber-500 text-white font-black' : 'border-blue-600 bg-blue-600 text-white') 
+                                  : (isLight ? 'border-gray-300' : 'border-white/20')
                               }`}>
                                 {isSelected && <Check size={10} strokeWidth={4} />}
                               </div>
@@ -1679,7 +1757,7 @@ export default function TeacherTasks({
                           );
                         })}
                         {filteredStudents.length === 0 && (
-                          <div className="p-3 text-center text-xs text-gray-600">조건에 부합하는 학생이 없습니다.</div>
+                          <div className="p-3 text-center text-xs text-gray-400">조건에 부합하는 학생이 없습니다.</div>
                         )}
                       </div>
                     </div>
@@ -1704,15 +1782,15 @@ export default function TeacherTasks({
                             key={itemKey} 
                             className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-black border ${
                               isSpecial 
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-300' 
-                                : 'bg-blue-600/10 border-blue-500/20 text-blue-400'
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' 
+                                : 'bg-blue-50 border-blue-200 text-blue-700'
                             }`}
                           >
                             <span>{name}</span>
                             <button 
                               type="button" 
                               onClick={() => setSelectedStudentIds(prev => prev.filter(item => item !== itemKey))}
-                              className={isSpecial ? "text-amber-400 hover:text-amber-200 transition-colors" : "text-blue-500 hover:text-blue-300 transition-colors"}
+                              className={isSpecial ? "text-amber-500 hover:text-amber-700 transition-colors" : "text-blue-600 hover:text-blue-800 transition-colors"}
                             >
                               <X size={10} />
                             </button>
@@ -1735,7 +1813,9 @@ export default function TeacherTasks({
                       setMakeupDayFilter('all');
                       setShowOnlyMyStudentsInMakeup(true);
                     }}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg text-xs font-bold transition-all"
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      isLight ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-white/5 text-gray-400 hover:text-white'
+                    }`}
                   >
                     취소
                   </button>
@@ -1758,7 +1838,7 @@ export default function TeacherTasks({
 }
 
 // --- Sub-component: SuggestionHistoryView ---
-function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin }: any) {
+function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin, isLight = false }: any) {
   const [sugFilter, setSugFilter] = useState<'all' | 'pending' | 'completed'>('all');
   const [searchQuery, setSearchQuery] = useState('');
 
@@ -1786,10 +1866,10 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin }: any) 
 
   return (
     <div className="space-y-6 h-full flex flex-col overflow-hidden">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 bg-[#0f0f0f] border border-white/5 p-4 rounded-lg shrink-0">
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-3.5 rounded-2xl border ${isLight ? 'bg-[#f2f1ee]/70 border-[#e3e2e0]' : 'bg-[#0f0f0f] border-white/5'}`}>
         <div className="flex items-center gap-3">
           <span className="text-[11px] font-bold text-gray-500 uppercase tracking-widest">Filter:</span>
-          <div className="flex bg-white/5 rounded-full p-1 border border-white/5">
+          <div className={`flex rounded-xl p-1 border ${isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-white/5 border-white/5'}`}>
             {[
               { id: 'all', label: '전체' },
               { id: 'pending', label: '미완료' },
@@ -1798,7 +1878,7 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin }: any) 
               <button 
                 key={f.id} 
                 onClick={() => setSugFilter(f.id as any)} 
-                className={`text-[10px] px-3.5 py-1.5 rounded-full font-black transition-all ${sugFilter === f.id ? 'bg-blue-600 text-white' : 'text-gray-500 hover:text-gray-300'}`}
+                className={`text-[10px] px-3.5 py-1.5 rounded-lg font-bold transition-all ${sugFilter === f.id ? 'bg-blue-600 text-white shadow-sm' : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-500 hover:text-gray-300')}`}
               >
                 {f.label}
               </button>
@@ -1812,12 +1892,12 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin }: any) 
             placeholder="학생 이름이나 내용 검색..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="w-full bg-black/40 border border-white/10 rounded-md py-2 px-3 text-[11px] text-white placeholder:text-gray-650 outline-none focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"
+            className={`w-full border rounded-xl py-2 px-3 text-[11px] outline-none focus:border-blue-500 transition-all ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] shadow-sm placeholder:text-gray-400' : 'bg-black/40 border-white/10 text-white placeholder:text-gray-650'}`}
           />
           {searchQuery && (
             <button 
               onClick={() => setSearchQuery('')} 
-              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white"
+              className={`absolute right-2.5 top-1/2 -translate-y-1/2 ${isLight ? 'text-gray-400 hover:text-black' : 'text-gray-500 hover:text-white'}`}
             >
               <X size={14} />
             </button>
@@ -1827,7 +1907,7 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin }: any) 
 
       <div className="flex-1 overflow-y-auto custom-scrollbar-v space-y-3 pr-1">
         {filteredSuggestions.length === 0 ? (
-          <div className="py-20 border border-dashed border-white/5 rounded-[4px] text-center text-gray-700 text-[10px] font-bold uppercase tracking-widest bg-black/20">
+          <div className={`py-20 border border-dashed rounded-2xl text-center text-xs font-bold ${isLight ? 'border-[#e3e2e0] bg-white text-gray-400 shadow-sm' : 'border-white/5 bg-black/20 text-gray-700'}`}>
             조회된 건의 사항이 없습니다.
           </div>
         ) : (

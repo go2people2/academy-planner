@@ -13,13 +13,14 @@ import { getTodayStr, getDayOfWeek } from '@/lib/utils';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { useClassroomTimers } from './useClassroomTimers';
 
-interface ClassroomModeProps {
+export interface ClassroomModeProps {
   students: Student[];
   onSave: (id: string, data: any) => Promise<boolean>;
   onClose: () => void;
   selectedDate: string;
   academyInfo?: any;
   selectedTeacherId?: string;
+  isLight?: boolean;
 }
 
 const TIMER_THEMES = [
@@ -33,7 +34,7 @@ const TIMER_THEMES = [
 
 const getTimerTheme = (index: number) => TIMER_THEMES[index % TIMER_THEMES.length];
 
-export default function ClassroomMode({ students, onSave, onClose, selectedDate, academyInfo, selectedTeacherId }: ClassroomModeProps) {
+export default function ClassroomMode({ students, onSave, onClose, selectedDate, academyInfo, selectedTeacherId, isLight = false }: ClassroomModeProps) {
   const [currentTime, setCurrentTime] = useState(new Date());
   const [activeTab, setActiveTab] = useState<'attendance' | 'timer'>('attendance');
   const [activeStudent, setActiveStudent] = useState<any | null>(null);
@@ -67,6 +68,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   } = useClassroomTimers(students, onSave, timerPresets);
 
   // 💡 실시간 시계 업데이트 (1초마다)
+  const [isPm, setIsPm] = useState(true);
   useEffect(() => {
     const timer = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(timer);
@@ -83,29 +85,22 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
   // 💡 학생의 수업 시간(시) 추출 함수 (가상 분할 카드 타입에 맞춰 고유 시간 반환)
   const getStudentHour = (student: any) => {
-    if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
-      const mVal = student.todaySession.moved_to_hour;
-      let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
-      if (h < 10) h += 12;
-      return h;
-    }
-
-    const status = student.todaySession?.attendance_status || ATTENDANCE_STATUS.BEFORE;
-    if (status.includes(':')) {
-      const parts = status.split(':');
-      const val = parseInt(parts[parts.length - 1]);
-      if (!isNaN(val) && val < 24) return val;
-    }
-
     const day = getDayOfWeek(selectedDate);
 
-    // 1. 정규 코스 카드로 쪼개진 원생인 경우 정규 교시만 검출
+    // 1. 정규 코스 카드로 쪼개진 원생인 경우 정규 교시만 검출 (순수 보강 로그의 moved_to_hour에 침범당하지 않음)
     if (student.__courseType === 'regular') {
+      const isPureMakeup = student.todaySession?.is_pure_makeup;
+      if (!isPureMakeup && student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null && student.todaySession?.moved_to_hour > 0) {
+        const mVal = student.todaySession.moved_to_hour;
+        let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+        if (h > 0 && h <= 12 && h < 10) h += 12;
+        return h;
+      }
       const hours = student.day_schedules?.[day] || [];
       if (hours.length > 0) {
         const firstVal = hours[0];
         let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-        if (h < 10) h += 12;
+        if (h > 0 && h <= 12 && h < 10) h += 12;
         return h;
       }
       return 999;
@@ -113,17 +108,21 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
     // 1.5. 보강 코스 카드로 쪼개진 원생인 경우 보강 교시만 검출
     if (student.__courseType === 'makeup') {
-      if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
+      if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null && student.todaySession?.moved_to_hour > 0) {
         const mVal = student.todaySession.moved_to_hour;
         let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
-        if (h < 10) h += 12;
+        if (h > 0 && h <= 12 && h < 10) h += 12;
         return h;
       }
       const status = student.todaySession?.attendance_status || '';
       if (status.includes(':')) {
         const parts = status.split(':');
         const val = parseInt(parts[parts.length - 1]);
-        if (!isNaN(val) && val < 24) return val;
+        if (!isNaN(val) && val < 24) {
+          let h = val;
+          if (h > 0 && h <= 12 && h < 10) h += 12;
+          return h;
+        }
       }
       return 999;
     }
@@ -212,14 +211,22 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   // 💡 [코스 세션 분리형 로컬 저장 래퍼] 학생의 courseType 속성에 따라 정확한 세션 로그를 분기 저장합니다.
   const localSave = async (student: any, data: any) => {
     const isElective = student.__courseType === 'elective';
+    const isMakeup = student.__courseType === 'makeup';
     const courseName = isElective ? (student.__courseSubject || '특강') : '정규';
     const realId = student.originalId || student.id;
     const movedHour = data.moved_to_hour !== undefined ? data.moved_to_hour : (student.todaySession?.moved_to_hour ?? null);
-    const payload = {
+    
+    const payload: any = {
       ...data,
       course_name: courseName,
-      moved_to_hour: movedHour
+      moved_to_hour: movedHour,
+      ...(isMakeup || student.todaySession?.is_pure_makeup ? { is_pure_makeup: true } : {})
     };
+
+    if (student.todaySession?.id && student.todaySession.id !== 'temp') {
+      payload.id = student.todaySession.id;
+    }
+
     return await onSave(realId, payload);
   };
 
@@ -260,6 +267,14 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
     Array.from(uniqueOriginalStudents.values()).forEach(s => {
       if (s.is_deleted) return;
+
+      // 💡 [입학/등록일자 원천 차단] 신규생의 입학/등록일자(registration_date || created_at) 이전 날짜인 경우 라이브모드 카드에서 제외!!
+      const regDateRaw = s.registration_date || s.created_at;
+      if (regDateRaw) {
+        const regDateStr = regDateRaw.slice(0, 10);
+        if (regDateStr && regDateStr > selectedDate) return;
+      }
+
       const session = s.todaySession;
       if (session) {
         const sDate = session.date || session.session_date;
@@ -305,34 +320,61 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       }
 
       const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
-      const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
-      const makeupLogs = todayLogs.filter((l: any) => (!l.course_name || l.course_name === '정규') && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+      const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !l.is_pure_makeup);
+      const rawMakeupLogs = todayLogs.filter((l: any) => (!l.course_name || l.course_name === '정규') && l.is_pure_makeup);
 
-      // 1. 정규 수업 카드 (정규 등원일인 경우 - 시간이동 세션 존재 시 이동 세션 연동하여 2중 카드 생성 차단)
+      // 💡 [새로고침 중복 차단] 동일 학생/날짜 보강 세션 중 가장 최신의 1개 보강 세션만 카드 채택!
+      const uniqueMakeupMap = new Map<string, any>();
+      rawMakeupLogs.forEach((mLog: any) => {
+        const key = `${s.originalId || s.id}_${mLog.course_name || '정규'}_${mLog.id || mLog.moved_to_hour}`;
+        uniqueMakeupMap.set(key, mLog);
+      });
+      const makeupLogs = Array.from(uniqueMakeupMap.values());
+
+      // 1. 정규 수업 카드 (정규 등원일인 경우 - 순수 보강 세션과 분리하여 정규 교시 보존)
       if (hasRegularSession) {
-        const activeSession = regularSession || s.todaySession || {
-          id: 'temp', date: selectedDate, status: 'none', attendance_status: ATTENDANCE_STATUS.BEFORE, course_name: '정규'
+        const activeSession = regularSession || {
+          ...(s.todaySession || {}),
+          id: regularSession ? (regularSession as any).id : 'temp',
+          date: selectedDate,
+          status: regularSession ? (regularSession as any).status || 'none' : 'none',
+          attendance_status: regularSession ? (regularSession as any).attendance_status || ATTENDANCE_STATUS.BEFORE : ATTENDANCE_STATUS.BEFORE,
+          course_name: '정규',
+          moved_to_hour: regularSession ? (regularSession as any).moved_to_hour : null
         };
 
-        expandedResult.push({
+        const regCard = {
           ...s,
           __courseType: 'regular',
           todaySession: activeSession
-        });
+        };
+
+        const regHour = getStudentHour(regCard);
+        const sRealId = s.originalId || s.id;
+        if (!expandedResult.some(c => (c.originalId || c.id) === sRealId && getStudentHour(c) === regHour)) {
+          expandedResult.push(regCard);
+        }
       }
 
-      // 2. 보강 수업 카드들 (보강 세션 로그가 별도 존재하는 경우)
+      // 2. 보강 수업 카드들 (독립 등록된 보강인 경우만 별도 카드 생성, 정규 수업 시간이동은 정규 카드 이동으로 처리)
       makeupLogs.forEach((mLog: any) => {
         const makeupHour = mLog.moved_to_hour;
-        const makeupCardId = `${s.originalId || s.id}_makeup_${makeupHour}`;
-        if (!expandedResult.some(card => card.id === makeupCardId)) {
-          expandedResult.push({
-            ...s,
-            id: makeupCardId,
-            originalId: s.originalId || s.id,
-            __courseType: 'makeup',
-            todaySession: mLog
-          });
+        const sessionId = mLog.id || mLog.created_at || makeupHour;
+        const makeupCardId = `${s.originalId || s.id}_makeup_${sessionId}`;
+
+        const isPureMakeup = mLog.is_pure_makeup || mLog.attendance_reason?.includes('보강') || (!hasRegularSession && mLog.attendance_status?.startsWith('보강'));
+        if (hasRegularSession && !isPureMakeup) return;
+
+        const mCard = {
+          ...s,
+          id: makeupCardId,
+          originalId: s.originalId || s.id,
+          __courseType: 'makeup',
+          todaySession: mLog
+        };
+
+        if (!expandedResult.some(c => c.id === makeupCardId)) {
+          expandedResult.push(mCard);
         }
       });
 
@@ -489,10 +531,14 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     const regularHours = student.day_schedules?.[day] || [];
     const isOriginalRegularHour = (() => {
       if (regularHours.length === 0) return false;
-      const firstVal = regularHours[0];
-      let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-      if (h <= 12) h += 12;
-      return h === hour;
+      const startVal = regularHours[0];
+      let origH = startVal >= 100 ? Math.floor(startVal / 100) : startVal;
+      if (origH > 0 && origH <= 12) origH += 12;
+      
+      let clickH = hour;
+      if (clickH > 0 && clickH <= 12) clickH += 12;
+      
+      return origH === clickH;
     })();
 
     if (isOriginalRegularHour) {
@@ -506,7 +552,18 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
         attendance_reason: null
       });
     } else {
-      await localSave(student, { moved_to_hour: hour });
+      const isPureMakeupDay = student.__courseType === 'makeup' || (!student.isScheduledToday && student.todaySession?.attendance_status?.startsWith('보강'));
+      const formatHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+      
+      const newAttStatus = isPureMakeupDay 
+        ? `보강:${formatHour}` 
+        : (student.todaySession?.attendance_status && !student.todaySession.attendance_status.startsWith('보강') ? student.todaySession.attendance_status : ATTENDANCE_STATUS.BEFORE);
+
+      await localSave(student, { 
+        moved_to_hour: hour, 
+        attendance_status: newAttStatus, 
+        attendance_reason: '시간 변경' 
+      });
     }
     setActiveStudent(null);
     setIsTimeShiftOpen(false);
@@ -526,24 +583,75 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
   };
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="fixed inset-0 z-[200] bg-[#050505] flex flex-col p-6 overflow-hidden text-center">
+    <motion.div 
+      initial={{ opacity: 0 }} 
+      animate={{ opacity: 1 }} 
+      exit={{ opacity: 0 }} 
+      className={`fixed inset-0 z-[200] flex flex-col p-6 overflow-hidden text-center ${
+        isLight ? 'bg-[#f8f9fa] text-[#0f172a]' : 'bg-[#050505] text-white'
+      }`}
+    >
       <div className="flex items-center justify-between mb-6 gap-6 shrink-0">
         <div className="flex items-center gap-6">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-lg flex items-center justify-center shadow-lg shadow-blue-500/30"><Zap className="text-white" size={24} /></div>
-            <div className="hidden sm:block">
-              <h2 className="text-xl font-black text-white uppercase tracking-tight leading-none">LIVE</h2>
-              <div className="flex items-center gap-1.5 mt-1 text-blue-400 font-bold text-[10px]"><Clock size={10} /> {currentTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}</div>
+            <div className={`w-12 h-12 rounded-xl flex items-center justify-center shadow-lg ${
+              isLight ? 'bg-blue-600 text-white shadow-blue-500/20' : 'bg-blue-600 text-white shadow-blue-500/30'
+            }`}>
+              <Zap size={24} />
+            </div>
+            <div className="hidden sm:block text-left">
+              <h2 className={`text-xl font-bold uppercase tracking-tight leading-none ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+                LIVE
+              </h2>
+              <div className={`flex items-center gap-1.5 mt-1 font-bold text-[11px] ${isLight ? 'text-blue-700' : 'text-blue-400'}`}>
+                <Clock size={12} /> {currentTime.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+              </div>
             </div>
           </div>
-          <div className="flex bg-white/5 p-1 rounded-xl border border-white/10">
-            <button onClick={() => setActiveTab('attendance')} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'attendance' ? 'bg-blue-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><UserCheck size={14} /> <span>출석체크</span></button>
-            <button onClick={() => setActiveTab('timer')} className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-black uppercase tracking-widest transition-all ${activeTab === 'timer' ? 'bg-indigo-600 text-white shadow-lg' : 'text-gray-500 hover:text-white'}`}><Clock size={14} /> <span>테스트 타이머</span></button>
+          <div className={`flex p-1 rounded-xl border ${isLight ? 'bg-white border-[#e3e2e0] shadow-xs' : 'bg-white/5 border-white/10'}`}>
+            <button 
+              onClick={() => setActiveTab('attendance')} 
+              className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                activeTab === 'attendance' 
+                  ? 'bg-blue-600 text-white shadow-md' 
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-500 hover:text-white')
+              }`}
+            >
+              <UserCheck size={14} /> <span>출석체크</span>
+            </button>
+            <button 
+              onClick={() => setActiveTab('timer')} 
+              className={`flex items-center gap-2 px-5 py-2 rounded-lg text-xs font-bold uppercase tracking-wider transition-all ${
+                activeTab === 'timer' 
+                  ? 'bg-indigo-600 text-white shadow-md' 
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-500 hover:text-white')
+              }`}
+            >
+              <Clock size={14} /> <span>테스트 타이머</span>
+            </button>
           </div>
         </div>
         <div className="flex items-center gap-3">
-          <button onClick={copyToClipboard} className="flex items-center gap-2 px-6 py-3 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:text-white hover:bg-white/10 transition-all font-black text-sm uppercase whitespace-nowrap"><Copy size={18} /> <span className="hidden md:inline">미등원 명단 복사</span></button>
-          <button onClick={onClose} className="p-3 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:text-white transition-all"><X size={24} /></button>
+          <button 
+            onClick={copyToClipboard} 
+            className={`flex items-center gap-2 px-5 py-2.5 rounded-xl border transition-all font-bold text-xs uppercase whitespace-nowrap ${
+              isLight 
+                ? 'bg-white text-gray-800 border-[#e3e2e0] hover:bg-gray-100 shadow-xs' 
+                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
+            }`}
+          >
+            <Copy size={16} /> <span className="hidden md:inline">미등원 명단 복사</span>
+          </button>
+          <button 
+            onClick={onClose} 
+            className={`p-2.5 rounded-xl border transition-all ${
+              isLight 
+                ? 'bg-white text-gray-700 border-[#e3e2e0] hover:bg-red-50 hover:text-red-600 hover:border-red-200 shadow-xs' 
+                : 'bg-white/5 border-white/10 text-gray-400 hover:text-white'
+            }`}
+          >
+            <X size={20} />
+          </button>
         </div>
       </div>
 
@@ -556,14 +664,16 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
             className="mb-8 flex flex-col items-center gap-4 shrink-0"
           >
             {/* ⏱️ 단일 타이머 컨트롤러 제어기 */}
-            <div className="flex bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-2xl p-3 shadow-2xl items-center gap-4 max-w-full overflow-x-auto">
-              <div className="flex items-center gap-2 pr-3 border-r border-white/10">
-                <Clock className="text-blue-500" size={18} />
-                <span className="text-[10px] font-black text-white uppercase tracking-wider">시간 설정</span>
+            <div className={`flex border rounded-2xl p-3 shadow-xl items-center gap-4 max-w-full overflow-x-auto ${
+              isLight ? 'bg-white border-[#e3e2e0] text-[#0f172a]' : 'bg-[#0a0a0a]/90 border-white/10 text-white'
+            }`}>
+              <div className={`flex items-center gap-2 pr-3 border-r ${isLight ? 'border-[#e3e2e0]' : 'border-white/10'}`}>
+                <Clock className="text-blue-600" size={18} />
+                <span className={`text-[10px] font-bold uppercase tracking-wider ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>시간 설정</span>
               </div>
               
               {/* 프리셋 시간 선택 */}
-              <div className="flex items-center gap-1 bg-white/5 p-1 rounded-xl border border-white/10">
+              <div className={`flex items-center gap-1 p-1 rounded-xl border ${isLight ? 'bg-gray-100 border-gray-200' : 'bg-white/5 border-white/10'}`}>
                 {timerPresets.map((preset) => (
                   <button
                     key={preset}
@@ -571,10 +681,10 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                       setSelectedDuration(preset);
                       setCustomDurationInput('');
                     }}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-black transition-all ${
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                       selectedDuration === preset && customDurationInput === ''
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                        : 'text-gray-400 hover:text-gray-200'
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-gray-200')
                     }`}
                   >
                     {preset}분
@@ -583,7 +693,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
               </div>
 
               {/* 자유 시간 직접 입력 */}
-              <div className="flex items-center gap-2 bg-white/5 px-3 py-1.5 rounded-xl border border-white/10">
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border ${isLight ? 'bg-gray-100 border-gray-200' : 'bg-white/5 border-white/10'}`}>
                 <input
                   type="number"
                   min="1"
@@ -592,27 +702,29 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                   onChange={(e) => {
                     setCustomDurationInput(e.target.value);
                   }}
-                  className="w-16 bg-transparent text-white text-xs font-bold focus:outline-none border-b border-transparent focus:border-blue-500 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                  className={`w-16 bg-transparent text-xs font-bold focus:outline-none border-b border-transparent focus:border-blue-500 text-center [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none ${
+                    isLight ? 'text-[#0f172a]' : 'text-white'
+                  }`}
                 />
-                <span className="text-[10px] font-black text-gray-500 uppercase">분</span>
+                <span className={`text-[10px] font-bold uppercase ${isLight ? 'text-gray-500' : 'text-gray-500'}`}>분</span>
               </div>
 
               {/* 스타트 버튼 */}
               <button
                 onClick={() => handleStartTimer(selectedIds, () => setSelectedIds([]))}
                 disabled={selectedIds.length === 0}
-                className={`px-5 py-2 rounded-xl text-xs font-black uppercase tracking-widest transition-all ${
+                className={`px-5 py-2 rounded-xl text-xs font-bold uppercase tracking-wider transition-all ${
                   selectedIds.length > 0
-                    ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-lg shadow-indigo-500/30 active:scale-95'
-                    : 'bg-white/5 text-gray-600 cursor-not-allowed'
+                    ? 'bg-indigo-600 text-white hover:bg-indigo-500 shadow-md active:scale-95'
+                    : (isLight ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-white/5 text-gray-600 cursor-not-allowed')
                 }`}
               >
                 {selectedIds.length > 0 ? `START (${selectedIds.length}명)` : 'START (학생 선택)'}
               </button>
 
               {selectedIds.length > 0 && (
-                <div className="pl-3 border-l border-white/10 flex items-center gap-2">
-                  <button onClick={() => setSelectedIds([])} className="text-gray-500 hover:text-white transition-colors" title="선택 해제">
+                <div className={`pl-3 border-l flex items-center gap-2 ${isLight ? 'border-gray-200' : 'border-white/10'}`}>
+                  <button onClick={() => setSelectedIds([])} className={isLight ? "text-gray-500 hover:text-black" : "text-gray-500 hover:text-white"} title="선택 해제">
                     <X size={16} />
                   </button>
                 </div>
@@ -621,7 +733,9 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
             {/* 💡 복사되어 동적으로 생성된 타이머 목록 */}
             {activeTimers.length > 0 && (
-              <div className="flex flex-wrap justify-center gap-3 max-w-7xl px-4 py-2 bg-white/[0.02] border border-white/5 rounded-2xl">
+              <div className={`flex flex-wrap justify-center gap-3 max-w-7xl px-4 py-2 rounded-2xl border ${
+                isLight ? 'bg-white border-[#e3e2e0] shadow-xs' : 'bg-white/[0.02] border-white/5'
+              }`}>
                 {activeTimers.map((timer, idx) => {
                   const elapsed = Math.floor((currentTime.getTime() - timer.startTime) / 1000);
                   const remaining = Math.max(0, timer.duration * 60 - elapsed);
@@ -636,21 +750,23 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                       key={timer.id} 
                       className={`flex items-center gap-4 px-4 py-2.5 rounded-xl border transition-all ${
                         isTimerExpired 
-                          ? 'bg-red-500/10 border-red-500 shadow-lg shadow-red-500/20 animate-pulse' 
-                          : `${theme.bg}/10 ${theme.border}/40 shadow-md ${theme.glow}`
+                          ? 'bg-red-50 border-red-300 shadow-md animate-pulse' 
+                          : (isLight ? 'bg-blue-50/50 border-blue-200 shadow-xs' : `${theme.bg}/10 ${theme.border}/40 shadow-md ${theme.glow}`)
                       }`}
                     >
                       <div className="flex flex-col text-left">
-                        <span className={`text-[8px] font-black uppercase tracking-widest ${isTimerExpired ? 'text-red-400' : theme.text}`}>
+                        <span className={`text-[9px] font-bold uppercase tracking-wider ${isTimerExpired ? 'text-red-600' : (isLight ? 'text-blue-700' : theme.text)}`}>
                           TIMER #{idx + 1} ({timer.duration}m)
                         </span>
-                        <div className="text-base font-black text-white tabular-nums leading-none mt-1">
+                        <div className={`text-base font-bold tabular-nums leading-none mt-1 ${isTimerExpired ? 'text-red-600' : (isLight ? 'text-[#0f172a]' : 'text-white')}`}>
                           {isTimerExpired ? 'EXPIRED' : `${minutes}:${seconds.toString().padStart(2, '0')}`}
                         </div>
                       </div>
                       
-                      <div className="flex items-center gap-1.5 px-2 py-1 bg-white/5 rounded-lg border border-white/10">
-                        <span className="text-[10px] font-black text-gray-300">{timer.studentIds.length}명</span>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-lg border ${
+                        isLight ? 'bg-white border-blue-200' : 'bg-white/5 border-white/10'
+                      }`}>
+                        <span className={`text-[10px] font-bold ${isLight ? 'text-blue-900' : 'text-gray-300'}`}>{timer.studentIds.length}명</span>
                       </div>
 
                       <div className="flex items-center gap-1">
@@ -665,7 +781,9 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                         )}
                         <button
                           onClick={() => handleStopTimer(timer.id)}
-                          className="p-1.5 bg-white/5 border border-white/10 hover:border-red-500 hover:bg-red-600/20 text-gray-400 hover:text-red-400 rounded-lg transition-all"
+                          className={`p-1.5 border rounded-lg transition-all ${
+                            isLight ? 'bg-white border-gray-300 text-gray-500 hover:border-red-400 hover:text-red-600 hover:bg-red-50' : 'bg-white/5 border-white/10 hover:border-red-500 hover:bg-red-600/20 text-gray-400 hover:text-red-400'
+                          }`}
                           title="타이머 종료 및 삭제"
                         >
                           <RotateCcw size={12} />
@@ -737,14 +855,16 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                     return (
                       <div className="col-span-full mt-8 mb-4 flex items-center justify-between gap-4">
                         <div className="flex items-center gap-4">
-                          <div className={`px-4 py-1.5 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] shadow-xl flex items-center gap-2 ${theme.bg} ${theme.border} text-white`}>
+                          <div className={`px-4 py-1.5 rounded-full border text-[10px] font-bold uppercase tracking-wider shadow-md flex items-center gap-2 ${
+                            isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : `${theme.bg} ${theme.border} text-white`
+                          }`}>
                             <Clock size={12} /> Timer #{timerIdx + 1} Group
                           </div>
-                          <div className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">
+                          <div className={`text-[10px] font-semibold tracking-wide ${isLight ? 'text-gray-600' : 'text-gray-500'}`}>
                             {timerObj.duration}분 설정 세션
                           </div>
                         </div>
-                        <div className={`flex-1 h-px bg-gradient-to-r ${theme.bg}/30 to-transparent`} />
+                        <div className={`flex-1 h-px ${isLight ? 'bg-gradient-to-r from-blue-200 to-transparent' : `bg-gradient-to-r ${theme.bg}/30 to-transparent`}`} />
                       </div>
                     );
                   })()
@@ -754,24 +874,50 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                     <div className="flex items-center gap-4">
                       <button 
                         onClick={() => setCollapsedHours(prev => ({ ...prev, [studentHour]: !prev[studentHour] }))}
-                        className={`px-3 py-1 rounded-full border text-[10px] font-black uppercase tracking-[0.2em] shadow-lg transition-all ${collapsedHours[studentHour] ? 'bg-gray-800 border-white/10 text-gray-500' : (studentHour === 999 ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-400' : studentHour < currentHour ? 'bg-white/5 border-white/10 text-gray-600' : studentHour === currentHour ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-blue-600/20 border-blue-500/30 text-blue-400')}`}
+                        className={`px-3.5 py-1.5 rounded-full border text-[11px] font-bold uppercase tracking-wider shadow-xs transition-all ${
+                          isLight 
+                            ? (collapsedHours[studentHour] ? 'bg-gray-100 border-gray-300 text-gray-500' : (studentHour === 999 ? 'bg-purple-50 border-purple-200 text-purple-700' : studentHour < currentHour ? 'bg-gray-100 border-gray-200 text-gray-600' : studentHour === currentHour ? 'bg-blue-50 border-blue-200 text-blue-700 font-bold' : 'bg-white border-[#e3e2e0] text-[#0f172a]'))
+                            : (collapsedHours[studentHour] ? 'bg-gray-800 border-white/10 text-gray-500' : (studentHour === 999 ? 'bg-indigo-600/20 border-indigo-500/30 text-indigo-400' : studentHour < currentHour ? 'bg-white/5 border-white/10 text-gray-600' : studentHour === currentHour ? 'bg-emerald-500/20 border-emerald-500/30 text-emerald-400' : 'bg-blue-600/20 border-blue-500/30 text-blue-400'))
+                        }`}
                       >
                         {studentHour === 999 ? '보강 / 기타 수업' : (studentHour >= 12 ? (studentHour === 12 ? `오후 12:${displayMinute}` : `오후 ${studentHour-12}:${displayMinute}`) : `오전 ${studentHour}:${displayMinute}`) + ' 수업'}
-                        <span className="ml-2 opacity-50">{collapsedHours[studentHour] ? '▼' : '▲'}</span>
+                        <span className="ml-2 opacity-60">{collapsedHours[studentHour] ? '▼' : '▲'}</span>
                       </button>
                       {studentHour !== 999 && !collapsedHours[studentHour] && (
                         <div className="flex items-center gap-2">
-                          <span className={`text-[10px] font-black px-2 py-0.5 rounded border uppercase tracking-widest ${selectedDate !== getTodayStr() ? (selectedDate > getTodayStr() ? 'bg-blue-500/20 text-blue-400 border-blue-500/20' : 'bg-gray-500/20 text-gray-500 border-gray-500/20') : (studentElapsed < (settings.late_threshold || 10) ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/20' : studentElapsed < (settings.alert_threshold || 15) ? 'bg-amber-500/20 text-amber-500 border-amber-500/20' : 'bg-red-500/20 text-red-500 border-red-500/20')}`}>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded border uppercase tracking-wider ${
+                            isLight 
+                              ? (selectedDate !== getTodayStr() ? 'bg-gray-100 text-gray-600 border-gray-200' : (studentElapsed < (settings.late_threshold || 10) ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : studentElapsed < (settings.alert_threshold || 15) ? 'bg-amber-50 text-amber-700 border-amber-200' : 'bg-red-50 text-red-700 border-red-200'))
+                              : (selectedDate !== getTodayStr() ? (selectedDate > getTodayStr() ? 'bg-blue-500/20 text-blue-400 border-blue-500/20' : 'bg-gray-500/20 text-gray-500 border-gray-500/20') : (studentElapsed < (settings.late_threshold || 10) ? 'bg-emerald-500/20 text-emerald-500 border-emerald-500/20' : studentElapsed < (settings.alert_threshold || 15) ? 'bg-amber-500/20 text-amber-500 border-amber-500/20' : 'bg-red-500/20 text-red-500 border-red-500/20'))
+                          }`}>
                             {selectedDate === getTodayStr() ? (studentElapsed < 0 ? `${Math.abs(studentElapsed)}분 전` : `${studentElapsed}분 경과`) : (selectedDate > getTodayStr() ? '수업 예정' : '수업 종료')}
                           </span>
                           <div className="flex items-center gap-1 ml-2">
-                            <button onClick={() => handleResetHour(studentHour)} className="flex items-center gap-1.5 px-3 py-0.5 bg-white/5 border border-white/10 rounded text-[10px] font-black text-gray-400 hover:bg-white/10 hover:text-white transition-all uppercase tracking-widest"><RotateCcw size={10} /> 전체 초기화</button>
-                            <button onClick={() => handleFinishHour(studentHour)} className="flex items-center gap-1.5 px-3 py-0.5 bg-red-600/10 border border-red-500/20 rounded text-[10px] font-black text-red-500 hover:bg-red-600 hover:text-white transition-all uppercase tracking-widest">마감하기</button>
+                            <button 
+                              onClick={() => handleResetHour(studentHour)} 
+                              className={`flex items-center gap-1.5 px-3 py-1 rounded text-[10px] font-bold transition-all border ${
+                                isLight 
+                                  ? 'bg-white text-gray-700 border-[#e3e2e0] hover:bg-gray-100 shadow-xs' 
+                                  : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
+                              }`}
+                            >
+                              <RotateCcw size={10} /> 전체 초기화
+                            </button>
+                            <button 
+                              onClick={() => handleFinishHour(studentHour)} 
+                              className={`flex items-center gap-1.5 px-3 py-1 rounded text-[10px] font-bold transition-all border ${
+                                isLight 
+                                  ? 'bg-rose-50 text-rose-700 border-rose-200 hover:bg-rose-600 hover:text-white shadow-xs' 
+                                  : 'bg-red-600/10 border-red-500/20 text-red-500 hover:bg-red-600 hover:text-white'
+                              }`}
+                            >
+                              마감하기
+                            </button>
                           </div>
                         </div>
                       )}
                     </div>
-                    <div className="flex-1 h-px bg-gradient-to-r from-white/10 to-transparent" />
+                    <div className={`flex-1 h-px ${isLight ? 'bg-gradient-to-r from-[#e3e2e0] to-transparent' : 'bg-gradient-to-r from-white/10 to-transparent'}`} />
                   </div>
                 )}
                 <AnimatePresence>
@@ -783,40 +929,40 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                       exit={{ opacity: 0, scale: 0.95, height: 0, overflow: 'hidden' }}
                       transition={{ duration: 0.2 }}
                       onClick={() => activeTab === 'attendance' ? handleCardClick(s) : handleToggleSelect(s.id)}
-                      className={`relative aspect-square rounded-lg border flex flex-col items-center justify-center gap-2 transition-all duration-300 cursor-pointer overflow-hidden ${
+                      className={`relative aspect-square rounded-xl border flex flex-col items-center justify-center gap-2 transition-all duration-300 cursor-pointer overflow-hidden ${
                         activeTab === 'timer' 
                           ? (selectedIds.includes(s.id) 
-                            ? 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-600/5' 
+                            ? (isLight ? 'border-blue-600 ring-2 ring-blue-500/30 bg-blue-50' : 'border-blue-500 ring-2 ring-blue-500/30 bg-blue-600/5') 
                             : isTimerExpired 
-                            ? 'border-red-500 bg-red-500/10 shadow-[0_0_15px_rgba(239,68,68,0.4)] animate-pulse' 
+                            ? 'border-red-500 bg-red-50 shadow-md animate-pulse' 
                             : sharedTimer 
                             ? (() => {
                                 const theme = getTimerTheme(activeTimerIdx);
-                                return `${theme.border} ${theme.bg}/5`;
+                                return isLight ? 'border-blue-300 bg-blue-50/30 shadow-xs' : `${theme.border} ${theme.bg}/5`;
                               })()
-                            : 'border-white/10 bg-white/5') 
+                            : (isLight ? 'border-[#e3e2e0] bg-white text-[#0f172a] shadow-xs' : 'border-white/10 bg-white/5')) 
                           : (isPureAttend 
-                            ? 'opacity-60 grayscale-[0.2] scale-[0.98] border-white/10 bg-white/5' 
+                            ? (isLight ? 'bg-emerald-50/80 border-emerald-200 shadow-xs' : 'opacity-60 grayscale-[0.2] scale-[0.98] border-white/10 bg-white/5') 
                             : isMakeupActive 
-                            ? 'bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-900/20' 
+                            ? (isLight ? 'bg-purple-50 border-purple-300 shadow-sm' : 'bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-900/20') 
                             : isAbsent 
-                            ? 'bg-red-500/20 border-red-500 shadow-lg shadow-red-900/20' 
+                            ? (isLight ? 'bg-red-50 border-red-300 shadow-sm' : 'bg-red-500/20 border-red-500 shadow-lg shadow-red-900/20') 
                             : isLate 
-                            ? 'bg-amber-500/20 border-amber-500 shadow-lg shadow-amber-900/20' 
+                            ? (isLight ? 'bg-amber-50 border-amber-300 shadow-sm' : 'bg-amber-500/20 border-amber-500 shadow-lg shadow-amber-900/20') 
                             : isCriticalWarning 
-                            ? 'bg-red-500/20 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse' 
+                            ? (isLight ? 'bg-red-50 border-red-400 shadow-md animate-pulse' : 'bg-red-500/20 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse') 
                             : isLateWarning 
-                            ? 'bg-amber-500/10 border-amber-500' 
+                            ? (isLight ? 'bg-amber-50 border-amber-300 shadow-xs' : 'bg-amber-500/10 border-amber-500') 
                             : isSupplementPending 
-                            ? 'bg-indigo-500/5 border-indigo-500/30 border-dashed' 
-                            : 'bg-blue-600/5 border-blue-500/50 hover:border-blue-500 hover:bg-blue-500/10')
+                            ? (isLight ? 'bg-indigo-50/50 border-indigo-200 border-dashed' : 'bg-indigo-500/5 border-indigo-500/30 border-dashed') 
+                            : (isLight ? 'bg-white border-[#e3e2e0] shadow-xs hover:border-blue-400 hover:bg-blue-50/30' : 'bg-blue-600/5 border-blue-500/50 hover:border-blue-500 hover:bg-blue-500/10'))
                       }`}
                     >
                       {activeTab === 'timer' ? (
                         <>
                           <div className="absolute inset-0 flex items-center justify-center pointer-events-none opacity-20">
                             <svg className="w-24 h-24 rotate-[-90deg]">
-                              <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="2" fill="transparent" className="text-white/10" />
+                              <circle cx="48" cy="48" r="40" stroke="currentColor" strokeWidth="2" fill="transparent" className={isLight ? "text-gray-300" : "text-white/10"} />
                               {sharedTimer && (
                                 <motion.circle 
                                   cx="48" 
@@ -828,14 +974,14 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                                   strokeDasharray="251.2" 
                                   initial={{ strokeDashoffset: 251.2 }} 
                                   animate={{ strokeDashoffset: 251.2 * (progress / 100) }} 
-                                  className={`${isTimerExpired ? 'text-red-500' : getTimerTheme(activeTimerIdx).text}`} 
+                                  className={`${isTimerExpired ? 'text-red-500' : (isLight ? 'text-blue-600' : getTimerTheme(activeTimerIdx).text)}`} 
                                 />
                               )}
                             </svg>
                           </div>
                           {sharedTimer && !isTimerExpired && (
                             <div 
-                              className={`absolute bottom-0 left-0 h-1 z-0 transition-all duration-1000 ${getTimerTheme(activeTimerIdx).bg}`} 
+                              className={`absolute bottom-0 left-0 h-1 z-0 transition-all duration-1000 ${isLight ? 'bg-blue-600' : getTimerTheme(activeTimerIdx).bg}`} 
                               style={{ width: `${100 - progress}%` }} 
                             />
                           )}
@@ -844,33 +990,30 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                               type="checkbox" 
                               checked={selectedIds.includes(s.id)} 
                               onChange={() => {}} 
-                              className="w-3 h-3 rounded-sm border-white/20 bg-black/40 checked:bg-blue-500 cursor-pointer" 
+                              className="w-3.5 h-3.5 rounded-sm border-gray-300 bg-white checked:bg-blue-600 cursor-pointer" 
                             />
                           </div>
                           <div className="text-center px-1 relative z-10">
-                            <h3 className="text-2xl font-black tracking-tighter leading-none text-white drop-shadow-lg">{s.name}</h3>
+                            <h3 className={`text-2xl font-bold tracking-tight leading-none ${isLight ? 'text-[#0f172a]' : 'text-white drop-shadow-lg'}`}>{s.name}</h3>
                             <div className="flex flex-row items-center gap-1 justify-center mt-2">
                               <p 
-                                className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                                   sharedTimer 
-                                    ? (() => {
-                                        const theme = getTimerTheme(activeTimerIdx);
-                                        return `${theme.border} ${theme.text}`;
-                                      })()
+                                    ? (isLight ? 'border-blue-300 bg-blue-50 text-blue-800' : `${getTimerTheme(activeTimerIdx).border} ${getTimerTheme(activeTimerIdx).text}`)
                                     : s.grade.includes('초') 
-                                    ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' 
+                                    ? (isLight ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10') 
                                     : s.grade.includes('고') 
-                                    ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' 
-                                    : 'text-blue-400 border-blue-500/30 bg-blue-500/10'
+                                    ? (isLight ? 'text-amber-700 border-amber-200 bg-amber-50' : 'text-amber-400 border-amber-500/30 bg-amber-500/10') 
+                                    : (isLight ? 'text-blue-700 border-blue-200 bg-blue-50' : 'text-blue-400 border-blue-500/30 bg-blue-500/10')
                                 }`}
                               >
                                 {sharedTimer ? `Timer #${activeTimerIdx + 1}` : s.grade}
                               </p>
                               {!sharedTimer && (
-                                <p className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${
+                                <p className={`text-[9.5px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${
                                   s.__courseType === 'elective' 
-                                    ? 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/15' 
-                                    : 'text-gray-400 border-white/10 bg-white/5'
+                                    ? (isLight ? 'text-purple-800 border-purple-200 bg-purple-50' : 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/15') 
+                                    : (isLight ? 'text-gray-700 border-gray-200 bg-gray-50' : 'text-gray-400 border-white/10 bg-white/5')
                                 }`}>
                                   {s.__courseType === 'elective' ? '특강' : '정규'}
                                 </p>
@@ -880,37 +1023,43 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                         </>
                       ) : (
                         <>
-                          <div className="absolute top-1.5 left-1.5 flex items-center gap-1 opacity-40"><div className={`w-1 h-1 rounded-full ${studentHour === 999 ? 'bg-indigo-500' : (studentHour < currentHour ? 'bg-gray-600' : studentHour === currentHour ? 'bg-emerald-500' : 'bg-blue-500/40')}`} /><span className="text-[6px] font-black uppercase text-gray-500">{studentHour === 999 ? 'SUP' : (studentHour >= 12 ? (studentHour === 12 ? '12p' : `${studentHour-12}p`) : `${studentHour}a`)}</span></div>
-                          <div className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
-                            <div className="flex items-center gap-1">
-                              {/* ⚡ 겉면 직통 시간이동 퀵 버튼 (원클릭으로 즉시 시간이동 피커 노출) */}
-                              <button
-                                type="button"
-                                title="시간 이동 (교시 변경)"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setActiveStudent(s);
-                                  setIsTimeShiftOpen(true); // 즉시 피커 열기!
-                                }}
-                                className="p-1 rounded bg-blue-500/20 hover:bg-blue-600 hover:text-white text-blue-400 border border-blue-500/30 transition-all flex items-center gap-0.5 shadow-sm"
-                              >
-                                <CalendarClock size={12} />
-                                <span className="text-[8px] font-black">이동</span>
-                              </button>
-
-                              <div className={`w-5 h-5 rounded-full flex items-center justify-center transition-all ${isPureAttend ? 'bg-white/10 text-gray-500' : isMakeupActive ? 'bg-blue-500 text-white' : isAbsent ? 'bg-red-500 text-white' : isLate ? 'bg-amber-500 text-black' : isCriticalWarning ? 'bg-red-500 text-white' : isLateWarning ? 'bg-amber-500 text-black' : isSupplementPending ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30' : 'bg-blue-600 text-white'}`}>{isPureAttend ? <Check size={10} strokeWidth={4} /> : isAbsent ? <LogOut size={10} /> : isLate ? <Clock size={10} strokeWidth={3} /> : isMakeupActive ? <CalendarClock size={10} /> : isSupplementPending ? <Plus size={10} strokeWidth={4} /> : <User size={10} />}</div>
-                              <button onClick={(e) => { e.stopPropagation(); setActiveStudent(s); setIsTimeShiftOpen(false); }} className="p-1 hover:bg-white/10 rounded transition-colors text-gray-600 hover:text-white"><MoreHorizontal size={12} /></button>
-                            </div>
+                          <div className="absolute top-1.5 left-1.5 flex items-center gap-1 opacity-80"><div className={`w-1.5 h-1.5 rounded-full ${studentHour === 999 ? 'bg-purple-500' : (studentHour < currentHour ? 'bg-gray-400' : studentHour === currentHour ? 'bg-blue-600' : 'bg-blue-400')}`} /><span className={`text-[8px] font-bold uppercase ${isLight ? 'text-gray-600' : 'text-gray-400'}`}>{studentHour === 999 ? '보강' : (studentHour >= 12 ? (studentHour === 12 ? '12시' : `${studentHour-12}시`) : `${studentHour}시`)}</span></div>
+                          <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+                            {/* ⚡ 겉면 직통 시간이동 퀵 버튼 */}
+                            <button
+                              type="button"
+                              title="시간 이동 (교시 변경)"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveStudent(s);
+                                setIsTimeShiftOpen(true);
+                              }}
+                              className={`p-1 rounded transition-all flex items-center gap-0.5 border ${
+                                isLight 
+                                  ? 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-600 hover:text-white shadow-xs' 
+                                  : 'bg-blue-500/20 text-blue-400 border-blue-500/30 hover:bg-blue-600 hover:text-white'
+                              }`}
+                            >
+                              <CalendarClock size={11} />
+                              <span className="text-[8.5px] font-bold">이동</span>
+                            </button>
+                            <button onClick={(e) => { e.stopPropagation(); setActiveStudent(s); setIsTimeShiftOpen(false); }} className={`p-1 rounded transition-colors ${isLight ? 'hover:bg-gray-100 text-gray-500 hover:text-black' : 'hover:bg-white/10 text-gray-600 hover:text-white'}`}>
+                              <MoreHorizontal size={12} />
+                            </button>
                           </div>
-                          <div className="text-center px-1"><h3 className={`text-2xl font-black tracking-tighter leading-none ${isPureAttend ? 'text-gray-400' : 'text-white'}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
+                          <div className="text-center px-1"><h3 className={`text-2xl font-bold tracking-tight leading-none ${isPureAttend ? (isLight ? 'text-emerald-950 font-bold' : 'text-gray-400') : (isLight ? 'text-[#0f172a]' : 'text-white')}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
                             {(() => { 
                               const isES = s.grade.includes('초'); 
                               const isHS = s.grade.includes('고'); 
-                              const colorClass = isES ? 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : isHS ? 'text-amber-400 border-amber-500/30 bg-amber-500/10' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'; 
+                              const colorClass = isES 
+                                ? (isLight ? 'text-emerald-700 border-emerald-200 bg-emerald-50' : 'text-emerald-400 border-emerald-500/30 bg-emerald-500/10') 
+                                : isHS 
+                                  ? (isLight ? 'text-amber-700 border-amber-200 bg-amber-50' : 'text-amber-400 border-amber-500/30 bg-amber-500/10') 
+                                  : (isLight ? 'text-blue-700 border-blue-200 bg-blue-50' : 'text-blue-400 border-blue-500/30 bg-blue-500/10'); 
                               return (
                                 <div className="flex flex-row items-center gap-1 justify-center">
-                                  <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${isPureAttend ? 'text-gray-600 border-white/5 bg-white/5 opacity-50' : colorClass}`}>{s.grade}</p>
-                                  <p className={`text-[10px] font-black uppercase tracking-widest px-2 py-0.5 rounded-full border ${isPureAttend ? 'text-gray-600 border-white/5 bg-white/5 opacity-50' : (s.__courseType === 'elective' ? 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/15' : 'text-gray-400 border-white/10 bg-white/5')}`}>{s.__courseType === 'elective' ? '특강' : '정규'}</p>
+                                  <p className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${isPureAttend && !isLight ? 'text-gray-600 border-white/5 bg-white/5 opacity-50' : colorClass}`}>{s.grade}</p>
+                                  <p className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border ${isPureAttend && !isLight ? 'text-gray-600 border-white/5 bg-white/5 opacity-50' : (s.__courseType === 'elective' ? (isLight ? 'text-purple-800 border-purple-200 bg-purple-50' : 'text-fuchsia-400 border-fuchsia-500/30 bg-fuchsia-500/15') : (isLight ? 'text-gray-700 border-gray-200 bg-gray-50' : 'text-gray-400 border-white/10 bg-white/5'))}`}>{s.__courseType === 'elective' ? '특강' : '정규'}</p>
                                 </div>
                               ); 
                             })()}
@@ -919,42 +1068,118 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                             const isMakeupCard = s.__courseType === 'makeup';
                             const badgeText = isMakeupCard 
                               ? '보강' 
-                              : (isMakeupActive ? '이동' : (status.startsWith(ATTENDANCE_STATUS.PRESENT) ? '출석' : status.startsWith(ATTENDANCE_STATUS.LATE) ? '지각' : status.startsWith(ATTENDANCE_STATUS.ABSENT) ? '결석' : status));
+                              : (isMakeupActive || (s.isScheduledToday && status.startsWith('보강'))
+                                ? '이동' 
+                                : (status.startsWith(ATTENDANCE_STATUS.PRESENT) 
+                                  ? '출석' 
+                                  : status.startsWith(ATTENDANCE_STATUS.LATE) 
+                                    ? '지각' 
+                                    : status.startsWith(ATTENDANCE_STATUS.ABSENT) 
+                                      ? '결석' 
+                                      : (status.startsWith('보강') ? '이동' : status)));
                             const badgeStyle = isAbsent 
-                              ? 'bg-red-500 text-white' 
+                              ? (isLight ? 'bg-rose-600 text-white font-bold' : 'bg-red-500 text-white') 
                               : (isLate 
-                                ? 'bg-amber-500 text-black' 
+                                ? (isLight ? 'bg-amber-500 text-white font-bold' : 'bg-amber-500 text-black') 
                                 : (isMakeupCard 
-                                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' 
+                                  ? (isLight ? 'bg-blue-50 text-blue-700 border border-blue-200 font-bold' : 'bg-blue-500/20 text-blue-400 border border-blue-500/30') 
                                   : (isMakeupActive 
-                                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30' 
-                                    : 'bg-white/10 text-gray-400')));
+                                    ? (isLight ? 'bg-purple-50 text-purple-700 border border-purple-200 font-bold' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30') 
+                                    : (isLight ? 'bg-gray-100 text-gray-700 border border-gray-200 font-bold' : 'bg-white/10 text-gray-400'))));
 
-                            if (isBeforeClass && !isMakeupCard) {
-                              return <div className="absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter bg-blue-500/10 text-blue-400 border border-blue-500/20">수업전</div>;
-                            }
-                            return <div className={`absolute bottom-1 right-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${badgeStyle}`}>{badgeText}</div>;
+                            return (
+                              <div className="absolute bottom-1.5 right-1.5 flex items-center gap-1">
+                                {/* 💡 하단으로 이동된 상태 인디케이터 아이콘 */}
+                                <div className={`w-4 h-4 rounded-full flex items-center justify-center transition-all ${
+                                  isPureAttend 
+                                    ? (isLight ? 'bg-emerald-600 text-white' : 'bg-white/10 text-gray-500') 
+                                    : isMakeupActive 
+                                    ? 'bg-purple-600 text-white' 
+                                    : isAbsent 
+                                    ? 'bg-rose-600 text-white' 
+                                    : isLate 
+                                    ? 'bg-amber-500 text-white' 
+                                    : isCriticalWarning 
+                                    ? 'bg-rose-600 text-white' 
+                                    : isLateWarning 
+                                    ? 'bg-amber-500 text-white' 
+                                    : isSupplementPending 
+                                    ? 'bg-indigo-50 text-indigo-700 border border-indigo-200' 
+                                    : 'bg-blue-600 text-white'
+                                }`}>
+                                  {isPureAttend ? <Check size={9} strokeWidth={3} /> : isAbsent ? <LogOut size={9} /> : isLate ? <Clock size={9} strokeWidth={3} /> : isMakeupActive ? <CalendarClock size={9} /> : isSupplementPending ? <Plus size={9} strokeWidth={3} /> : <User size={9} />}
+                                </div>
+                                <div className={`px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight ${
+                                  isBeforeClass && !isMakeupCard
+                                    ? (isLight ? 'bg-blue-50 text-blue-700 border border-blue-200' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20')
+                                    : badgeStyle
+                                }`}>
+                                  {isBeforeClass && !isMakeupCard ? '수업전' : badgeText}
+                                </div>
+                              </div>
+                            );
                           })()}
-                          {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[7px] font-black uppercase tracking-tighter ${isCriticalWarning ? 'bg-red-500 text-white' : 'bg-amber-500 text-black'}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
+                          {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight ${isCriticalWarning ? (isLight ? 'bg-rose-600 text-white' : 'bg-red-500 text-white') : (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black')}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
                         </>
                       )}
                       <AnimatePresence>
                         {isActive && (
-                          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="absolute inset-0 bg-black/95 backdrop-blur-md z-20 flex flex-col items-center justify-center p-1" onClick={(e) => e.stopPropagation()}>
+                          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className={`absolute inset-0 z-20 flex flex-col items-center justify-center p-1 backdrop-blur-md ${
+                            isLight ? 'bg-white/98 text-[#0f172a] border border-[#e3e2e0] shadow-2xl' : 'bg-black/95 text-white'
+                          }`} onClick={(e) => e.stopPropagation()}>
                             {!isTimeShiftOpen ? (
                               <div className="flex flex-col gap-1 w-full h-full p-0.5">
                                 <div className="grid grid-cols-2 gap-1 flex-1 min-h-0">
-                                  <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.BEFORE)} className="flex flex-col items-center justify-center bg-white/5 border border-white/10 rounded hover:bg-white/10 transition-all group p-1"><RotateCcw size={16} className="text-gray-400 group-hover:text-white" /><span className="text-[10px] font-black uppercase mt-1">초기화</span></button>
-                                  <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.LATE)} className="flex flex-col items-center justify-center bg-amber-600/20 border border-amber-500/20 rounded hover:bg-amber-600 transition-all group p-1"><Clock size={16} className="text-amber-500 group-hover:text-white" /><span className="text-[10px] font-black uppercase mt-1">지각</span></button>
+                                  <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.BEFORE)} className={`flex flex-col items-center justify-center rounded transition-all group p-1 border ${
+                                    isLight ? 'bg-gray-50 border-gray-200 hover:bg-gray-100 text-gray-700' : 'bg-white/5 border-white/10 hover:bg-white/10 text-gray-400'
+                                  }`}><RotateCcw size={16} className={isLight ? "text-gray-600" : "text-gray-400"} /><span className="text-[10px] font-bold uppercase mt-1">초기화</span></button>
+                                  <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.LATE)} className={`flex flex-col items-center justify-center rounded transition-all group p-1 border ${
+                                    isLight ? 'bg-amber-50 border-amber-200 text-amber-900 hover:bg-amber-500 hover:text-white' : 'bg-amber-600/20 border-amber-500/20 text-amber-500 hover:bg-amber-600'
+                                  }`}><Clock size={16} className={isLight ? "text-amber-700" : "text-amber-500"} /><span className="text-[10px] font-bold uppercase mt-1">지각</span></button>
                                   <button onClick={() => handleQuickAction(s, ATTENDANCE_STATUS.ABSENT)} className="flex flex-col items-center justify-center bg-red-600/20 border border-red-500/20 rounded hover:bg-red-600 transition-all group p-1"><X size={16} className="text-red-500 group-hover:text-white" /><span className="text-[10px] font-black uppercase mt-1">결석</span></button>
                                   <button onClick={() => setIsTimeShiftOpen(true)} className="flex flex-col items-center justify-center bg-blue-600/20 border border-blue-500/20 rounded hover:bg-blue-600 transition-all group p-1"><CalendarClock size={16} className="text-blue-500 group-hover:text-white" /><span className="text-[10px] font-black uppercase mt-1">시간 이동</span></button>
                                 </div>
                               </div>
                             ) : (
                               <div className="flex flex-col w-full h-full p-1">
-                                <button onClick={() => setIsTimeShiftOpen(false)} className="flex items-center gap-1 text-[7px] font-black text-gray-500 hover:text-white mb-1 uppercase"><ArrowLeft size={6} /> 뒤로</button>
-                                <div className="grid grid-cols-4 gap-0.5 overflow-y-auto pr-1 custom-scrollbar-v flex-1">
-                                  {[13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map(h => (<button key={h} onClick={() => handleTimeShift(s, h)} className="py-1 rounded bg-white/5 border border-white/10 text-[8px] font-black hover:bg-blue-600 transition-all">{h >= 12 ? (h === 12 ? '12p' : `${h-12}p`) : `${h}a`}</button>))}
+                                <div className="flex items-center justify-between mb-1">
+                                  <button 
+                                    onClick={() => setIsTimeShiftOpen(false)} 
+                                    className={`flex items-center gap-1 text-[7.5px] font-bold uppercase ${
+                                      isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white'
+                                    }`}
+                                  >
+                                    <ArrowLeft size={8} /> 뒤로
+                                  </button>
+                                  <button 
+                                    onClick={() => setIsPm(prev => !prev)}
+                                    className={`px-1.5 py-0.5 rounded text-[7.5px] font-black border transition-all flex items-center gap-0.5 ${
+                                      isPm 
+                                        ? 'bg-amber-500/15 text-amber-700 border-amber-500/30' 
+                                        : 'bg-sky-500/15 text-sky-700 border-sky-500/30'
+                                    }`}
+                                  >
+                                    <span>{isPm ? '오후' : '오전'}</span>
+                                    <span className="text-[6px] opacity-60">🔄</span>
+                                  </button>
+                                </div>
+                                <div className="grid grid-cols-4 gap-0.5 flex-1">
+                                  {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => {
+                                    const targetHour = isPm ? (num === 12 ? 12 : num + 12) : (num === 12 ? 0 : num);
+                                    return (
+                                      <button 
+                                        key={num} 
+                                        onClick={(e) => { e.stopPropagation(); handleTimeShift(s, targetHour); }} 
+                                        className={`py-0.5 rounded text-[8px] font-bold transition-all border ${
+                                          isLight 
+                                            ? 'bg-blue-50 text-blue-950 border-blue-200 hover:bg-blue-600 hover:text-white' 
+                                            : 'bg-white/10 text-white border-white/20 hover:bg-blue-600'
+                                        }`}
+                                      >
+                                        {num}시
+                                      </button>
+                                    );
+                                  })}
                                 </div>
                               </div>
                             )}

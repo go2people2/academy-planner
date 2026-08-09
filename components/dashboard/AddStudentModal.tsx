@@ -19,6 +19,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
   const [isSaving, setIsSaving] = useState(false);
   const [bookSearch, setBookSearch] = useState('');
   
+  const todayStr = new Date().toISOString().slice(0, 10);
   const [formData, setFormData] = useState({
     name: '',
     school: '',
@@ -27,6 +28,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     class_name: '일반반',
     phone: '',
     login_suffix: '', // 💡 추가 (번호 중복 로그인 방지 접미사)
+    registration_date: todayStr, // 💡 입학/등록일자 (자유 수정 가능)
     teacher_id: (currentUser && currentUser.role === 'teacher') ? currentUser.id : '', // 💡 교사 로그인 시 본인 자동 배정
     class_days: [] as string[],
     day_schedules: {} as { [key: string]: number[] },
@@ -267,6 +269,18 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                     <input type="text" maxLength={1} placeholder="숫자 1자리 (예: 1)" value={formData.login_suffix || ''} onChange={(e) => setFormData({...formData, login_suffix: e.target.value.replace(/[^0-9]/g, '')})}
                       className="w-full bg-black/40 border border-amber-500/20 rounded-[2px] py-3 px-4 text-amber-400 placeholder-amber-600/30 text-sm focus:border-amber-500 outline-none transition-all font-bold" />
                   </div>
+                </div>
+                <div className="space-y-1.5">
+                  <label className="text-[10px] font-black text-blue-400 uppercase ml-1 flex items-center gap-1">
+                    <Calendar size={12} /> Registration Date (입학/등록일)
+                  </label>
+                  <input 
+                    type="date" 
+                    value={formData.registration_date} 
+                    onChange={(e) => setFormData({...formData, registration_date: e.target.value})}
+                    className="w-full bg-black/40 border border-blue-500/30 rounded-[2px] py-2.5 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-medium" 
+                  />
+                  <p className="text-[9px] text-gray-500 ml-1">이 날짜 이전에는 시간표에 원생이 나타나지 않습니다 (자유 변경 가능)</p>
                 </div>
               </div>
             </div>

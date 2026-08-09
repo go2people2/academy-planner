@@ -43,6 +43,41 @@ import { TodaySheetModals } from './todaySheet/TodaySheetModals';
 
 // --- Main Component ---
 
+export interface TodaySheetProps {
+  students: any[];
+  allStudents?: any[];
+  setStudents: any;
+  masterTextbooks?: any;
+  onSave: any;
+  onBatchSave?: any;
+  onUpdateStudentInfo?: any;
+  onRemoveFromToday?: any;
+  selectedDate: string;
+  onDateChange: any;
+  onViewProgress?: any;
+  onSelectStudent?: any;
+  academyInfo: any;
+  currentUser?: any;
+  sortMode?: any;
+  onSortModeChange?: any;
+  sortDirection?: any;
+  onSortDirectionChange?: any;
+  onOpenBriefing?: any;
+  selectedFilter?: any;
+  setSelectedFilter?: any;
+  selectedTeacherId?: any;
+  setSelectedTeacherId?: any;
+  selectedDays?: any;
+  setSelectedDays?: any;
+  isAndFilter?: any;
+  setIsAndFilter?: any;
+  teachers?: any[];
+  isFullScreen?: boolean;
+  onToggleFullScreen?: any;
+  selectedHour?: string;
+  isLight?: boolean;
+}
+
 export default function TodaySheet({
   students, allStudents, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, onRemoveFromToday, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
   sortMode = 'time', onSortModeChange,
@@ -55,8 +90,9 @@ export default function TodaySheet({
   teachers = [],
   isFullScreen = false,
   onToggleFullScreen,
-  selectedHour = 'All' // 💡 시작 시간대 필터 추가
-}: any) {
+  selectedHour = 'All', // 💡 시작 시간대 필터 추가
+  isLight = false
+}: TodaySheetProps) {
 
   // Undo/Redo hook
   const {
@@ -76,17 +112,24 @@ export default function TodaySheet({
   const [showAllTools, setShowAllTools] = useState(false); // 💡 [추가] 7개 도구 일괄 접기/펼치기 상태
   const [isToolsEditMode, setIsToolsEditMode] = useState(false); // 💡 도구 편집 모드 상태
   const [toolsOrder, setToolsOrder] = useState<string[]>(() => {
+    const defaultOrder = ['timeshift', 'profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ams_tools_order');
       if (saved) {
         try {
-          return JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed)) {
+            if (!parsed.includes('timeshift')) {
+              return ['timeshift', ...parsed];
+            }
+            return parsed;
+          }
         } catch (e) {
           console.error(e);
         }
       }
     }
-    return ['profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
+    return defaultOrder;
   });
 
   const handleReorderTools = useCallback((draggedId: string, targetId: string) => {
@@ -456,7 +499,7 @@ export default function TodaySheet({
 
   const handleSave = useCallback(async (studentId: string, newData: any) => {
     const rowStudent = filteredStudents.find((s: any) => s.id === studentId);
-    const realId = rowStudent?.originalId || studentId.replace(/_special.*$/, '');
+    const realId = rowStudent?.originalId || extractRealStudentId(studentId);
     const courseName = rowStudent?.courseName || '정규';
 
     const student = students.find((s: any) => s.id === realId);
@@ -487,31 +530,38 @@ export default function TodaySheet({
       prevData
     }]);
 
-    // 💡 [낙관적 업데이트] 상태 즉시 변경
+    // 💡 [낙관적 업데이트] 4개 식별자(학생ID, 과목, 날짜, moved_to_hour)가 정확히 일치하는 행만 독립 갱신
     setStudents((prev: any[]) => (prev || []).map(s => {
-      const isTargetStudent = s.id === realId || s.id === studentId || s.originalId === realId;
+      const isTargetStudent = s.id === studentId;
       if (!isTargetStudent) return s;
 
       const hasMission = 'mission' in newData;
       const hasNotes = 'management_notes' in newData;
 
-      // allLogs는 항상 course_name 기준으로 업데이트 (정규/특강 무관)
       let updatedAllLogs = s.allLogs || [];
+      const targetMovedHour = 'moved_to_hour' in newData ? newData.moved_to_hour : (s.todaySession?.moved_to_hour ?? null);
+      
       const logIdx = updatedAllLogs.findIndex((l: any) =>
-        (l.date || l.session_date) === selectedDate &&
-        (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규')))
+        newData.id ? l.id === newData.id : (
+          (l.date || l.session_date) === selectedDate &&
+          (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규'))) &&
+          (l.moved_to_hour === targetMovedHour || (targetMovedHour === null && (l.moved_to_hour === null || l.moved_to_hour === undefined)))
+        )
       );
+
+      const hasMovedHourInNewData = 'moved_to_hour' in newData;
 
       const newSess = {
         ...(logIdx !== -1 ? updatedAllLogs[logIdx] : {}),
         ...newData,
-        course_name: courseName
+        course_name: courseName,
+        ...(hasMovedHourInNewData ? { moved_to_hour: targetMovedHour } : {})
       };
 
       if (logIdx !== -1) {
         updatedAllLogs = updatedAllLogs.map((l: any, i: number) => i === logIdx ? { ...l, ...newSess } : l);
       } else {
-        updatedAllLogs = [{ ...newSess, date: selectedDate }, ...updatedAllLogs];
+        updatedAllLogs = [{ ...newSess, date: selectedDate, session_date: selectedDate }, ...updatedAllLogs];
       }
 
       // todaySession은 정규 수업 저장 시에만 반영 (특강 세션은 allLogs로만 관리)
@@ -521,7 +571,13 @@ export default function TodaySheet({
         ...s,
         ...(hasMission ? { recent_mission: newData.mission } : {}),
         ...(hasNotes ? { management_notes: newData.management_notes } : {}),
-        ...(isRegularCourse ? { todaySession: newSess } : {}),
+        ...(isRegularCourse ? { 
+          todaySession: {
+            ...(s.todaySession || {}),
+            ...newSess,
+            ...(hasMovedHourInNewData ? { moved_to_hour: targetMovedHour } : {})
+          } 
+        } : {}),
         allLogs: updatedAllLogs
       };
     }));
@@ -564,7 +620,7 @@ export default function TodaySheet({
     // 💡 낙관적 업데이트: 화면에 즉시 반영
     setStudents((prev: any[]) => (prev || []).map((s: any) => {
       const match = updates.find(u => {
-        const realId = u.studentId.replace(/_special.*$/, '');
+        const realId = extractRealStudentId(u.studentId);
         return String(s.id) === String(realId) || String(s.id) === String(u.studentId) || (s.originalId && String(s.originalId) === String(realId));
       });
       if (!match) return s;
@@ -608,7 +664,7 @@ export default function TodaySheet({
 
     await Promise.all(updates.map(async (u) => {
       const rowStudent = filteredStudents.find((s: any) => String(s.id) === String(u.studentId));
-      const realId = rowStudent?.originalId || u.studentId.replace(/_special.*$/, '');
+      const realId = rowStudent?.originalId || extractRealStudentId(u.studentId);
       const courseName = u.newData?.course_name || rowStudent?.courseName || '정규';
       const movedToHour = u.newData?.moved_to_hour !== undefined 
         ? u.newData.moved_to_hour 
@@ -1021,19 +1077,19 @@ export default function TodaySheet({
   const gradeStats = useMemo(() => { const stats: Record<string, number> = {}; ['초5', '초6', '중1', '중2', '중3', '고1', '고2', '고3'].forEach(g => stats[g] = 0); students.forEach((s:any) => { if (stats[s.grade] !== undefined) stats[s.grade]++; }); return stats; }, [students]);
 
   return (
-    <div className="p-3 space-y-4 relative flex flex-col h-full overflow-hidden bg-[#050505] text-center">
-      <div className="flex items-center justify-between px-3 py-2 bg-black/50 border border-white/10 rounded-lg shrink-0 no-print">
+    <div className={`p-3 space-y-4 relative flex flex-col h-full overflow-hidden text-center ${isLight ? 'bg-[#f7f7f5]' : 'bg-[#050505]'}`}>
+      <div className={`flex items-center justify-between px-3 py-2 border rounded-lg shrink-0 no-print ${isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-black/50 border-white/10'}`}>
         <div className="flex items-center gap-6">
           <div className="flex flex-col gap-0.5 items-start">
             <div className="flex items-center gap-3">
               <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
-              <div className="flex items-center bg-zinc-950 p-0.5 rounded-[4px] border border-zinc-800 shadow-inner">
+              <div className={`flex p-0.5 rounded-[4px] border ${isLight ? 'bg-gray-100 border-[#e3e2e0]' : 'bg-zinc-950 border-zinc-800'}`}>
                 <button
                   onClick={() => setActiveTab('daily')}
                   className={`px-2.5 py-1 rounded-[3px] text-[10px] font-black tracking-tight transition-all cursor-pointer ${
                     activeTab === 'daily' 
                       ? 'bg-blue-600 text-white shadow-md' 
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
+                      : (isLight ? 'text-gray-600 hover:text-black hover:bg-gray-200' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5')
                   }`}
                 >
                   📝 일지 작성
@@ -1043,7 +1099,7 @@ export default function TodaySheet({
                   className={`px-2.5 py-1 rounded-[3px] text-[10px] font-black tracking-tight transition-all cursor-pointer ${
                     activeTab === 'checklist' 
                       ? 'bg-blue-600 text-white shadow-md' 
-                      : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'
+                      : (isLight ? 'text-gray-600 hover:text-black hover:bg-gray-200' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5')
                   }`}
                 >
                   📋 체크리스트
@@ -1052,9 +1108,13 @@ export default function TodaySheet({
               <button
                 onClick={onOpenBriefing}
                 title="오늘의 브리핑 열기"
-                className="flex items-center gap-1.5 px-2.5 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/30 text-amber-300 rounded-[4px] text-[10px] font-black tracking-tight transition-all cursor-pointer shadow-md shadow-amber-950/20 ml-2"
+                className={`flex items-center gap-1.5 px-2.5 py-1.5 border rounded-[4px] text-[10px] font-black tracking-tight transition-all cursor-pointer shadow-sm ${
+                  isLight 
+                    ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100' 
+                    : 'bg-amber-500/10 hover:bg-amber-500/20 border-amber-500/30 text-amber-300'
+                }`}
               >
-                <Megaphone size={11} className="text-amber-355" />
+                <Megaphone size={11} className={isLight ? 'text-amber-600' : 'text-amber-355'} />
                 오늘의 브리핑
               </button>
             </div>
@@ -1062,7 +1122,7 @@ export default function TodaySheet({
               <span className="text-[9px] text-gray-500 uppercase font-black tracking-tighter mr-1">{students.length} Total</span>
               {Object.entries(gradeStats).filter(([_, count]) => count > 0).map(([grade, count], idx) => {
                 const colorClass = grade.includes('초') ? 'text-emerald-500/80' : grade.includes('고') ? 'text-amber-500/80' : 'text-blue-500/80';
-                return <div key={grade || idx} className="flex items-center gap-1 bg-white/[0.03] border border-white/5 px-1.5 py-0.5 rounded-[2px]"><span className="text-[8px] font-bold text-gray-600 uppercase">{grade}</span><span className={`text-[8px] font-black ${colorClass}`}>{count}</span></div>;
+                return <div key={grade || idx} className={`flex items-center gap-1 border px-1.5 py-0.5 rounded-[2px] ${isLight ? 'bg-gray-100 border-[#e3e2e0]' : 'bg-white/[0.03] border-white/5'}`}><span className="text-[8px] font-bold text-gray-500 uppercase">{grade}</span><span className={`text-[8px] font-black ${colorClass}`}>{count}</span></div>;
               })}
             </div>
           </div>
@@ -1095,10 +1155,10 @@ export default function TodaySheet({
                 <button
                   onClick={() => isNotToday && onDateChange(todayStr)}
                   disabled={!isNotToday}
-                  className={`px-2.5 py-1.5 text-[10.5px] font-black uppercase tracking-wider rounded-[6px] transition-all border shadow-xl ${
+                  className={`px-2.5 py-1.5 text-[10.5px] font-black uppercase tracking-wider rounded-[6px] transition-all border shadow-sm ${
                     isNotToday
-                      ? 'bg-blue-950/60 border-blue-500/40 text-blue-300 hover:bg-blue-600 hover:text-white cursor-pointer'
-                      : 'bg-[#121212] border-white/5 text-gray-655 cursor-not-allowed opacity-30'
+                      ? (isLight ? 'bg-blue-600 text-white border-blue-600 cursor-pointer shadow-md' : 'bg-blue-950/60 border-blue-500/40 text-blue-300 hover:bg-blue-600 hover:text-white cursor-pointer')
+                      : (isLight ? 'bg-gray-100 border-[#e3e2e0] text-gray-400 cursor-not-allowed opacity-50' : 'bg-[#121212] border-white/5 text-gray-655 cursor-not-allowed opacity-30')
                   }`}
                   title="오늘 날짜로 복귀"
                 >
@@ -1106,22 +1166,22 @@ export default function TodaySheet({
                 </button>
 
                 <div onClick={(e) => { const input = e.currentTarget.querySelector('input'); if (input && 'showPicker' in input) try { (input as any).showPicker(); } catch (err) { console.error(err); } }}
-                  className={`flex items-center gap-1 border rounded-[6px] px-2 py-1.5 transition-all group cursor-pointer shadow-xl relative ${
+                  className={`flex items-center gap-1 border rounded-[6px] px-2 py-1.5 transition-all group cursor-pointer shadow-sm relative ${
                     isNotToday 
-                      ? 'bg-rose-950/30 border-rose-500/40 text-rose-300 hover:bg-rose-900/30' 
-                      : 'bg-amber-950/40 border-amber-500/50 text-amber-300 hover:bg-amber-900/40'
+                      ? (isLight ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100' : 'bg-rose-950/30 border-rose-500/40 text-rose-300 hover:bg-rose-900/30') 
+                      : (isLight ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100' : 'bg-amber-950/40 border-amber-500/50 text-amber-300 hover:bg-amber-900/40')
                   }`}>
-                  <CalendarIcon size={13} className={isNotToday ? 'text-rose-400 animate-pulse' : 'text-amber-400 group-hover:text-amber-300'} />
-                  <span className={`text-[11.5px] font-black tracking-tight shrink-0 select-none ${isNotToday ? 'text-rose-300' : 'text-amber-300'}`}>
+                  <CalendarIcon size={13} className={isNotToday ? (isLight ? 'text-rose-600' : 'text-rose-400 animate-pulse') : (isLight ? 'text-amber-600' : 'text-amber-400')} />
+                  <span className={`text-[11.5px] font-black tracking-tight shrink-0 select-none ${isNotToday ? (isLight ? 'text-rose-800' : 'text-rose-300') : (isLight ? 'text-amber-900' : 'text-amber-300')}`}>
                     {displayDate}
                   </span>
                   <input type="date" value={selectedDate} onChange={(e) => onDateChange(e.target.value)} className="absolute opacity-0 w-0 h-0 pointer-events-none" />
                   {isNotToday ? (
-                    <div className="ml-0.5 px-1 py-0.5 bg-rose-600 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(244,63,94,0.4)]">
+                    <div className="ml-0.5 px-1 py-0.5 bg-rose-600 text-white text-[9px] font-black rounded-sm whitespace-nowrap shadow-sm">
                       {selectedDayStr}
                     </div>
                   ) : (
-                    <div className="ml-0.5 px-1 py-0.5 bg-amber-500 text-black text-[9px] font-black rounded-sm whitespace-nowrap shadow-[0_0_8px_rgba(245,158,11,0.25)]">
+                    <div className="ml-0.5 px-1 py-0.5 bg-amber-500 text-black text-[9px] font-black rounded-sm whitespace-nowrap shadow-sm">
                       {selectedDayStr}
                     </div>
                   )}
@@ -1130,10 +1190,9 @@ export default function TodaySheet({
             );
           })()}
 
-          <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-xl ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-blue-900/30' : 'bg-zinc-900 border-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-850'}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
+          <button onClick={() => setIsReportVisible(!isReportVisible)} className={`flex items-center gap-2 px-5 py-2 rounded-[6px] text-[11px] font-black uppercase tracking-widest transition-all border shadow-sm ${isReportVisible ? 'bg-blue-600 border-blue-500 text-white shadow-md' : (isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] hover:bg-gray-100' : 'bg-zinc-900 border-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-850')}`}><LayoutGrid size={16} /> {isReportVisible ? '리포트 닫기' : '리포트 미리보기'}</button>
           
-          {/* 💡 [변경] 전체 리포트 발송 버튼 (1행 안전 구역으로 이동) */}
-          <button onClick={handleSendAll} disabled={!!isSendingReport} className="flex items-center gap-2 px-4 py-2 bg-blue-500/10 text-blue-400 border border-blue-500/30 rounded-[6px] text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 hover:text-white transition-all disabled:opacity-30 shadow-xl no-print">
+          <button onClick={handleSendAll} disabled={!!isSendingReport} className={`flex items-center gap-2 px-4 py-2 border rounded-[6px] text-[10px] font-black uppercase tracking-widest transition-all disabled:opacity-30 shadow-sm no-print ${isLight ? 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-600 hover:text-white' : 'bg-blue-500/10 text-blue-400 border-blue-500/30 hover:bg-blue-600 hover:text-white'}`}>
             {isSendingReport === 'all' ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} 전체 리포트 발송
           </button>
           
@@ -1145,10 +1204,10 @@ export default function TodaySheet({
               onChange={handleImportExcel} 
               className="hidden" 
             />
-            <button onClick={() => setIsExportOpen(!isExportOpen)} className="flex items-center gap-2 px-4 py-2 bg-zinc-900 border border-zinc-800 rounded-[6px] text-[10px] font-black uppercase tracking-widest text-zinc-200 hover:text-white hover:bg-zinc-800 transition-all shadow-xl"><Download size={14} /> Download</button>
+            <button onClick={() => setIsExportOpen(!isExportOpen)} className={`flex items-center gap-2 px-4 py-2 border rounded-[6px] text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] hover:bg-gray-100' : 'bg-zinc-900 border border-zinc-800 text-zinc-200 hover:text-white hover:bg-zinc-800'}`}><Download size={14} /> Download</button>
             <AnimatePresence>
               {isExportOpen && (
-                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className="absolute right-0 mt-2 w-56 bg-[#0a0a0a]/95 backdrop-blur-2xl border border-white/10 rounded-lg shadow-2xl p-2 z-[100] overflow-hidden">
+                <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 10 }} className={`absolute right-0 mt-2 w-56 backdrop-blur-2xl border rounded-lg shadow-2xl p-2 z-[100] overflow-hidden ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#0a0a0a]/95 border-white/10 text-white'}`}>
                   <div className="space-y-1">
                     <button onClick={() => handleExport('aca2000')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-indigo-400 transition-all text-left group border border-indigo-500/10 hover:border-indigo-500/30 mb-1 bg-indigo-500/5"><div className="w-8 h-8 rounded bg-indigo-500/10 flex items-center justify-center group-hover:bg-indigo-500 group-hover:text-white transition-all"><Zap size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">ACA2000 전용</span><span className="text-[9px] text-gray-600">업로드용 맞춤 엑셀</span></div></button>
                     <button onClick={() => handleExport('excel')} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-emerald-400 transition-all text-left group"><div className="w-8 h-8 rounded bg-emerald-500/10 flex items-center justify-center group-hover:bg-emerald-500 group-hover:text-white transition-all"><FileSpreadsheet size={16} /></div><div className="flex flex-col"><span className="text-[12px] font-black">Excel File</span><span className="text-[9px] text-gray-600">Microsoft Excel (.xlsx)</span></div></button>
@@ -1168,7 +1227,7 @@ export default function TodaySheet({
                           }
                         }, 50);
                       }} 
-                      className="w-full flex items-center gap-3 px-3 py-2.5 rounded-md hover:bg-white/5 text-gray-400 hover:text-purple-400 transition-all text-left group border border-purple-500/10 hover:border-purple-500/30 bg-purple-500/5"
+                      className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-md text-left group border ${isLight ? 'bg-purple-50 text-gray-700 hover:bg-purple-100 border-purple-200' : 'bg-purple-500/5 text-gray-400 hover:text-purple-400 border-purple-500/10 hover:border-purple-500/30'}`}
                     >
                       <div className="w-8 h-8 rounded bg-purple-500/10 flex items-center justify-center group-hover:bg-purple-500 group-hover:text-white transition-all">
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -1177,7 +1236,7 @@ export default function TodaySheet({
                       </div>
                       <div className="flex flex-col">
                         <span className="text-[12px] font-black">엑셀 일지 가져오기 (Import)</span>
-                        <span className="text-[9px] text-purple-400/80 font-bold">아카2000 엑셀 업로드 복원</span>
+                        <span className="text-[9px] text-purple-500 font-bold">아카2000 엑셀 업로드 복원</span>
                       </div>
                     </button>
                   </div>
@@ -1189,13 +1248,13 @@ export default function TodaySheet({
           {/* 2행 접기/펼치기 토글 버튼 */}
           <button 
             onClick={toggleSecondRow} 
-            className={`p-2 border rounded-[6px] transition-all shadow-xl ${showSecondRow ? 'bg-blue-650/20 border-blue-500/40 text-blue-350' : 'bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800'}`}
+            className={`p-2 border rounded-[6px] transition-all shadow-sm ${showSecondRow ? (isLight ? 'bg-blue-50 border-blue-300 text-blue-600' : 'bg-blue-650/20 border-blue-500/40 text-blue-350') : (isLight ? 'bg-white border-[#e3e2e0] text-gray-700 hover:bg-gray-100' : 'bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800')}`}
             title={showSecondRow ? "상세 설정 도구 접기" : "상세 설정 도구 펼치기"}
           >
             {showSecondRow ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </button>
 
-          <button onClick={() => setIsSettingsOpen(true)} className="p-2 bg-zinc-900 border border-zinc-800 rounded-[6px] text-zinc-300 hover:text-white hover:bg-zinc-800 transition-all shadow-xl"><Settings2 size={18} /></button>
+          <button onClick={() => setIsSettingsOpen(true)} className={`p-2 border rounded-[6px] transition-all shadow-sm cursor-pointer ${isLight ? 'bg-white border-[#e3e2e0] text-gray-700 hover:bg-gray-100' : 'bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-800'}`} title="열 선택 및 순서 설정"><Settings2 size={18} /></button>
         </div>
       </div>
 
@@ -1206,20 +1265,20 @@ export default function TodaySheet({
             animate={{ opacity: 1, height: 'auto', marginTop: 0 }}
             exit={{ opacity: 0, height: 0, marginTop: 0 }}
             transition={{ duration: 0.2, ease: 'easeInOut' }}
-            className="flex flex-wrap items-center justify-between gap-4 px-4 py-2.5 bg-[#0a0a0a]/60 border border-white/5 rounded-lg shrink-0 text-left no-print overflow-hidden"
+            className={`flex flex-wrap items-center justify-between gap-4 px-4 py-2.5 rounded-lg shrink-0 text-left no-print overflow-hidden border ${isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-[#0a0a0a]/60 border-white/5'}`}
           >
             {/* 2행 왼쪽: 세트 선택 스위치 & 전체화면 모드 필터들 */}
             <div className="flex flex-wrap items-center gap-2.5">
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-gray-600 uppercase tracking-widest">Set</span>
-                <div className="flex bg-zinc-950 p-0.5 rounded-md border border-zinc-800">
+                <span className={`text-[9px] font-black uppercase tracking-widest ${isLight ? 'text-gray-500' : 'text-gray-600'}`}>Set</span>
+                <div className={`flex p-0.5 rounded-md border ${isLight ? 'bg-gray-100 border-[#e3e2e0]' : 'bg-zinc-950 border-zinc-800'}`}>
                   {['1', '2', '3', '4'].map((setId, idx) => {
                     const keys = ['Q', 'W', 'E', 'R'];
                     return (
                       <button 
                         key={setId} 
                         onClick={() => handleSetSwitch(setId)} 
-                        className={`w-7 py-1 rounded-[4px] text-[11px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/40' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5'}`} 
+                        className={`w-7 py-1 rounded-[4px] text-[11px] font-black transition-all ${activeSet === setId ? 'bg-blue-600 text-white shadow-md' : (isLight ? 'text-gray-600 hover:text-black hover:bg-gray-200' : 'text-zinc-400 hover:text-zinc-200 hover:bg-white/5')}`} 
                         title={`Alt + ${keys[idx]}`}
                       >
                         {setId}
@@ -1231,7 +1290,7 @@ export default function TodaySheet({
 
               <button 
                 onClick={() => setIsTagBatchMode(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-500/10 text-indigo-350 border border-indigo-500/30 hover:bg-indigo-650 hover:text-white rounded-[4px] text-[10px] font-black transition-all ml-2 shadow-sm"
+                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[4px] text-[10px] font-black transition-all ml-2 shadow-sm border ${isLight ? 'bg-indigo-50 border-indigo-300 text-indigo-700 hover:bg-indigo-600 hover:text-white' : 'bg-indigo-500/10 text-indigo-355 border border-indigo-500/30 hover:bg-indigo-650 hover:text-white'}`}
                 title="태그별 일괄입력 모드 열기"
               >
                 <Wand2 size={12} />
@@ -1242,10 +1301,10 @@ export default function TodaySheet({
                 onClick={toggleHideAbsent}
                 className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-[4px] text-[10px] font-black transition-all ml-1 shadow-sm ${
                   hideAbsent === 'absent'
-                    ? 'bg-rose-500/20 text-rose-355 border-rose-500/30 hover:bg-rose-500/40 hover:text-white shadow-md'
+                    ? (isLight ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-600 hover:text-white' : 'bg-rose-500/20 text-rose-355 border-rose-500/30 hover:bg-rose-500/40 hover:text-white')
                     : hideAbsent === 'attend'
-                    ? 'bg-emerald-500/20 text-emerald-355 border-emerald-500/30 hover:bg-emerald-500/40 hover:text-white shadow-md'
-                    : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white shadow-sm'
+                    ? (isLight ? 'bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-600 hover:text-white' : 'bg-emerald-500/20 text-emerald-355 border-emerald-500/30 hover:bg-emerald-500/40 hover:text-white')
+                    : (isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] hover:bg-gray-100 shadow-sm' : 'bg-zinc-900 text-zinc-300 border-zinc-800 hover:bg-zinc-800 hover:text-white')
                 }`}
                 title={
                   hideAbsent === 'all' ? '전체 학생 표시 중 (클릭 시 결석생만 표시)' :
@@ -1264,13 +1323,13 @@ export default function TodaySheet({
 
               {isFullScreen && (
                 <>
-                  <div className="h-4 w-px bg-white/10" />
+                  <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
 
                   {/* 담당 선생님 필터 (라벨 제거) */}
                   <select 
                     value={selectedTeacherId} 
                     onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className="bg-black border border-white/10 rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold text-white outline-none focus:border-blue-500 [color-scheme:dark]"
+                    className={`border rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-blue-500 ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-black border-white/10 text-white [color-scheme:dark]'}`}
                   >
                     <option value="All">전체 선생님</option>
                     {teachers.map((t: any) => (
@@ -1278,24 +1337,24 @@ export default function TodaySheet({
                     ))}
                   </select>
 
-                  <div className="h-4 w-px bg-white/10" />
+                  <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
 
                   {/* 학년 필터 (라벨 제거 & 초/중/고 축소) */}
-                  <div className="flex bg-zinc-950 rounded-[4px] p-0.5 border border-zinc-800">
+                  <div className={`flex rounded-[4px] p-0.5 border ${isLight ? 'bg-gray-100 border-[#e3e2e0]' : 'bg-zinc-950 border-zinc-800'}`}>
                     {[
                       { label: 'ALL', key: 'All' }, { label: '초', key: '초' }, { label: '중', key: '중' }, { label: '고', key: '고' }
                     ].map((g) => (
                       <button 
                         key={g.key} 
                         onClick={() => setSelectedFilter(g.key)} 
-                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : 'text-zinc-400 hover:text-zinc-200'}`}
+                        className={`px-2.5 py-1 rounded-[3px] text-[9px] font-black uppercase transition-all ${selectedFilter === g.key ? 'bg-blue-600 text-white shadow-sm' : (isLight ? 'text-gray-600 hover:text-black' : 'text-zinc-400 hover:text-zinc-200')}`}
                       >
                         {g.label}
                       </button>
                     ))}
                   </div>
 
-                  <div className="h-4 w-px bg-white/10" />
+                  <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
 
                   {/* 요일 필터 (라벨 제거) */}
                   <div className="flex items-center gap-1.5">
@@ -1312,7 +1371,7 @@ export default function TodaySheet({
                                 setSelectedDays([...selectedDays, day]);
                               }
                             }} 
-                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : (isLight ? 'bg-white border-[#e3e2e0] text-gray-700 hover:bg-gray-100' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white')}`}
                           >
                             {day}
                           </button>
@@ -1322,7 +1381,7 @@ export default function TodaySheet({
                     {selectedDays.length > 0 && (
                       <button 
                         onClick={() => setIsAndFilter(!isAndFilter)} 
-                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-650/20 border-indigo-500/40 text-indigo-405 shadow-sm' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white'}`}
+                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-650/20 border-indigo-500/40 text-indigo-405 shadow-sm' : (isLight ? 'bg-white border-[#e3e2e0] text-gray-700 hover:bg-gray-100' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white')}`}
                       >
                         {isAndFilter ? 'AND' : 'OR'}
                       </button>
@@ -1363,13 +1422,13 @@ export default function TodaySheet({
                       해제 ({hiddenStudentIds.length})
                     </button>
                   )}
-                  <div className="h-4 w-px bg-white/10" />
+                  <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
                 </div>
               )}
 
               {/* 이전 기록 개수 설정 */}
-              <div className="flex items-center gap-1.5 bg-white/5 rounded-[4px] px-2 py-0.5 border border-white/5">
-                <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest mr-1">이력</span>
+              <div className={`flex items-center gap-1.5 rounded-[4px] px-2 py-0.5 border ${isLight ? 'bg-white border-[#e3e2e0]' : 'bg-white/5 border-white/5'}`}>
+                <span className={`text-[9px] font-black uppercase tracking-widest mr-1 ${isLight ? 'text-gray-500' : 'text-gray-500'}`}>이력</span>
                 <select
                   value={historyLimit}
                   onChange={(e) => {
@@ -1377,29 +1436,33 @@ export default function TodaySheet({
                     setHistoryLimit(val);
                     localStorage.setItem('ams_history_limit', String(val));
                   }}
-                  className="bg-transparent border-0 text-[10px] font-black text-white outline-none cursor-pointer focus:ring-0 py-0.5"
+                  className={`bg-transparent border-0 text-[10px] font-black outline-none cursor-pointer focus:ring-0 py-0.5 ${isLight ? 'text-[#37352f]' : 'text-white'}`}
                 >
-                  <option value={1} className="bg-[#050505] text-white">1개</option>
-                  <option value={2} className="bg-[#050505] text-white">2개</option>
-                  <option value={3} className="bg-[#050505] text-white">3개</option>
-                  <option value={5} className="bg-[#050505] text-white">5개</option>
-                  <option value={10} className="bg-[#050505] text-white">10개</option>
-                  <option value={20} className="bg-[#050505] text-white">20개</option>
+                  <option value={1} className={isLight ? 'bg-white text-[#37352f]' : 'bg-[#050505] text-white'}>1개</option>
+                  <option value={2} className={isLight ? 'bg-white text-[#37352f]' : 'bg-[#050505] text-white'}>2개</option>
+                  <option value={3} className={isLight ? 'bg-white text-[#37352f]' : 'bg-[#050505] text-white'}>3개</option>
+                  <option value={5} className={isLight ? 'bg-white text-[#37352f]' : 'bg-[#050505] text-white'}>5개</option>
+                  <option value={10} className={isLight ? 'bg-white text-[#37352f]' : 'bg-[#050505] text-white'}>10개</option>
+                  <option value={20} className={isLight ? 'bg-white text-[#37352f]' : 'bg-[#050505] text-white'}>20개</option>
                 </select>
               </div>
 
-              <div className="h-4 w-px bg-white/10" />
+              <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
 
               {/* 순환형 정렬(Sort) 스마트 버튼 + UP/DOWN 방향 유지 */}
               <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-gray-550 uppercase tracking-widest">Sort</span>
+                <span className={`text-[9px] font-black uppercase tracking-widest ${isLight ? 'text-gray-500' : 'text-gray-550'}`}>Sort</span>
                 <button
                   onClick={() => {
                     const modes: ('time' | 'name' | 'grade' | 'school')[] = ['time', 'name', 'grade', 'school'];
                     const nextIdx = (modes.indexOf(sortMode) + 1) % modes.length;
                     onSortModeChange(modes[nextIdx]);
                   }}
-                  className="px-2.5 py-1 rounded-[4px] bg-blue-600/20 border border-blue-500/40 text-blue-300 hover:bg-blue-600 hover:text-white transition-all text-[9.5px] font-black uppercase shadow-sm cursor-pointer flex items-center gap-1"
+                  className={`px-2.5 py-1 rounded-[4px] border text-[9.5px] font-black uppercase transition-all shadow-sm cursor-pointer flex items-center gap-1 ${
+                    isLight 
+                      ? 'bg-blue-50 border-blue-300 text-blue-700 hover:bg-blue-600 hover:text-white' 
+                      : 'bg-blue-600/20 border-blue-500/40 text-blue-300 hover:bg-blue-600 hover:text-white'
+                  }`}
                   title="클릭 시: 시간순 -> 이름순 -> 학년순 -> 학교순 순환 정렬"
                 >
                   {sortMode === 'time' && '⏰ 시간순'}
@@ -1410,15 +1473,19 @@ export default function TodaySheet({
 
                 <button 
                   onClick={() => onSortDirectionChange(sortDirection === 'asc' ? 'desc' : 'asc')}
-                  className="px-2 py-1 rounded-[4px] bg-zinc-900 border border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-850 transition-all flex items-center gap-1 text-[8px] font-black shadow-sm"
+                  className={`px-2 py-1 rounded-[4px] border transition-all flex items-center gap-1 text-[8px] font-black shadow-sm ${
+                    isLight 
+                      ? 'bg-white border-[#e3e2e0] text-[#37352f] hover:bg-gray-100' 
+                      : 'bg-zinc-900 border-zinc-800 text-zinc-300 hover:text-white hover:bg-zinc-850'
+                  }`}
                   title={sortDirection === 'asc' ? '오름차순 (Up)' : '내림차순 (Down)'}
                 >
-                  {sortDirection === 'asc' ? <ArrowUp size={10} className="text-blue-400" /> : <ArrowDown size={10} className="text-purple-400" />}
+                  {sortDirection === 'asc' ? <ArrowUp size={10} className={isLight ? "text-blue-600" : "text-blue-400"} /> : <ArrowDown size={10} className={isLight ? "text-purple-600" : "text-purple-400"} />}
                   {sortDirection === 'asc' ? 'UP' : 'DOWN'}
                 </button>
               </div>
 
-              <div className="h-4 w-px bg-white/10" />
+              <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
 
               {/* 화면 컨트롤 (원래 크기로 복원, 전체화면, 인쇄하기) */}
               <div className="flex items-center gap-1.5">
@@ -1432,7 +1499,11 @@ export default function TodaySheet({
                 )}
                 <button 
                   onClick={onToggleFullScreen} 
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 border border-white/10 text-gray-400 hover:text-white hover:bg-white/10 rounded-[4px] text-[10px] font-black uppercase tracking-widest transition-all shadow-lg"
+                  className={`flex items-center gap-1.5 px-3 py-1.5 border rounded-[4px] text-[10px] font-black uppercase tracking-widest transition-all shadow-sm ${
+                    isLight 
+                      ? 'bg-white border-[#e3e2e0] text-[#37352f] hover:bg-gray-100 hover:text-black' 
+                      : 'bg-white/5 border-white/10 text-gray-400 hover:text-white hover:bg-white/10'
+                  }`}
                 >
                   {isFullScreen ? <Minimize2 size={12} /> : <Maximize2 size={12} />}
                   {isFullScreen ? '원래화면' : '전체화면'}
@@ -1483,15 +1554,15 @@ export default function TodaySheet({
       </AnimatePresence>
 
       {activeTab === 'checklist' ? (
-        <ChecklistTab ref={checklistRef} students={filteredStudents} academyInfo={academyInfo} />
+        <ChecklistTab ref={checklistRef} students={filteredStudents} academyInfo={academyInfo} isLight={isLight} />
       ) : (
         <div 
-          className={`bg-black border border-white/20 rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print`}
+          className={`border rounded-lg shadow-2xl custom-scrollbar-h overflow-x-auto overflow-y-auto transition-all duration-500 ${isReportVisible ? 'max-h-[35vh] shrink-0' : 'flex-1 min-h-0'} today-sheet-container no-print ${isLight ? 'bg-white border-[#e3e2e0]' : 'bg-black border-white/20'}`}
           onScroll={handleScroll}
         >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} onCycleSelectAll={handleCycleSelectAll} selectCycleMode={selectCycleMode} isAllSelected={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} /></thead>
-          <tbody className="divide-y divide-white/10">
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} onCycleSelectAll={handleCycleSelectAll} selectCycleMode={selectCycleMode} isAllSelected={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} isLight={isLight} /></thead>
+          <tbody className={isLight ? "divide-y divide-[#e3e2e0]" : "divide-y divide-white/10"}>
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
               const [_, configM] = (academyInfo?.operation_settings?.first_period_time || "00:00").split(':').map(Number);
@@ -1559,6 +1630,7 @@ export default function TodaySheet({
                       academyInfo={academyInfo}
                       activeCell={activeCell}
                       editingCell={editingCell}
+                      isLight={isLight}
                       onActiveCellChange={handleActiveCellChange}
                       onEditingCellChange={handleEditingCellChange}
                       isSelected={selectedIds.some((id: any) => String(id) === String(s.id))} 
@@ -1588,14 +1660,14 @@ export default function TodaySheet({
 
       {isSettingsOpen && (
         <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="bg-[#0a0a0a] border border-white/10 rounded-lg shadow-2xl w-full max-w-md overflow-hidden">
-            <div className="px-6 py-4 border-b border-white/5 flex items-center justify-between">
-              <h3 className="text-sm font-black text-white uppercase tracking-widest flex items-center gap-2"><Settings2 size={16} /> Column Settings</h3>
-              <button onClick={() => setIsSettingsOpen(false)} className="text-gray-500 hover:text-white"><X size={20} /></button>
+          <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className={`border rounded-lg shadow-2xl w-full max-w-md overflow-hidden ${isLight ? 'bg-white border-[#e3e2e0]' : 'bg-[#0a0a0a] border-white/10'}`}>
+            <div className={`px-6 py-4 border-b flex items-center justify-between ${isLight ? 'border-b-[#e3e2e0]' : 'border-b-white/5'}`}>
+              <h3 className={`text-sm font-black uppercase tracking-widest flex items-center gap-2 ${isLight ? 'text-[#37352f]' : 'text-white'}`}><Settings2 size={16} /> Column Settings</h3>
+              <button onClick={() => setIsSettingsOpen(false)} className={isLight ? "text-gray-400 hover:text-black" : "text-gray-500 hover:text-white"}><X size={20} /></button>
             </div>
             <div className="p-4 max-h-[60vh] overflow-y-auto custom-scrollbar-v space-y-1">
               {DEFAULT_COLUMNS.filter(c => c.canHide).map(col => (
-                <div key={col.id} onClick={() => toggleColumn(col.id)} className={`flex items-center justify-between px-3 py-2.5 rounded-md transition-all cursor-pointer group ${visibleColumns.includes(col.id) ? 'bg-blue-600/20' : 'hover:bg-white/5'}`}><span className={`text-[12px] font-bold ${visibleColumns.includes(col.id) ? 'text-blue-400' : 'text-gray-500'}`}>{col.label}</span>{visibleColumns.includes(col.id) && <Check size={16} className="text-blue-500" />}</div>
+                <div key={col.id} onClick={() => toggleColumn(col.id)} className={`flex items-center justify-between px-3 py-2.5 rounded-md transition-all cursor-pointer group ${visibleColumns.includes(col.id) ? (isLight ? 'bg-blue-50 border border-blue-200' : 'bg-blue-600/20') : (isLight ? 'hover:bg-gray-100' : 'hover:bg-white/5')}`}><span className={`text-[12px] font-bold ${visibleColumns.includes(col.id) ? (isLight ? 'text-blue-700' : 'text-blue-400') : (isLight ? 'text-gray-600' : 'text-gray-500')}`}>{col.label}</span>{visibleColumns.includes(col.id) && <Check size={16} className={isLight ? "text-blue-600" : "text-blue-500"} />}</div>
               ))}
             </div>
           </motion.div>

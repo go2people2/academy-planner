@@ -18,12 +18,14 @@ interface ScoreCellProps {
   onTestScoreTypeToggle: () => void;
   defaultScoreCut?: number;
   defaultCountCut?: number;
+  isLight?: boolean;
 }
 
 export const ScoreCell = React.memo(function ScoreCell({
   student, colId, formData, isEditing, isActive, scoreInputRef,
   onSave, handleKeyDown, handleLocalInput, handleCellInteraction,
-  onTestScoreTypeToggle, defaultScoreCut = 80, defaultCountCut = 2
+  onTestScoreTypeToggle, defaultScoreCut = 80, defaultCountCut = 2,
+  isLight = false
 }: ScoreCellProps) {
   
   // 💡 로컬 Ref 신설하여 안전한 element 참조 보장 (prop이 함수일 경우 대응)
@@ -49,12 +51,16 @@ export const ScoreCell = React.memo(function ScoreCell({
       <div className="relative w-full min-h-[22px] flex flex-col items-end justify-center px-3 py-1.5 group/score">
         {parsedTests.map((t, idx) => {
           const isPending = t.numericScore === null;
-          let scoreColor = 'text-gray-400';
+          let scoreColor = isLight ? 'text-gray-500' : 'text-gray-400';
           if (!isPending) {
             if (t.maxScore === 100) {
-              scoreColor = t.isPass ? 'text-emerald-400' : 'text-red-400';
+              scoreColor = t.isPass 
+                ? (isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400') 
+                : (isLight ? 'text-rose-600 font-medium' : 'text-red-400');
             } else {
-              scoreColor = t.isPass ? 'text-pink-300' : 'text-red-400';
+              scoreColor = t.isPass 
+                ? (isLight ? 'text-rose-600 font-medium' : 'text-pink-300') 
+                : (isLight ? 'text-red-600 font-medium' : 'text-red-400');
             }
           }
 
@@ -69,8 +75,8 @@ export const ScoreCell = React.memo(function ScoreCell({
               ) : (
                 <>
                   <span className={scoreColor}>{isPending ? '-' : t.numericScore}</span>
-                  <span className="text-gray-600 mx-0.5">/</span>
-                  <span className="text-blue-400">{t.maxScore}</span>
+                  <span className={isLight ? "text-gray-400 mx-0.5" : "text-gray-600 mx-0.5"}>/</span>
+                  <span className={isLight ? "text-blue-600 font-medium" : "text-blue-400"}>{t.maxScore}</span>
                 </>
               )}
             </div>
@@ -117,7 +123,9 @@ export const ScoreCell = React.memo(function ScoreCell({
             }} 
             onChange={(e) => handleLocalInput(e, 'test_score')} 
             placeholder="-" 
-            className="bg-transparent border-0 outline-none text-[14px] text-emerald-400 font-normal p-0 m-0 w-full text-left" 
+            className={`bg-transparent border-0 outline-none text-[14px] p-0 m-0 w-full text-left ${
+              isLight ? 'text-emerald-800 font-medium' : 'text-emerald-400 font-normal'
+            }`} 
           />
         </div>
       )}
@@ -126,7 +134,11 @@ export const ScoreCell = React.memo(function ScoreCell({
         <div 
           onClick={(e) => handleCellInteraction(e, colId, 'click')}
           onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
-          className="px-4 text-[14px] text-left text-emerald-400 font-normal pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-text group-hover/td:bg-white/[0.02] transition-colors"
+          className={`px-4 text-[14px] text-left pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-text transition-colors ${
+            isLight 
+              ? 'text-emerald-800 font-medium group-hover/td:bg-gray-100/50' 
+              : 'text-emerald-400 font-normal group-hover/td:bg-white/[0.02]'
+          }`}
         >
           {formData.test_score ? `${formData.test_score}점` : '-'}
         </div>

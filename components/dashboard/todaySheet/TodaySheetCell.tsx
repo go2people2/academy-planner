@@ -5,10 +5,11 @@ import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, Send, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3, RefreshCw
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, ArrowLeftRight, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3, RefreshCw
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
 import { getDayOfWeek, getCoursePrefix, parseBookCourseValue } from '@/lib/utils';
+import { isValidHomeworkText } from '@/lib/studentDataEnricher';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { ScoreCell } from './cells/ScoreCell';
 import { SimpleTextCell } from './cells/SimpleTextCell';
@@ -31,7 +32,7 @@ export const resolveTargetSession = (student?: any, hour?: number | null, course
   return student.todaySession;
 };
 
-interface TodaySheetCellProps {
+export interface TodaySheetCellProps {
   col: any;
   styles: React.CSSProperties;
   student: Student;
@@ -53,6 +54,7 @@ interface TodaySheetCellProps {
   testPresets?: any[];
   defaultScoreCut?: number;
   defaultCountCut?: number;
+  isLight?: boolean;
   
   // Refs
   testRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -141,6 +143,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onReorderTools,
   isOtherClassSection,
   onTimePickerClick,
+  isLight = false
 }: TodaySheetCellProps) {
   
   const wasAlreadyActive = useRef(false);
@@ -210,7 +213,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div 
             key="profile"
             onClick={(e) => { e.stopPropagation(); onViewDetail(student.id); }}
-            className={`${itemClass} bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/40 hover:text-emerald-200 shadow-sm`}
+            className={`${itemClass} ${isLight ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-600 hover:text-white shadow-sm' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/40 hover:text-emerald-200 shadow-sm'}`}
             title="학생 프로필 서랍 열기"
             {...dragHandlers}
           >
@@ -224,8 +227,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }} 
             className={`${itemClass} ${
               isHistoryExpanded 
-                ? 'bg-white text-gray-900 border border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]' 
-                : 'bg-white/20 text-gray-300 border border-white/10 hover:bg-white/30 hover:text-white shadow-sm'
+                ? (isLight ? 'bg-blue-600 text-white border border-blue-600 shadow-md' : 'bg-white text-gray-900 border border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]') 
+                : (isLight ? 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:text-black shadow-sm' : 'bg-white/20 text-gray-300 border border-white/10 hover:bg-white/30 hover:text-white shadow-sm')
             }`} 
             title="이전 기록 보기"
             {...dragHandlers}
@@ -239,7 +242,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div 
             key="progress"
             onClick={(e) => { e.stopPropagation(); onViewProgress(student.id); }} 
-            className={`${itemClass} bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/40 hover:text-indigo-200 shadow-sm`}
+            className={`${itemClass} ${isLight ? 'bg-indigo-50 text-indigo-700 border border-indigo-300 hover:bg-indigo-600 hover:text-white shadow-sm' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/40 hover:text-indigo-200 shadow-sm'}`}
             title="진도표 바로가기"
             {...dragHandlers}
           >
@@ -268,13 +271,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             }}
             className={`w-[21px] h-[21px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[12px] select-none transition-all ${
               isToolsEditMode 
-                ? 'border border-dashed border-amber-500/60 bg-amber-500/10 cursor-grab active:cursor-grabbing hover:border-amber-500 text-amber-300 font-black'
-                : `opacity-75 hover:opacity-100 hover:scale-110 active:scale-95 ${
-                    student.level_tag === '가' ? "bg-emerald-500/20 text-emerald-300 font-black border border-emerald-400/80" :
-                    student.level_tag === '나' ? "bg-blue-500/20 text-blue-300 font-black border border-blue-400/80" :
-                    student.level_tag === '다' ? "bg-amber-500/20 text-amber-300 font-black border border-amber-400/80" :
-                    student.level_tag === '라' ? "bg-red-500/20 text-red-300 font-black border border-red-400/80" :
-                    "bg-white/5 text-gray-400 hover:bg-white/10 border border-dashed border-white/10"
+                ? (isLight ? 'border border-dashed border-amber-500 bg-amber-50 cursor-grab active:cursor-grabbing text-amber-800 font-bold' : 'border border-dashed border-amber-500/60 bg-amber-500/10 cursor-grab active:cursor-grabbing hover:border-amber-500 text-amber-300 font-black')
+                : `opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 ${
+                    student.level_tag === '가' ? (isLight ? "bg-emerald-50 text-emerald-800 font-bold border border-emerald-300" : "bg-emerald-500/20 text-emerald-300 font-black border border-emerald-400/80") :
+                    student.level_tag === '나' ? (isLight ? "bg-blue-50 text-blue-800 font-bold border border-blue-300" : "bg-blue-500/20 text-blue-300 font-black border border-blue-400/80") :
+                    student.level_tag === '다' ? (isLight ? "bg-amber-50 text-amber-800 font-bold border border-amber-300" : "bg-amber-500/20 text-amber-300 font-black border border-amber-400/80") :
+                    student.level_tag === '라' ? (isLight ? "bg-red-50 text-red-800 font-bold border border-red-300" : "bg-red-500/20 text-red-300 font-black border border-red-400/80") :
+                    (isLight ? "bg-gray-100 text-gray-600 hover:bg-gray-200 border border-dashed border-gray-300" : "bg-white/5 text-gray-400 hover:bg-white/10 border border-dashed border-white/10")
                   }`
             }`}
             title="클릭하여 태그(가/나/다/라) 변경"
@@ -292,11 +295,26 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               const slug = window.location.pathname.split('/')[1];
               window.open(`/${slug}/student?id=${student.id}`, '_blank');
             }}
-            className={`${itemClass} bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/40 hover:text-sky-200 shadow-sm`}
+            className={`${itemClass} ${isLight ? 'bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-600 hover:text-white shadow-sm' : 'bg-sky-500/20 text-sky-300 border border-sky-500/30 hover:bg-sky-500/40 hover:text-sky-200 shadow-sm'}`}
             title="학생 페이지 보기"
             {...dragHandlers}
           >
             <ExternalLink size={13.5} strokeWidth={2.5} />
+          </div>
+        );
+      case 'timeshift':
+        return (
+          <div 
+            key="timeshift"
+            onClick={(e) => {
+              e.stopPropagation();
+              onTimePickerClick?.(e);
+            }}
+            className={`${itemClass} ${isLight ? 'bg-purple-50 text-purple-700 border border-purple-300 hover:bg-purple-600 hover:text-white shadow-sm' : 'bg-purple-500/20 text-purple-300 border border-purple-500/30 hover:bg-purple-500/40 hover:text-purple-200 shadow-sm'}`}
+            title="수업시간 / 교시 이동"
+            {...dragHandlers}
+          >
+            <ArrowLeftRight size={12.5} strokeWidth={2.5} />
           </div>
         );
       case 'reset':
@@ -319,8 +337,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               }}
               className={`${resetItemClass} ${
                 isSubmittedOrApproved 
-                  ? "bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 cursor-pointer shadow-sm animate-pulse" 
-                  : "bg-white/10 text-gray-400 border border-white/20 opacity-70 cursor-not-allowed"
+                  ? (isLight ? "bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-600 hover:text-white cursor-pointer shadow-sm animate-pulse" : "bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 cursor-pointer shadow-sm animate-pulse")
+                  : (isLight ? "bg-gray-100 text-gray-400 border border-gray-200 opacity-70 cursor-not-allowed" : "bg-white/10 text-gray-400 border border-white/20 opacity-70 cursor-not-allowed")
               }`}
               title={isSubmittedOrApproved ? "학생 제출 리셋 (다시 수정 가능하게 하기)" : "제출 또는 승인 전 상태입니다"}
               {...dragHandlers}
@@ -352,7 +370,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               e.stopPropagation();
               e.preventDefault();
             }}
-            className={`${itemClass} bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 shadow-sm flex items-center justify-center font-black cursor-pointer`}
+            className={`${itemClass} ${isLight ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-600 hover:text-white shadow-sm' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 shadow-sm'} flex items-center justify-center font-black cursor-pointer`}
             title="Reset & Remove (기록 리셋 / 보강 제외)"
           >
             <span className="text-[10px] tracking-tighter leading-none">R</span>
@@ -364,7 +382,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div 
               key="separator" 
               onMouseDown={(e) => e.stopPropagation()}
-              className="h-5 w-[1px] bg-white/20 mx-1 self-center shrink-0" 
+              className={`h-5 w-[1px] mx-1 self-center shrink-0 ${isLight ? 'bg-gray-300' : 'bg-white/20'}`} 
               title="상시 노출 경계선"
             />
           );
@@ -540,7 +558,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
-  const textColClass = colId === 'mission' ? 'text-amber-200/90 font-normal' : 'text-white font-normal';
+  const textColClass = colId === 'assign' 
+    ? (isLight ? 'text-[#0f172a] font-normal' : 'text-blue-200 font-normal')
+    : colId === 'classwork' || colId === 'completed_classwork'
+    ? (isLight ? 'text-[#0f172a] font-normal' : 'text-blue-100 font-normal')
+    : colId === 'mission' 
+    ? (isLight ? 'text-amber-900 font-normal' : 'text-amber-200/90 font-normal') 
+    : (isLight ? 'text-[#1e293b] font-normal' : 'text-white font-normal');
   const commonTextStyle = `w-full text-[12px] leading-[14px] text-left ${textColClass} ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
   const renderHighlightedText = (text: string, columnId: string) => {
     if (!text) return '-';
@@ -567,27 +591,27 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         const memoPart = commaIdx !== -1 ? afterColon.substring(commaIdx + 1) : '';
         
         const highlightScore = (str: string) => {
-          if (!str.includes('/')) return <span className="text-emerald-400 font-normal">{str}</span>;
+          if (!str.includes('/')) return <span className={isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400 font-normal'}>{str}</span>;
           
           const parts = str.split('/');
           return (
             <span className="font-normal">
-              <span className="text-pink-300">{parts[0]}</span>
+              <span className={isLight ? 'text-rose-600 font-medium' : 'text-pink-300'}>{parts[0]}</span>
               {parts.length > 1 && (
                 <>
-                  <span className="text-gray-600 mx-0.5">/</span>
-                  <span className="text-blue-400">{parts[1]}</span>
+                  <span className={isLight ? 'text-gray-400 mx-0.5' : 'text-gray-600 mx-0.5'}>/</span>
+                  <span className={isLight ? 'text-blue-600 font-medium' : 'text-blue-400'}>{parts[1]}</span>
                 </>
               )}
               {parts.length > 2 && (
                 <>
-                  <span className="text-gray-600 mx-0.5">/</span>
-                  <span className="text-orange-400">{parts[2]}</span>
+                  <span className={isLight ? 'text-gray-400 mx-0.5' : 'text-gray-600 mx-0.5'}>/</span>
+                  <span className={isLight ? 'text-amber-600 font-medium' : 'text-orange-400'}>{parts[2]}</span>
                 </>
               )}
               {parts.slice(3).map((p, idx) => (
                 <React.Fragment key={idx}>
-                  <span className="text-gray-600 mx-0.5">/</span>
+                  <span className={isLight ? 'text-gray-400 mx-0.5' : 'text-gray-600 mx-0.5'}>/</span>
                   <span>{p}</span>
                 </React.Fragment>
               ))}
@@ -597,9 +621,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         return (
           <React.Fragment key={i}>
-            <span>{beforeColon}</span>
+            <span className={isLight ? 'text-[#1e293b] font-normal' : ''}>{beforeColon}</span>
             {highlightScore(scorePart)}
-            <span className="text-gray-500 italic">{memoPart}</span>
+            <span className={isLight ? 'text-gray-500 italic' : 'text-gray-500 italic'}>{memoPart}</span>
             {!isLast && '\n'}
           </React.Fragment>
         );
@@ -608,16 +632,26 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       if (isTaskField) {
         // - 또는 * 기호로 시작하는지 감지
         const match = line.match(/^(\s*[-*+•]\s*)(.*)$/);
+        const assignClass = columnId === 'assign' 
+          ? (isLight ? 'text-[#0f172a] font-normal' : 'text-blue-200 font-normal') 
+          : (isLight ? 'text-[#1e293b] font-normal' : '');
         
         if (!match) {
           // 불릿 없는 일반 줄도 ,, 메모 분리 적용
           const plainCommaIdx = line.indexOf(',,');
-          if (plainCommaIdx === -1) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
+          if (plainCommaIdx === -1) {
+            return (
+              <React.Fragment key={i}>
+                <span className={assignClass}>{line}</span>
+                {!isLast && '\n'}
+              </React.Fragment>
+            );
+          }
           const plainContent = line.substring(0, plainCommaIdx);
           const plainMemo = line.substring(plainCommaIdx + 2);
           return (
             <React.Fragment key={i}>
-              <span>{plainContent}</span>
+              <span className={assignClass}>{plainContent}</span>
               <span className="text-gray-500 italic ml-0.5">{plainMemo}</span>
               {!isLast && '\n'}
             </React.Fragment>
@@ -628,11 +662,16 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         const rest = match[2];
         const commaIdx = rest.indexOf(',,');
         
+        const bulletClass = isLight ? 'text-[#0f172a] font-medium' : 'text-blue-400 font-normal';
+        const contentClass = columnId === 'assign' 
+          ? (isLight ? 'font-normal text-[#0f172a]' : 'font-normal text-blue-200') 
+          : (isLight ? 'font-normal text-[#1e293b]' : 'font-normal text-white/90');
+        
         if (commaIdx === -1) {
           return (
             <React.Fragment key={i}>
-              <span className="text-blue-400 font-bold">{bulletStr}</span>
-              <span>{rest}</span>
+              <span className={bulletClass}>{bulletStr}</span>
+              <span className={contentClass}>{rest}</span>
               {!isLast && '\n'}
             </React.Fragment>
           );
@@ -641,8 +680,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           const memoStr = rest.substring(commaIdx + 2);
           return (
             <React.Fragment key={i}>
-              <span className="text-blue-400 font-bold">{bulletStr}</span>
-              <span className="font-medium text-white/90">{contentStr}</span>
+              <span className={bulletClass}>{bulletStr}</span>
+              <span className={contentClass}>{contentStr}</span>
               <span className="text-gray-500 italic ml-0.5">{memoStr}</span>
               {!isLast && '\n'}
             </React.Fragment>
@@ -658,7 +697,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       style={styles} 
       tabIndex={0}
       data-col-id={colId}
-      className={`border-r border-white/12 relative group/td outline-none align-top ${
+      className={`relative group/td outline-none align-top ${isLight ? 'border-r border-[#e3e2e0] text-[#37352f]' : 'border-r border-white/12 text-white'} ${
         isFirstInTimeSection ? 'border-t-[3px] border-t-blue-500/60 shadow-[inset_0_1px_0_rgba(59,130,246,0.2)]' : ''
       } ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''} ${
         isLockActive ? 'bg-amber-500/[0.04] border border-dashed border-amber-500/20 cursor-not-allowed' : ''
@@ -835,8 +874,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     const daysStr = sortedElectiveDays || (student.class_days || []).join('').replace(/요일/g, '') || '무';
                     const prefix = getCoursePrefix(student.isSpecialClass, student.electiveCourse);
                     return (
-                      <span className="text-[13px] font-medium text-white truncate transition-colors">
-                        <span className="text-amber-400">{prefix}</span>
+                      <span className={`text-[13px] font-medium truncate transition-colors ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
+                        <span className={isLight ? "text-amber-600 mr-0.5" : "text-amber-500 mr-0.5"}>{prefix}</span>
                         {student.name}-{teacherInitial}-{daysStr}
                       </span>
                     );
@@ -846,21 +885,28 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       return (order[a] || 0) - (order[b] || 0);
                     }).join('');
                     return (
-                      <span className="text-[13px] font-medium text-white truncate transition-colors">
+                      <span className={`text-[13px] font-medium truncate transition-colors ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
                         {student.name}-{teacherInitial}-{sortedDays || '무'}
                       </span>
                     );
                   }
                 })()}
               </div>
-              <div className="flex items-center gap-1 text-[9px] font-normal uppercase tracking-tighter truncate">
-                <span className="text-pink-300">{student.school}</span>
-                <span className="text-gray-600">·</span>
+              <div className="flex items-center gap-1 text-[10px] font-normal uppercase tracking-tighter truncate">
+                <span className={isLight ? "text-pink-600 font-medium" : "text-pink-300"}>{student.school}</span>
+                <span className={isLight ? "text-gray-400 font-medium" : "text-gray-600"}>·</span>
                 <span className={
-                  (student.grade || '').includes('초') ? 'text-emerald-400' :
-                  (student.grade || '').includes('중') ? 'text-blue-400' :
-                  (student.grade || '').includes('고') ? 'text-amber-400' :
-                  'text-gray-500'
+                  isLight ? (
+                    (student.grade || '').includes('초') ? 'text-emerald-700 font-medium' :
+                    (student.grade || '').includes('중') ? 'text-blue-700 font-medium' :
+                    (student.grade || '').includes('고') ? 'text-amber-700 font-medium' :
+                    'text-gray-600 font-medium'
+                  ) : (
+                    (student.grade || '').includes('초') ? 'text-emerald-400' :
+                    (student.grade || '').includes('중') ? 'text-blue-400' :
+                    (student.grade || '').includes('고') ? 'text-amber-400' :
+                    'text-gray-500'
+                  )
                 }>{student.grade}</span>
               </div>
             </div>
@@ -963,7 +1009,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
             {/* 💡 정렬된 도구 아이템 렌더링 */}
             {(() => {
-              const order = toolsOrder || ['profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
+              const order = toolsOrder || ['timeshift', 'profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
               const isExpanded = showAllTools;
               
               const itemsToRender: React.ReactNode[] = [];
@@ -995,13 +1041,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           ].includes(cleanStatus as any);
           
           const isScheduledToday = student?.isScheduledToday ?? true;
-          const isMovedHour = formData.moved_to_hour !== null && formData.moved_to_hour !== undefined;
+          const isMovedHour = formData.moved_to_hour !== null && formData.moved_to_hour !== undefined && formData.moved_to_hour > 0;
           
           const statusText = hasExplicitStatus 
-            ? cleanStatus 
+            ? (cleanStatus.startsWith('보강:') ? ATTENDANCE_STATUS.BEFORE : cleanStatus) 
             : (cleanStatus === '보강' || !isScheduledToday ? '보강' : ATTENDANCE_STATUS.BEFORE);
 
-          const isSupplementText = cleanStatus === '보강' || statusText === '보강';
+          const isSupplementText = !isScheduledToday && (cleanStatus === '보강' || statusText === '보강');
           
           return (
             <div 
@@ -1018,19 +1064,23 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 onTimePickerClick?.(e);
               }}
               className={`absolute inset-0 w-full h-full flex items-center justify-between px-3 text-[11px] cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
-              isSupplementText ? 'text-blue-400 font-semibold' :
-              statusText === ATTENDANCE_STATUS.BEFORE ? 'text-gray-600' :
-              statusText.startsWith(ATTENDANCE_STATUS.PRESENT) ? 'text-emerald-400 font-semibold' : 
-              statusText.startsWith(ATTENDANCE_STATUS.ABSENT) ? 'text-red-400 font-bold' : 
-              'text-amber-400 font-bold'
+              isSupplementText 
+                ? (isLight ? 'text-blue-700 font-medium' : 'text-blue-400 font-semibold') 
+                : statusText === ATTENDANCE_STATUS.BEFORE 
+                  ? (isLight ? 'text-gray-500 font-medium' : 'text-gray-600') 
+                  : statusText.startsWith(ATTENDANCE_STATUS.PRESENT) 
+                    ? (isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400 font-semibold') 
+                    : statusText.startsWith(ATTENDANCE_STATUS.ABSENT) 
+                      ? (isLight ? 'text-red-600 font-medium' : 'text-red-400 font-bold') 
+                      : (isLight ? 'text-amber-700 font-medium' : 'text-amber-400 font-bold')
             }`}>
-              <div className="flex items-center gap-1.5 min-w-0 flex-1">
-                <span>{statusText}</span>
-                {isMovedHour && statusText !== '보강' && (
-                  <span className={`text-[9.5px] font-bold px-1 rounded shrink-0 border ${
+              <div className="flex flex-col items-start justify-center min-w-0 flex-1 gap-0.5 py-0.5">
+                <span className="text-[11px] font-bold leading-tight">{statusText}</span>
+                {isMovedHour && (
+                  <span className={`text-[10px] font-extrabold leading-none px-1 py-0.5 rounded ${
                     !isScheduledToday 
-                      ? 'bg-blue-500/10 text-blue-400 border-blue-500/20' 
-                      : 'bg-purple-500/10 text-purple-400 border-purple-500/20'
+                      ? (isLight ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400') 
+                      : (isLight ? 'bg-purple-100 text-purple-700' : 'bg-purple-500/20 text-purple-300')
                   }`}>
                     {!isScheduledToday ? '보강' : '이동'}
                   </span>
@@ -1103,25 +1153,25 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         })()}
 
         {colId === 'review' && (
-          <div className="relative w-full h-full flex items-start justify-between bg-blue-600/[0.03] py-1 px-2 gap-2">
+          <div className={`relative w-full h-full flex items-start justify-between py-1 px-2 gap-2 ${isLight ? 'bg-blue-50/50' : 'bg-blue-600/[0.03]'}`}>
             <div 
               onMouseDown={(e) => e.stopPropagation()} 
               className="flex-1 text-left min-w-0 select-text cursor-text"
             >
-              {student.lastSession?.homework_text ? (
-                <div className="text-[12px] font-normal text-blue-100 leading-[1.15] italic whitespace-pre-wrap break-all">
-                  {student.lastSession.homework_text.split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
+              {isValidHomeworkText(student.lastSession?.homework_text) ? (
+                <div className={`text-[12px] leading-[1.15] whitespace-pre-wrap break-all ${isLight ? 'text-[#002147] font-normal italic' : 'text-blue-100 font-normal italic'}`}>
+                  {(student.lastSession?.homework_text || '').split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
                     <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
-                      {i === 0 && <span className="text-blue-500/80 text-[14px] font-normal mr-1 align-top leading-[1.15]">"</span>}
+                      {i === 0 && <span className={isLight ? 'text-blue-700 text-[14px] font-medium mr-1 align-top leading-[1.15]' : 'text-blue-500/80 text-[14px] font-normal mr-1 align-top leading-[1.15]'}>"</span>}
                       {para.split(/(\([월화수목금토일]\))/g).map((part, j) => 
-                        part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className="text-yellow-400 font-black not-italic px-0.5">{part}</span> : part
+                        part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className={isLight ? 'text-amber-800 font-medium not-italic px-0.5' : 'text-yellow-400 font-medium not-italic px-0.5'}>{part}</span> : part
                       )}
-                      {i === arr.length - 1 && <span className="text-blue-500/80 text-[14px] font-normal ml-1 align-bottom leading-[1.15]">"</span>}
+                      {i === arr.length - 1 && <span className={isLight ? 'text-blue-700 text-[14px] font-medium ml-1 align-bottom leading-[1.15]' : 'text-blue-500/80 text-[14px] font-normal ml-1 align-bottom leading-[1.15]'}>"</span>}
                     </span>
                   ))}
                 </div>
               ) : (
-                <span className="italic opacity-30 text-gray-500 font-medium text-[11px] px-2">기존 숙제 없음</span>
+                <span className={`italic font-medium text-[11px] px-2 ${isLight ? 'text-gray-400 opacity-60' : 'text-gray-500 opacity-30'}`}>기존 숙제 없음</span>
               )}
             </div>
             <div className="flex items-center gap-1 shrink-0">
@@ -1148,10 +1198,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         e.stopPropagation(); 
                         onSave({ hw_checked_today: !isChecked });
                       }}
-                      className={`relative z-30 shrink-0 px-2 py-0.5 rounded text-[9.5px] font-normal tracking-tighter border transition-colors ${
+                      className={`relative z-30 shrink-0 px-2 py-0.5 rounded text-[9.5px] font-medium tracking-tight border transition-colors ${
                         isChecked
-                          ? 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30'
-                          : 'bg-gray-800 text-gray-400 border-gray-600 hover:bg-gray-700 hover:text-gray-200'
+                          ? (isLight ? 'bg-blue-100 text-blue-800 border-blue-300 hover:bg-blue-200' : 'bg-blue-500/20 text-blue-300 border-blue-500/40 hover:bg-blue-500/30')
+                          : (isLight ? 'bg-white text-gray-700 border-gray-300 hover:bg-gray-50' : 'bg-gray-800 text-gray-400 border-gray-600 hover:bg-gray-700 hover:text-gray-200')
                       }`}
                     >
                       {isChecked ? '✅ 오늘검사' : '🔳 검사하기'}
@@ -1165,8 +1215,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   onClick={(e) => { e.stopPropagation(); onFeedbackToggle(); }} 
                   className={`w-5 h-5 rounded-[3px] flex items-center justify-center transition-all border ${
                     isFeedbackOpen 
-                      ? 'bg-indigo-500/30 text-indigo-200 border-indigo-500/50' 
-                      : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/30 hover:text-white hover:border-indigo-500/50'
+                      ? (isLight ? 'bg-indigo-100 text-indigo-800 border-indigo-300' : 'bg-indigo-500/30 text-indigo-200 border-indigo-500/50') 
+                      : (isLight ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/30 hover:text-white hover:border-indigo-500/50')
                   }`}
                   title="특이사항에 과제 피드백 추가"
                 >
@@ -1177,7 +1227,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   statusMap={statusMap}
                   onSelectFeedback={onSelectFeedback}
                   onCloseFeedback={onCloseFeedback}
-                  isLight={false}
+                  isLight={isLight}
                 />
               </div>
             </div>
@@ -1268,36 +1318,46 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       setSelectedBookForDrawer(bookKey);
                     }}
                     className={`group relative px-2 py-1 rounded-md text-[10px] flex items-center justify-between gap-1.5 truncate border transition-all cursor-pointer hover:scale-[1.02] active:scale-[0.98] ${
-                    val && daysElapsed >= 14
-                      ? 'bg-rose-500/10 border-rose-500/70 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse'
-                      : val && daysElapsed >= 7
-                        ? 'bg-amber-500/10 border-amber-500/70'
-                        : isElectiveBook 
-                          ? 'bg-amber-500/10 border-amber-500/30' 
-                          : 'bg-emerald-500/10 border-emerald-500/20'
-                  }`}>
+                      val && daysElapsed >= 14
+                        ? (isLight ? 'bg-rose-50 border-rose-300 shadow-sm animate-pulse' : 'bg-rose-500/10 border-rose-500/70 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse')
+                        : val && daysElapsed >= 7
+                          ? (isLight ? 'bg-amber-50 border-amber-300 shadow-sm' : 'bg-amber-500/10 border-amber-500/70')
+                          : isElectiveBook 
+                            ? (isLight ? 'bg-amber-50/90 border-amber-200/90 shadow-sm' : 'bg-amber-500/10 border-amber-500/30') 
+                            : (isLight ? 'bg-emerald-50/90 border-emerald-200/90 shadow-sm' : 'bg-emerald-500/10 border-emerald-500/20')
+                    }`}>
                     {valParts.length > 1 ? (
                       <div className="flex flex-col gap-0.5 min-w-0 flex-1 py-0.5">
                         <div className="flex items-center gap-1.5 truncate">
-                          <span className={`text-[8.5px] font-black px-1 rounded shrink-0 ${
-                            isElectiveBook ? 'bg-amber-500 text-black' : targetTag === '공통' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+                          <span className={`text-[8.5px] font-bold px-1 rounded shrink-0 ${
+                            isElectiveBook 
+                              ? (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black') 
+                              : targetTag === '공통' 
+                                ? 'bg-blue-600 text-white' 
+                                : 'bg-emerald-600 text-white'
                           }`}>
                             {targetTag.replace('선택:', '')}
                           </span>
-                          <span className={`font-extrabold shrink-0 ${isElectiveBook ? 'text-amber-300' : 'text-emerald-400'}`}>
+                          <span className={`font-black shrink-0 ${
+                            isElectiveBook 
+                              ? (isLight ? 'text-amber-900' : 'text-amber-300') 
+                              : (isLight ? 'text-emerald-900' : 'text-emerald-400')
+                          }`}>
                             {bookTitle}
                           </span>
                           {val && daysElapsed >= 14 && (
-                            <span className="text-[8px] font-black px-1 rounded bg-rose-600 text-white shrink-0">14일+ 정체</span>
+                            <span className="text-[8px] font-bold px-1 rounded bg-rose-600 text-white shrink-0">14일+ 정체</span>
                           )}
                           {val && daysElapsed >= 7 && daysElapsed < 14 && (
-                            <span className="text-[8px] font-black px-1 rounded bg-amber-500 text-black shrink-0">7일+ 정체</span>
+                            <span className="text-[8px] font-bold px-1 rounded bg-amber-500 text-black shrink-0">7일+ 정체</span>
                           )}
                         </div>
                         <div className="flex flex-col gap-0.5 pl-0.5">
                           {valParts.map((part, pIdx) => (
-                            <div key={pIdx} className="text-[9.5px] text-gray-200 font-medium truncate flex items-center gap-1">
-                              <span className="text-[8.5px] text-amber-400 font-bold shrink-0">{pIdx === 0 ? '①' : '②'}</span>
+                            <div key={pIdx} className={`text-[9.5px] font-semibold truncate flex items-center gap-1 ${
+                              isLight ? 'text-[#2c2b29]' : 'text-gray-200'
+                            }`}>
+                              <span className={`text-[8.5px] font-bold shrink-0 ${isLight ? 'text-amber-700' : 'text-amber-400'}`}>{pIdx === 0 ? '①' : '②'}</span>
                               <span className="truncate">{part}</span>
                             </div>
                           ))}
@@ -1306,23 +1366,35 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     ) : (
                       <div className="flex items-center gap-1.5 truncate min-w-0 flex-1">
                         {/* 💡 [정규] / [공통] / [과목명] 선명한 뱃지 표기 */}
-                        <span className={`text-[8.5px] font-black px-1 rounded shrink-0 ${
-                          isElectiveBook ? 'bg-amber-500 text-black' : targetTag === '공통' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'
+                        <span className={`text-[8.5px] font-bold px-1 rounded shrink-0 ${
+                          isElectiveBook 
+                            ? (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black') 
+                            : targetTag === '공통' 
+                              ? 'bg-blue-600 text-white' 
+                              : 'bg-emerald-600 text-white'
                         }`}>
                           {targetTag.replace('선택:', '')}
                         </span>
 
-                        <span className={`font-extrabold shrink-0 ${isElectiveBook ? 'text-amber-300' : 'text-emerald-400'}`}>
+                        <span className={`font-black shrink-0 ${
+                          isElectiveBook 
+                            ? (isLight ? 'text-amber-900' : 'text-amber-300') 
+                            : (isLight ? 'text-emerald-900' : 'text-emerald-400')
+                        }`}>
                           {bookTitle}
                         </span>
-                        <span className={`truncate text-[9.5px] ${val ? 'text-gray-300 font-medium opacity-90' : 'text-gray-500 italic'}`}>
+                        <span className={`truncate text-[9.5px] font-bold ${
+                          val 
+                            ? (isLight ? 'text-[#2c2b29]' : 'text-gray-300') 
+                            : 'text-gray-400 italic font-normal'
+                        }`}>
                           {val || ''}
                         </span>
                         {val && daysElapsed >= 14 && (
-                          <span className="text-[8px] font-black px-1 rounded bg-rose-600 text-white shrink-0">14일+ 정체</span>
+                          <span className="text-[8px] font-bold px-1 rounded bg-rose-600 text-white shrink-0">14일+ 정체</span>
                         )}
                         {val && daysElapsed >= 7 && daysElapsed < 14 && (
-                          <span className="text-[8px] font-black px-1 rounded bg-amber-500 text-black shrink-0">7일+ 정체</span>
+                          <span className="text-[8px] font-bold px-1 rounded bg-amber-500 text-black shrink-0">7일+ 정체</span>
                         )}
                       </div>
                     )}
@@ -1648,6 +1720,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onTestScoreTypeToggle={onTestScoreTypeToggle}
             defaultScoreCut={defaultScoreCut}
             defaultCountCut={defaultCountCut}
+            isLight={isLight}
           />
         )}
       </div>
@@ -1655,3 +1728,5 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     </td>
   );
 });
+
+export default TodaySheetCell;

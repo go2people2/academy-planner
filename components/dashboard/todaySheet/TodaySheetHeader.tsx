@@ -23,6 +23,7 @@ interface TodaySheetHeaderProps {
   isToolsEditMode: boolean;
   setIsToolsEditMode: (edit: boolean) => void;
   onAutofillManagementNotes?: () => void;
+  isLight?: boolean;
 }
 
 export function TodaySheetHeader({ 
@@ -41,7 +42,8 @@ export function TodaySheetHeader({
   setShowAllTools, 
   isToolsEditMode, 
   setIsToolsEditMode, 
-  onAutofillManagementNotes 
+  onAutofillManagementNotes,
+  isLight = false 
 }: TodaySheetHeaderProps) {
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
   const lastDataColumnId = React.useMemo(() => {
@@ -133,7 +135,7 @@ export function TodaySheetHeader({
   };
 
   return (
-    <tr className="bg-black border-b border-white/20 select-none">
+    <tr className={`select-none ${isLight ? 'bg-white border-b border-[#e3e2e0]' : 'bg-black border-b border-white/20'}`}>
       {activeColumns.map((col: any) => {
         const isStickyHorizontally = col.id === 'name' || col.id === 'tools' || col.id === 'action' || col.id === 'select';
         const canFocus = ['test_id', 'next_quiz', 'classwork', 'completed_classwork', 'assign', 'mission', 'notes', 'management_notes'].includes(col.id);
@@ -155,12 +157,12 @@ export function TodaySheetHeader({
           right: col.id === 'action' ? 0 : 'auto',
           zIndex: isStickyHorizontally ? 50 : 40,
           backgroundColor: draggedId === col.id 
-            ? (isOrigDragged ? '#075985' : '#00d2ff') // 💡 고스트는 아쿠아(#00d2ff), 남겨진 원본은 딥 아쿠아(#075985)
+            ? (isOrigDragged ? '#075985' : '#00d2ff')
             : dragOverId === col.id 
-            ? '#1e293b' 
+            ? (isLight ? '#e0f2fe' : '#1e293b')
             : focusColumn === col.id 
-            ? '#172554' 
-            : '#000000',
+            ? (isLight ? '#eff6ff' : '#172554')
+            : (isLight ? '#ffffff' : '#000000'),
           cursor: !['select', 'name', 'tools', 'action'].includes(col.id) ? 'grab' : 'default',
         };
         return (
@@ -174,12 +176,14 @@ export function TodaySheetHeader({
             onDragLeave={() => setDragOverId(null)}
             onDrop={(e) => handleDrop(e, col.id)}
             onDragEnd={handleDragEnd}
-            className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-black uppercase tracking-widest text-center border-r border-white/12 transition-all ${
-              focusColumn === col.id 
-                ? 'text-blue-400 bg-blue-950/20 border-b-2 border-b-blue-500/80 shadow-[0_1px_0_rgba(59,130,246,0.3)]' 
-                : 'text-gray-400 shadow-[0_1px_0_rgba(255,255,255,0.1)]'
+            className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-semibold uppercase tracking-wider text-center border-r transition-all ${
+              isLight ? 'border-[#e3e2e0]' : 'border-white/12'
             } ${
-              draggedId === col.id ? `${isOrigDragged ? 'opacity-30' : 'opacity-100'} bg-blue-600/30 border-2 border-dashed border-blue-500 text-white font-extrabold` : ''
+              focusColumn === col.id 
+                ? (isLight ? 'text-blue-700 bg-blue-50/80 border-b-2 border-b-blue-600' : 'text-blue-400 bg-blue-950/20 border-b-2 border-b-blue-500/80 shadow-[0_1px_0_rgba(59,130,246,0.3)]') 
+                : (isLight ? 'text-[#37352f]' : 'text-gray-400 shadow-[0_1px_0_rgba(255,255,255,0.1)]')
+            } ${
+              draggedId === col.id ? `${isOrigDragged ? 'opacity-30' : 'opacity-100'} bg-blue-600/30 border-2 border-dashed border-blue-500 text-white font-bold` : ''
             } ${
               dragOverId === col.id ? 'border-l-4 border-l-blue-500 bg-white/10' : ''
             }`}
@@ -197,7 +201,7 @@ export function TodaySheetHeader({
                       selectCycleMode === 'all' || (isAllSelected && selectCycleMode === 'none')
                         ? 'border-blue-500 bg-blue-600 text-white'
                         : selectCycleMode === 'elective'
-                        ? 'border-amber-500 bg-amber-500 text-black font-black'
+                        ? 'border-amber-500 bg-amber-500 text-black font-bold'
                         : selectCycleMode === 'regular'
                         ? 'border-cyan-500 bg-cyan-600 text-white'
                         : 'border-white/20 bg-white/5 hover:border-white/40'
@@ -210,7 +214,7 @@ export function TodaySheetHeader({
                     }
                   >
                     {(selectCycleMode !== 'none' || isAllSelected) && (
-                      <span className="text-[10px] font-black leading-none">✓</span>
+                      <span className="text-[10px] font-bold leading-none">✓</span>
                     )}
                   </button>
                 ) : (
@@ -218,9 +222,9 @@ export function TodaySheetHeader({
                   <div className={`flex items-center gap-1.5 ${col.id === 'review' ? 'italic' : ''}`}>
                     {col.id === 'review' ? (
                       <>
-                        <span className="text-blue-500/80 font-black mr-0.5">"</span>
-                        <span className="text-blue-200">{col.label}</span>
-                        <span className="text-blue-500/80 font-black ml-0.5">"</span>
+                        <span className={isLight ? 'text-blue-700 font-medium mr-0.5' : 'text-blue-500/80 font-medium mr-0.5'}>"</span>
+                        <span className={isLight ? 'text-[#0f172a] font-semibold' : 'text-blue-200 font-medium'}>{col.label}</span>
+                        <span className={isLight ? 'text-blue-700 font-medium ml-0.5' : 'text-blue-500/80 font-medium ml-0.5'}>"</span>
                       </>
                     ) : col.id === 'tools' ? (
                       <div className="flex items-center gap-1 select-none">
@@ -235,8 +239,8 @@ export function TodaySheetHeader({
                           }}
                           className={`p-0.5 rounded transition-all flex items-center justify-center ${
                             showAllTools 
-                              ? 'bg-blue-600/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30' 
-                              : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700'
+                              ? (isLight ? 'bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-300' : 'bg-blue-600/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30') 
+                              : (isLight ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black border border-gray-300' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700')
                           }`}
                           title={showAllTools ? '7개 도구 접기' : '7개 도구 펼치기'}
                         >
@@ -250,8 +254,8 @@ export function TodaySheetHeader({
                             }}
                             className={`p-0.5 rounded transition-all flex items-center justify-center ${
                               isToolsEditMode 
-                                ? 'bg-amber-500/30 text-amber-400 hover:bg-amber-600 hover:text-white border border-amber-500/30 shadow-[0_0_8px_rgba(245,158,11,0.4)]' 
-                                : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700'
+                                ? (isLight ? 'bg-amber-100 text-amber-800 hover:bg-amber-500 hover:text-white border border-amber-300 shadow-sm' : 'bg-amber-500/30 text-amber-400 hover:bg-amber-600 hover:text-white border border-amber-500/30 shadow-[0_0_8px_rgba(245,158,11,0.4)]') 
+                                : (isLight ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black border border-gray-300' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700')
                             }`}
                             title={isToolsEditMode ? '도구 편집 모드 종료' : '도구 순서 편집'}
                           >

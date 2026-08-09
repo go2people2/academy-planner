@@ -106,7 +106,28 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
   };
 };
 
-// 5. 과거 숙제 내역 취합 유틸리티 (중간 결석/휴업일이 있어도 가장 최근 1회의 숙제만 깔끔하게 이월)
+// 무효 과제 문구 판정 유틸리티 (보강이라 숙제없음, 숙제없음, 결석 등 무효 문구 자동 걸러냄)
+export const isValidHomeworkText = (hwText?: string | null): boolean => {
+  if (!hwText) return false;
+  const cleaned = hwText.trim().replace(/\s+/g, '');
+  if (!cleaned) return false;
+
+  const invalidPatterns = [
+    '결석',
+    '숙제없음',
+    '보강이라숙제없음',
+    '보강숙제없음',
+    '없음',
+    '보강',
+    '수업취소',
+    '수업제외'
+  ];
+
+  if (invalidPatterns.includes(cleaned)) return false;
+  return true;
+};
+
+// 5. 과거 숙제 내역 취합 유틸리티 (중간 결석/휴업일이 있어도 가장 최근 1회의 유효 숙제만 깔끔하게 이월)
 export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: any, targetCourse = '정규') => {
   if (pastLogs.length === 0) return "";
 
@@ -127,13 +148,13 @@ export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, stud
 
   const logsToProcess = filteredLogs.length > 0 ? filteredLogs : pastLogs;
 
-  // 가장 최근에 숙제가 작성되었던 1회의 과거 수업 찾기 (결석 세션은 무조건 스킵하고 그 전 수업 계속 추적)
+  // 가장 최근에 유효한 숙제가 작성되었던 1회의 과거 수업 찾기 (무효 문구는 스킵하고 그 전 수업 계속 추적)
   for (const log of logsToProcess) {
     const attStatus = log.attendance_status || '';
     const isAbsent = attStatus.startsWith('결석');
     const hw = log.homework_text ? log.homework_text.trim() : '';
 
-    if (!isAbsent && hw !== '' && hw !== '결석') {
+    if (!isAbsent && isValidHomeworkText(hw)) {
       const dayName = getDayOfWeek(log.date);
       const dateStr = log.date ? log.date.slice(5).replace('-', '.') : '';
       return `${dateStr}(${dayName})\n${hw}`;
@@ -283,8 +304,10 @@ export const getEnrichedStudentData = (
   
   const history = calculateStudentHistory(logs, selectedDate);
   const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays, '정규');
-  const todayLogs = logs.filter(l => String(l.date) === String(selectedDate));
-  const regularTodayLog = todayLogs.find(l => (l.course_name === '정규' || !l.course_name) && (l.moved_to_hour === null || l.moved_to_hour === undefined));
+  const todayLogs = logs.filter((l: any) => String(l.date || l.session_date) === String(selectedDate));
+  // 💡 [시간 이동 / 보강 완전 분리] 순수 보강(is_pure_makeup) 로그는 정규 수업 세션으로 채택되는 것을 원천 차단
+  const movedTodayLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !l.is_pure_makeup && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+  const regularTodayLog = movedTodayLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !l.is_pure_makeup);
   
   let electiveDays: string[] = [];
   const rawElective = s.book_courses?.['__elective_courses'];

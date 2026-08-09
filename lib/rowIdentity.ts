@@ -33,5 +33,6 @@ export function matchRowIdentity(s: any, updateStudentId: string): boolean {
  * @param studentId - 정규 또는 파생(_special_xxx) 학생 ID
  */
 export function extractRealStudentId(studentId: string): string {
-  return String(studentId).replace(/_special.*$/, '');
+  if (!studentId) return '';
+  return String(studentId).replace(/_special.*$/, '').replace(/_makeup.*$/, '');
 }

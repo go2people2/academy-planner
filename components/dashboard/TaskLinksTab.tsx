@@ -14,6 +14,7 @@ interface TaskLinksTabProps {
   teachers: any[];
   currentUser: any;
   onRefreshTasks: () => Promise<void>;
+  isLight?: boolean;
 }
 
 // Helper to safely parse task content whether string or object
@@ -54,7 +55,8 @@ export default function TaskLinksTab({
   tasks,
   teachers,
   currentUser,
-  onRefreshTasks
+  onRefreshTasks,
+  isLight = false
 }: TaskLinksTabProps) {
   const [linkScopeFilter, setLinkScopeFilter] = useState<'all' | 'shared' | 'private'>('all');
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
@@ -265,19 +267,19 @@ export default function TaskLinksTab({
       {/* Header controls */}
       <div className="flex items-center justify-between shrink-0 flex-wrap gap-2">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">
+          <span className="text-xs font-bold uppercase tracking-wider text-gray-500">
             업무 구글 시트 / 링크 ({linkTasks.length}개)
           </span>
 
           {/* 세그먼트 필터 버튼 */}
-          <div className="flex items-center bg-white/5 border border-white/10 p-0.5 rounded-lg gap-1">
+          <div className={`flex items-center p-1 rounded-xl gap-1 border ${isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-white/5 border-white/10'}`}>
             <button
               type="button"
               onClick={() => setLinkScopeFilter('all')}
-              className={`px-2.5 py-1 text-[10px] font-black rounded transition-all ${
+              className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 linkScopeFilter === 'all'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-400 hover:text-white'
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
               }`}
             >
               전체
@@ -285,63 +287,65 @@ export default function TaskLinksTab({
             <button
               type="button"
               onClick={() => setLinkScopeFilter('shared')}
-              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-black rounded transition-all ${
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 linkScopeFilter === 'shared'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-400 hover:text-white'
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
               }`}
             >
-              <Globe size={11} /> 공유 링크
+              <Globe size={13} /> 공유 링크
             </button>
             <button
               type="button"
               onClick={() => setLinkScopeFilter('private')}
-              className={`flex items-center gap-1 px-2.5 py-1 text-[10px] font-black rounded transition-all ${
+              className={`flex items-center gap-1 px-3 py-1.5 text-xs font-bold rounded-lg transition-all ${
                 linkScopeFilter === 'private'
                   ? 'bg-blue-600 text-white shadow-sm'
-                  : 'text-gray-400 hover:text-white'
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
               }`}
             >
-              <Lock size={11} /> 나만 보기 (개인)
+              <Lock size={13} /> 나만 보기 (개인)
             </button>
           </div>
         </div>
         
         <button 
           onClick={handleOpenCreateModal}
-          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10"
+          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10"
         >
-          <Plus size={14} /> 새 링크 등록
+          <Plus size={15} /> 새 링크 등록
         </button>
       </div>
 
       {/* Grid of Link Cards */}
-      <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 custom-scrollbar-v align-start content-start">
+      <div className="flex-1 overflow-y-auto pr-1 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3.5 custom-scrollbar-v align-start content-start">
         {linkTasks.map((task) => {
           const assignee = teachers.find(t => t.id === task.created_by);
           return (
             <motion.div 
               key={task.id}
               layout
-              className={`group relative flex flex-col justify-between border rounded-xl p-3 bg-[#0a0a0a] transition-all ${
-                task.is_completed ? 'border-emerald-500/20 opacity-60' : 'border-white/10 hover:border-white/20'
-              }`}
+              className={`group relative flex flex-col justify-between border rounded-2xl p-3.5 transition-all ${
+                isLight ? 'bg-white border-[#e3e2e0] shadow-sm hover:border-blue-400' : 'bg-[#0a0a0a] border-white/10 hover:border-white/20'
+              } ${task.is_completed ? 'opacity-60' : ''}`}
             >
-              <div className="space-y-1.5">
+              <div className="space-y-2">
                 <div className="flex items-start justify-between gap-2">
                   <div className="flex flex-col min-w-0 pr-1">
-                    <div className="flex items-center gap-1.5 mb-0.5">
+                    <div className="flex items-center gap-1.5 mb-1">
                       {task.isPrivate ? (
-                        <span className="flex items-center gap-0.5 text-[8.5px] font-black px-1.5 py-0.2 bg-amber-500/15 text-amber-400 border border-amber-500/30 rounded shrink-0">
+                        <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/10 text-amber-600 border border-amber-500/20 rounded shrink-0">
                           <Lock size={9} /> 개인
                         </span>
                       ) : (
-                        <span className="flex items-center gap-0.5 text-[8.5px] font-black px-1.5 py-0.2 bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 rounded shrink-0">
+                        <span className="flex items-center gap-0.5 text-[9px] font-bold px-1.5 py-0.5 bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 rounded shrink-0">
                           <Globe size={9} /> 공유
                         </span>
                       )}
                     </div>
-                    <h4 className={`text-sm font-black leading-tight ${task.is_completed ? 'text-gray-500 line-through' : 'text-white'}`}>
+                    <h4 className={`text-sm font-bold leading-tight ${
+                      task.is_completed ? 'text-gray-400 line-through' : (isLight ? 'text-[#37352f]' : 'text-white')
+                    }`}>
                       {task.title}
                     </h4>
                   </div>
@@ -352,7 +356,7 @@ export default function TaskLinksTab({
                       className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${
                         task.is_completed 
                           ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
-                          : 'border-white/20 hover:border-blue-500 hover:text-blue-500'
+                          : (isLight ? 'border-gray-300 hover:border-blue-500 hover:text-blue-500' : 'border-white/20 hover:border-blue-500 hover:text-blue-500')
                       }`}
                       title="완료 처리"
                     >
@@ -361,7 +365,9 @@ export default function TaskLinksTab({
 
                     <button 
                       onClick={() => handleOpenEditModal(task)}
-                      className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-blue-500 hover:text-blue-500 transition-all opacity-0 group-hover:opacity-100"
+                      className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
+                        isLight ? 'border-gray-300 text-gray-400 hover:border-blue-500 hover:text-blue-500' : 'border-white/10 text-gray-500 hover:border-blue-500 hover:text-blue-500'
+                      }`}
                       title="수정"
                     >
                       <Edit2 size={10} />
@@ -369,7 +375,9 @@ export default function TaskLinksTab({
 
                     <button 
                       onClick={() => handleDeleteLink(task.id)}
-                      className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500 transition-all opacity-0 group-hover:opacity-100"
+                      className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
+                        isLight ? 'border-gray-300 text-gray-400 hover:border-rose-500 hover:text-rose-500' : 'border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500'
+                      }`}
                       title="완전 삭제"
                     >
                       <Trash2 size={10} />
@@ -377,21 +385,23 @@ export default function TaskLinksTab({
                   </div>
                 </div>
                 
-                <p className={`text-xs leading-relaxed ${task.is_completed ? 'text-gray-600' : 'text-gray-400'}`}>
+                <p className={`text-xs leading-relaxed ${
+                  task.is_completed ? 'text-gray-400 line-through' : (isLight ? 'text-gray-600' : 'text-gray-400')
+                }`}>
                   {task.textContent || '링크에 대한 세부 설명이 없습니다.'}
                 </p>
               </div>
 
               {/* Lower Section */}
-              <div className="mt-3 pt-2.5 border-t border-white/5 flex flex-col gap-2">
+              <div className={`mt-3.5 pt-2.5 border-t flex flex-col gap-2 ${isLight ? 'border-t-[#e3e2e0]' : 'border-t-white/5'}`}>
                 {/* Link button */}
                 <button
                   onClick={() => handleOpenLink(task.url)}
                   disabled={!task.url}
-                  className={`w-full py-1.5 rounded-lg flex items-center justify-center gap-1.5 text-xs font-black transition-all ${
+                  className={`w-full py-2 rounded-xl flex items-center justify-center gap-1.5 text-xs font-bold transition-all ${
                     task.is_completed
-                      ? 'bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed'
-                      : 'bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 active:scale-95 shadow-md shadow-indigo-900/10'
+                      ? (isLight ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed' : 'bg-white/5 text-gray-500 border border-white/5 cursor-not-allowed')
+                      : (isLight ? 'bg-blue-50 border border-blue-200 text-blue-700 hover:bg-blue-600 hover:text-white hover:border-blue-600 shadow-sm' : 'bg-indigo-600/10 border border-indigo-500/30 text-indigo-400 hover:bg-indigo-600 hover:text-white hover:border-indigo-500 shadow-md')
                   }`}
                 >
                   <ExternalLink size={13} />
@@ -404,7 +414,7 @@ export default function TaskLinksTab({
                     <User size={12} />
                     <span>{assignee?.nickname || assignee?.name || '지정되지 않음'}</span>
                   </div>
-                  <div className="px-2 py-0.5 rounded-[4px] uppercase font-black bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                  <div className={`px-2 py-0.5 rounded-[4px] uppercase font-bold border ${isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20'}`}>
                     상시
                   </div>
                 </div>
@@ -414,8 +424,8 @@ export default function TaskLinksTab({
         })}
 
         {linkTasks.length === 0 && (
-          <div className="col-span-full h-64 border border-dashed border-white/10 rounded-2xl flex flex-col items-center justify-center text-gray-500 gap-2">
-            <Sparkles size={24} className="text-gray-600" />
+          <div className={`col-span-full h-64 border border-dashed rounded-2xl flex flex-col items-center justify-center gap-2 ${isLight ? 'border-[#e3e2e0] bg-white text-gray-400 shadow-sm' : 'border-white/10 text-gray-500'}`}>
+            <Sparkles size={24} className={isLight ? "text-blue-500" : "text-gray-600"} />
             <span className="text-xs font-bold">등록된 업무 링크가 없습니다. 새 링크를 등록해 보세요.</span>
           </div>
         )}
@@ -429,16 +439,18 @@ export default function TaskLinksTab({
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
-              className="bg-[#0f0f0f] border border-white/10 w-full max-w-md rounded-2xl p-6 shadow-2xl relative"
+              className={`border w-full max-w-md rounded-2xl p-6 shadow-2xl relative ${
+                isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#0f0f0f] border-white/10 text-white'
+              }`}
             >
               <button 
                 onClick={() => { setIsLinkModalOpen(false); setEditingLinkTask(null); }}
-                className="absolute top-4 right-4 text-gray-500 hover:text-white transition-all"
+                className={`absolute top-4 right-4 transition-all ${isLight ? 'text-gray-400 hover:text-black' : 'text-gray-500 hover:text-white'}`}
               >
                 <X size={20} />
               </button>
 
-              <h3 className="text-base font-black text-white uppercase tracking-wider mb-6 flex items-center gap-2">
+              <h3 className={`text-base font-black uppercase tracking-wider mb-6 flex items-center gap-2 ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
                 {editingLinkTask ? (
                   <>
                     <Edit2 size={18} className="text-blue-500" /> 업무 링크 수정
@@ -454,14 +466,14 @@ export default function TaskLinksTab({
                 {/* 공개 범위 선택 */}
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">공개 범위 설정</label>
-                  <div className="grid grid-cols-2 gap-2 p-1 bg-white/5 border border-white/10 rounded-lg">
+                  <div className={`grid grid-cols-2 gap-2 p-1 border rounded-lg ${isLight ? 'bg-gray-50 border-[#e3e2e0]' : 'bg-white/5 border-white/10'}`}>
                     <button
                       type="button"
                       onClick={() => setIsPrivate(false)}
                       className={`flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-black transition-all ${
                         !isPrivate
                           ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-                          : 'text-gray-400 hover:text-white'
+                          : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
                       }`}
                     >
                       <Globe size={14} />
@@ -473,7 +485,7 @@ export default function TaskLinksTab({
                       className={`flex items-center justify-center gap-1.5 py-2 rounded-md text-xs font-black transition-all ${
                         isPrivate
                           ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/20'
-                          : 'text-gray-400 hover:text-white'
+                          : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
                       }`}
                     >
                       <Lock size={14} />
@@ -490,7 +502,9 @@ export default function TaskLinksTab({
                     onChange={(e) => setLinkTitle(e.target.value)}
                     required
                     placeholder="예: 초등부 단원 평가 관리 시트"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-all"
+                    className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                      isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] placeholder-gray-400' : 'bg-white/5 border-white/10 text-white placeholder-gray-600'
+                    }`}
                   />
                 </div>
 
@@ -502,7 +516,9 @@ export default function TaskLinksTab({
                     onChange={(e) => setLinkUrl(e.target.value)}
                     required
                     placeholder="예: docs.google.com/spreadsheets/d/..."
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-all"
+                    className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all ${
+                      isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] placeholder-gray-400' : 'bg-white/5 border-white/10 text-white placeholder-gray-600'
+                    }`}
                   />
                 </div>
 
@@ -513,7 +529,9 @@ export default function TaskLinksTab({
                     onChange={(e) => setLinkContent(e.target.value)}
                     rows={2}
                     placeholder="업무 설명 및 관련 숙지 사항 입력"
-                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder-gray-600 focus:outline-none focus:border-blue-500 transition-all resize-none"
+                    className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all resize-none ${
+                      isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] placeholder-gray-400' : 'bg-white/5 border-white/10 text-white placeholder-gray-600'
+                    }`}
                   />
                 </div>
 
@@ -531,11 +549,11 @@ export default function TaskLinksTab({
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-black transition-all ${
                             isSelected 
                               ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
-                              : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
+                              : (isLight ? 'bg-gray-100 border-[#e3e2e0] text-gray-600 hover:bg-gray-200' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white')
                           }`}
                         >
                           <div className={`w-4 h-4 rounded-full flex items-center justify-center text-[9px] font-black uppercase ${
-                            isSelected ? 'bg-white text-blue-600' : 'bg-white/10 text-gray-300'
+                            isSelected ? 'bg-white text-blue-600' : (isLight ? 'bg-gray-200 text-gray-700' : 'bg-white/10 text-gray-300')
                           }`}>
                             {(t.nickname || t.name || '?')[0]}
                           </div>
@@ -550,7 +568,9 @@ export default function TaskLinksTab({
                   <button 
                     type="button" 
                     onClick={() => { setIsLinkModalOpen(false); setEditingLinkTask(null); }}
-                    className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white rounded-lg text-xs font-bold transition-all"
+                    className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
+                      isLight ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                    }`}
                   >
                     취소
                   </button>

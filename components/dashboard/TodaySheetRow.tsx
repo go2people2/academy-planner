@@ -12,7 +12,7 @@ import { HistoryRows } from './TodaySheetHistory';
 import { TodaySheetCell } from './todaySheet/TodaySheetCell';
 import { useTodaySheetRowLogic } from './hooks/useTodaySheetRowLogic';
 
-interface TodaySheetRowProps {
+export interface TodaySheetRowProps {
   student: Student;
   masterTextbooks: TextbookOption[];
   onSave: (id: string, data: any) => Promise<boolean>;
@@ -48,6 +48,7 @@ interface TodaySheetRowProps {
   isToolsEditMode?: boolean;
   showAllTools?: boolean;
   onReorderTools?: (draggedId: string, targetId: string) => void;
+  isLight?: boolean;
 }
 
 /**
@@ -60,8 +61,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
     selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
     rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel, isOtherClassSection,
-    cooperatingCells, onRemoveFromToday,
-    toolsOrder, isToolsEditMode, showAllTools, onReorderTools
+    cooperatingCells, onSave, onUpdateStudentInfo, onRemoveFromToday,
+    toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false
   } = props;
 
   // 💡 단축어 및 트리거 기호 추출
@@ -90,7 +91,7 @@ useEffect(() => {
 
   // 1. 커스텀 훅 호출 (모든 상태와 핸들러 포함)
   const { states, refs, handlers } = useTodaySheetRowLogic({
-    student, masterTextbooks, onSave: props.onSave, onUpdateStudentInfo: props.onUpdateStudentInfo, 
+    student, masterTextbooks, onSave, onUpdateStudentInfo, 
     selectedDate, activeCell, editingCell, currentUser: props.currentUser
   });
 
@@ -103,6 +104,8 @@ useEffect(() => {
   const {
     handleSave, handleAttendanceToggle, handleSupplementTimeSelect, selectFeedback, syncTextFromData
   } = handlers;
+
+  const [isPm, setIsPm] = useState(true);
 
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
   const lastDataColumnId = React.useMemo(() => {
@@ -145,12 +148,12 @@ useEffect(() => {
 
   return (
     <>
-      <tr className={`group/row transition-all duration-300 border-b border-white/10 ${
+      <tr className={`group/row transition-all duration-300 border-b ${props.isLight ? 'border-[#e3e2e0]' : 'border-white/10'} ${
         isSelected 
-          ? 'bg-[#0f172a] hover:bg-[#1e293b]' // 투명도 없는 진한 남색
+          ? (props.isLight ? 'bg-blue-100 hover:bg-blue-200' : 'bg-[#0f172a] hover:bg-[#1e293b]')
           : (rowIndex !== undefined && rowIndex % 2 !== 0)
-            ? 'bg-[#1c1c1e] hover:bg-[#2a2a2d]' // 홀수 행
-            : 'bg-black hover:bg-[#111111]' // 짝수 행
+            ? (props.isLight ? 'bg-[#f9f9f8] hover:bg-[#f0f0ee]' : 'bg-[#1c1c1e] hover:bg-[#2a2a2d]')
+            : (props.isLight ? 'bg-white hover:bg-[#f4f4f2]' : 'bg-black hover:bg-[#111111]')
       }`}>
         {activeColumns.map((col) => {
           const isSticky = col.id === 'name' || col.id === 'tools' || col.id === 'action' || col.id === 'select';
@@ -219,6 +222,7 @@ useEffect(() => {
               isToolsEditMode={isToolsEditMode}
               showAllTools={showAllTools}
               onReorderTools={onReorderTools}
+              isLight={props.isLight}
               onApplyTestPreset={(preset: any, cid: 'test_id' | 'next_quiz') => {
                 states.setFormData((prev: any) => {
                   const updates: any = {};
@@ -290,7 +294,7 @@ useEffect(() => {
         })}
       </tr>
 
-      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} limit={props.historyLimit || 3} masterTextbooks={masterTextbooks} onUpdateStudentInfo={props.onUpdateStudentInfo} onSave={props.onSave} academyInfo={props.academyInfo} />
+      <HistoryRows student={student} activeColumns={activeColumns} colWidths={colWidths} isExpanded={isHistoryExpanded} selectedDate={selectedDate} limit={props.historyLimit || 3} masterTextbooks={masterTextbooks} isLight={props.isLight} onUpdateStudentInfo={props.onUpdateStudentInfo} onSave={props.onSave} academyInfo={props.academyInfo} />
 
       {/* Editors Container (Invisible row) */}
       <tr style={{ display: 'none' }}>
@@ -330,24 +334,75 @@ useEffect(() => {
 
       {/* Supplement Time Picker Portal */}
       {isSupplementTimePickerOpen && createPortal(
-        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.9 }} className="bg-[#0a0a0a] border border-blue-500/30 rounded-2xl shadow-[0_0_50px_rgba(37,99,235,0.2)] p-6 w-full max-w-sm text-center">
-            <div className="flex items-center justify-center gap-3 mb-6">
-              <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center text-blue-500 shadow-lg"><Clock size={20} /></div>
-              <div className="text-left">
-                <h3 className="text-lg font-black text-white leading-none">{student.name} 보강 시간</h3>
-                <p className="text-[10px] text-gray-500 uppercase font-bold tracking-widest mt-1.5">Select Session Time</p>
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+          <motion.div 
+            initial={{ opacity: 0, scale: 0.95 }} 
+            animate={{ opacity: 1, scale: 1 }} 
+            exit={{ opacity: 0, scale: 0.95 }} 
+            className={`rounded-2xl p-6 w-full max-w-sm text-center border shadow-2xl ${
+              isLight 
+                ? 'bg-white border-[#e3e2e0] text-[#0f172a]' 
+                : 'bg-[#0a0a0a] border-blue-500/30 text-white shadow-[0_0_50px_rgba(37,99,235,0.2)]'
+            }`}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-left">
+                <div className={`w-8 h-8 rounded-full flex items-center justify-center shadow-sm border ${
+                  isLight ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-blue-600/20 text-blue-500 border-blue-500/30'
+                }`}>
+                  <Clock size={16} />
+                </div>
+                <div>
+                  <h3 className={`text-sm font-bold leading-none ${isLight ? 'text-[#0f172a]' : 'text-white'}`}>
+                    {student.name} 수업 이동
+                  </h3>
+                  <p className={`text-[10px] font-semibold mt-1 ${isLight ? 'text-gray-500' : 'text-gray-400'}`}>
+                    이동할 시각을 선택하세요
+                  </p>
+                </div>
               </div>
+              {/* 💡 오전 / 오후 순환 토글 버튼 */}
+              <button
+                type="button"
+                onClick={() => setIsPm(prev => !prev)}
+                className={`px-3 py-1.5 rounded-xl border text-[11px] font-extrabold transition-all flex items-center gap-1.5 shadow-xs ${
+                  isPm 
+                    ? 'bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500 hover:text-black' 
+                    : 'bg-sky-500/15 text-sky-600 border-sky-500/30 hover:bg-sky-500 hover:text-white'
+                }`}
+              >
+                <span>{isPm ? '🌙 오후' : '☀️ 오전'}</span>
+                <span className="text-[9px] opacity-60">🔄</span>
+              </button>
             </div>
-            <div className="grid grid-cols-5 gap-2">
-              {[13, 14, 15, 16, 17, 18, 19, 20, 21, 22].map(h => (
-                <button key={h} onClick={() => handleSupplementTimeSelect(h)} className="py-3 rounded-lg bg-white/5 border border-white/10 text-xs font-black text-white hover:bg-blue-600 hover:border-blue-400 transition-all shadow-md group">
-                  <span className="opacity-60 group-hover:opacity-100">{h >= 12 ? (h === 12 ? '12p' : `${h-12}p`) : `${h}a`}</span>
-                </button>
-              ))}
+
+            <div className="grid grid-cols-4 gap-2">
+              {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => {
+                const targetHour = isPm ? (num === 12 ? 12 : num + 12) : (num === 12 ? 0 : num);
+                return (
+                  <button 
+                    key={num} 
+                    onClick={() => handleSupplementTimeSelect(targetHour)} 
+                    className={`py-2.5 rounded-xl border text-sm font-black transition-all shadow-xs active:scale-95 ${
+                      isLight 
+                        ? 'bg-blue-50 text-blue-950 border-blue-200/90 hover:bg-blue-600 hover:text-white hover:border-blue-600' 
+                        : 'bg-white/5 border-white/10 text-white hover:bg-blue-600 hover:border-blue-400'
+                    }`}
+                  >
+                    {num}시
+                  </button>
+                );
+              })}
             </div>
-            <button onClick={() => setIsSupplementTimePickerOpen(false)} className="mt-6 w-full py-2.5 rounded-xl bg-white/5 border border-white/10 text-[10px] font-black uppercase tracking-widest text-gray-500 hover:text-white transition-all flex items-center justify-center gap-2">
-              <X size={14} /> 취소
+            <button 
+              onClick={() => setIsSupplementTimePickerOpen(false)} 
+              className={`mt-5 w-full py-2 rounded-xl border text-[11px] font-bold tracking-wider transition-all flex items-center justify-center gap-2 ${
+                isLight 
+                  ? 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200 hover:text-black' 
+                  : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
+              }`}
+            >
+              닫기
             </button>
           </motion.div>
         </div>,

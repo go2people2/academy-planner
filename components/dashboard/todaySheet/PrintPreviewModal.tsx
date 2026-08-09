@@ -445,6 +445,19 @@ export default function PrintPreviewModal({
                               cellContent = session?.mission ?? s.recent_mission ?? '';
                             } else if (col.id === 'notes') {
                               cellContent = session?.special_notes || '';
+                            } else if (col.id === 'book_progress') {
+                              if (s.book_progress) {
+                                if (typeof s.book_progress === 'string') {
+                                  cellContent = s.book_progress;
+                                } else if (typeof s.book_progress === 'object') {
+                                  cellContent = Object.entries(s.book_progress)
+                                    .filter(([_, prog]) => prog && String(prog).trim())
+                                    .map(([book, prog]) => `${book}: ${prog}`)
+                                    .join('\n');
+                                }
+                              } else {
+                                cellContent = '';
+                              }
                             }
 
                             return (
