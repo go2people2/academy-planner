@@ -42,6 +42,8 @@ export interface OverviewProps {
   isLight?: boolean;
 }
 
+import { downloadStudentTemplate, detectDuplicatePhoneStudents } from './utils/studentExcelParser';
+
 export default function Overview({ 
   todayStudents = [], excludedStudents = [], filteredAllStudents = [], allTodayIds = [], selectedStudentId, onSelectStudent, 
   onViewProgress,
@@ -55,10 +57,10 @@ export default function Overview({
   consultationCycle = 21,
   onStartClass,
   academyInfo,
-  searchQuery = '', // 💡 추가
-  onSearchChange, // 💡 추가
-  currentUser, // 💡 추가
-  showDuplicateWarning = false, // 💡 추가
+  searchQuery = '',
+  onSearchChange,
+  currentUser,
+  showDuplicateWarning = false,
   isLight = false
 }: OverviewProps) {
   
@@ -68,47 +70,8 @@ export default function Overview({
 
   // 💡 [추가] 로그인 전화번호 뒷자리 중복 학생 탐지 및 경고 목록 추출
   const duplicatePhoneStudents = useMemo(() => {
-    if (!filteredAllStudents || filteredAllStudents.length === 0) return [];
-    
-    // 1) 학생들의 뒷 4자리와 login_suffix 현황 매핑
-    const groupMap: Record<string, Student[]> = {};
-    filteredAllStudents.forEach(s => {
-      if (s.is_deleted) return;
-      const cleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
-      if (cleanPhone.length >= 4) {
-        const last4 = cleanPhone.slice(-4);
-        if (!groupMap[last4]) groupMap[last4] = [];
-        groupMap[last4].push(s);
-      }
-    });
-
-    // 2) 중복이 발생했는데 login_suffix가 지정되지 않았거나, login_suffix가 동일하게 설정되어 충돌 우려가 있는 그룹 필터링
-    const duplicates: { last4: string; students: Student[] }[] = [];
-    Object.entries(groupMap).forEach(([last4, list]) => {
-      if (list.length > 1) {
-        const suffixes = list.map(s => (s as any).login_suffix || '');
-        const hasEmptySuffix = suffixes.some(s => s === '');
-        const hasDuplicateSuffix = suffixes.filter((item, index) => suffixes.indexOf(item) !== index).length > 0;
-
-        if (hasEmptySuffix || hasDuplicateSuffix) {
-          duplicates.push({ last4, students: list });
-        }
-      }
-    });
-
-    return duplicates;
+    return detectDuplicatePhoneStudents(filteredAllStudents);
   }, [filteredAllStudents]);
-
-  // 💡 [추가] 학생 등록용 엑셀 템플릿 다운로드
-  const downloadStudentTemplate = () => {
-    const headers = ['이름', '학년', '학교', '반명', '학생연락처', '부모연락처', '코스', '수업요일', '수업시작시간', '수업시간(시수)', '담당교사'];
-    const sampleRow = ['홍길동', '초5', '호크마초등학교', '삼산-Y', '010-1234-5678', '010-9876-5432', 'C', '월수금', '19:00', '3', '윤여태'];
-    const ws = XLSX.utils.aoa_to_sheet([headers, sampleRow]);
-    ws['!cols'] = [{ wch: 10 }, { wch: 8 }, { wch: 18 }, { wch: 12 }, { wch: 16 }, { wch: 16 }, { wch: 8 }, { wch: 10 }, { wch: 12 }, { wch: 12 }, { wch: 10 }];
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "학생일괄등록");
-    XLSX.writeFile(wb, `학생일괄등록_양식.xlsx`);
-  };
 
   // 💡 [추가] 학생 엑셀 일괄 등록 파서
   const handleImportStudents = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -980,12 +943,13 @@ function StudentRowItem({
 }) {
   const isSelectionMode = isBatchMode && isChecked !== undefined;
   
-  // 💡 [시간 이동 / 보강 감지 정밀화] (순수 보강 로그는 수동 시간이동 뱃지 생성 대상에서 완전 제외)
+  // 💡 [시간 이동 / 보강 감지 정밀화] (당일 정규 수업의 수동 시간이동에만 뱃지 생성)
   const movedHourVal = (() => {
     if (student.todaySession?.is_pure_makeup || (student as any).__courseType === 'makeup') return null;
-    if (student.todaySession?.moved_to_hour && !student.todaySession?.is_pure_makeup) return student.todaySession.moved_to_hour;
-    const nonMakeupLog = (student.allLogs || []).find((l: any) => !l.is_pure_makeup && l.moved_to_hour > 0);
-    return nonMakeupLog ? nonMakeupLog.moved_to_hour : null;
+    if (student.todaySession?.moved_to_hour && !student.todaySession?.is_pure_makeup && student.todaySession.moved_to_hour > 0) {
+      return student.todaySession.moved_to_hour;
+    }
+    return null;
   })();
   const isTimeShifted = movedHourVal !== undefined && movedHourVal !== null && movedHourVal > 0;
   const isMakeup = student.__courseType === 'makeup' || isTimeShifted || (student.todaySession?.attendance_status && student.todaySession.attendance_status.startsWith('보강'));
