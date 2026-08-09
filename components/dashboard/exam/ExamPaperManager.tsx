@@ -58,6 +58,8 @@ class ErrorBoundary extends React.Component<
   }
 }
 
+import { useExamPaperManager } from './hooks/useExamPaperManager';
+
 type ViewState = 'list' | 'create' | 'edit' | 'answer_key' | 'detail';
 
 interface ExamPaperManagerProps {
@@ -65,227 +67,25 @@ interface ExamPaperManagerProps {
 }
 
 export default function ExamPaperManager({ academyId }: ExamPaperManagerProps) {
-  const [viewState, setViewState] = useState<ViewState>('list');
-  const [selectedExam, setSelectedExam] = useState<ExamPaper | null>(null);
-  const [formData, setFormData] = useState<ExamPaperFormData | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  // 학원 ID 방어 체크
-  if (!academyId) {
-    return (
-      <div style={styles.errorBanner}>
-        ⚠️ 학원 정보가 올바르게 로드되지 않았습니다. 새로고침 후 다시 시도해 주세요.
-      </div>
-    );
-  }
-
-  // 폼 정보 등록 핸들러 (기존 시험지 수정 시 즉시 저장, 새 시험지 등록 시 정답 입력 단계로)
-  const handleFormSubmit = useCallback(async (data: ExamPaperFormData) => {
-    if (viewState === 'edit' && selectedExam) {
-      setSaving(true);
-      setMessage(null);
-      try {
-        const payload = {
-          exam_code: data.exam_code,
-          title: data.title,
-          has_error: data.has_error || false,
-          error_notes: data.error_notes || '',
-          region: data.region,
-          school: data.school,
-          grade: data.grade,
-          subject: data.subject,
-          year: data.year,
-          semester: data.semester,
-          scope: data.scope,
-          question_count: data.question_count,
-          file_links: data.file_links || [],
-          tags: data.tags || [],
-          updated_at: new Date().toISOString(),
-          // 기존 정답/문항 유형 정보 보존
-          answer_key: selectedExam.answer_key || {},
-          question_types: selectedExam.question_types || {},
-          essay_questions: selectedExam.essay_questions || [],
-        };
-
-        const { error } = await supabase
-          .from('ams_exam_papers')
-          .update(payload)
-          .eq('id', selectedExam.id);
-
-        if (error) throw error;
-
-        setMessage({ type: 'success', text: '시험지 정보가 성공적으로 수정되었습니다.' });
-        setSelectedExam(null);
-        setFormData(null);
-        setViewState('list');
-      } catch (err: any) {
-        console.error('Error updating exam metadata:', err);
-        setMessage({ type: 'error', text: `수정 실패: ${err.message}` });
-      } finally {
-        setSaving(false);
-      }
-    } else {
-      setFormData(data);
-      setViewState('answer_key');
-    }
-  }, [viewState, selectedExam, academyId]);
-
-  // 전체 시험지 데이터 저장 (DB 트랜잭션)
-  const handleSaveExam = useCallback(async (
-    answerKey: Record<string, number | string | number[]>,
-    questionTypes: Record<string, any>,
-    essayQuestions: Array<{ q: number; points: number }>
-  ) => {
-    if (!formData) return;
-
-    // 💡 총 배점 유효성 검증 (부동 소수점 오차 보정 적용 및 미입력 문항은 에디터와 동일하게 0점 처리)
-    const rawTotal = Array.from({ length: formData.question_count }, (_, i) => {
-      const qNum = i + 1;
-      const essayItem = essayQuestions.find((item) => item.q === qNum);
-      return essayItem ? essayItem.points : 0; // 에디터와 동일하게 0점 기준 합산
-    }).reduce((sum, p) => sum + p, 0);
-
-    const totalPoints = Math.round(rawTotal * 100) / 100;
-
-    if (totalPoints !== 100) {
-      const proceed = window.confirm(
-        `⚠️ 현재 설정된 문항 배점의 총합이 100점이 아닙니다.\n(현재 합계: ${totalPoints}점)\n\n이대로 저장하시겠습니까?`
-      );
-      if (!proceed) {
-        return;
-      }
-    }
-
-    setSaving(true);
-    setMessage(null);
-
-    try {
-      const payload = {
-        academy_id: academyId,
-        exam_code: formData.exam_code,
-        title: formData.title,
-        has_error: formData.has_error || false,
-        error_notes: formData.error_notes || '',
-        region: formData.region,
-        school: formData.school,
-        grade: formData.grade,
-        subject: formData.subject,
-        year: formData.year,
-        semester: formData.semester,
-        scope: formData.scope,
-        question_count: formData.question_count,
-        answer_key: answerKey,
-        question_types: questionTypes,
-        essay_questions: essayQuestions,
-        file_links: formData.file_links || [],
-        tags: formData.tags || [],
-        updated_at: new Date().toISOString(),
-      };
-
-      if (selectedExam) {
-        // 기존 시험지 수정
-        const { error } = await supabase
-          .from('ams_exam_papers')
-          .update(payload)
-          .eq('id', selectedExam.id);
-        if (error) throw error;
-        setMessage({ type: 'success', text: '시험지 정보 및 정답이 수정되었습니다.' });
-      } else {
-        // 새 시험지 추가
-        const { error } = await supabase
-          .from('ams_exam_papers')
-          .insert(payload);
-        if (error) throw error;
-        setMessage({ type: 'success', text: '새로운 시험지가 성공적으로 등록되었습니다.' });
-      }
-
-      setSelectedExam(null);
-      setFormData(null);
-      setViewState('list');
-    } catch (err: any) {
-      console.error('Error saving exam:', err);
-      setMessage({ type: 'error', text: `저장 중 오류 발생: ${err.message}` });
-    } finally {
-      setSaving(false);
-    }
-  }, [formData, selectedExam, academyId]);
-
-  // 시험지 상세 조회 전환
-  const handleSelect = useCallback((exam: ExamPaper) => {
-    setSelectedExam(exam);
-    setViewState('detail');
-  }, []);
-
-  // 수정 진입 핸들러
-  const handleEdit = useCallback((exam: ExamPaper) => {
-    setSelectedExam(exam);
-    setFormData({
-      exam_code: exam.exam_code,
-      title: exam.title,
-      has_error: exam.has_error || false,
-      error_notes: exam.error_notes || '',
-      region: exam.region,
-      school: exam.school,
-      grade: exam.grade,
-      subject: exam.subject,
-      year: exam.year,
-      semester: exam.semester,
-      scope: exam.scope,
-      question_count: exam.question_count,
-      answer_key: exam.answer_key,
-      question_types: exam.question_types as any,
-      essay_questions: exam.essay_questions,
-      file_links: exam.file_links,
-      tags: exam.tags,
-    });
-    setViewState('edit');
-  }, []);
-
-  // 정답 편집 다이렉트 진입 핸들러
-  const handleEditAnswerKey = useCallback((exam: ExamPaper) => {
-    setSelectedExam(exam);
-    setFormData({
-      exam_code: exam.exam_code,
-      title: exam.title,
-      has_error: exam.has_error || false,
-      error_notes: exam.error_notes || '',
-      region: exam.region,
-      school: exam.school,
-      grade: exam.grade,
-      subject: exam.subject,
-      year: exam.year,
-      semester: exam.semester,
-      scope: exam.scope,
-      question_count: exam.question_count,
-      answer_key: exam.answer_key,
-      question_types: exam.question_types as any,
-      essay_questions: exam.essay_questions,
-      file_links: exam.file_links,
-      tags: exam.tags,
-    });
-    setViewState('answer_key');
-  }, []);
-
-  // 삭제 핸들러
-  const handleDelete = useCallback(async (examId: string) => {
-    if (!confirm('이 시험지를 삭제하시겠습니까?\n채점 답안 제출 데이터도 함께 지워집니다.')) return;
-    try {
-      const { error } = await supabase.from('ams_exam_papers').delete().eq('id', examId);
-      if (error) throw error;
-      setMessage({ type: 'success', text: '시험지가 영구 삭제되었습니다.' });
-      setViewState('list');
-    } catch (err: any) {
-      setMessage({ type: 'error', text: `삭제 실패: ${err.message}` });
-    }
-  }, []);
-
-  // 뒤로가기 핸들러
-  const handleBack = useCallback(() => {
-    setSelectedExam(null);
-    setFormData(null);
-    setViewState('list');
-  }, []);
+  const {
+    viewState,
+    setViewState,
+    selectedExam,
+    setSelectedExam,
+    formData,
+    setFormData,
+    saving,
+    message,
+    setMessage,
+    handleFormSubmit,
+    handleSaveExam,
+    handleSelect,
+    handleEdit,
+    handleEditAnswerKey,
+    handleDelete,
+    handleCancel: handleBack,
+    handleCreateNew,
+  } = useExamPaperManager({ academyId });
 
   return (
     <div style={styles.container}>
