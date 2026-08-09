@@ -43,90 +43,64 @@ const WRONG_ANSWER_THEMES: Record<string, { primary: string; bg: string; ring: s
   chalkboard: { primary: '#ffffff', bg: '#064e3b', ring: 'focus:ring-white', buttonText: '#064e3b' }
 };
 
+import { useStudentPortal } from './hooks/useStudentPortal';
+
 export default function StudentPortal() {
   const router = useRouter();
   const { slug } = useParams();
-  const [student, setStudent] = useState<any>(null);
-  const [academy, setAcademy] = useState<any>(null); 
-  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
-  const [todaySession, setTodaySession] = useState<any>(null);
-  const [allLogs, setAllLogs] = useState<any[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [isSaving, setIsSaving] = useState(false);
-  const [isTestModalOpen, setIsTestModalOpen] = useState(false);
-  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
-  const [isDashboardSlim, setIsDashboardSlim] = useState(false); // 💡 대시보드 접기 상태를 전역으로 관리
-  const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion' | 'wrong-answer' | 'exam-submit'>('study'); // 💡 모바일 탭 상태 추가 및 오답 제출 지원
   
-  // 💡 오답노트 연동 상태
-  const [wrongAnswerStudent, setWrongAnswerStudent] = useState<any>(null);
-  const [wrongAnswerAcademy, setWrongAnswerAcademy] = useState<any>(null);
-  const [wrongAnswerTheme, setWrongAnswerTheme] = useState<any>(WRONG_ANSWER_THEMES.default);
-  
-  const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
-  const [examSchedules, setExamSchedules] = useState<ExamSchedule[]>([]);
-  const [localClasswork, setLocalClasswork] = useState('');
-  const [localCompletedClasswork, setLocalCompletedClasswork] = useState(''); // 💡 수행 진도 상태 추가
-  const [localHomework, setLocalHomework] = useState('');
-  const [todayPlan, setTodayPlan] = useState('');
-  const [suggestion, setSuggestion] = useState('');
-  const [mySuggestions, setMySuggestions] = useState<any[]>([]); // 💡 건의 히스토리 상태 추가
-  const [teachers, setTeachers] = useState<any[]>([]);
-  const [selectedDate, setSelectedDate] = useState(() => {
-    const now = new Date();
-    const offset = now.getTimezoneOffset() * 60000;
-    return new Date(now.getTime() - offset).toISOString().split('T')[0];
-  });
-  const [validClassDates, setValidClassDates] = useState<{ date: string; label: string }[]>([]);
-  const [selectedCourse, setSelectedCourse] = useState<string>('정규');
-  const [invalidDateAlert, setInvalidDateAlert] = useState<string | null>(null);
-
-  const matchedExam = useMemo(() => {
-    if (!student || !examSchedules.length) return null;
-    
-    // 💡 [개선] 학원에서 정한 현재 관리 시험 회차 가져오기
-    const currentPeriod = academy?.operation_settings?.current_exam_period;
-    
-    // 💡 학교명 정규화: 공백 제거 및 '학교' 접미사 제거하여 매칭 유연성 확보
-    const normalize = (name: string) => (name || '').trim().replace(/\s+/g, '').replace(/학교$/, '');
-    
-    const studentSchool = normalize(student.school);
-    const studentGrade = (student.grade || '').trim();
-
-    if (!studentSchool) return null;
-
-    // 1. 현재 학기(period) 필터링 및 과거 시험 제외 (다가오는 시험만)
-    const upcomingSchedules = examSchedules.filter(ex => ex.target_date >= selectedDate);
-    const currentPeriodSchedules = currentPeriod 
-      ? upcomingSchedules.filter(ex => {
-          if (ex.exam_name && ex.exam_name.startsWith(currentPeriod)) return true;
-          const periodType = currentPeriod.split('-').slice(1).join('-');
-          const legacyNames: any = {
-            '1-MID': ['1학기 중간', '1학기 중간고사'],
-            '1-FINAL': ['1학기 기말', '1학기 기말고사'],
-            '2-MID': ['2학기 중간', '2학기 중간고사'],
-            '2-FINAL': ['2학기 기말', '2학기 기말고사']
-          };
-          if (ex.exam_name && (legacyNames[periodType] || []).includes(ex.exam_name)) return true;
-          return false;
-        })
-      : upcomingSchedules; // 설정이 없으면 전체에서 검색 (하위 호환성)
-
-    // 2. 학교명 + 학년 완벽 일치
-    const exactMatch = currentPeriodSchedules.find(ex => 
-      normalize(ex.school_name) === studentSchool && 
-      (ex.grade?.trim() === studentGrade)
-    );
-    if (exactMatch) return exactMatch;
-
-    // 3. 학교명 일치 + 전학년 대상 (grade가 없거나 빈 값)
-    const schoolMatch = currentPeriodSchedules.find(ex => 
-      normalize(ex.school_name) === studentSchool && 
-      (!ex.grade || ex.grade.trim() === '')
-    );
-    
-    return schoolMatch || null;
-  }, [student, examSchedules, academy?.operation_settings?.current_exam_period, selectedDate]);
+  const {
+    student,
+    setStudent,
+    academy,
+    setAcademy,
+    confirmSubmitOpen,
+    setConfirmSubmitOpen,
+    todaySession,
+    setTodaySession,
+    allLogs,
+    setAllLogs,
+    isLoading,
+    setIsLoading,
+    isSaving,
+    setIsSaving,
+    isTestModalOpen,
+    setIsTestModalOpen,
+    isHistoryOpen,
+    setIsHistoryOpen,
+    isDashboardSlim,
+    setIsDashboardSlim,
+    activeTab,
+    setActiveTab,
+    wrongAnswerStudent,
+    wrongAnswerAcademy,
+    wrongAnswerTheme,
+    availableTextbooks,
+    examSchedules,
+    localClasswork,
+    setLocalClasswork,
+    localCompletedClasswork,
+    setLocalCompletedClasswork,
+    localHomework,
+    setLocalHomework,
+    todayPlan,
+    setTodayPlan,
+    suggestion,
+    setSuggestion,
+    mySuggestions,
+    setMySuggestions,
+    teachers,
+    selectedDate,
+    setSelectedDate,
+    validClassDates,
+    setValidClassDates,
+    selectedCourse,
+    setSelectedCourse,
+    invalidDateAlert,
+    setInvalidDateAlert,
+    matchedExam,
+    fetchAllStudentData,
+  } = useStudentPortal(slug);
 
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;
@@ -171,250 +145,13 @@ export default function StudentPortal() {
       .sort((a, b) => a.session_date.localeCompare(b.session_date));
   }, [allLogs]);
 
-  const fetchAllStudentData = useCallback(async (studentId: string, courseParam?: string) => {
-    setIsLoading(true);
-    const activeCourse = courseParam || selectedCourse;
-    try {
-      const normalizedSlug = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
-      const { data: acData } = await supabase.from('ams_academies').select('*').eq('slug', normalizedSlug).single();
-      let currentTeachers: any[] = [];
-      if (acData) {
-        setAcademy(acData);
-        const { data: tData } = await supabase
-          .from('ams_teachers')
-          .select('*')
-          .eq('academy_id', acData.id)
-          .neq('role', 'master');
-        if (tData) {
-          setTeachers(tData);
-          currentTeachers = tData;
-        }
-      }
-      const { data: stData } = await supabase.from('ams_students').select('*').eq('id', studentId).single();
-      if (stData) setStudent(stData);
-      if (acData) {
-        const { data: exData } = await supabase.from('ams_exam_schedules').select('*').eq('academy_id', acData.id).order('target_date', { ascending: true });
-        if (exData) setExamSchedules(exData);
+  // fetchAllStudentData provided by useStudentPortal hook
 
-        // 💡 학생 건의 사항 히스토리 가져오기 (최근 30일 이내, 최대 5개)
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const { data: suggData } = await supabase.from('ams_tasks')
-          .select('*')
-          .eq('academy_id', acData.id)
-          .eq('title', `[건의] ${stData.name}`)
-          .gte('created_at', thirtyDaysAgo.toISOString())
-          .order('created_at', { ascending: false })
-          .limit(5);
-        if (suggData) setMySuggestions(suggData);
-
-        try {
-          const { data: waAcData } = await supabase
-            .from('academies')
-            .select('*')
-            .eq('slug', normalizedSlug)
-            .maybeSingle();
-
-          if (waAcData) {
-            setWrongAnswerAcademy(waAcData);
-            const themeObj = WRONG_ANSWER_THEMES[waAcData.theme] || WRONG_ANSWER_THEMES.default;
-            setWrongAnswerTheme(themeObj);
-
-            let waTeacherId = null;
-            const amsTeacher = currentTeachers?.find((t: any) => t.id === stData.teacher_id);
-            if (amsTeacher?.name) {
-              const { data: waTeacher } = await supabase
-                .from('teachers')
-                .select('id')
-                .eq('name', amsTeacher.name)
-                .eq('academy_id', waAcData.id)
-                .maybeSingle();
-              if (waTeacher) {
-                waTeacherId = waTeacher.id;
-              }
-            }
-
-            let query = supabase
-              .from('student_users')
-              .select('*')
-              .eq('name', stData.name)
-              .eq('academy_id', waAcData.id);
-
-            if (waTeacherId) {
-              query = query.eq('teacher_id', waTeacherId);
-            }
-
-            const { data: waStData } = await query.maybeSingle();
-
-            if (waStData) {
-              setWrongAnswerStudent(waStData);
-            }
-          }
-        } catch (err) {
-          console.error('Failed to load wrong answer student mapping:', err);
-        }
-      }
-      const tbRes = await fetch('/api/textbooks');
-      const textbooks: TextbookOption[] = tbRes.ok ? await tbRes.json() : [];
-      if (tbRes.ok) setAvailableTextbooks(textbooks);
-
-      const translateBookCodes = (text: string) => {
-        if (!text || !textbooks || textbooks.length === 0) return text;
-        let result = text;
-        const sortedMaster = [...textbooks].sort((a, b) => (b.bookcode?.length || 0) - (a.bookcode?.length || 0));
-        sortedMaster.forEach(m => {
-          if (m.bookcode && m.title) {
-            const escapedCode = m.bookcode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const regex = new RegExp(escapedCode, 'gi');
-            result = result.replace(regex, m.title);
-          }
-        });
-        return result;
-      };
-
-      const { data: logs } = await supabase.from('ams_session_logs').select('*').eq('student_id', studentId).order('session_date', { ascending: false }).limit(50);
-      
-      if (logs) {
-        setAllLogs(logs);
-
-        // 💡 선택된 과목(정규/특강) 로그만 분리 필터링
-        const courseLogs = logs.filter(l => (l.course_name || '정규') === activeCourse);
-
-        const holidays = acData?.operation_settings?.holidays || [];
-        const calculatedDates = getValidClassDates(stData, courseLogs, holidays, activeCourse);
-        setValidClassDates(calculatedDates);
-
-        // 💡 오늘 날짜 문자열 구하기
-        const todayObj = new Date();
-        const offsetVal = todayObj.getTimezoneOffset() * 60000;
-        const todayStr = new Date(todayObj.getTime() - offsetVal).toISOString().split('T')[0];
-
-        // 💡 디폴트 매칭 날짜 추천
-        let defaultDate = todayStr;
-        if (calculatedDates.length > 0) {
-          const hasToday = calculatedDates.some(d => d.date === todayStr);
-          if (hasToday) {
-            defaultDate = todayStr;
-          } else {
-            // 오늘 이후 가장 가까운 미래 수업일 탐색
-            const futureDates = calculatedDates.filter(d => d.date > todayStr).sort((a, b) => a.date.localeCompare(b.date));
-            // 오늘 이전 가장 가까운 과거 수업일 탐색
-            const pastDates = calculatedDates.filter(d => d.date < todayStr).sort((a, b) => b.date.localeCompare(a.date)); // 최신 순 정렬됨
-            
-            if (futureDates.length > 0) {
-              defaultDate = futureDates[0].date;
-            } else if (pastDates.length > 0) {
-              defaultDate = pastDates[0].date;
-            }
-          }
-        }
-
-        // 💡 [무한루프 방지] 현재 selectedDate가 새로 보정된 defaultDate와 다를 때만 업데이트를 수행합니다.
-        let activeDate = selectedDate;
-        if (selectedDate !== defaultDate) {
-          setSelectedDate(defaultDate);
-          activeDate = defaultDate;
-        }
-
-        const dayName = ['일', '월', '화', '수', '목', '금', '토'][new Date(activeDate).getDay()];
-        const todayLog = courseLogs.find(l => l.session_date === activeDate);
-        const isTodayClassDay = stData.class_days?.includes(dayName) || todayLog?.attendance_status?.startsWith('보강');
-        const pastLogs = courseLogs.filter(l => l.session_date < selectedDate).sort((a, b) => b.session_date.localeCompare(a.session_date));
-        const lastValidSession = pastLogs.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || pastLogs[0];
-        
-        let autoTodayTest = "";
-        let autoTodayTestCut = 0; 
-        let autoNextTestText = "";
-        let autoNextTestCut = 0;
-        let autoNextTestTrial = 1;
-        
-        if (lastValidSession) {
-          let isLastTestCompleted = false;
-          try { 
-            if (lastValidSession.test_result?.startsWith('{')) { 
-              const res = JSON.parse(lastValidSession.test_result);
-              isLastTestCompleted = res.completed === true; 
-            } 
-          } catch (e) {}
-          const lastPrepObj = (() => {
-            try { if (lastValidSession.homework_to?.startsWith('{')) { return JSON.parse(lastValidSession.homework_to); } } catch (e) {}
-            return { text: lastValidSession.homework_to || "", cut: 0, trial: 1 };
-          })();
-
-          let lastTodayCut = 0;
-          try {
-            if (lastValidSession.test_result?.startsWith('{')) {
-              lastTodayCut = JSON.parse(lastValidSession.test_result).cut || 0;
-            }
-          } catch (e) {}
-
-          const activePlanText = lastPrepObj.text || (isLastTestCompleted === false ? (lastValidSession.test_status || "") : "");
-          const activePlanCut = lastPrepObj.text ? (lastPrepObj.cut || 0) : (isLastTestCompleted === false ? lastTodayCut : 0);
-          const activePlanTrial = lastPrepObj.text ? (lastPrepObj.trial || 1) : 1;
-
-          if (isTodayClassDay) {
-            autoTodayTest = activePlanText;
-            autoTodayTestCut = activePlanCut;
-          } else {
-            autoNextTestText = activePlanText;
-            autoNextTestCut = activePlanCut;
-            autoNextTestTrial = activePlanTrial;
-            autoTodayTest = "";
-            autoTodayTestCut = 0;
-          }
-        }
-        if (todayLog) {
-          let nqText = '', nqCut = 0, nqTrial = 1, nqJson = [];
-          try {
-            if (todayLog.homework_to && todayLog.homework_to.startsWith('{')) {
-              const parsed = JSON.parse(todayLog.homework_to); nqText = parsed.text || ''; nqCut = parsed.cut || 0; nqTrial = parsed.trial || 1; nqJson = parsed.json || [];
-            } else if (todayLog.homework_to) { nqText = todayLog.homework_to; }
-          } catch (e) {}
-          
-          let todayCut = 0;
-          let todoAchievement = null;
-          try { 
-            if (todayLog.test_result?.startsWith('{')) { 
-              const res = JSON.parse(todayLog.test_result); 
-              todayCut = res.cut || 0; 
-              todoAchievement = res.todo_achievement !== undefined ? res.todo_achievement : null;
-            } 
-          } catch (e) {}
-
-          setTodaySession({ 
-            ...todayLog, 
-            test_status: translateBookCodes(todayLog.test_status || autoTodayTest), 
-            next_quiz_text: translateBookCodes(nqText || autoNextTestText), 
-            next_quiz_cut: nqText ? nqCut : autoNextTestCut, 
-            next_quiz_trial: nqText ? nqTrial : autoNextTestTrial, 
-            next_quiz_json: nqJson, 
-            test_cut: todayLog.test_cut || todayCut || autoTodayTestCut, 
-            todo_achievement: todoAchievement,
-            test_answers: todayLog.test_answers || null,
-            onTodoClick: handleTodoAchievement,
-            onTodoToggle: handleTodoToggle
-          });
-          
-          setTodayPlan(translateBookCodes(todayLog.classwork_text || '')); 
-          setLocalCompletedClasswork(translateBookCodes(todayLog.completed_classwork_text || '')); 
-          setLocalHomework(translateBookCodes(todayLog.homework_text || ''));
-        } else {
-          setTodaySession({ 
-            session_date: selectedDate, 
-            test_status: translateBookCodes(autoTodayTest), 
-            next_quiz_text: translateBookCodes(autoNextTestText), 
-            next_quiz_cut: autoNextTestCut, 
-            next_quiz_trial: autoNextTestTrial, 
-            next_quiz_json: [], 
-            test_cut: autoTodayTestCut, 
-            todo_achievement: null 
-          } as any);
-          setLocalCompletedClasswork(''); setTodayPlan(''); setLocalHomework('');
-        }
-      }
-    } catch (e) { console.error(e); } finally { setIsLoading(false); }
-  }, [selectedDate, slug]);
+  useEffect(() => {
+    if (student?.id) {
+      fetchAllStudentData(student.id);
+    }
+  }, [student?.id, selectedCourse, selectedDate, fetchAllStudentData]);
 
   useEffect(() => {
     // 💡 URL 파라미터에서 studentId가 있는지 먼저 확인 (선생님이 뷰어로 들어올 때)
