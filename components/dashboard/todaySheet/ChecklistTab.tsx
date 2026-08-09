@@ -12,6 +12,8 @@ export interface ChecklistTabProps {
   isLight?: boolean;
 }
 
+import { useChecklistTab } from './hooks/useChecklistTab';
+
 export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({ 
   students, 
   allStudents = [], 
@@ -20,193 +22,43 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
   selectedTeacherId = 'All',
   isLight = false 
 }, ref) => {
-  const [topics, setTopics] = useState<any[]>([]);
-  const [items, setItems] = useState<Record<string, Record<string, any>>>({});
-  
-  const [isPrintOpen, setIsPrintOpen] = useState(false);
-  const [isArchiveModalOpen, setIsArchiveModalOpen] = useState(false);
-  const [archiveSearchQuery, setArchiveSearchQuery] = useState('');
-
-  const [archivedTopicIds, setArchivedTopicIds] = useState<string[]>(() => {
-    if (typeof window !== 'undefined' && academyInfo?.id) {
-      const saved = localStorage.getItem(`ams_checklist_archived_topics_${academyInfo.id}`);
-      if (saved) {
-        try { return JSON.parse(saved); } catch (e) {}
-      }
-    }
-    return [];
+  const {
+    topics,
+    setTopics,
+    items,
+    setItems,
+    isPrintOpen,
+    setIsPrintOpen,
+    isArchiveModalOpen,
+    setIsArchiveModalOpen,
+    archiveSearchQuery,
+    setArchiveSearchQuery,
+    archivedTopicIds,
+    setArchivedTopicIds,
+    showAllDays,
+    setShowAllDays,
+    activeChecklistFilter,
+    setActiveChecklistFilter,
+    displayStudents,
+    activeTopics,
+    archivedTopics,
+    searchedArchivedTopics,
+    handleArchiveTopic,
+    handleRestoreTopic,
+    handleCycleColumnFilter,
+    isLoading,
+    setIsLoading,
+    isAddingTopic,
+    setIsAddingTopic,
+    newTopicTitle,
+    setNewTopicTitle,
+  } = useChecklistTab({
+    students,
+    allStudents,
+    academyInfo,
+    selectedFilter,
+    selectedTeacherId,
   });
-
-  useEffect(() => {
-    if (typeof window !== 'undefined' && academyInfo?.id) {
-      localStorage.setItem(`ams_checklist_archived_topics_${academyInfo.id}`, JSON.stringify(archivedTopicIds));
-    }
-  }, [archivedTopicIds, academyInfo?.id]);
-  
-  const [showAllDays, setShowAllDays] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ams_checklist_show_all_days');
-      return saved === 'true';
-    }
-    return false;
-  });
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ams_checklist_show_all_days', String(showAllDays));
-    }
-  }, [showAllDays]);
-
-  const [activeChecklistFilter, setActiveChecklistFilter] = useState<{
-    topicId: string | null;
-    status: string; // 'none' | 'checked' | 'hold' | 'na'
-  }>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('ams_checklist_active_filter');
-      if (saved) {
-        try {
-          return JSON.parse(saved);
-        } catch (e) {
-          console.error(e);
-        }
-      }
-    }
-    return { topicId: null, status: 'none' };
-  });
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('ams_checklist_active_filter', JSON.stringify(activeChecklistFilter));
-    }
-  }, [activeChecklistFilter]);
-
-  // 실시간 화면 및 연산에 사용될 최종 학생 리스트
-  const displayStudents = useMemo(() => {
-    // 1) showAllDays가 false이면 부모가 넘겨준 오늘 요일 학생 목록(이미 정렬 완료) 사용
-    const baseList = showAllDays 
-      ? (allStudents && allStudents.length > 0 ? allStudents : students)
-      : students;
-    
-    let filtered = baseList.filter(s => !s.is_deleted);
-
-    // 2) 학년/반 필터 동기화
-    if (selectedFilter && selectedFilter !== 'All') {
-      if (selectedFilter.startsWith('Grade-')) {
-        const gradeTarget = selectedFilter.replace('Grade-', ''); // 예: "초", "중", "고"
-        filtered = filtered.filter(s => s.grade && s.grade.includes(gradeTarget));
-      } else if (selectedFilter.startsWith('Class-')) {
-        const classIdTarget = selectedFilter.replace('Class-', '');
-        filtered = filtered.filter(s => s.class_id === classIdTarget);
-      }
-    }
-
-    // 3) 담당 선생님 필터 동기화
-    if (selectedTeacherId && selectedTeacherId !== 'All') {
-      filtered = filtered.filter(s => s.teacher_id === selectedTeacherId);
-    }
-
-    // 4) 열 헤더에 지정된 "체크리스트 단일 열 필터" 적용!
-    if (activeChecklistFilter.topicId && activeChecklistFilter.status !== 'none') {
-      const targetTopicId = activeChecklistFilter.topicId;
-      const targetStatus = activeChecklistFilter.status;
-
-      filtered = filtered.filter(student => {
-        const cellData = items[student.id]?.[targetTopicId];
-        const studentStatus = cellData?.status || 'none';
-        
-        if (targetStatus === 'checked') {
-          return studentStatus === 'checked' || cellData?.is_checked === true;
-        }
-
-        // 'empty' 필터일 때는, studentStatus가 'none' 이거나 데이터가 없는 미체크 상태인 경우만 필터링!
-        if (targetStatus === 'empty') {
-          return studentStatus === 'none' && cellData?.is_checked !== true;
-        }
-
-        return studentStatus === targetStatus;
-      });
-    }
-
-    // 5) 가나다 순으로 깔끔하게 정렬
-    if (showAllDays) {
-      return filtered.sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-    }
-    return filtered;
-  }, [students, allStudents, showAllDays, selectedFilter, selectedTeacherId, activeChecklistFilter, items]);
-
-  // 활성화된 메인 토픽과 보관된 토픽 분리
-  const activeTopics = useMemo(() => {
-    return topics.filter(t => !t.title?.startsWith('[ARCHIVED]') && !archivedTopicIds.includes(t.id));
-  }, [topics, archivedTopicIds]);
-
-  const archivedTopics = useMemo(() => {
-    return topics.filter(t => t.title?.startsWith('[ARCHIVED]') || archivedTopicIds.includes(t.id));
-  }, [topics, archivedTopicIds]);
-
-  // 보관함 검색 필터링 토픽
-  const searchedArchivedTopics = useMemo(() => {
-    if (!archiveSearchQuery.trim()) return archivedTopics;
-    const query = archiveSearchQuery.trim().toLowerCase();
-    return archivedTopics.filter(t => {
-      const cleanTitle = t.title.replace(/^\[ARCHIVED\]\s*/, '');
-      return cleanTitle.toLowerCase().includes(query);
-    });
-  }, [archivedTopics, archiveSearchQuery]);
-
-  const handleArchiveTopic = async (topicId: string) => {
-    const topic = topics.find(t => t.id === topicId);
-    if (!topic) return;
-    const cleanTitle = topic.title.replace(/^\[ARCHIVED\]\s*/, '');
-    if (confirm(`📦 "${cleanTitle}" 체크 항목을 보관함으로 이동하시겠습니까?\n메인 체크리스트 표에서는 즉시 숨겨지며 언제든지 보관함에서 복구할 수 있습니다.`)) {
-      setArchivedTopicIds(prev => [...prev, topicId]);
-      // DB 전역 업데이트 (제목 앞에 [ARCHIVED] 마킹)
-      if (!topic.title.startsWith('[ARCHIVED]')) {
-        const newTitle = `[ARCHIVED] ${topic.title}`;
-        setTopics(prev => prev.map(t => t.id === topicId ? { ...t, title: newTitle } : t));
-        try {
-          await supabase.from('ams_checklist_topics').update({ title: newTitle }).eq('id', topicId);
-        } catch (e) {
-          console.error('Archive DB Update Error:', e);
-        }
-      }
-    }
-  };
-
-  const handleRestoreTopic = async (topicId: string) => {
-    setArchivedTopicIds(prev => prev.filter(id => id !== topicId));
-    const topic = topics.find(t => t.id === topicId);
-    if (topic && topic.title.startsWith('[ARCHIVED]')) {
-      const cleanTitle = topic.title.replace(/^\[ARCHIVED\]\s*/, '');
-      setTopics(prev => prev.map(t => t.id === topicId ? { ...t, title: cleanTitle } : t));
-      try {
-        await supabase.from('ams_checklist_topics').update({ title: cleanTitle }).eq('id', topicId);
-      } catch (e) {
-        console.error('Restore DB Update Error:', e);
-      }
-    }
-  };
-
-  const handleCycleColumnFilter = (topicId: string) => {
-    setActiveChecklistFilter(prev => {
-      // 다른 항목을 필터하려는 경우, 새로 지정하고 'checked'부터 시작
-      if (prev.topicId !== topicId) {
-        return { topicId, status: 'checked' };
-      }
-      
-      // 같은 항목인 경우 5단 순환: none -> checked -> hold -> na -> empty -> none
-      let nextStatus = 'none';
-      if (prev.status === 'none') nextStatus = 'checked';
-      else if (prev.status === 'checked') nextStatus = 'hold';
-      else if (prev.status === 'hold') nextStatus = 'na';
-      else if (prev.status === 'na') nextStatus = 'empty';
-      else nextStatus = 'none';
-
-      return {
-        topicId: nextStatus === 'none' ? null : topicId,
-        status: nextStatus
-      };
-    });
-  };
 
   // 열 필터 헤더 전용 아이콘 렌더링
   const renderColumnFilterIcon = (topicId: string) => {
@@ -246,9 +98,6 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
     }
   }));
 
-  const [isLoading, setIsLoading] = useState(true);
-  const [isAddingTopic, setIsAddingTopic] = useState(false);
-  const [newTopicTitle, setNewTopicTitle] = useState('');
   const [draggedTopicId, setDraggedTopicId] = useState<string | null>(null);
 
   // 1. 데이터 조회

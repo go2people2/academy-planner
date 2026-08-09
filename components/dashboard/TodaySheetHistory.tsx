@@ -72,176 +72,53 @@ const renderHighlightedHistoryText = (text: string, isLight: boolean = false) =>
   });
 };
 
-// 💡 빈 껍데기 세션 로그(출결도 없고 학습 내용도 없는 가짜 로그) 판정 헬퍼
-const isValidHistoryLog = (l: any) => {
-  if (!l) return false;
-  const hasStatus = l.status && l.status !== 'none';
-  const hasAttendance = l.attendance_status && l.attendance_status !== '출석전' && l.attendance_status !== 'BEFORE';
-  const hasContent = (l.classwork_text || '').trim() || 
-                     (l.completed_classwork_text || '').trim() || 
-                     (l.homework_text || '').trim() || 
-                     (l.special_notes || '').trim() || 
-                     (l.mission || '').trim();
-  const hasTest = l.test_completed || (l.test_score !== undefined && l.test_score !== null && l.test_score !== '');
-  
-  return hasStatus || hasAttendance || hasContent || hasTest;
-};
+import { useTodaySheetHistory, isValidHistoryLog } from './hooks/useTodaySheetHistory';
 
 export const HistoryRows = React.memo(function HistoryRows({ student, activeColumns, colWidths, isExpanded, selectedDate, limit = 3, masterTextbooks, isLight = false, onUpdateStudentInfo, onSave, academyInfo }: HistoryRowsProps) {
-  const [showAddBookModal, setShowAddBookModal] = useState(false);
-  const [selectedCategory, setSelectedCategory] = useState('전체');
-  const [bookSearchQuery, setBookSearchQuery] = useState('');
-  const [showBookSearch, setShowBookSearch] = useState(false);
+  const {
+    showAddBookModal,
+    setShowAddBookModal,
+    selectedCategory,
+    setSelectedCategory,
+    bookSearchQuery,
+    setBookSearchQuery,
+    showBookSearch,
+    setShowBookSearch,
+    selectedBookForDrawer,
+    setSelectedBookForDrawer,
+    bookUnits,
+    setBookUnits,
+    selectedDrawerUnits,
+    setSelectedDrawerUnits,
+    isLoadingUnits,
+    setIsLoadingUnits,
+    pinTargetBook,
+    setPinTargetBook,
+    startPageInput,
+    setStartPageInput,
+    endPageInput,
+    setEndPageInput,
+    matchedUnitPreview,
+    setMatchedUnitPreview,
+    ccwBookBuf,
+    hwBookBuf,
+    checkLiveUnitMatch,
+    currentRowCourseName,
+    pastLogs,
+    history,
+    translateBook,
+    fetchBookUnits,
+    handleQuickAddDrawerUnits,
+  } = useTodaySheetHistory({
+    student,
+    selectedDate,
+    limit,
+    masterTextbooks,
+    onSave,
+    onUpdateStudentInfo,
+  });
 
-  // 💡 추가: 단원/쪽수 조회 드로어용 상태
-  const [selectedBookForDrawer, setSelectedBookForDrawer] = useState<string | null>(null);
-
-  // 💡 [교재 저장 버퍼] TextbookSystem에 전달할 ccw/hw 최신값을 독립 ref로 관리
-  const ccwBookBuf = useRef(student.todaySession?.completed_classwork_text || '');
-  const hwBookBuf = useRef(student.todaySession?.homework_text || '');
-
-  const incomingCcw = student.todaySession?.completed_classwork_text || '';
-  const incomingHw = student.todaySession?.homework_text || '';
-
-  useEffect(() => {
-    if (incomingCcw && !ccwBookBuf.current.includes(incomingCcw)) {
-      ccwBookBuf.current = incomingCcw;
-    }
-  }, [incomingCcw]);
-
-  useEffect(() => {
-    if (incomingHw && !hwBookBuf.current.includes(incomingHw)) {
-      hwBookBuf.current = incomingHw;
-    }
-  }, [incomingHw]);
-
-  const [bookUnits, setBookUnits] = useState<any[]>([]);
-  const [selectedDrawerUnits, setSelectedDrawerUnits] = useState<any[]>([]);
-  const [isLoadingUnits, setIsLoadingUnits] = useState(false);
-
-  // 💡 추가: 📌 진도파악 수동/Auto 파싱 팝오버용 상태
-  const [pinTargetBook, setPinTargetBook] = useState<string | null>(null);
-  const [startPageInput, setStartPageInput] = useState('');
-  const [endPageInput, setEndPageInput] = useState('');
-  const [matchedUnitPreview, setMatchedUnitPreview] = useState<string>('');
-
-  // 💡 입력 중 실시간 단원 매칭 헬퍼 (단일 페이지 전용)
-  const checkLiveUnitMatch = async (bookCode: string, pageStr: string, _dummy = '') => {
-    if (!pageStr) {
-      setMatchedUnitPreview('');
-      return;
-    }
-    const pageNum = parseInt(pageStr, 10);
-
-    // masterTextbooks에서 실제 구글시트 bookcode 가져오기
-    const targetMaster = masterTextbooks?.find((m: any) => m.title === bookCode || m.bookcode === bookCode);
-    const realCode = targetMaster?.bookcode || bookCode;
-
-    try {
-      const res = await fetch(`/api/textbooks/${realCode}`);
-      if (res.ok) {
-        const units = await res.json();
-        const found = (units || []).find((u: any) => {
-          const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
-          const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
-          return pageNum >= uStart && pageNum <= uEnd;
-        });
-
-        if (found) {
-          const uName = found.unit || found.unitName || found.title;
-          setMatchedUnitPreview(`${uName} (p.${pageStr})`);
-        } else {
-          setMatchedUnitPreview(`해당 페이지(p.${pageStr})의 단원을 찾을 수 없습니다`);
-        }
-      }
-    } catch (e) {
-      console.error(e);
-    }
-  };
   if (!isExpanded) return null;
-  
-  const currentRowCourseName = student.isSpecialClass 
-    ? (student.courseName || student.electiveCourse?.subject || '').trim() 
-    : '정규';
-
-  const pastLogs = (student.allLogs || [])
-    .filter((l: any) => {
-      if (!l.date || l.date >= selectedDate || !isValidHistoryLog(l)) return false;
-      const logCourse = (l.course_name || '정규').trim();
-      
-      if (student.isSpecialClass) {
-        // 💡 특강 행: 오직 해당 특강 수업의 과거 일지 이력만 노출
-        return logCourse === currentRowCourseName || (currentRowCourseName && logCourse.includes(currentRowCourseName));
-      } else {
-        // 💡 정규 행: 오직 정규 수업 과거 일지 이력만 노출
-        return logCourse === '정규' || !logCourse;
-      }
-    })
-    .sort((a: any, b: any) => (b.date || '').localeCompare(a.date || ''));
-  const history = pastLogs.slice(0, limit); 
-
-  const translateBook = (bookName: string) => {
-    if (!bookName) return '';
-    if (!masterTextbooks || masterTextbooks.length === 0) return bookName;
-    const trimmed = bookName.trim();
-    const foundMaster = masterTextbooks.find(m => m.bookcode === trimmed || m.title === trimmed);
-    if (foundMaster && foundMaster.title) {
-      return foundMaster.title;
-    }
-    let result = trimmed;
-    const sortedMaster = [...masterTextbooks].sort((a, b) => (b.bookcode?.length || 0) - (a.bookcode?.length || 0));
-    sortedMaster.forEach(m => {
-      if (m.bookcode && m.title) {
-        const escapedCode = m.bookcode.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-        const regex = new RegExp(escapedCode, 'gi');
-        result = result.replace(regex, m.title);
-      }
-    });
-    return result;
-  };
-
-  // 💡 단원 목록 조회 API 호출
-  const fetchBookUnits = async (bookCode: string) => {
-    setIsLoadingUnits(true);
-    const targetMaster = masterTextbooks?.find((m: any) => m.title === bookCode || m.bookcode === bookCode);
-    const realCode = targetMaster?.bookcode || bookCode;
-    try {
-      const res = await fetch(`/api/textbooks/${realCode}`);
-      if (res.ok) {
-        const data = await res.json();
-        setBookUnits(data || []);
-      }
-    } catch (e) {
-      console.error('Failed to fetch units:', e);
-    } finally {
-      setIsLoadingUnits(false);
-    }
-  };
-
-  // 💡 선택한 단원들 일지(수업진도/숙제/오답) 일괄 반영 헬퍼
-  const handleQuickAddDrawerUnits = async (type: 'classwork' | 'homework' | 'wrong') => {
-    if ((!onSave && !onUpdateStudentInfo) || selectedDrawerUnits.length === 0 || !selectedBookForDrawer) return;
-    const title = translateBook(selectedBookForDrawer);
-    const unitTexts = selectedDrawerUnits.map(u => {
-      const pageStr = u.start_page && u.end_page ? `p.${u.start_page}~${u.end_page}` : u.start_page ? `p.${u.start_page}` : '';
-      return `${u.unit || u.unitName || u.title}${pageStr ? ` (${pageStr})` : ''}`;
-    }).join(', ');
-
-    const prefix = type === 'wrong' ? '[오답고치기] ' : '';
-    const textToAdd = `[${title}] ${prefix}${unitTexts}`;
-
-    const targetKey = type === 'homework' ? 'homework_text' : 'completed_classwork_text';
-    const currentText = (student.todaySession as any)?.[targetKey] || (student as any)?.[targetKey] || '';
-    const newText = currentText ? `${currentText}\n${textToAdd}` : textToAdd;
-
-    if (onSave) {
-      await onSave(student.id, { [targetKey]: newText });
-    } else if (onUpdateStudentInfo) {
-      await onUpdateStudentInfo(student.id, targetKey, newText);
-    }
-    setSelectedBookForDrawer(null);
-    setSelectedDrawerUnits([]);
-  };
 
   // 💡 📌 진도파악 수동 페이지 입력 저장 헬퍼 (단일 또는 | 구분 2개 진도 지원)
   const handleSaveManualProgress = async (bookCode: string) => {
