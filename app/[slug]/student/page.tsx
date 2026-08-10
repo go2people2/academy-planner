@@ -227,10 +227,16 @@ export default function StudentPortal() {
     try {
       let finalValue = value;
       const updateData: any = { student_id: student.id, session_date: selectedDate, academy_id: academy.id, course_name: selectedCourse, [dbField]: finalValue };
+      if (todaySession?.id && todaySession.id !== 'temp') updateData.id = todaySession.id;
+      if (todaySession?.moved_to_hour !== undefined && todaySession?.moved_to_hour !== null) {
+        updateData.moved_to_hour = todaySession.moved_to_hour;
+      }
       
+      const conflictKeys = updateData.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
+
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
+        .upsert([updateData], { onConflict: conflictKeys })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -258,10 +264,16 @@ export default function StudentPortal() {
         course_name: selectedCourse,
         test_result: JSON.stringify(newResult)
       };
+      if (todaySession?.id && todaySession.id !== 'temp') updateData.id = todaySession.id;
+      if (todaySession?.moved_to_hour !== undefined && todaySession?.moved_to_hour !== null) {
+        updateData.moved_to_hour = todaySession.moved_to_hour;
+      }
+
+      const conflictKeys = updateData.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
       
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
+        .upsert([updateData], { onConflict: conflictKeys })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -291,7 +303,6 @@ export default function StudentPortal() {
     try {
       const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
       
-      // 기존에 배열이 없으면 퍼센트 기반으로 채워진 배열 생성 (연속성 유지)
       let currentChecked: number[] = [];
       if (Array.isArray(currentResult.checked_todos)) {
         currentChecked = [...currentResult.checked_todos];
@@ -314,7 +325,6 @@ export default function StudentPortal() {
         currentChecked.push(index);
       }
       
-      // 실제 체크박스 항목(totalCount) 중 몇 개가 체크되었는지에 따라 퍼센트 재계산 (최대 100)
       const validChecked = currentChecked.filter(idx => idx < totalCount);
       let rawPercentage = totalCount > 0 ? (validChecked.length / totalCount) * 100 : 0;
       let newPercentage = Math.floor(rawPercentage / 10) * 10;
@@ -330,10 +340,16 @@ export default function StudentPortal() {
         course_name: selectedCourse,
         test_result: JSON.stringify(newResult)
       };
+      if (todaySession?.id && todaySession.id !== 'temp') updateData.id = todaySession.id;
+      if (todaySession?.moved_to_hour !== undefined && todaySession?.moved_to_hour !== null) {
+        updateData.moved_to_hour = todaySession.moved_to_hour;
+      }
+
+      const conflictKeys = updateData.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
       
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
+        .upsert([updateData], { onConflict: conflictKeys })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -363,7 +379,6 @@ export default function StudentPortal() {
     
     setIsSaving(true);
     try {
-      // 💡 [동시성 안전조치] 텍스트 저장 완료 전에 최종 제출이 클릭되더라도 입력값 유실이 없도록 현재 최종 내용을 병합하여 전송합니다.
       const updateData: any = { 
         student_id: student.id, 
         session_date: selectedDate, 
@@ -373,9 +388,16 @@ export default function StudentPortal() {
         completed_classwork_text: localCompletedClasswork || '',
         homework_text: localHomework || ''
       };
+      if (todaySession?.id && todaySession.id !== 'temp') updateData.id = todaySession.id;
+      if (todaySession?.moved_to_hour !== undefined && todaySession?.moved_to_hour !== null) {
+        updateData.moved_to_hour = todaySession.moved_to_hour;
+      }
+
+      const conflictKeys = updateData.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
+
       const { data, error } = await supabase
         .from('ams_session_logs')
-        .upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' })
+        .upsert([updateData], { onConflict: conflictKeys })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
@@ -420,7 +442,8 @@ export default function StudentPortal() {
       };
       let savedLog: any = null;
       if (targetLog?.id && targetLog.id !== 'temp') { 
-        const { data, error } = await supabase.from('ams_session_logs').update(updateData).eq('id', targetLog.id).select(); 
+        updateData.id = targetLog.id;
+        const { data, error } = await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'id' }).select(); 
         if (error) throw error;
         if (data && data[0]) savedLog = data[0];
       } else { 
@@ -435,7 +458,6 @@ export default function StudentPortal() {
         setAllLogs(prev => prev.map(l => (l.session_date === targetDate && (l.course_name || '정규') === selectedCourse) ? { ...l, test_result: JSON.stringify(currentResult) } : l));
       }
       
-      // 특이사항에 남아있는 예전 "[숙제이행: X단계]" 텍스트가 있다면 지워줍니다 (마이그레이션 효과)
       const currentNotes = todaySession?.special_notes || '';
       if (currentNotes.includes('[숙제이행:')) {
         const cleanNotes = currentNotes.replace(/\n?\[숙제이행: \d+단계\]/g, '').trim();
@@ -456,8 +478,13 @@ export default function StudentPortal() {
       const { answers, calculatedScore, testId } = result;
       const updateData: any = { student_id: student.id, student_name: student.name, session_date: selectedDate, course_name: selectedCourse, test_status: testId || todaySession?.test_status };
       if (calculatedScore !== undefined) updateData.test_score = calculatedScore;
-      if (todaySession?.id && todaySession.id !== 'temp') { await supabase.from('ams_session_logs').update(updateData).eq('id', todaySession.id); } 
-      else { await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' }); }
+      if (todaySession?.id && todaySession.id !== 'temp') { 
+        updateData.id = todaySession.id;
+        await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'id' }); 
+      } 
+      else { 
+        await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' }); 
+      }
       alert('테스트 답안이 제출되었습니다.'); setIsTestModalOpen(false); fetchAllStudentData(student.id);
     } catch (e) { console.error(e); alert('제출 중 오류 발생'); } finally { setIsSaving(false); }
   };
