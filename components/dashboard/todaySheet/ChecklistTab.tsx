@@ -239,7 +239,6 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       const payload: any = {
         topic_id: topicId,
         student_id: realStudentUuid,
-        course_name: courseName,
         status: nextStatus,
         is_checked: nextStatus === 'checked',
         memo: currentVal.memo || ''
@@ -339,7 +338,6 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       const payload: any = {
         topic_id: topicId,
         student_id: realStudentUuid,
-        course_name: courseName,
         status: currentVal.status || (currentVal.is_checked ? 'checked' : 'none'),
         is_checked: currentVal.is_checked || false,
         memo: nextMemo
