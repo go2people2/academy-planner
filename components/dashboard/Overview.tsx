@@ -594,7 +594,11 @@ export default function Overview({
                     <>
                       <button 
                         onClick={downloadStudentTemplate}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-white/5 text-gray-400 hover:text-white transition-all border border-white/10"
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all border ${
+                          isLight 
+                            ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-gray-900 border-gray-300 shadow-sm' 
+                            : 'bg-white/5 text-gray-400 hover:text-white border-white/10'
+                        }`}
                         title="대량 등록용 엑셀 템플릿 다운로드"
                       >
                         <Download size={10} /> 양식 다운로드
@@ -609,7 +613,11 @@ export default function Overview({
                       />
                       <button 
                         onClick={() => document.getElementById('excel-students-bulk-input')?.click()}
-                        className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-purple-600/10 text-purple-400 hover:bg-purple-600 hover:text-white transition-all border border-purple-500/20"
+                        className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all border ${
+                          isLight
+                            ? 'bg-purple-50 text-purple-700 hover:bg-purple-600 hover:text-white border-purple-200 shadow-sm'
+                            : 'bg-purple-600/10 text-purple-400 hover:bg-purple-600 hover:text-white border-purple-500/20'
+                        }`}
                         title="엑셀 작성본 업로드하여 학생 일괄 등록"
                       >
                         <Upload size={10} /> 엑셀 일괄 등록
@@ -618,7 +626,11 @@ export default function Overview({
                   )}
                   <button 
                     onClick={() => setIsAddModalOpen(true)}
-                    className="flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white transition-all border border-emerald-500/20"
+                    className={`flex items-center gap-2 px-3 py-1.5 rounded-[2px] text-[9px] font-black uppercase tracking-widest transition-all border ${
+                      isLight
+                        ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-600 hover:text-white border-emerald-200 shadow-sm'
+                        : 'bg-emerald-600/10 text-emerald-500 hover:bg-emerald-600 hover:text-white border-emerald-500/20'
+                    }`}
                   >
                     <UserPlus size={10} /> 신규 학생 등록
                   </button>
