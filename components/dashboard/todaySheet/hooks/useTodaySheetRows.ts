@@ -148,10 +148,7 @@ export function useTodaySheetRows({
               const courseSubject = c.subject?.trim() || '특강';
               const hasLogToday = (s.allLogs || []).some((l: any) => {
                 if ((l.date || l.session_date) !== selectedDate) return false;
-                const logCourse = l.course_name || '정규';
-                if (['특강', '방학특강', '선택과목'].includes(courseSubject)) {
-                  return ['특강', '방학특강', '선택과목'].includes(logCourse);
-                }
+                const logCourse = (l.course_name || '정규').trim();
                 return logCourse === courseSubject;
               });
 
@@ -169,10 +166,7 @@ export function useTodaySheetRows({
         const courseSubject = c.subject?.trim() || '특강';
         const electiveLog = (s.allLogs || []).find((l: any) => {
           if ((l.date || l.session_date) !== selectedDate) return false;
-          const logCourse = l.course_name || '정규';
-          if (['특강', '방학특강', '선택과목'].includes(courseSubject)) {
-            return ['특강', '방학특강', '선택과목'].includes(logCourse);
-          }
+          const logCourse = (l.course_name || '정규').trim();
           return logCourse === courseSubject;
         });
 
@@ -217,12 +211,12 @@ export function useTodaySheetRows({
       // 💡 [시간 이동 정밀 복원] 당일 정규 로그 중 시간이동(moved_to_hour)이 존재하는 로그를 최우선 채택
       const movedRegularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
       const regularLog = movedRegularLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name));
-      const rawMakeupLogs = todayLogs.filter((l: any) => (!l.course_name || l.course_name === '정규') && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+      const rawMakeupLogs = todayLogs.filter((l: any) => l.is_pure_makeup || (l.attendance_status && l.attendance_status.startsWith('보강')) || (l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0));
 
-      // 💡 [중복 완벽 차단] 동일 학생/날짜 보강 세션 중 가장 최신의 1개 보강 세션만 채택!
+      // 💡 [중복 완벽 차단] 동일 학생/날짜/과목/시간 보강 세션만 고유하게 채택!
       const uniqueMakeupMap = new Map<string, any>();
       rawMakeupLogs.forEach((mLog: any) => {
-        const key = `${mLog.student_id || realId}_${mLog.course_name || '정규'}`;
+        const key = `${mLog.student_id || realId}_${mLog.course_name || '정규'}_${mLog.moved_to_hour || mLog.id || mLog.attendance_status}`;
         uniqueMakeupMap.set(key, mLog);
       });
       const makeupLogs = Array.from(uniqueMakeupMap.values());
@@ -274,10 +268,7 @@ export function useTodaySheetRows({
       );
 
       if (isRegularClassDay) {
-        // 1. 원래 오늘 정규 수업일인 경우 정규 행 배치
-        shouldShowRegular = true;
-      } else if (regularLog && !isCanceled && !isPureMakeupLog) {
-        // 2. 원래 수업일이 아니었지만 보강이 아닌 일반 정규 세션이 명시적으로 작성된 경우 노출
+        // 1. 원래 오늘 정규 수업일인 경우에만 정규 행 배치
         shouldShowRegular = true;
       }
 
@@ -317,11 +308,22 @@ export function useTodaySheetRows({
 
       // (3) 보강 전용 독립 행 추가 (독립 등록된 보강인 경우만 별도 행 생성, 정규 수업 시간이동은 정규 행 이동으로 처리)
       makeupLogs.forEach((mLog: any) => {
-        const makeupHour = mLog.moved_to_hour;
+        // 💡 [시간 파싱 강화] moved_to_hour 또는 attendance_status ("보강:19:00~21:00") 에서 시각 파싱
+        let makeupHour = mLog.moved_to_hour;
+        if (!makeupHour || makeupHour <= 0) {
+          const attStatus = mLog.attendance_status || '';
+          const match = attStatus.match(/(\d{1,2}):/);
+          if (match) {
+            makeupHour = parseInt(match[1], 10);
+          }
+        }
         const sessionId = mLog.id || mLog.created_at || makeupHour;
         const makeupId = `${realId}_makeup_${sessionId}`;
 
-        const isPureMakeup = mLog.is_pure_makeup || mLog.attendance_reason?.includes('보강') || (!isRegularClassDay && mLog.attendance_status?.startsWith('보강'));
+        const isPureMakeup = mLog.is_pure_makeup || 
+          (mLog.attendance_status && mLog.attendance_status.startsWith('보강')) || 
+          (mLog.attendance_reason && mLog.attendance_reason.includes('보강')) ||
+          (!isRegularClassDay && mLog.attendance_status?.startsWith('보강'));
         if (isRegularClassDay && shouldShowRegular && !isPureMakeup) {
           return;
         }
@@ -343,12 +345,12 @@ export function useTodaySheetRows({
             ...s,
             id: makeupId,
             originalId: realId,
-            isSpecialClass: false,
+            isSpecialClass: mLog.course_name && mLog.course_name !== '정규',
             isMakeupRow: true,
-            courseName: '정규',
+            courseName: mLog.course_name || '정규',
             day_schedules: {
               ...s.day_schedules,
-              [dayKey]: [makeupHour]
+              [dayKey]: makeupHour ? [makeupHour] : (s.day_schedules?.[dayKey] || [])
             },
             lastSession: makeupLastSession,
             todaySession: mLog
@@ -379,17 +381,27 @@ export function useTodaySheetRows({
     }
 
     // 💡 4. 시간대 계산 헬퍼 (1~12시는 오후 13~24시로 일관성 있게 통일)
-    const normalizeHour = (val: number) => {
-      if (!val || val <= 0) return 99;
-      let h = val >= 100 ? Math.floor(val / 100) : val;
+    const normalizeHour = (val: number | string) => {
+      if (!val) return 99;
+      let num = typeof val === 'number' ? val : parseInt(String(val), 10);
+      if (isNaN(num) || num <= 0) return 99;
+      let h = num >= 100 ? Math.floor(num / 100) : num;
       if (h > 0 && h <= 12) h += 12;
       return h;
     };
 
     const getStartTime = (st: any) => {
-      // 💡 1. 명시적 시간이동 정보(moved_to_hour)가 있으면 정규/보강 상관없이 이동된 교시 최우선 적용!!
-      if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null && st.todaySession.moved_to_hour > 0) {
-        return normalizeHour(st.todaySession.moved_to_hour);
+      // 💡 1. 명시적 시간이동 정보(moved_to_hour) 또는 attendance_status ("보강:19:00~21:00") 파싱 시각 최우선 적용!!
+      const movedHour = st.todaySession?.moved_to_hour;
+      if (movedHour !== undefined && movedHour !== null && movedHour > 0) {
+        return normalizeHour(movedHour);
+      }
+      const attStatus = st.todaySession?.attendance_status || '';
+      if (attStatus.startsWith('보강:')) {
+        const m = attStatus.match(/(\d{1,2}):/);
+        if (m) {
+          return normalizeHour(parseInt(m[1], 10));
+        }
       }
 
       const hours = st.day_schedules?.[dayKey] || [];

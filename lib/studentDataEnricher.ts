@@ -305,9 +305,9 @@ export const getEnrichedStudentData = (
   const history = calculateStudentHistory(logs, selectedDate);
   const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays, '정규');
   const todayLogs = logs.filter((l: any) => String(l.date || l.session_date) === String(selectedDate));
-  // 💡 [시간 이동 / 보강 완전 분리] 순수 보강(is_pure_makeup) 로그는 정규 수업 세션으로 채택되는 것을 원천 차단
-  const movedTodayLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !l.is_pure_makeup && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
-  const regularTodayLog = movedTodayLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !l.is_pure_makeup);
+  const isMakeupLog = (l: any) => l.is_pure_makeup || (l.attendance_status && l.attendance_status.startsWith('보강')) || (l.attendance_reason && l.attendance_reason.includes('보강'));
+  const movedTodayLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+  const regularTodayLog = movedTodayLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l));
   
   let electiveDays: string[] = [];
   const rawElective = s.book_courses?.['__elective_courses'];

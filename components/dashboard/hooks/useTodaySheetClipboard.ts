@@ -69,7 +69,7 @@ export function useTodaySheetClipboard({
         else if (col.id === 'date') val = selectedDate;
         else if (col.id === 'review') val = st.lastSession?.homework_text || '';
         else if (col.id === 'mission') val = st.recent_mission || session.mission || '';
-        else if (col.id === 'management_notes') val = st.management_notes || session.management_notes || '';
+        else if (col.id === 'management_notes') val = session.management_notes || '';
         else if (col.id === 'next_quiz') {
           val = session.next_quiz_text || '';
           if (!val && session.homework_to) {

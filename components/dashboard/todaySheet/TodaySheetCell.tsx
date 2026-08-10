@@ -364,7 +364,18 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onMouseDown={(e) => {
               e.stopPropagation();
               e.preventDefault();
-              onRemoveFromToday?.(student.id, '수업 취소', 'delete');
+              const sAny = student as any;
+              const isMakeup = sAny?.isMakeupRow || String(student?.id || '').includes('_makeup_') || (formData?.attendance_status && formData.attendance_status.startsWith('보강'));
+              const isSpecial = sAny?.isSpecialClass || String(student?.id || '').includes('_special_');
+              
+              if (isMakeup) {
+                onRemoveFromToday?.(student.id, '보강 삭제', 'delete');
+              } else if (isSpecial) {
+                onRemoveFromToday?.(student.id, '특강 삭제', 'delete');
+              } else {
+                // 정규 수업일 경우 출결 상태를 '수업전'으로 초기화
+                onSave?.('attendance', ATTENDANCE_STATUS.BEFORE);
+              }
             }}
             onClick={(e) => {
               e.stopPropagation();

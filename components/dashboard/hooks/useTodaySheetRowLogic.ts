@@ -171,10 +171,8 @@ export function useTodaySheetRowLogic({
     // 💡 [단순명확 원칙] 학생미션(mission)은 과거/기존 JSON 기록을 절대 당겨오지 않고 '당일 직저' 입력된 session.mission 만 사용!
     const initialMission = session?.mission || '';
 
-    // 💡 [규칙] 주의점(management_notes)은 당일 작성 세션 내용 또는 학생 마스터 기록 보존
-    const initialNotes = (sessionNotes !== undefined && sessionNotes !== null)
-      ? sessionNotes
-      : (student.management_notes || '');
+    // 💡 [단순명확 원칙] 주의점(management_notes)은 당일 세션 기록(session.management_notes)만 사용 (마스터 주의점 자동 fallback 금지)
+    const initialNotes = sessionNotes || '';
     
     return {
       attendance_status: normalizeAttendanceStatus(session?.attendance_status),

@@ -120,7 +120,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         return { textVal: st.recent_mission || sess.mission || '', extraData: {} };
       }
       if (colId === 'management_notes') {
-        return { textVal: st.management_notes || sess.management_notes || '', extraData: {} };
+        return { textVal: sess.management_notes || '', extraData: {} };
       }
       if (colId === 'next_quiz') {
         let nqText = sess.next_quiz_text || '';
@@ -452,7 +452,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
               const prevD: any = {};
               Object.keys(nD).forEach(k => {
                 if (k === 'mission') prevD[k] = st.recent_mission || sess.mission || '';
-                else if (k === 'management_notes') prevD[k] = st.management_notes || sess.management_notes || '';
+                else if (k === 'management_notes') prevD[k] = sess.management_notes || '';
                 else prevD[k] = sess[k] || '';
               });
               updates.push({ studentId: st.id, newData: nD, prevData: prevD });
