@@ -769,7 +769,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                 }`}>
                   완료 인원
                 </td>
-                {topics.map(t => {
+                {activeTopics.map(t => {
                   const checkedCount = getCheckedCount(t.id);
                   return (
                     <React.Fragment key={`sum-${t.id}`}>
