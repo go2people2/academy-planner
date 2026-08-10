@@ -44,11 +44,26 @@ export function useTextbookSystemState({
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState({ sheets: 0, pages: 0 });
 
-  const [localAssigned, setLocalAssigned] = useState<string[]>(() => student?.assigned_books || []);
+  const parseAssigned = (books: any): string[] => {
+    if (!books) return [];
+    if (Array.isArray(books)) return books;
+    if (typeof books === 'string') {
+      try {
+        const parsed = JSON.parse(books);
+        if (Array.isArray(parsed)) return parsed;
+      } catch (e) {
+        return [books];
+      }
+    }
+    return [];
+  };
+
+  const [localAssigned, setLocalAssigned] = useState<string[]>(() => parseAssigned(student?.assigned_books));
   useEffect(() => {
     if (student?.assigned_books) {
+      const parsed = parseAssigned(student.assigned_books);
       setLocalAssigned(prev => {
-        const merged = Array.from(new Set([...(student.assigned_books || []), ...prev]));
+        const merged = Array.from(new Set([...parsed, ...prev]));
         return merged;
       });
     }

@@ -295,26 +295,50 @@ export default function TextbookSystem({
       {/* 상단 교재 선택 바 */}
       <div className="relative bg-white/[0.03] border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2 overflow-x-auto py-3 px-4 scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
-        {(localAssigned || []).map((code: string) => {
-          const book = availableTextbooks.find(b => b.bookcode === code); if (!book) return null;
-          const isActive = activeBook?.bookcode === code;
-          return (
-            <motion.button 
-              key={code} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} 
-              onClick={() => { 
-                if (activeBook?.bookcode === code) { 
-                  setActiveBook(null); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); setIsMergedViewActive(false);
-                } else { 
-                  setActiveBook(book); fetchUnits(code); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); setIsMergedViewActive(false);
-                } 
-              }} 
-              className={`flex items-center gap-2 border rounded-[4px] px-3 py-1.5 transition-all shrink-0 ${isActive ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50 hover:bg-emerald-500/10'}`}
-            >
-              <BookOpen size={12} className={isActive ? 'text-white' : 'text-emerald-500'} />
-              <span className="text-[11px] font-black whitespace-nowrap">{book.title}</span>
-            </motion.button>
-          );
-        })}
+        {(() => {
+          const validAssigned = (localAssigned || []).filter((code: string) => {
+            return (availableTextbooks || []).some(b => 
+              b.bookcode === code || 
+              (b.bookcode && b.bookcode.trim() === code.trim()) || 
+              (b.title && b.title.trim() === code.trim())
+            );
+          });
+
+          if (validAssigned.length === 0) {
+            return (
+              <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400 py-0.5 shrink-0">
+                <BookOpen size={13} className="text-gray-500" />
+                <span>배정된 교재가 없습니다.</span>
+              </div>
+            );
+          }
+
+          return validAssigned.map((code: string) => {
+            const book = (availableTextbooks || []).find(b => 
+              b.bookcode === code || 
+              (b.bookcode && b.bookcode.trim() === code.trim()) || 
+              (b.title && b.title.trim() === code.trim())
+            ); 
+            if (!book) return null;
+            const isActive = activeBook?.bookcode === book.bookcode;
+            return (
+              <motion.button 
+                key={book.bookcode} whileHover={{ scale: 1.05 }} whileTap={{ scale: 0.95 }} 
+                onClick={() => { 
+                  if (activeBook?.bookcode === book.bookcode) { 
+                    setActiveBook(null); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); setIsMergedViewActive(false);
+                  } else { 
+                    setActiveBook(book); fetchUnits(book.bookcode); setActiveUnit(null); setSelectedUnits([]); setLastClickedUnitIdx(null); setIsMergedViewActive(false);
+                  } 
+                }} 
+                className={`flex items-center gap-2 border rounded-[4px] px-3 py-1.5 transition-all shrink-0 ${isActive ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50 hover:bg-emerald-500/10'}`}
+              >
+                <BookOpen size={12} className={isActive ? 'text-white' : 'text-emerald-500'} />
+                <span className="text-[11px] font-black whitespace-nowrap">{book.title}</span>
+              </motion.button>
+            );
+          });
+        })()}
 
         {/* ➕ 교재 추가 버튼 */}
         {onUpdateAssignedBooks && (
