@@ -658,18 +658,26 @@ export default function Overview({
           {/* 💡 [추가] 학생 정보 수정 모드('전체 학생 정보 관리')에서만 노출되는 검색창 */}
           {hideTodaySection && onSearchChange && (
             <div className="mt-4 relative group max-w-md px-1">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-600 group-focus-within:text-blue-500 transition-colors" size={14} />
+              <Search className={`absolute left-4 top-1/2 -translate-y-1/2 transition-colors ${
+                isLight ? 'text-gray-400 group-focus-within:text-blue-600' : 'text-gray-600 group-focus-within:text-blue-500'
+              }`} size={14} />
               <input 
                 type="text"
                 value={searchQuery}
                 onChange={(e) => onSearchChange(e.target.value)}
                 placeholder="찾으실 학생 이름을 입력하세요..."
-                className="w-full bg-white/[0.03] border border-white/10 rounded-[2px] py-2.5 pl-10 pr-10 text-xs text-white placeholder:text-gray-700 focus:bg-white/[0.06] focus:border-blue-500/50 outline-none transition-all font-bold"
+                className={`w-full rounded-[2px] py-2.5 pl-10 pr-10 text-xs outline-none transition-all font-bold ${
+                  isLight 
+                    ? 'bg-white border border-gray-300 text-gray-900 placeholder:text-gray-400 focus:border-blue-500 shadow-sm'
+                    : 'bg-white/[0.03] border border-white/10 text-white placeholder:text-gray-700 focus:bg-white/[0.06] focus:border-blue-500/50'
+                }`}
               />
               {searchQuery && (
                 <button 
                   onClick={() => onSearchChange('')}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-500 hover:text-white transition-colors p-1"
+                  className={`absolute right-4 top-1/2 -translate-y-1/2 transition-colors p-1 ${
+                    isLight ? 'text-gray-400 hover:text-gray-700' : 'text-gray-500 hover:text-white'
+                  }`}
                 >
                   <X size={14} />
                 </button>
