@@ -244,7 +244,6 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
         is_checked: nextStatus === 'checked',
         memo: currentVal.memo || ''
       };
-      if (academyInfo?.id) payload.academy_id = academyInfo.id;
       if (currentVal.id) payload.id = currentVal.id;
 
       let { data, error } = await supabase
@@ -345,7 +344,6 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
         is_checked: currentVal.is_checked || false,
         memo: nextMemo
       };
-      if (academyInfo?.id) payload.academy_id = academyInfo.id;
       if (currentVal.id) payload.id = currentVal.id;
 
       const { data, error } = await supabase
