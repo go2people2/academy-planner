@@ -17,6 +17,7 @@ import { FeedbackKeyboardPopup } from './FeedbackKeyboardPopup';
 import TextbookSystem from '@/components/student/TextbookSystem';
 import { CellTextHighlighter } from './CellTextHighlighter';
 import { CellTooltip } from './CellTooltip';
+import { useTodaySheetCellEditor } from '../hooks/useTodaySheetCellEditor';
 
 export const resolveTargetSession = (student?: any, hour?: number | null, courseName?: string) => {
   if (!student) return undefined;
@@ -520,55 +521,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     };
   }, [activeTooltip]);
 
-  const handleLocalInput = (e: React.FormEvent<HTMLTextAreaElement | HTMLInputElement>, field: string) => {
-    const target = e.target as any;
-    let val = target.value;
+  const { processLocalInput } = useTodaySheetCellEditor({
+    snippets,
+    snippetTrigger,
+  });
 
-    // 💡 단축어 트리거 치환 감지 (textarea 에서만 동작)
-    if (e.target instanceof HTMLTextAreaElement && snippets && snippetTrigger && snippetTrigger !== 'none') {
-      const escapedTrigger = snippetTrigger.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-      
-      // 맥북 한글 상태에서 백틱 입력 시 ₩로 입력되는 현상 대응
-      let triggerRegexStr = escapedTrigger;
-      if (snippetTrigger === '`') {
-        triggerRegexStr = '[`₩]';
-      }
-      
-      const regex = new RegExp(`${triggerRegexStr}([1-9]|10|0)$`);
-      const match = val.match(regex);
-
-      if (match) {
-        const matchedStr = match[0];
-        const numStr = match[1];
-        let idx = parseInt(numStr) - 1;
-        if (numStr === '0' || numStr === '10') idx = 9;
-
-        const snip = snippets[idx];
-        if (snip) {
-          const startPos = target.selectionStart - matchedStr.length;
-          const endPos = target.selectionStart;
-          const before = val.substring(0, startPos);
-          const after = val.substring(endPos);
-          const newVal = before + snip + after;
-
-          val = newVal;
-          target.value = newVal;
-
-          const newCursorPos = startPos + snip.length;
-          requestAnimationFrame(() => {
-            target.selectionStart = newCursorPos;
-            target.selectionEnd = newCursorPos;
-          });
-        }
-      }
-    }
-
-    if (onInputChange) onInputChange(field, val);
-    
-    if (e.target instanceof HTMLTextAreaElement) {
-      e.target.style.height = 'auto';
-      e.target.style.height = `${e.target.scrollHeight}px`;
-    }
+  const handleLocalInput = (
+    e: React.FormEvent<HTMLTextAreaElement | HTMLInputElement>,
+    field: string
+  ) => {
+    const { value } = processLocalInput(e.currentTarget);
+    onInputChange?.(field, value);
   };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
