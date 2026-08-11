@@ -206,7 +206,9 @@ export function TodaySheetHeader({
                         ? 'border-amber-500 bg-amber-500 text-black font-bold'
                         : selectCycleMode === 'regular'
                         ? 'border-cyan-500 bg-cyan-600 text-white'
-                        : 'border-white/20 bg-white/5 hover:border-white/40'
+                        : isLight
+                        ? 'border-gray-400 bg-gray-100 hover:border-gray-600 hover:bg-gray-200'
+                        : 'border-white/30 bg-white/10 hover:border-white/60 hover:bg-white/20'
                     }`}
                     title={
                       selectCycleMode === 'none' ? '전체 선택 (클릭 1회: 전체 선택)' :
