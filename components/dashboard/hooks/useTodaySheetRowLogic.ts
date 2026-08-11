@@ -346,7 +346,7 @@ export function useTodaySheetRowLogic({
     setSaveStatus(success ? 'success' : 'error');
     setTimeout(() => setSaveStatus('idle'), 2000);
     return success;
-  }, [formData, rowDate, student.id, student.recent_mission, isSaving, onSave, onUpdateStudentInfo, getInitialFormData]);
+  }, [formData, rowDate, student.id, isSaving, onSave, onUpdateStudentInfo, getInitialFormData]);
 
   const handleAttendanceToggle = (e: React.MouseEvent) => {
     e.stopPropagation();

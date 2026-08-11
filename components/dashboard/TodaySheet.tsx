@@ -168,7 +168,13 @@ export default function TodaySheet({
     setStudents((prev: any[]) => prev.map(s => {
       if (s.id === studentId) {
         if (colId === 'mission') {
-          return { ...s, recent_mission: value };
+          return {
+            ...s,
+            todaySession: {
+              ...(s.todaySession || {}),
+              mission: value
+            }
+          };
         }
         if (colId === 'notes') {
           return {
@@ -450,7 +456,7 @@ export default function TodaySheet({
     const keys = Object.keys(newData);
     keys.forEach(key => {
       if (key === 'mission') {
-        prevData[key] = student?.recent_mission || '';
+        prevData[key] = session?.mission || '';
         filteredNewData[key] = newData[key] || '';
       } else if (key === 'management_notes') {
         prevData[key] = student?.management_notes || '';
@@ -506,7 +512,6 @@ export default function TodaySheet({
 
       return {
         ...s,
-        ...(hasMission ? { recent_mission: newData.mission } : {}),
         ...(hasNotes ? { management_notes: newData.management_notes } : {}),
         ...(isRegularCourse ? { 
           todaySession: {
@@ -592,7 +597,6 @@ export default function TodaySheet({
 
       return {
         ...s,
-        ...(hasMission ? { recent_mission: match.newData.mission } : {}),
         ...(hasNotes ? { management_notes: match.newData.management_notes } : {}),
         ...(isRegularCourse || isMatchingRow ? { todaySession: newSess } : {}),
         allLogs: updatedAllLogs
