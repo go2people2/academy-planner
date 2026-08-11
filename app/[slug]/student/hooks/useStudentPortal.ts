@@ -232,14 +232,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
             setLocalClasswork(matchedSession.classwork_text || '');
             setLocalCompletedClasswork(matchedSession.completed_classwork_text || '');
             setLocalHomework(matchedSession.homework_text || '');
-            let cleanPlan = matchedSession.homework_to || '';
-            if (cleanPlan && typeof cleanPlan === 'string' && cleanPlan.startsWith('{')) {
-              try {
-                const parsed = JSON.parse(cleanPlan);
-                cleanPlan = parsed.text || '';
-              } catch (e) {}
-            }
-            setTodayPlan(cleanPlan);
+            setTodayPlan('');
           } else {
             setTodaySession(null);
             setLocalClasswork('');

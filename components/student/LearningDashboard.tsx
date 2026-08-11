@@ -92,10 +92,7 @@ export default function LearningDashboard({
   const planTasks = useMemo(() => {
     let raw = todayPlan || '';
     if (raw && typeof raw === 'string' && raw.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(raw);
-        raw = parsed.text || '';
-      } catch (e) {}
+      return [];
     }
     return raw ? raw.split('\n').filter(l => l.trim()) : [];
   }, [todayPlan]);
