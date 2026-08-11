@@ -43,7 +43,13 @@ export const useTodaySheetCellEditor = ({
       }
 
       const regex = new RegExp(`${triggerRegexStr}([1-9]|10|0)$`);
-      const match = val.match(regex);
+
+      // 💡 현재 커서 위치 기준으로 커서 앞 텍스트만 단축어 패턴 매칭 검사 (문장 중간 위치 치환 지원)
+      const cursor = element.selectionStart ?? val.length;
+      const textBeforeCursor = val.substring(0, cursor);
+      const textAfterCursor = val.substring(cursor);
+
+      const match = textBeforeCursor.match(regex);
 
       if (match) {
         const matchedStr = match[0];
@@ -53,17 +59,17 @@ export const useTodaySheetCellEditor = ({
 
         const snip = snippets[idx];
         if (snip) {
-          const startPos = element.selectionStart - matchedStr.length;
-          const endPos = element.selectionStart;
-          const before = val.substring(0, startPos);
-          const after = val.substring(endPos);
-          const newVal = before + snip + after;
+          const beforeStr = textBeforeCursor.substring(
+            0,
+            textBeforeCursor.length - matchedStr.length
+          );
+          const newVal = beforeStr + snip + textAfterCursor;
 
           val = newVal;
           element.value = newVal;
           wasSnippetExpanded = true;
 
-          const newCursorPos = startPos + snip.length;
+          const newCursorPos = beforeStr.length + snip.length;
           requestAnimationFrame(() => {
             element.selectionStart = newCursorPos;
             element.selectionEnd = newCursorPos;
