@@ -729,7 +729,6 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       return {
         ...s,
         management_notes: ('management_notes' in dataToSave) ? (dataToSave.management_notes ?? '') : s.management_notes,
-        recent_mission: targetRecentMission,
         // 💡 정규 수업일 때만 s.todaySession을 교체하고, 특강일 때는 정규 todaySession 데이터 보존
         todaySession: targetCourseName === '정규' ? updatedTodaySession : s.todaySession,
         allLogs: updatedAllLogs

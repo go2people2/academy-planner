@@ -171,7 +171,7 @@ export function useTodaySheetExport({
           if (col.id === 'review') return s.lastSession?.homework_text || '';
           if (col.id === 'classwork') return sess.classwork_text || '';
           if (col.id === 'assign') return sess.homework_text || '';
-          if (col.id === 'mission') return s.recent_mission || '';
+          if (col.id === 'mission') return sess.mission || '';
           if (col.id === 'notes') return sess.special_notes || '';
           return '';
         });

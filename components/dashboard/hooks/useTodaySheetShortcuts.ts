@@ -117,7 +117,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       const prop = mapColumnToProp(colId);
 
       if (colId === 'mission') {
-        return { textVal: st.recent_mission || sess.mission || '', extraData: {} };
+        return { textVal: sess.mission || '', extraData: {} };
       }
       if (colId === 'management_notes') {
         return { textVal: sess.management_notes || '', extraData: {} };
@@ -451,7 +451,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
               const prevD: any = {};
               Object.keys(nD).forEach(k => {
-                if (k === 'mission') prevD[k] = st.recent_mission || sess.mission || '';
+                if (k === 'mission') prevD[k] = sess.mission || '';
                 else if (k === 'management_notes') prevD[k] = sess.management_notes || '';
                 else prevD[k] = sess[k] || '';
               });
@@ -588,17 +588,13 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
           // 1. 로컬 학생 데이터 즉시 덮어쓰기
           setStudents((prev: any[]) => prev.map(s => {
             if (matchRowIdentity(s, activeCell.studentId)) {
-              if (colId === 'mission') {
-                return { ...s, recent_mission: initialChar };
-              } else {
-                return {
-                  ...s,
-                  todaySession: {
-                    ...(s.todaySession || {}),
-                    [prop]: initialChar
-                  }
-                };
-              }
+              return {
+                ...s,
+                todaySession: {
+                  ...(s.todaySession || {}),
+                  [prop]: initialChar
+                }
+              };
             }
             return s;
           }));

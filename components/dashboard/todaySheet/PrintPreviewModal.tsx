@@ -442,7 +442,7 @@ export default function PrintPreviewModal({
                             } else if (col.id === 'assign') {
                               cellContent = session?.homework_text || '';
                             } else if (col.id === 'mission') {
-                              cellContent = session?.mission ?? s.recent_mission ?? '';
+                              cellContent = session?.mission || '';
                             } else if (col.id === 'notes') {
                               cellContent = session?.special_notes || '';
                             } else if (col.id === 'book_progress') {

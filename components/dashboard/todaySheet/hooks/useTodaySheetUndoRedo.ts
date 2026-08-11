@@ -56,10 +56,8 @@ export function useTodaySheetUndoRedo({
     setStudents((prev: any[]) => prev.map(s => {
       const update = undoUpdates.find((u: any) => matchRowIdentity(s, u.studentId));
       if (update) {
-        const hasMission = 'mission' in update.newData;
         return {
           ...s,
-          ...(hasMission ? { recent_mission: update.newData.mission } : {}),
           todaySession: {
             ...(s.todaySession || {}),
             ...update.newData
@@ -95,13 +93,8 @@ export function useTodaySheetUndoRedo({
     syncTodaySheetDom(undoUpdates, Array.from(affectedColIds));
 
     await Promise.all(undoUpdates.map(async (u: any) => {
-      if ('mission' in u.newData && onUpdateStudentInfo) {
-        await onUpdateStudentInfo(u.studentId, 'recent_mission', u.newData.mission);
-      }
-      const savePayload = { ...u.newData };
-      delete savePayload.mission;
-      if (Object.keys(savePayload).length > 0) {
-        await onSave(extractRealStudentId(u.studentId), savePayload);
+      if (Object.keys(u.newData).length > 0) {
+        await onSave(extractRealStudentId(u.studentId), u.newData);
       }
     }));
   }, [setStudents, onSave, onUpdateStudentInfo]);
@@ -114,10 +107,8 @@ export function useTodaySheetUndoRedo({
     setStudents((prev: any[]) => prev.map(s => {
       const update = updates.find((u: any) => matchRowIdentity(s, u.studentId));
       if (update) {
-        const hasMission = 'mission' in update.newData;
         return {
           ...s,
-          ...(hasMission ? { recent_mission: update.newData.mission } : {}),
           todaySession: {
             ...(s.todaySession || {}),
             ...update.newData
@@ -153,13 +144,8 @@ export function useTodaySheetUndoRedo({
     syncTodaySheetDom(updates, Array.from(affectedColIds));
 
     await Promise.all(updates.map(async (u: any) => {
-      if ('mission' in u.newData && onUpdateStudentInfo) {
-        await onUpdateStudentInfo(u.studentId, 'recent_mission', u.newData.mission);
-      }
-      const savePayload = { ...u.newData };
-      delete savePayload.mission;
-      if (Object.keys(savePayload).length > 0) {
-        await onSave(extractRealStudentId(u.studentId), savePayload);
+      if (Object.keys(u.newData).length > 0) {
+        await onSave(extractRealStudentId(u.studentId), u.newData);
       }
     }));
   }, [setStudents, onSave, onUpdateStudentInfo]);
