@@ -179,7 +179,9 @@ export function TodaySheetHeader({
             onDrop={(e) => handleDrop(e, col.id)}
             onDragEnd={handleDragEnd}
             className={`relative group py-3 ${isAction ? 'px-0' : 'px-3'} text-[12px] font-semibold uppercase tracking-wider text-center border-r transition-all ${
-              isLight ? 'border-[#e3e2e0]' : 'border-white/12'
+              ['select', 'name', 'tools'].includes(col.id)
+                ? (isLight ? 'border-r-2 border-r-gray-300' : 'border-r-2 border-r-zinc-700')
+                : (isLight ? 'border-r border-r-[#e3e2e0]' : 'border-r border-r-white/15')
             } ${
               focusColumn === col.id 
                 ? (isLight ? 'text-blue-700 bg-blue-50/80 border-b-2 border-b-blue-600' : 'text-blue-400 bg-blue-950/20 border-b-2 border-b-blue-500/80 shadow-[0_1px_0_rgba(59,130,246,0.3)]') 
