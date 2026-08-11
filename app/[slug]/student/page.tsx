@@ -392,14 +392,28 @@ export default function StudentPortal() {
     
     setIsSaving(true);
     try {
+      // 💡 교재 코드([BK...])가 들어있다면 실제 교재 제목으로 변환하여 DB에 깨끗하게 저장
+      let cleanCompleted = localCompletedClasswork || '';
+      let cleanHomework = localHomework || '';
+      if (availableTextbooks && availableTextbooks.length > 0) {
+        availableTextbooks.forEach(tb => {
+          if (tb.bookcode && tb.title) {
+            cleanCompleted = cleanCompleted.split(`[${tb.bookcode}]`).join(tb.title);
+            cleanHomework = cleanHomework.split(`[${tb.bookcode}]`).join(tb.title);
+          }
+        });
+      }
+
+      const targetCourse = todaySession?.course_name || selectedCourse || '정규';
+
       const updateData: any = { 
         student_id: student.id, 
         session_date: selectedDate, 
         academy_id: academy.id, 
-        course_name: selectedCourse,
+        course_name: targetCourse,
         approval_status: status,
-        completed_classwork_text: localCompletedClasswork || '',
-        homework_text: localHomework || ''
+        completed_classwork_text: cleanCompleted,
+        homework_text: cleanHomework
       };
       if (todaySession?.id && todaySession.id !== 'temp') updateData.id = todaySession.id;
       if (todaySession?.moved_to_hour !== undefined && todaySession?.moved_to_hour !== null) {
