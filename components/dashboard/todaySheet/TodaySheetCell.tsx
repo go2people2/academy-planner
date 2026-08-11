@@ -15,6 +15,8 @@ import { ScoreCell } from './cells/ScoreCell';
 import { SimpleTextCell } from './cells/SimpleTextCell';
 import { FeedbackKeyboardPopup } from './FeedbackKeyboardPopup';
 import TextbookSystem from '@/components/student/TextbookSystem';
+import { CellTextHighlighter } from './CellTextHighlighter';
+import { CellTooltip } from './CellTooltip';
 
 export const resolveTargetSession = (student?: any, hour?: number | null, courseName?: string) => {
   if (!student) return undefined;
@@ -578,130 +580,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     ? (isLight ? 'text-amber-900 font-normal' : 'text-amber-200/90 font-normal') 
     : (isLight ? 'text-[#1e293b] font-normal' : 'text-white font-normal');
   const commonTextStyle = `w-full text-[12px] leading-[14px] text-left ${textColClass} ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
-  const renderHighlightedText = (text: string, columnId: string) => {
-    if (!text) return '-';
-    
-    const isTestField = columnId === 'test_id' || columnId === 'next_quiz';
-    const isTaskField = columnId === 'classwork' || columnId === 'completed_classwork' || columnId === 'assign' || columnId === 'mission' || columnId === 'notes' || columnId === 'management_notes';
-    
-    if (!isTestField && !isTaskField) return text;
-    
-    return text.split('\n').map((line, i) => {
-      const isLast = i === text.split('\n').length - 1;
-      
-      if (isTestField) {
-        if (!line.trim().startsWith('-')) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
-        
-        const colonIdx = line.indexOf(':');
-        if (colonIdx === -1) return <React.Fragment key={i}>{line}{!isLast && '\n'}</React.Fragment>;
-        
-        const beforeColon = line.substring(0, colonIdx + 1);
-        const afterColon = line.substring(colonIdx + 1);
-        
-        const commaIdx = afterColon.indexOf(',,');
-        const scorePart = commaIdx !== -1 ? afterColon.substring(0, commaIdx) : afterColon;
-        const memoPart = commaIdx !== -1 ? afterColon.substring(commaIdx + 1) : '';
-        
-        const highlightScore = (str: string) => {
-          if (!str.includes('/')) return <span className={isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400 font-normal'}>{str}</span>;
-          
-          const parts = str.split('/');
-          return (
-            <span className="font-normal">
-              <span className={isLight ? 'text-rose-600 font-medium' : 'text-pink-300'}>{parts[0]}</span>
-              {parts.length > 1 && (
-                <>
-                  <span className={isLight ? 'text-gray-400 mx-0.5' : 'text-gray-600 mx-0.5'}>/</span>
-                  <span className={isLight ? 'text-blue-600 font-medium' : 'text-blue-400'}>{parts[1]}</span>
-                </>
-              )}
-              {parts.length > 2 && (
-                <>
-                  <span className={isLight ? 'text-gray-400 mx-0.5' : 'text-gray-600 mx-0.5'}>/</span>
-                  <span className={isLight ? 'text-amber-600 font-medium' : 'text-orange-400'}>{parts[2]}</span>
-                </>
-              )}
-              {parts.slice(3).map((p, idx) => (
-                <React.Fragment key={idx}>
-                  <span className={isLight ? 'text-gray-400 mx-0.5' : 'text-gray-600 mx-0.5'}>/</span>
-                  <span>{p}</span>
-                </React.Fragment>
-              ))}
-            </span>
-          );
-        };
 
-        return (
-          <React.Fragment key={i}>
-            <span className={isLight ? 'text-[#1e293b] font-normal' : ''}>{beforeColon}</span>
-            {highlightScore(scorePart)}
-            <span className={isLight ? 'text-gray-500 italic' : 'text-gray-500 italic'}>{memoPart}</span>
-            {!isLast && '\n'}
-          </React.Fragment>
-        );
-      }
-      
-      if (isTaskField) {
-        // - 또는 * 기호로 시작하는지 감지
-        const match = line.match(/^(\s*[-*+•]\s*)(.*)$/);
-        const assignClass = columnId === 'assign' 
-          ? (isLight ? 'text-[#0f172a] font-normal' : 'text-blue-200 font-normal') 
-          : (isLight ? 'text-[#1e293b] font-normal' : '');
-        
-        if (!match) {
-          // 불릿 없는 일반 줄도 ,, 메모 분리 적용
-          const plainCommaIdx = line.indexOf(',,');
-          if (plainCommaIdx === -1) {
-            return (
-              <React.Fragment key={i}>
-                <span className={assignClass}>{line}</span>
-                {!isLast && '\n'}
-              </React.Fragment>
-            );
-          }
-          const plainContent = line.substring(0, plainCommaIdx);
-          const plainMemo = line.substring(plainCommaIdx + 2);
-          return (
-            <React.Fragment key={i}>
-              <span className={assignClass}>{plainContent}</span>
-              <span className="text-gray-500 italic ml-0.5">{plainMemo}</span>
-              {!isLast && '\n'}
-            </React.Fragment>
-          );
-        }
-        
-        const bulletStr = match[1];
-        const rest = match[2];
-        const commaIdx = rest.indexOf(',,');
-        
-        const bulletClass = isLight ? 'text-[#0f172a] font-medium' : 'text-blue-400 font-normal';
-        const contentClass = columnId === 'assign' 
-          ? (isLight ? 'font-normal text-[#0f172a]' : 'font-normal text-blue-200') 
-          : (isLight ? 'font-normal text-[#1e293b]' : 'font-normal text-white/90');
-        
-        if (commaIdx === -1) {
-          return (
-            <React.Fragment key={i}>
-              <span className={bulletClass}>{bulletStr}</span>
-              <span className={contentClass}>{rest}</span>
-              {!isLast && '\n'}
-            </React.Fragment>
-          );
-        } else {
-          const contentStr = rest.substring(0, commaIdx);
-          const memoStr = rest.substring(commaIdx + 2);
-          return (
-            <React.Fragment key={i}>
-              <span className={bulletClass}>{bulletStr}</span>
-              <span className={contentClass}>{contentStr}</span>
-              <span className="text-gray-500 italic ml-0.5">{memoStr}</span>
-              {!isLast && '\n'}
-            </React.Fragment>
-          );
-        }
-      }
-    });
-  };
 
   return (
     <td 
@@ -945,32 +824,6 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     ? 'border-t-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]' 
                     : 'border-t-white/10 hover:border-t-amber-500/40'
                 }`} />
-                
-                {/* 마우스 오버 말풍선 (주의사항 컬럼이 닫혀있어도 확인 가능) */}
-                {activeTooltip === 'note' && formData.management_notes && createPortal(
-                  <AnimatePresence mode="wait">
-                    <motion.div 
-                      initial={{ opacity: 0, y: tooltipCoords.top < 350 ? 10 : -10 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      exit={{ opacity: 0 }}
-                      style={{ 
-                        position: 'fixed',
-                        top: tooltipCoords.top < 350 ? tooltipCoords.bottom + 8 : 'auto',
-                        bottom: tooltipCoords.top < 350 ? 'auto' : (window.innerHeight - tooltipCoords.top) + 8,
-                        left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
-                        zIndex: 9999
-                      }}
-                      className="w-80 p-5 bg-amber-50 text-amber-950 text-[13px] font-normal rounded-lg shadow-[0_30px_60px_rgba(0,0,0,0.5)] border-2 border-amber-200 ring-4 ring-black/20 pointer-events-none"
-                    >
-                      <div className="flex items-center gap-2 mb-3 pb-2 border-b border-amber-200">
-                        <AlertTriangle size={14} className="text-amber-600 animate-bounce" />
-                        <span className="text-[10px] uppercase tracking-widest text-amber-600 font-normal">Student Management Alert</span>
-                      </div>
-                      <p className="whitespace-pre-wrap leading-relaxed text-[14px]">"{formData.management_notes}"</p>
-                    </motion.div>
-                  </AnimatePresence>,
-                  document.body
-                )}
               </div>
             </div>
 
@@ -986,38 +839,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   tabIndex={0}
                 >
                   <div className="w-0 h-0 border-t-[14px] border-t-blue-500 border-r-[14px] border-r-transparent shadow-md" />
-                  
-                  {activeTooltip === 'suggestion' && createPortal(
-                    <AnimatePresence mode="wait">
-                      <motion.div 
-                        initial={{ opacity: 0, y: tooltipCoords.top < 350 ? 10 : -10 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0 }}
-                        style={{ 
-                          position: 'fixed',
-                          top: tooltipCoords.top < 350 ? tooltipCoords.bottom + 8 : 'auto',
-                          bottom: tooltipCoords.top < 350 ? 'auto' : (window.innerHeight - tooltipCoords.top) + 8,
-                          left: Math.max(16, Math.min(tooltipCoords.right - 320, window.innerWidth - 336)),
-                          zIndex: 9999
-                        }}
-                        className="w-80 p-4 bg-blue-50 text-blue-950 text-[13px] font-normal rounded-lg shadow-[0_20px_50px_rgba(0,0,0,0.3)] border-2 border-blue-200 pointer-events-none"
-                      >
-                        <div className="flex items-center gap-2 mb-2 pb-2 border-b border-blue-200/50">
-                          <div className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-                          <span className="text-[10px] uppercase tracking-widest text-blue-600">Student Suggestion</span>
-                        </div>
-                        <div className="space-y-3">
-                          {student.suggestions.map((sug: any, idx: number) => (
-                            <p key={idx} className="whitespace-pre-wrap leading-relaxed">{sug.content}</p>
-                          ))}
-                        </div>
-                      </motion.div>
-                    </AnimatePresence>,
-                    document.body
-                  )}
                 </div>
               </div>
             )}
+
+            {/* 💡 [리팩토링] Portal 툴팁 전용 컴포넌트 */}
+            <CellTooltip 
+              activeTooltip={activeTooltip}
+              tooltipCoords={tooltipCoords}
+              managementNotes={formData.management_notes}
+              suggestions={student.suggestions}
+            />
 
             {/* 💡 정렬된 도구 아이템 렌더링 */}
             {(() => {
@@ -1693,7 +1525,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             {!isEditing && !isActive && (
               <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start w-full`}>
                 <div className="w-full">
-                  {currentText ? renderHighlightedText(currentText, colId) : (
+                  {currentText ? <CellTextHighlighter text={currentText} columnId={colId} isLight={isLight} /> : (
                     isLockActive ? (
                       <span className="text-amber-500/40 text-[11px] font-normal italic select-none">
                         ⏳ 승인을 누르면 내용이 입력됩니다
