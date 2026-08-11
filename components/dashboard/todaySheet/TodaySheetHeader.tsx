@@ -23,6 +23,7 @@ interface TodaySheetHeaderProps {
   isToolsEditMode: boolean;
   setIsToolsEditMode: (edit: boolean) => void;
   onAutofillManagementNotes?: () => void;
+  onAutofillMission?: () => void;
   isLight?: boolean;
 }
 
@@ -43,6 +44,7 @@ export function TodaySheetHeader({
   isToolsEditMode, 
   setIsToolsEditMode, 
   onAutofillManagementNotes,
+  onAutofillMission,
   isLight = false 
 }: TodaySheetHeaderProps) {
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
@@ -274,6 +276,18 @@ export function TodaySheetHeader({
                             }}
                             className="p-1 rounded bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 transition-all flex items-center justify-center shadow-sm cursor-pointer ml-0.5"
                             title="비어있는 주의점 칸에 최신 메모 수동 이월하기"
+                          >
+                            <Wand2 size={11} className="text-amber-300" />
+                          </button>
+                        )}
+                        {col.id === 'mission' && onAutofillMission && (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onAutofillMission();
+                            }}
+                            className="p-1 rounded bg-amber-500/10 hover:bg-amber-500/30 text-amber-400 border border-amber-500/30 transition-all flex items-center justify-center shadow-sm cursor-pointer ml-0.5"
+                            title="비어있는 미션 칸에 최신 미션 수동 이월하기"
                           >
                             <Wand2 size={11} className="text-amber-300" />
                           </button>

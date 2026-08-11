@@ -485,13 +485,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 DOM value 동기화
   React.useLayoutEffect(() => {
     const targetRef = colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : null;
-    if (targetRef?.current && (isEditing || isActive)) {
-      if (document.activeElement !== targetRef.current) {
+    if (targetRef?.current) {
+      const isFocused = document.activeElement === targetRef.current;
+      if (!isFocused && !isEditing) {
         targetRef.current.value = currentText || '';
       }
       targetRef.current.style.height = 'auto';
       targetRef.current.style.height = `${targetRef.current.scrollHeight}px`;
-      if (isEditing && document.activeElement !== targetRef.current) targetRef.current.focus();
+      if (isEditing && !isFocused) targetRef.current.focus();
     }
   }, [isEditing, isActive, currentText, colId]);
 

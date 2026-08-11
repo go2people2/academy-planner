@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle, ClipboardCheck, Calendar, ChevronDown } from 'lucide-react';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle, ClipboardCheck, Calendar, ChevronDown, RefreshCw } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
@@ -104,7 +104,20 @@ export default function StudentPortal() {
 
   const lastSession = useMemo(() => {
     if (!allLogs || allLogs.length === 0) return null;
-    const pastLogs = allLogs.filter(l => l.session_date < selectedDate && (l.course_name || '정규') === selectedCourse).sort((a, b) => b.session_date.localeCompare(a.session_date));
+    const currentCourse = (selectedCourse || '정규').trim();
+    const isRegular = currentCourse === '정규' || currentCourse === '정규수업';
+
+    const pastLogs = allLogs.filter(l => {
+      if (l.session_date >= selectedDate) return false;
+      const rawCourse = l.course_name ? l.course_name.trim() : '';
+      const logCourse = rawCourse || '정규';
+
+      if (isRegular) {
+        return logCourse === '정규';
+      }
+
+      return logCourse === currentCourse || (logCourse !== '정규' && (logCourse.includes(currentCourse) || currentCourse.includes(logCourse)));
+    }).sort((a, b) => b.session_date.localeCompare(a.session_date));
     
     let aggregatedHw = "";
     for (const log of pastLogs) {
@@ -589,42 +602,94 @@ export default function StudentPortal() {
         onInvalidDateSelect={(dateStr) => setInvalidDateAlert(dateStr)}
         matchedExam={matchedExam} 
         getRemainingClasses={getRemainingClasses} handleLogout={handleLogout} getInitial={getInitial}
-        academy={academy} selectedCourse={selectedCourse} setSelectedCourse={setSelectedCourse}
+        academy={academy} selectedCourse={selectedCourse} setSelectedCourse={(course) => {
+          setSelectedCourse(course);
+          if (student) {
+            try {
+              localStorage.setItem('ams_student', JSON.stringify({ ...student, _selectedCourse: course }));
+            } catch (e) {}
+          }
+        }}
       />
 
-      {/* 💡 데스크톱 전용 상단 탭 바 (오답노트 전환용) */}
-      <div className="bg-[#0a0a0a] border-b border-white/5 hidden lg:flex px-4 md:px-8 shrink-0">
-        <button
-          onClick={() => setActiveTab('study')}
-          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
-            activeTab !== 'wrong-answer' && activeTab !== 'exam-submit'
-              ? 'border-blue-500 text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-300'
-          }`}
-        >
-          📝 내 학습 플래너
-        </button>
-        <button
-          onClick={() => setActiveTab('wrong-answer')}
-          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
-            activeTab === 'wrong-answer'
-              ? 'border-blue-500 text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-300'
-          }`}
-        >
-          ❌ 틀린 문제 제출
-        </button>
-        <button
-          onClick={() => setActiveTab('exam-submit')}
-          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all ${
-            activeTab === 'exam-submit'
-              ? 'border-blue-500 text-blue-400'
-              : 'border-transparent text-gray-500 hover:text-gray-300'
-          }`}
-        >
-          ✏️ 답안 제출
-        </button>
-      </div>
+      {/* 💡 데스크톱 전용 상단 탭 바 (lg 이상에서만 노출) */}
+      {(() => {
+        const availableCourses: string[] = ['정규'];
+        const rawElective = student?.book_courses?.['__elective_courses'] || student?.book_courses?.["'__elective_courses'"];
+        if (rawElective) {
+          try {
+            const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+            if (Array.isArray(parsed)) {
+              parsed.forEach((c: any) => {
+                const subj = c.subject?.trim() || '특강';
+                if (!availableCourses.includes(subj)) availableCourses.push(subj);
+              });
+            }
+          } catch (e) {}
+        }
+        const hasElectives = availableCourses.length > 1;
+        const isElectiveNow = selectedCourse && selectedCourse !== '정규';
+        const currentIndex = availableCourses.indexOf(selectedCourse || '정규');
+        const nextIndex = (currentIndex + 1) % availableCourses.length;
+        const nextCourse = availableCourses[nextIndex];
+
+        return (
+          <div className="bg-[#0a0a0a] border-b border-white/5 hidden lg:flex px-4 md:px-8 shrink-0">
+            {/* 1. 오늘 학습 플래너 탭 (100% 항시 유효) */}
+            <button
+              onClick={() => setActiveTab('study')}
+              className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
+                activeTab === 'study'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              📝 오늘 학습
+            </button>
+
+            {/* 2. 특강이 있는 학생인 경우 1개 스마트 전환 탭 추가 */}
+            {hasElectives && (
+              <button
+                onClick={() => {
+                  setActiveTab('study');
+                  setSelectedCourse(nextCourse);
+                  try {
+                    localStorage.setItem('ams_student', JSON.stringify({ ...student, _selectedCourse: nextCourse }));
+                  } catch (e) {}
+                }}
+                className={`px-5 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
+                  isElectiveNow
+                    ? 'border-purple-500/40 text-purple-300 hover:text-purple-200'
+                    : 'border-blue-500/40 text-blue-300 hover:text-blue-200'
+                }`}
+              >
+                <span>{isElectiveNow ? '📘 정규수업 전환 🔄' : `📙 ${nextCourse} 전환 🔄`}</span>
+              </button>
+            )}
+
+            <button
+              onClick={() => setActiveTab('wrong-answer')}
+              className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
+                activeTab === 'wrong-answer'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              ❌ 틀린 문제 제출
+            </button>
+            <button
+              onClick={() => setActiveTab('exam-submit')}
+              className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
+                activeTab === 'exam-submit'
+                  ? 'border-blue-500 text-blue-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-300'
+              }`}
+            >
+              ✏️ 답안 제출
+            </button>
+          </div>
+        );
+      })()}
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden pb-[64px] lg:pb-0">
         {activeTab === 'wrong-answer' ? (
@@ -686,7 +751,26 @@ export default function StudentPortal() {
               academy={academy}
             />
             {(() => {
-              const isValidClassDate = validClassDates.some(d => d.date === selectedDate);
+              const dayOfWeek = selectedDate ? ['일', '월', '화', '수', '목', '금', '토'][new Date(selectedDate).getDay()] : '';
+              const isRegularDay = (selectedCourse === '정규' || !selectedCourse) && student?.class_days?.includes(dayOfWeek);
+
+              let isElectiveDay = false;
+              if (selectedCourse && selectedCourse !== '정규') {
+                const rawElective = student?.book_courses?.['__elective_courses'];
+                if (rawElective) {
+                  try {
+                    const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+                    if (Array.isArray(courses)) {
+                      const targetCourse = courses.find((c: any) => c.subject?.trim() === selectedCourse);
+                      if (targetCourse && Array.isArray(targetCourse.days)) {
+                        isElectiveDay = targetCourse.days.includes(dayOfWeek);
+                      }
+                    }
+                  } catch (e) {}
+                }
+              }
+
+              const isValidClassDate = isRegularDay || isElectiveDay || !!todaySession || validClassDates.some(d => d.date === selectedDate);
 
               return (
                 <div className="mt-8 mb-4">
@@ -845,31 +929,85 @@ export default function StudentPortal() {
       </main>
 
       {/* 모바일 하단 플로팅 탭 네비게이션 (lg 미만에서만 노출) */}
-      <div className="lg:hidden fixed bottom-0 left-0 right-0 h-[60px] bg-[#0c0c0c]/90 backdrop-blur-md border-t border-white/5 flex items-center justify-around z-30 px-2 shadow-2xl">
-        {[
-          { id: 'study', label: '오늘 학습', icon: <BookOpen size={16} /> },
-          { id: 'wrong-answer', label: '오답 제출', icon: <AlertTriangle size={16} /> },
-          { id: 'exam-submit', label: '답안 제출', icon: <FileText size={16} /> },
-          { id: 'history', label: '히스토리', icon: <History size={16} /> },
-          { id: 'suggestion', label: '알림장 & 설문', icon: <MessageSquare size={16} /> },
-        ].map(tab => {
-          const isActive = activeTab === tab.id;
-          return (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
-              className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 transition-all ${
-                isActive ? 'text-blue-500 font-extrabold scale-105' : 'text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              <div className={isActive ? 'text-blue-500' : 'text-gray-500'}>
-                {tab.icon}
-              </div>
-              <span className="text-[9px] font-bold tracking-tight">{tab.label}</span>
-            </button>
-          );
-        })}
-      </div>
+      {(() => {
+        const availableCourses: string[] = ['정규'];
+        const rawElective = student?.book_courses?.['__elective_courses'] || student?.book_courses?.["'__elective_courses'"];
+        if (rawElective) {
+          try {
+            const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+            if (Array.isArray(parsed)) {
+              parsed.forEach((c: any) => {
+                const subj = c.subject?.trim() || '특강';
+                if (!availableCourses.includes(subj)) availableCourses.push(subj);
+              });
+            }
+          } catch (e) {}
+        }
+        const hasElectives = availableCourses.length > 1;
+        const isElectiveNow = selectedCourse && selectedCourse !== '정규';
+        const currentIndex = availableCourses.indexOf(selectedCourse || '정규');
+        const nextIndex = (currentIndex + 1) % availableCourses.length;
+        const nextCourse = availableCourses[nextIndex];
+
+        const mobileTabs: any[] = [
+          {
+            id: 'study',
+            targetCourse: selectedCourse || '정규',
+            label: '오늘 학습',
+            icon: <BookOpen size={16} />
+          }
+        ];
+
+        if (hasElectives) {
+          mobileTabs.push({
+            id: 'smart_study_toggle',
+            targetCourse: nextCourse,
+            label: isElectiveNow ? '📘 정규전환' : `📙 ${nextCourse}전환`,
+            icon: isElectiveNow ? <RefreshCw size={16} className="text-blue-400 shrink-0" /> : <RefreshCw size={16} className="text-purple-400 shrink-0" />
+          });
+        }
+
+        mobileTabs.push(
+          { id: 'wrong-answer', targetCourse: '', label: '오답 제출', icon: <AlertTriangle size={16} /> },
+          { id: 'exam-submit', targetCourse: '', label: '답안 제출', icon: <FileText size={16} /> },
+          { id: 'history', targetCourse: '', label: '히스토리', icon: <History size={16} /> },
+          { id: 'suggestion', targetCourse: '', label: '알림장', icon: <MessageSquare size={16} /> }
+        );
+
+        return (
+          <div className="lg:hidden fixed bottom-0 left-0 right-0 h-[60px] bg-[#0c0c0c]/90 backdrop-blur-md border-t border-white/5 flex items-center justify-around z-30 px-2 shadow-2xl">
+            {mobileTabs.map(tab => {
+              const isActive = tab.id === 'smart_study_toggle' || tab.id === 'study' ? activeTab === 'study' : activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => {
+                    if (tab.id === 'smart_study_toggle') {
+                      setActiveTab('study');
+                      setSelectedCourse(tab.targetCourse);
+                      try {
+                        localStorage.setItem('ams_student', JSON.stringify({ ...student, _selectedCourse: tab.targetCourse }));
+                      } catch (e) {}
+                    } else if (tab.id === 'study') {
+                      setActiveTab('study');
+                    } else {
+                      setActiveTab(tab.id as any);
+                    }
+                  }}
+                  className={`flex flex-col items-center justify-center gap-1 flex-1 py-1.5 transition-all cursor-pointer ${
+                    isActive ? 'text-blue-400 font-extrabold scale-105' : 'text-gray-500 hover:text-gray-300'
+                  }`}
+                >
+                  <div className={isActive ? (isElectiveNow ? 'text-purple-400' : 'text-blue-400') : 'text-gray-500'}>
+                    {tab.icon}
+                  </div>
+                  <span className="text-[9px] font-bold tracking-tight whitespace-nowrap">{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+        );
+      })()}
 
       {/* 테스트 답안 모달 */}
       <AnimatePresence>

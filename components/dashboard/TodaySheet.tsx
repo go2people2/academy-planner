@@ -865,6 +865,63 @@ export default function TodaySheet({
     });
   }, [filteredStudents, selectedDate, setStudents, handleBatchSave]);
 
+  // 💡 [수동 이월] 미션(mission) 칼럼 헤더 🪄 버튼 클릭 시 비어있는 셀에 최신 미션 채우기
+  const handleAutofillMission = useCallback(async () => {
+    const emptyTargets: any[] = [];
+    filteredStudents.forEach((st: any) => {
+      const currentMission = st.todaySession?.mission || '';
+      if (!currentMission || String(currentMission).trim() === '') {
+        // 과거 logs 중 가장 최근 작성된 미션 찾기
+        const pastLogs = (st.allLogs || [])
+          .filter((l: any) => l.mission && String(l.mission).trim() !== '' && (l.date || l.session_date || '') < selectedDate)
+          .sort((a: any, b: any) => String(b.date || b.session_date || '').localeCompare(String(a.date || a.session_date || '')));
+        
+        const latestPastMission = pastLogs.length > 0 ? String(pastLogs[0].mission) : '';
+        if (latestPastMission && String(latestPastMission).trim() !== '') {
+          emptyTargets.push({
+            studentId: st.id,
+            latestMission: latestPastMission
+          });
+        }
+      }
+    });
+
+    if (emptyTargets.length === 0) {
+      alert('비어있는 미션 항목 중 이월할 과거 미션이 있는 학생이 없습니다.');
+      return;
+    }
+
+    // 1. 부모 Local State(setStudents) 선반영
+    setStudents((prev: any[]) => prev.map(s => {
+      const target = emptyTargets.find(t => t.studentId === s.id);
+      if (target) {
+        return {
+          ...s,
+          todaySession: { ...(s.todaySession || {}), mission: target.latestMission }
+        };
+      }
+      return s;
+    }));
+
+    // 2. DB 및 백엔드 batchSave 반영 & Cmd+Z Undo 스택 등록
+    const updates = emptyTargets.map(t => ({
+      studentId: t.studentId,
+      newData: { mission: t.latestMission },
+      prevData: { mission: '' }
+    }));
+
+    await handleBatchSave(updates);
+
+    // 3. DOM Sync
+    requestAnimationFrame(() => {
+      emptyTargets.forEach(t => {
+        const selector = `[data-student-id="${t.studentId}"][data-col-id="mission"]`;
+        const el = document.querySelector(selector) as HTMLTextAreaElement | HTMLInputElement;
+        if (el) el.value = t.latestMission;
+      });
+    });
+  }, [filteredStudents, selectedDate, setStudents, handleBatchSave]);
+
   // 📝 [리팩토링] 엑셀 및 ACA2000 가공/다운로드 전용 분리 훅 호출
   // 💡 filteredStudents: 정규/특강 행이 이미 분리된 배열 → 아카2000 export 시 각각 별도 행 출력
   const { handleExport } = useTodaySheetExport({
@@ -1498,7 +1555,7 @@ export default function TodaySheet({
           onScroll={handleScroll}
         >
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
-          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} onCycleSelectAll={handleCycleSelectAll} selectCycleMode={selectCycleMode} isAllSelected={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} isLight={isLight} /></thead>
+          <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} onCycleSelectAll={handleCycleSelectAll} selectCycleMode={selectCycleMode} isAllSelected={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} onAutofillMission={handleAutofillMission} isLight={isLight} /></thead>
           <tbody className={isLight ? "divide-y divide-[#e3e2e0]" : "divide-y divide-white/10"}>
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);

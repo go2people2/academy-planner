@@ -1,5 +1,84 @@
 import { useState, useMemo, useEffect, useCallback } from 'react';
 import { TextbookOption } from '@/types/dashboard';
+import { parseBookCourseValue } from '@/lib/utils';
+
+export function parseAssignedBooks(student: any, selectedCourse?: string, availableTextbooks: TextbookOption[] = []): string[] {
+  if (!student) return [];
+
+  let rawAssigned: any[] = [];
+  const b = student.assigned_books;
+  if (Array.isArray(b)) {
+    rawAssigned = b;
+  } else if (typeof b === 'string' && b.trim()) {
+    try {
+      const parsed = JSON.parse(b);
+      if (Array.isArray(parsed)) rawAssigned = parsed;
+      else rawAssigned = [b];
+    } catch (e) {
+      rawAssigned = [b];
+    }
+  }
+
+  const stringList: string[] = rawAssigned
+    .map(item => {
+      if (!item) return '';
+      if (typeof item === 'string') return item.trim();
+      if (typeof item === 'object') return (item.bookcode || item.title || item.id || item.code || '').trim();
+      return String(item).trim();
+    })
+    .filter(code => code && !code.startsWith('__'));
+
+  const bookCourses = student.book_courses || {};
+
+  return stringList.filter(bookKey => {
+    // 💡 availableTextbooks와 1:1 대조하여 순수 bookcode 및 title 둘 다 확보
+    const matchedTb = (availableTextbooks || []).find(tb => 
+      tb.bookcode === bookKey || 
+      tb.title === bookKey || 
+      (tb.bookcode && tb.bookcode.toLowerCase() === bookKey.toLowerCase()) ||
+      (tb.title && tb.title.toLowerCase() === bookKey.toLowerCase())
+    );
+
+    const keyByCode = matchedTb?.bookcode ? String(bookCourses[matchedTb.bookcode] || '') : '';
+    const keyByTitle = matchedTb?.title ? String(bookCourses[matchedTb.title] || '') : '';
+    const keyBySelf = String(bookCourses[bookKey] || '');
+
+    const rawVal = keyByCode || keyByTitle || keyBySelf || '';
+    const { isKeep, targetTag } = parseBookCourseValue(rawVal);
+    
+    // 💡 제외 상태 판별 (-removed, -done, isKeep)
+    if (rawVal.includes('-removed') || rawVal.includes('-done') || isKeep) {
+      return false;
+    }
+
+    // 💡 과목 구별 필터링
+    const currentCourse = (selectedCourse || '정규').trim();
+    const isRegularMode = !selectedCourse || currentCourse === '정규' || currentCourse === '정규수업';
+    const tag = (targetTag || '정규').trim();
+    const hasTargetTag = rawVal.includes('-target-');
+
+    // ① 정규 수업 모드인 경우
+    if (isRegularMode) {
+      // 1) -target- 태그가 없는 일반 배정 교재 -> 100% 정규 교재로 무조건 인정!
+      if (!hasTargetTag) return true;
+      // 2) -target-정규 또는 -target-공통 인 경우 -> 100% 정규 교재로 인정!
+      return tag === '정규' || tag === '정규수업' || tag === '공통' || tag === '미지정';
+    }
+
+    // ② 선택/특강 수업 모드인 경우
+    // 1) -target-공통 인 교재 -> 특강에서도 100% 노출
+    if (tag === '공통') return true;
+
+    // 2) 태그가 '특강', '방학특강', '선택과목' 이거나
+    //    선택 과목명과 태그명이 상호 포함 관계에 있거나 ('중3특강' vs '특강' 등)
+    //    태그명에 '특강' 또는 '선택' 단어가 포함되어 있는 교재 -> 100% 노출
+    const isElectiveTag = tag === '특강' || tag === '방학특강' || tag === '선택과목' || 
+                          tag.includes('특강') || tag.includes('선택') ||
+                          currentCourse.includes(tag) || tag.includes(currentCourse);
+
+    return isElectiveTag;
+  });
+}
 
 export function useTextbookSystemState({
   student,
@@ -8,6 +87,7 @@ export function useTextbookSystemState({
   localCompletedClasswork,
   localHomework,
   selectedDate,
+  selectedCourse = '정규',
   academy,
   initialBookCode,
 }: {
@@ -17,6 +97,7 @@ export function useTextbookSystemState({
   localCompletedClasswork: string;
   localHomework: string;
   selectedDate: string;
+  selectedCourse?: string;
   academy?: any;
   initialBookCode?: string;
 }) {
@@ -44,30 +125,10 @@ export function useTextbookSystemState({
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState({ sheets: 0, pages: 0 });
 
-  const parseAssigned = (books: any): string[] => {
-    if (!books) return [];
-    if (Array.isArray(books)) return books;
-    if (typeof books === 'string') {
-      try {
-        const parsed = JSON.parse(books);
-        if (Array.isArray(parsed)) return parsed;
-      } catch (e) {
-        return [books];
-      }
-    }
-    return [];
-  };
-
-  const [localAssigned, setLocalAssigned] = useState<string[]>(() => parseAssigned(student?.assigned_books));
+  const [localAssigned, setLocalAssigned] = useState<string[]>(() => parseAssignedBooks(student, selectedCourse, availableTextbooks));
   useEffect(() => {
-    if (student?.assigned_books) {
-      const parsed = parseAssigned(student.assigned_books);
-      setLocalAssigned(prev => {
-        const merged = Array.from(new Set([...parsed, ...prev]));
-        return merged;
-      });
-    }
-  }, [student?.assigned_books]);
+    setLocalAssigned(parseAssignedBooks(student, selectedCourse, availableTextbooks));
+  }, [student, selectedCourse, availableTextbooks]);
 
   const unassignedBooks = useMemo(() => {
     return (availableTextbooks || []).filter(b => !localAssigned.includes(b.bookcode) && b.status !== '비활성');

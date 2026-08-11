@@ -92,6 +92,7 @@ export default function TextbookSystem({
     localCompletedClasswork,
     localHomework,
     selectedDate,
+    selectedCourse,
     academy,
     initialBookCode,
   });
@@ -296,15 +297,9 @@ export default function TextbookSystem({
       <div className="relative bg-white/[0.03] border-b border-white/5 shrink-0">
         <div className="flex items-center gap-2 overflow-x-auto py-3 px-4 scroll-smooth" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
         {(() => {
-          const validAssigned = (localAssigned || []).filter((code: string) => {
-            return (availableTextbooks || []).some(b => 
-              b.bookcode === code || 
-              (b.bookcode && b.bookcode.trim() === code.trim()) || 
-              (b.title && b.title.trim() === code.trim())
-            );
-          });
+          const assignedList = (localAssigned || []).filter(code => code && !code.startsWith('__'));
 
-          if (validAssigned.length === 0) {
+          if (assignedList.length === 0) {
             return (
               <div className="flex items-center gap-2 text-[11px] font-bold text-gray-400 py-0.5 shrink-0">
                 <BookOpen size={13} className="text-gray-500" />
@@ -313,13 +308,14 @@ export default function TextbookSystem({
             );
           }
 
-          return validAssigned.map((code: string) => {
-            const book = (availableTextbooks || []).find(b => 
+          return assignedList.map((code: string) => {
+            const found = (availableTextbooks || []).find(b => 
               b.bookcode === code || 
               (b.bookcode && b.bookcode.trim() === code.trim()) || 
-              (b.title && b.title.trim() === code.trim())
+              (b.title && b.title.trim() === code.trim()) ||
+              (b.bookcode && b.bookcode.toLowerCase() === code.toLowerCase())
             ); 
-            if (!book) return null;
+            const book = found || { bookcode: code, title: code };
             const isActive = activeBook?.bookcode === book.bookcode;
             return (
               <motion.button 

@@ -30,6 +30,10 @@ export const syncTodaySheetDom = (
         
         if (el) {
           el.value = isClearMode ? '' : (u.newData[prop] || '');
+          if (el.tagName === 'TEXTAREA') {
+            el.style.height = 'auto';
+            el.style.height = `${el.scrollHeight}px`;
+          }
         }
       });
     });

@@ -98,23 +98,7 @@ export function useTodaySheetRowLogic({
         )
       : student.class_days?.map(d => d.trim()).includes(dayName);
 
-    // 💡 [과거 가장 최신 로그 역추적 수혈 유틸]
-    const getPastMostRecentValue = (field: 'mission' | 'management_notes') => {
-      const logs = student.allLogs || [];
-      const pastLogs = logs
-        .filter((l: any) => {
-          const lDate = l.date || l.session_date || '';
-          return lDate !== '' && lDate < date;
-        })
-        .sort((a: any, b: any) => {
-          const dateA = a.date || a.session_date || '';
-          const dateB = b.date || b.session_date || '';
-          return dateB.localeCompare(dateA);
-        });
-      
-      const foundLog = pastLogs.find((l: any) => l[field] && String(l[field]).trim() !== '');
-      return foundLog ? String(foundLog[field]) : '';
-    };
+
 
     // 💡 [안정화] session.next_quiz_text 가 없더라도 homework_to JSON 데이터가 있으면 역파싱하여 복원합니다.
     let resolvedNextQuizText = session?.next_quiz_text || '';

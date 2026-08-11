@@ -581,13 +581,6 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   // 💡 [독립 세션 참조] targetCourseName 및 moved_to_hour에 따른 특정 세션 객체 지정
   const targetSession = existingLog || student.todaySession;
 
-  // 💡 [추가] 관리 주의점(management_notes) 수정 시, 학생 마스터 정보 테이블도 함께 연동 갱신
-  if ('management_notes' in sessionData && sessionData.management_notes !== undefined) {
-    await supabase.from('ams_students').update({ 
-      management_notes: sessionData.management_notes 
-    }).eq('id', realStudentId);
-  }
-
   const dataToSave = { ...sessionData };
 
   // 1. 기본 필드 필터링
@@ -680,11 +673,11 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         ...(s.todaySession || { id: 'temp', student_id: studentId, academy_id: academy.id, date: selectedDate, session_date: selectedDate }),
         ...filteredData,
         date: selectedDate, status: filteredData.status || 'none',
-        management_notes: ('management_notes' in dataToSave) ? dataToSave.management_notes : (s.todaySession?.management_notes ?? s.management_notes),
+        management_notes: ('management_notes' in dataToSave) ? (dataToSave.management_notes ?? '') : (s.todaySession?.management_notes ?? ''),
         test_id: ('test_id' in dataToSave) ? dataToSave.test_id : (('test_status' in dataToSave) ? dataToSave.test_status : s.todaySession?.test_id),
         test_completed: isTestCompleted,
         test_cut: ('test_cut' in dataToSave) ? dataToSave.test_cut : (s.todaySession?.test_cut ?? 0),
-        mission: targetRecentMission,
+        mission: ('mission' in dataToSave) ? (dataToSave.mission ?? '') : (s.todaySession?.mission ?? ''),
         todo_achievement: ('todo_achievement' in dataToSave) ? dataToSave.todo_achievement : (s.todaySession?.todo_achievement ?? 0),
         test_answers: ('test_answers' in dataToSave) ? dataToSave.test_answers : s.todaySession?.test_answers,
         next_quiz_text: nqObj.text,

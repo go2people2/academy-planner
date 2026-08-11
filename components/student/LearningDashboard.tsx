@@ -90,7 +90,14 @@ export default function LearningDashboard({
   onSyncTasks
 }: LearningDashboardProps) {
   const planTasks = useMemo(() => {
-    return todayPlan ? todayPlan.split('\n').filter(l => l.trim()) : [];
+    let raw = todayPlan || '';
+    if (raw && typeof raw === 'string' && raw.startsWith('{')) {
+      try {
+        const parsed = JSON.parse(raw);
+        raw = parsed.text || '';
+      } catch (e) {}
+    }
+    return raw ? raw.split('\n').filter(l => l.trim()) : [];
   }, [todayPlan]);
 
   const displayOptions = [0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100];
@@ -175,8 +182,8 @@ export default function LearningDashboard({
       </div>
 
       <div className={isSlim ? "grid grid-cols-1 gap-1.5" : "space-y-4 md:space-y-8"}>
-        {/* 1. 학생 미션 (미션 내용이 있을 때만 노출) */}
-        {student?.recent_mission && (
+        {/* 1. 학생 미션 (오늘 세션의 미션 내용이 있을 때만 1:1 노출) */}
+        {todaySession?.mission && (
           <motion.div 
             layout
             className={isSlim 
@@ -189,10 +196,10 @@ export default function LearningDashboard({
                 <Zap className="text-black fill-black" size={isSlim ? 10 : 22} strokeWidth={3} />
               </div>
               <div className={`text-left flex-1 min-w-0 ${isSlim ? "overflow-x-auto no-scrollbar" : ""}`}>
-                <p className={`${isSlim ? "text-[13px] whitespace-nowrap" : "text-[16px] md:text-[22px]"} font-black text-white tracking-tight`}>{student.recent_mission}</p>
+                <p className={`${isSlim ? "text-[13px] whitespace-nowrap" : "text-[16px] md:text-[22px]"} font-black text-white tracking-tight`}>{todaySession.mission}</p>
                 {!isSlim && (
                   <p className="text-[10px] md:text-[11px] font-bold text-amber-400 mt-1.5 md:mt-2.5 flex items-center gap-1.5">
-                    <CheckCircle2 size={12} /> 최근에 이거 꼭 해야 해! 집중해서 완료하자.
+                    <CheckCircle2 size={12} /> 오늘 이거 꼭 해야 해! 집중해서 완료하자.
                   </p>
                 )}
               </div>

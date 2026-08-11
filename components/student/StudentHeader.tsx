@@ -1,6 +1,6 @@
 'use client';
 
-import { User, Calendar as CalendarIcon, FileText, LogOut, Globe, ExternalLink } from 'lucide-react';
+import { User, Calendar as CalendarIcon, FileText, LogOut, Globe, ExternalLink, RefreshCw } from 'lucide-react';
 
 interface StudentHeaderProps {
   student: any;
@@ -40,6 +40,31 @@ export default function StudentHeader({
       formatted = `https://${formatted}`;
     }
     return formatted;
+  };
+
+  const availableCourses = (() => {
+    const list: string[] = ['정규'];
+    const rawElective = student?.book_courses?.['__elective_courses'] || student?.book_courses?.["'__elective_courses'"];
+    if (rawElective) {
+      try {
+        const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+        if (Array.isArray(parsed)) {
+          parsed.forEach((c: any) => {
+            const subj = c.subject?.trim() || '특강';
+            if (!list.includes(subj)) list.push(subj);
+          });
+        }
+      } catch (e) {}
+    }
+    return list;
+  })();
+
+  const handleCycleCourse = () => {
+    if (availableCourses.length <= 1 || !setSelectedCourse) return;
+    const currentIndex = availableCourses.indexOf(selectedCourse || '정규');
+    const nextIndex = (currentIndex + 1) % availableCourses.length;
+    const nextCourse = availableCourses[nextIndex];
+    setSelectedCourse(nextCourse);
   };
 
   return (

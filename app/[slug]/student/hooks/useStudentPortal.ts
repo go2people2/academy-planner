@@ -118,80 +118,94 @@ export function useStudentPortal(slug: string | string[] | undefined) {
           currentTeachers = tData;
         }
       }
-      const { data: stData } = await supabase.from('ams_students').select('*').eq('id', studentId).single();
-      if (stData) setStudent(stData);
-      if (acData) {
-        const { data: exData } = await supabase.from('ams_exam_schedules').select('*').eq('academy_id', acData.id).order('target_date', { ascending: true });
-        if (exData) setExamSchedules(exData);
+      const baseStudentId = studentId ? studentId.split('_special_')[0] : '';
+      const { data: stData } = await supabase.from('ams_students').select('*').eq('id', baseStudentId).single();
+      if (stData) {
+        setStudent(stData);
+        if (acData) {
+          const { data: exData } = await supabase.from('ams_exam_schedules').select('*').eq('academy_id', acData.id).order('target_date', { ascending: true });
+          if (exData) setExamSchedules(exData);
 
-        const thirtyDaysAgo = new Date();
-        thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-        
-        const { data: suggData } = await supabase.from('ams_tasks')
-          .select('*')
-          .eq('academy_id', acData.id)
-          .eq('title', `[건의] ${stData.name}`)
-          .gte('created_at', thirtyDaysAgo.toISOString())
-          .order('created_at', { ascending: false })
-          .limit(5);
-        if (suggData) setMySuggestions(suggData);
-
-        try {
-          const { data: waAcData } = await supabase
-            .from('academies')
+          const thirtyDaysAgo = new Date();
+          thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+          
+          const { data: suggData } = await supabase.from('ams_tasks')
             .select('*')
-            .eq('slug', normalizedSlug)
-            .maybeSingle();
+            .eq('academy_id', acData.id)
+            .eq('title', `[건의] ${stData.name}`)
+            .gte('created_at', thirtyDaysAgo.toISOString())
+            .order('created_at', { ascending: false })
+            .limit(5);
+          if (suggData) setMySuggestions(suggData);
+        
+          try {
+            const { data: waAcData } = await supabase
+              .from('academies')
+              .select('*')
+              .eq('slug', normalizedSlug)
+              .maybeSingle();
 
-          if (waAcData) {
-            setWrongAnswerAcademy(waAcData);
-            const themeObj = WRONG_ANSWER_THEMES[waAcData.theme] || WRONG_ANSWER_THEMES.default;
-            setWrongAnswerTheme(themeObj);
+            if (waAcData) {
+              setWrongAnswerAcademy(waAcData);
+              const themeObj = WRONG_ANSWER_THEMES[waAcData.theme] || WRONG_ANSWER_THEMES.default;
+              setWrongAnswerTheme(themeObj);
 
-            let waTeacherId = null;
-            const amsTeacher = currentTeachers?.find((t: any) => t.id === stData.teacher_id);
-            if (amsTeacher?.name) {
-              const { data: waTeacher } = await supabase
-                .from('teachers')
-                .select('id')
-                .eq('name', amsTeacher.name)
-                .eq('academy_id', waAcData.id)
-                .maybeSingle();
-              if (waTeacher) {
-                waTeacherId = waTeacher.id;
+              let waTeacherId = null;
+              const amsTeacher = currentTeachers?.find((t: any) => t.id === stData.teacher_id);
+              if (amsTeacher?.name) {
+                const { data: waTeacher } = await supabase
+                  .from('teachers')
+                  .select('id')
+                  .eq('academy_id', waAcData.id)
+                  .eq('name', amsTeacher.name)
+                  .maybeSingle();
+                if (waTeacher) waTeacherId = waTeacher.id;
+              }
+
+              let query = supabase
+                .from('student_users')
+                .select('*')
+                .eq('name', stData.name)
+                .eq('academy_id', waAcData.id);
+
+              if (waTeacherId) {
+                query = query.eq('teacher_id', waTeacherId);
+              }
+
+              const { data: waStData } = await query.maybeSingle();
+
+              if (waStData) {
+                setWrongAnswerStudent(waStData);
+              } else {
+                setWrongAnswerStudent({
+                  id: stData.id,
+                  name: stData.name,
+                  academy_id: waAcData.id,
+                  teacher_id: waTeacherId || null,
+                  phone: stData.phone,
+                });
               }
             }
-
-            let query = supabase
-              .from('student_users')
-              .select('*')
-              .eq('name', stData.name)
-              .eq('academy_id', waAcData.id);
-
-            if (waTeacherId) {
-              query = query.eq('teacher_id', waTeacherId);
-            }
-
-            const { data: waStData } = await query.maybeSingle();
-
-            if (waStData) {
-              setWrongAnswerStudent(waStData);
-            } else {
-              setWrongAnswerStudent({
-                id: stData.id,
-                name: stData.name,
-                academy_id: waAcData.id,
-                teacher_id: waTeacherId || null,
-                phone: stData.phone,
-              });
-            }
+          } catch (waErr) {
+            console.error('Error matching wrong answer account:', waErr);
           }
-        } catch (waErr) {
-          console.error('Error fetching wrong answer portal data:', waErr);
-        }
 
-        const { data: tbData } = await supabase.from('ams_master_textbooks').select('*').eq('academy_id', acData.id).order('title');
-        if (tbData) setAvailableTextbooks(tbData);
+        try {
+          const [apiRes, dbTbRes] = await Promise.all([
+            fetch('/api/textbooks').then(r => r.ok ? r.json() : []).catch(() => []),
+            supabase.from('ams_master_textbooks').select('*').eq('academy_id', acData.id).order('title')
+          ]);
+          const dbData = dbTbRes.data || [];
+          const combined = [...apiRes];
+          dbData.forEach((dt: any) => {
+            if (!combined.some(c => c.bookcode === dt.bookcode || c.title === dt.title)) {
+              combined.push(dt);
+            }
+          });
+          setAvailableTextbooks(combined);
+        } catch (tbErr) {
+          console.error('Error fetching textbooks:', tbErr);
+        }
 
         const { data: logsData } = await supabase
           .from('ams_session_logs')
@@ -201,19 +215,38 @@ export function useStudentPortal(slug: string | string[] | undefined) {
 
         if (logsData) {
           setAllLogs(logsData);
-          const matchedSession = logsData.find(l => l.session_date === selectedDate && (l.course_name || '정규') === activeCourse);
+          const matchedSession = logsData.find(l => {
+            if (l.session_date !== selectedDate) return false;
+            const rawCourse = l.course_name ? l.course_name.trim() : '';
+            const logCourse = rawCourse || '정규';
+
+            if (activeCourse === '정규' || !activeCourse) {
+              return logCourse === '정규';
+            }
+
+            return logCourse === activeCourse || (logCourse !== '정규' && (logCourse.includes(activeCourse) || activeCourse.includes(logCourse)));
+          });
+
           if (matchedSession) {
             setTodaySession(matchedSession);
             setLocalClasswork(matchedSession.classwork_text || '');
             setLocalCompletedClasswork(matchedSession.completed_classwork_text || '');
             setLocalHomework(matchedSession.homework_text || '');
-            setTodayPlan(matchedSession.homework_to || '');
+            let cleanPlan = matchedSession.homework_to || '';
+            if (cleanPlan && typeof cleanPlan === 'string' && cleanPlan.startsWith('{')) {
+              try {
+                const parsed = JSON.parse(cleanPlan);
+                cleanPlan = parsed.text || '';
+              } catch (e) {}
+            }
+            setTodayPlan(cleanPlan);
           } else {
             setTodaySession(null);
             setLocalClasswork('');
             setLocalCompletedClasswork('');
             setLocalHomework('');
             setTodayPlan('');
+          }
           }
         }
       }
