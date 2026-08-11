@@ -784,7 +784,9 @@ export default function StudentPortal() {
                 }
               }
 
-              const isValidClassDate = isRegularDay || isElectiveDay || !!todaySession || validClassDates.some(d => d.date === selectedDate);
+              const todayStr = new Date().toLocaleDateString('sv-SE');
+              const isToday = selectedDate === todayStr;
+              const isValidClassDate = isToday || isRegularDay || isElectiveDay || !!todaySession || validClassDates.some(d => d.date === selectedDate);
 
               return (
                 <div className="mt-8 mb-4">
