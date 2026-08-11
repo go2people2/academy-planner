@@ -667,7 +667,6 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
     if (isTargetStudent) {
       const isTestCompleted = ('test_completed' in dataToSave) ? dataToSave.test_completed : (targetCourseName === '정규' ? s.todaySession?.test_completed : undefined);
-      const targetRecentMission = ('mission' in dataToSave) ? (dataToSave.mission ?? '') : (s.recent_mission ?? '');
       
       const updatedTodaySession = {
         ...(s.todaySession || { id: 'temp', student_id: studentId, academy_id: academy.id, date: selectedDate, session_date: selectedDate }),
@@ -708,7 +707,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         test_id: ('test_id' in dataToSave) ? dataToSave.test_id : (logIndex !== -1 ? updatedAllLogs[logIndex].test_id : undefined),
         test_completed: isTestCompleted,
         test_cut: ('test_cut' in dataToSave) ? dataToSave.test_cut : (logIndex !== -1 ? updatedAllLogs[logIndex].test_cut : 0),
-        mission: targetRecentMission,
+        mission: ('mission' in dataToSave) ? dataToSave.mission : (logIndex !== -1 ? updatedAllLogs[logIndex].mission : undefined),
         todo_achievement: ('todo_achievement' in dataToSave) ? dataToSave.todo_achievement : (logIndex !== -1 ? updatedAllLogs[logIndex].todo_achievement : 0),
         test_answers: ('test_answers' in dataToSave) ? dataToSave.test_answers : (logIndex !== -1 ? updatedAllLogs[logIndex].test_answers : undefined),
         next_quiz_text: nqObj.text,

@@ -198,7 +198,6 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
           const hasNotes = 'management_notes' in update.newData;
           return {
             ...s,
-            ...(hasMission ? { recent_mission: update.newData.mission } : {}),
             ...(hasNotes ? { management_notes: update.newData.management_notes } : {}),
             todaySession: {
               ...(s.todaySession || {}),
@@ -477,7 +476,6 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
                 const hasNotes = 'management_notes' in update.newData;
                 return {
                   ...s,
-                  ...(hasMission ? { recent_mission: update.newData.mission } : {}),
                   ...(hasNotes ? { management_notes: update.newData.management_notes } : {}),
                   todaySession: {
                     ...(s.todaySession || {}),

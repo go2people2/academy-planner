@@ -185,7 +185,7 @@ export function useTodaySheetRowLogic({
       moved_to_hour: session?.moved_to_hour,
       isTodayClassDay
     };
-  }, [student.allLogs, student.assigned_books, student.todaySession, student.management_notes, student.recent_mission, student.class_days, selectedDate, translateBookCodes]);
+  }, [student.allLogs, student.assigned_books, student.todaySession, student.management_notes, student.class_days, selectedDate, translateBookCodes]);
 
   const [formData, setFormData] = useState<any>(() => getInitialFormData(selectedDate));
 
