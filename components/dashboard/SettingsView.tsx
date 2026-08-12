@@ -268,6 +268,7 @@ const updateTimerPreset = async (index: number, value: number) => {
           <TextbookPdfSettings 
             academyInfo={academyInfo}
             masterTextbooks={masterTextbooks}
+            onUpdateAcademyInfo={onUpdateAcademyInfo}
             isLight={false}
           />
         )}

@@ -5,6 +5,7 @@ import {
   BookOpen, Search, FileText, Zap, HelpCircle, ExternalLink, X, Loader2, Library, ChevronDown, ChevronUp, Target, Layers
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getEffectiveBaseServerUrl, openMediaPdf } from '@/lib/mediaUrl';
 
 interface PdfLibraryViewProps {
   masterTextbooks: any[];
@@ -34,21 +35,9 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
   const [expandedBookCode, setExpandedBookCode] = useState<string | null>(null);
 
   // 💡 학원 내부 서버 기본 주소
-  const [baseServerUrl, setBaseServerUrl] = useState<string>(() => {
-    if (academyInfo?.operation_settings?.base_server_url) {
-      return academyInfo.operation_settings.base_server_url;
-    }
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('ams_base_server_url') || 'http://192.168.0.207:8080';
-    }
-    return 'http://192.168.0.207:8080';
-  });
-
-  useEffect(() => {
-    if (academyInfo?.operation_settings?.base_server_url) {
-      setBaseServerUrl(academyInfo.operation_settings.base_server_url);
-    }
-  }, [academyInfo?.operation_settings?.base_server_url]);
+  const baseServerUrl = useMemo(() => {
+    return getEffectiveBaseServerUrl(academyInfo);
+  }, [academyInfo]);
 
   // 1. 등록된 교재 PDF 링크 불러오기
   useEffect(() => {
@@ -135,23 +124,8 @@ export default function PdfLibraryView({ masterTextbooks = [], academyInfo, isLi
     });
   }, [masterTextbooks, activeCategory, searchQuery]);
 
-  // 학원 내부 서버 풀 주소 합성 헬퍼
-  const getFullServerUrl = (path?: string) => {
-    if (!path || !path.trim()) return '';
-    const cleanP = path.trim();
-    if (cleanP.startsWith('http://') || cleanP.startsWith('https://')) {
-      return cleanP;
-    }
-    const base = (baseServerUrl || '').replace(/\/+$/, '');
-    const relative = cleanP.startsWith('/') ? cleanP : `/${cleanP}`;
-    return `${base}${relative}`;
-  };
-
   const openPdf = (title: string, rawUrlOrPath: string) => {
-    if (!rawUrlOrPath) return;
-    const fullUrl = getFullServerUrl(rawUrlOrPath);
-    if (!fullUrl) return;
-    window.open(fullUrl, '_blank');
+    openMediaPdf(rawUrlOrPath, academyInfo);
   };
 
   const toggleExpand = (bookcode: string) => {

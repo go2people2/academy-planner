@@ -48,6 +48,14 @@ export default function StudentCoursePlayer({
     ? getFullUrl(selectedProblemVideo)
     : getFullUrl(currentUnitData.videoPath);
 
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[media-debug]', {
+      baseServerUrl,
+      videoPath: currentUnitData.videoPath,
+      resolvedUrl: activeVideoUrl
+    });
+  }
+
   // 비디오 풀 URL
   const videoFullUrl = useMemo(() => {
     if (!currentUnitData.videoPath) return '';
@@ -128,11 +136,25 @@ export default function StudentCoursePlayer({
           ) : (
             <div className="relative aspect-video rounded overflow-hidden bg-black shadow-lg group">
               <video
+                key={activeVideoUrl}
                 ref={videoRef}
                 src={activeVideoUrl}
                 controls
                 autoPlay
+                playsInline
+                preload="auto"
+                controlsList="nodownload"
                 className="w-full h-full object-contain"
+                onError={(e) => {
+                  if (process.env.NODE_ENV !== 'production') {
+                    const err = e.currentTarget.error;
+                    console.error('[StudentCoursePlayer Video Error]', {
+                      code: err?.code,
+                      message: err?.message,
+                      src: activeVideoUrl
+                    });
+                  }
+                }}
               />
             </div>
           )}

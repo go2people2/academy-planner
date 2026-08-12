@@ -60,9 +60,16 @@ export function useTodaySheetRowLogic({
 
   const getInitialFormData = useCallback((date: string) => {
     const isToday = date === selectedDate;
+    const targetCourse = (student.courseName || (student.isSpecialClass ? '특강' : '정규')).trim();
     const session = (isToday && student.todaySession?.date === date)
       ? student.todaySession 
-      : (student.allLogs || []).find((l: any) => l.date === date);
+      : (student.allLogs || []).find((l: any) => {
+          const lDate = l.date || l.session_date;
+          if (lDate !== date) return false;
+          const logCourse = (l.course_name || '정규').trim();
+          if (targetCourse === '정규') return !l.course_name || logCourse === '정규';
+          return logCourse === targetCourse;
+        });
 
     const mergeBooks = (existingJson: any[] | undefined) => {
       const assigned = student.assigned_books || [];

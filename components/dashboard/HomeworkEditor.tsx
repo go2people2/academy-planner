@@ -15,13 +15,14 @@ interface HomeworkEditorProps {
   onUpdate: (newHw: HomeworkItem[]) => void;
   onToggleKeepBook?: (bookCode: string, isKeep: boolean) => void;
   onClose: (finalJson?: HomeworkItem[]) => void;
+  academyInfo?: any;
   isLight?: boolean; // 💡 추가: 라이트 모드 테마 지원
 }
 
 import { useHomeworkEditorState } from './hooks/useHomeworkEditorState';
 
 export default function HomeworkEditor({ 
-  title = "Smart Study Editor", student, homeworkJson, masterTextbooks, onUpdate, onToggleKeepBook, onClose, isLight = false 
+  title = "Smart Study Editor", student, homeworkJson, masterTextbooks, onUpdate, onToggleKeepBook, onClose, academyInfo, isLight = false 
 }: HomeworkEditorProps) {
   const {
     mounted,
@@ -42,6 +43,7 @@ export default function HomeworkEditor({
     student,
     homeworkJson,
     onClose,
+    academyInfo,
   });
 
   if (!mounted) return null;

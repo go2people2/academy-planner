@@ -7,6 +7,7 @@ import { supabase } from '@/lib/supabase';
 interface TextbookPdfSettingsProps {
   academyInfo: any;
   masterTextbooks: any[];
+  onUpdateAcademyInfo?: (updates: any) => Promise<void> | void;
   isLight?: boolean;
 }
 
@@ -21,7 +22,12 @@ interface BookLinks {
   unitQuizzesMap?: Record<number, { quiz1Path?: string; quiz2Path?: string; quiz3Path?: string; unitPdfPath?: string }>;
 }
 
-export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [], isLight = false }: TextbookPdfSettingsProps) {
+export default function TextbookPdfSettings({ 
+  academyInfo, 
+  masterTextbooks = [], 
+  onUpdateAcademyInfo,
+  isLight = false 
+}: TextbookPdfSettingsProps) {
   const [pdfsMap, setPdfsMap] = useState<Record<string, BookLinks>>({});
   const [inputMap, setInputMap] = useState<Record<string, BookLinks>>({});
   const [isLoading, setIsLoading] = useState(true);
@@ -51,8 +57,32 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
     if (academyInfo?.id) {
       try {
         const opSettings = { ...(academyInfo.operation_settings || {}), base_server_url: url };
-        await supabase.from('ams_academies').update({ operation_settings: opSettings }).eq('id', academyInfo.id);
-      } catch (e) {}
+        const { data, error } = await supabase
+          .from('ams_academies')
+          .update({ operation_settings: opSettings })
+          .eq('id', academyInfo.id)
+          .select('id');
+
+        if (error) {
+          console.error('[BaseServerUrl Save Error]', error.message);
+          alert(`[DB 저장 실패] 학원 기본 서버 주소를 DB에 저장하지 못했습니다: ${error.message}\n(로컬 브라우저 저장소와 DB 간 주소 불일치가 발생할 수 있습니다.)`);
+          return;
+        }
+
+        if (!data || data.length !== 1) {
+          console.error('[BaseServerUrl Save Error] Row count updated is not 1:', data);
+          alert('[DB 저장 실패] 학원 설정 갱신(0건) 실패했습니다. 권한 또는 academy_id를 확인해 주세요.');
+          return;
+        }
+
+        // DB 저장 성공 후에만 부모 state 갱신
+        if (onUpdateAcademyInfo) {
+          await onUpdateAcademyInfo({ operation_settings: opSettings });
+        }
+      } catch (e: any) {
+        console.error('[BaseServerUrl Save Exception]', e?.message || e);
+        alert(`[DB 저장 예외 발생] 학원 기본 서버 주소 저장 중 예외가 발생했습니다: ${e?.message || '알 수 없는 오류'}`);
+      }
     }
   };
 
@@ -264,7 +294,6 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
     const g = (b.grade || b.grade_type || b.category || b.grade_category || '').toString().trim().toLowerCase();
     const title = (b.title || '').toString().trim().toLowerCase();
     const code = (b.bookcode || '').toString().trim().toLowerCase();
-
     if (g.includes('초') || title.includes('초등') || code.startsWith('e_') || code.startsWith('e-')) return 'elementary';
     if (g.includes('중') || title.includes('중등') || code.startsWith('m_') || code.startsWith('m-')) return 'middle';
 
@@ -277,6 +306,21 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
     if (g.includes('고') || isHighSchool) return 'high';
 
     return 'etc';
+  };
+
+  // 💡 [개발 환경 전용] 집/개발 PC 전용 로컬 미디어 서버 주소 (localStorage ams_dev_media_server_url)
+  const [devMediaServerUrl, setDevMediaServerUrl] = useState<string>(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('ams_dev_media_server_url') || '';
+    }
+    return '';
+  });
+
+  const handleSaveDevMediaServerUrl = (url: string) => {
+    setDevMediaServerUrl(url);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('ams_dev_media_server_url', url.trim());
+    }
   };
 
   // 필터링 및 검색 로직
@@ -293,7 +337,7 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
 
   return (
     <div className="space-y-6">
-      {/* 💡 학원 내부 서버 기본 주소 세팅 및 복사 헤더 */}
+      {/* 🏛️ 상단 안내 & 기본 서버 주소 설정 */}
       <div className={`p-4 rounded-[6px] border shadow-sm ${
         isLight ? 'bg-gradient-to-r from-indigo-50 to-blue-50 border-indigo-200 text-indigo-950' : 'bg-gradient-to-r from-indigo-950/40 to-slate-900 border-indigo-500/20 text-indigo-100'
       }`}>
@@ -333,6 +377,43 @@ export default function TextbookPdfSettings({ academyInfo, masterTextbooks = [],
             </button>
           </div>
         </div>
+
+        {/* 🏠 [개발 환경 전용] 내 로컬 브라우저 전용 미디어 주소 설정 (production 배포 환경 숨김) */}
+        {process.env.NODE_ENV !== 'production' && (
+          <div className="mt-3 pt-3 border-t border-dashed border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 bg-amber-500/10 p-3 rounded border border-amber-500/30">
+            <div className="space-y-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] font-black px-1.5 py-0.5 rounded bg-amber-600 text-white tracking-wider">
+                  DEV ONLY OVERRIDE
+                </span>
+                <p className="text-xs font-bold text-amber-300">
+                  🏠 [집/개발 PC 전용] 내 로컬 브라우저 전용 미디어 서버 주소
+                </p>
+              </div>
+              <p className="text-[11px] text-amber-200/80">
+                학원 공용 DB를 변경하지 않고 현재 내 로컬 브라우저에만 고유하게 저장됩니다. (배포 앱 미노출)
+              </p>
+            </div>
+            <div className="flex items-center gap-2 w-full sm:w-auto">
+              <input 
+                type="text"
+                value={devMediaServerUrl}
+                onChange={(e) => handleSaveDevMediaServerUrl(e.target.value)}
+                placeholder="예: http://192.168.0.207:8080"
+                className="px-3 py-1.5 text-xs font-mono font-bold rounded border border-amber-500/40 bg-slate-900 text-amber-200 outline-none w-full sm:w-64"
+              />
+              {devMediaServerUrl && (
+                <button
+                  type="button"
+                  onClick={() => handleSaveDevMediaServerUrl('')}
+                  className="px-2 py-1.5 rounded text-xs font-bold bg-amber-800/60 hover:bg-amber-700 text-amber-100 shrink-0"
+                >
+                  초기화
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* 🔍 검색 및 탭 컨트롤 */}

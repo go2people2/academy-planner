@@ -1,15 +1,18 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { HomeworkItem } from '@/types/dashboard';
 import { supabase } from '@/lib/supabase';
+import { openMediaPdf, AcademyInfoMediaParam } from '@/lib/mediaUrl';
 
 export function useHomeworkEditorState({
   student,
   homeworkJson,
   onClose,
+  academyInfo,
 }: {
   student?: any;
   homeworkJson: HomeworkItem[];
   onClose: (finalJson?: HomeworkItem[]) => void;
+  academyInfo?: AcademyInfoMediaParam;
 }) {
   const [mounted, setMounted] = useState(false);
   const [unitDataMap, setUnitDataMap] = useState<Record<string, any[]>>({});
@@ -187,15 +190,8 @@ export function useHomeworkEditorState({
   }, []);
 
   const openFastPdf = useCallback((url: string) => {
-    if (!url) return;
-    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/) || url.match(/id=([a-zA-Z0-9-_]+)/);
-    if (match && match[1]) {
-      const fastUrl = `https://drive.google.com/file/d/${match[1]}/view`;
-      window.open(fastUrl, '_blank');
-    } else {
-      window.open(url, '_blank');
-    }
-  }, []);
+    openMediaPdf(url, academyInfo);
+  }, [academyInfo]);
 
   return {
     mounted,

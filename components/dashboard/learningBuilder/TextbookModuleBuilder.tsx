@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Search, BookOpen, Save, Loader2, Layers, CheckCircle2, Lock, Unlock, HelpCircle, FileText } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getEffectiveBaseServerUrl } from '@/lib/mediaUrl';
 import UnitVideoSection from './UnitVideoSection';
 import TimelineSection from './TimelineSection';
 import RelatedResourcesSection, { ResourceLinkItem } from './RelatedResourcesSection';
@@ -64,14 +65,12 @@ export default function TextbookModuleBuilder({
 
   // 내부망 기본 서버 주소
   const baseServerUrl = useMemo(() => {
-    if (academyInfo?.operation_settings?.base_server_url) {
-      return academyInfo.operation_settings.base_server_url;
-    }
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('ams_base_server_url') || 'http://192.168.0.207:8080';
-    }
-    return 'http://192.168.0.207:8080';
+    return getEffectiveBaseServerUrl(academyInfo);
   }, [academyInfo]);
+
+  if (process.env.NODE_ENV !== 'production') {
+    console.log('[builder-media-debug]', { baseServerUrl });
+  }
 
   // 1. 학습 모듈 데이터 로드
   useEffect(() => {

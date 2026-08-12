@@ -131,19 +131,16 @@ export const isValidHomeworkText = (hwText?: string | null): boolean => {
 export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, student?: any, targetCourse = '정규') => {
   if (pastLogs.length === 0) return "";
 
-  const isTargetElective = ['특강', '방학특강', '선택과목'].includes(targetCourse?.trim());
+  const trimmedTarget = targetCourse?.trim() || '정규';
 
-  // 해당 과목(정규/특강)에 해당하거나 course_name 구분이 없는 과거 로그 필터링
+  // 해당 과목(정규/특강/기하/확통 등)에 정확히 1:1 일치하는 과거 로그만 필터링
   const filteredLogs = pastLogs.filter(l => {
     const rawCourse = l.course_name ? l.course_name.trim() : '';
     const logCourse = rawCourse || '정규';
-    if (targetCourse === '정규') {
+    if (trimmedTarget === '정규') {
       return !rawCourse || logCourse === '정규';
     }
-    if (isTargetElective) {
-      return ['특강', '방학특강', '선택과목'].includes(logCourse);
-    }
-    return logCourse === targetCourse;
+    return logCourse === trimmedTarget;
   });
 
   const logsToProcess = filteredLogs.length > 0 ? filteredLogs : pastLogs;
@@ -246,22 +243,19 @@ export const calculateStudentHistory = (logs: SessionLog[], targetDate: string):
 };
 
 // 9. 오늘 수업 계획의 모태가 될 과거 세션(베이스 세션) 선택
-// 💡 courseName 파라미터: 정규/특강 로그를 구분하여 이월 기준을 혼용하지 않도록 방지
+// 💡 courseName 파라미터: 정규/특강/선택과목(기하, 확통, 미적분2, 방학특강 등) 로그를 1:1로 정확히 구분
 export const selectBaseSession = (logs: SessionLog[], targetDate: string, holidays: any[], courseName = '정규'): SessionLog | undefined => {
-  const isGenericElective = ['특강', '방학특강', '선택과목'].includes(courseName?.trim());
+  const trimmedTarget = courseName?.trim() || '정규';
 
   const pastLogs = logs
     .filter(l => l.date < targetDate)
     .filter(l => {
       const rawCourse = l.course_name ? l.course_name.trim() : '';
       const logCourse = rawCourse || '정규';
-      if (courseName === '정규') {
+      if (trimmedTarget === '정규') {
         return !rawCourse || logCourse === '정규';
       }
-      if (isGenericElective) {
-        return ['특강', '방학특강', '선택과목'].includes(logCourse);
-      }
-      return logCourse === courseName;
+      return logCourse === trimmedTarget;
     })
     .sort((a, b) => b.date.localeCompare(a.date));
 

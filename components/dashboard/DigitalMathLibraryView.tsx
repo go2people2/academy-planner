@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Library, Layers, Wrench, Search, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { getEffectiveBaseServerUrl } from '@/lib/mediaUrl';
 import TextbookModuleBuilder from './learningBuilder/TextbookModuleBuilder';
 import StudentBookDrawer from './studentPortal/StudentBookDrawer';
 import StudentCoursePlayer from './studentPortal/StudentCoursePlayer';
@@ -26,15 +27,9 @@ export default function DigitalMathLibraryView({
   const [builtModules, setBuiltModules] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
 
-  // 내부망 기본 서버 주소
+  // 미디어 서버 주소 (개발 모드 Override & 공용 DB 주소 통합)
   const baseServerUrl = useMemo(() => {
-    if (academyInfo?.operation_settings?.base_server_url) {
-      return academyInfo.operation_settings.base_server_url;
-    }
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('ams_base_server_url') || 'http://192.168.0.207:8080';
-    }
-    return 'http://192.168.0.207:8080';
+    return getEffectiveBaseServerUrl(academyInfo);
   }, [academyInfo]);
 
   // 학습 모듈 불러오기
