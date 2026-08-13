@@ -43,11 +43,21 @@ export default function StudentCoursePlayer({
   const [selectedProblemVideo, setSelectedProblemVideo] = useState<string>('');
   const videoRef = useRef<HTMLVideoElement>(null);
 
-  // 🎬 미디어 상태 관리
+  // 🎬 미디어 상태 및 타이머 관리
   const [isPlaying, setIsPlaying] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isError, setIsError] = useState(false);
   const [currentRate, setCurrentRate] = useState<number>(1);
+
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSeekingRef = useRef<boolean>(false);
+
+  const clearLoadingTimeout = useCallback(() => {
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  }, []);
 
   const bookType = bookModule?.bookType || 'concept';
   const unitsData = bookModule?.units || {};
@@ -85,8 +95,10 @@ export default function StudentCoursePlayer({
     return `${base}${rel}`;
   }, [currentUnitData?.resources, baseServerUrl]);
 
-  // 비디오 URL 변경 시 미디어 상태 초기화
+  // 비디오 URL 변경 시 미디어 상태 및 타이머 안전 초기화
   useEffect(() => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsLoading(!!activeVideoUrl);
     setIsError(false);
     setIsPlaying(false);
@@ -98,27 +110,55 @@ export default function StudentCoursePlayer({
         // ignore
       }
     }
-  }, [activeVideoUrl]);
+
+    return () => {
+      clearLoadingTimeout();
+    };
+  }, [activeVideoUrl, clearLoadingTimeout]);
+
+  // 컴포넌트 unmount 시 cleanup
+  useEffect(() => {
+    return () => {
+      clearLoadingTimeout();
+    };
+  }, [clearLoadingTimeout]);
 
   // 🎥 비디오 이벤트 기반 상태 핸들러
   const handleLoadStart = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsLoading(true);
     setIsError(false);
   };
 
   const handleWaiting = () => {
+    // seek 진행 중이거나 seek 타이머 대기 중일 때는 즉시 켜지 않고 300ms 타이머에 위임하여 깜빡임 방지
+    if (isSeekingRef.current || loadingTimeoutRef.current !== null) {
+      return;
+    }
     setIsLoading(true);
   };
 
   const handleSeeking = () => {
-    setIsLoading(true);
+    isSeekingRef.current = true;
+    clearLoadingTimeout();
+    // 300ms 이상 탐색이 길어질 때만 로딩 오버레이 켜기 (연속 클릭 시 깜빡임 완벽 방지)
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (isSeekingRef.current) {
+        setIsLoading(true);
+      }
+    }, 300);
   };
 
   const handleCanPlay = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsLoading(false);
   };
 
   const handlePlaying = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsLoading(false);
     setIsPlaying(true);
   };
@@ -128,15 +168,21 @@ export default function StudentCoursePlayer({
   };
 
   const handleSeeked = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsLoading(false);
   };
 
   const handleEnded = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsPlaying(false);
     setIsLoading(false);
   };
 
   const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsLoading(false);
     setIsPlaying(false);
     setIsError(true);
@@ -152,6 +198,8 @@ export default function StudentCoursePlayer({
 
   // 🔄 다시 시도 로직
   const handleRetry = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
     setIsError(false);
     setIsLoading(true);
     if (videoRef.current) {
