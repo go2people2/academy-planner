@@ -38,14 +38,29 @@ export default function TextbookPdfSettings({
   // 💡 펼쳐진 단원별 퀴즈 관리 교재 코드
   const [expandedQuizBookcode, setExpandedBookCode] = useState<string | null>(null);
 
-  // 💡 학원 내부 서버 기본 주소 (Base Server URL)
+  // 💡 학원 내부 서버 기본 주소 (Base Server URL) - DB에 기록된 학원 주소를 최우선 동적 바인딩
   const [baseServerUrl, setBaseServerUrl] = useState<string>(() => {
+    if (academyInfo?.operation_settings?.base_server_url) {
+      return String(academyInfo.operation_settings.base_server_url).trim();
+    }
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ams_base_server_url');
-      if (saved) return saved;
+      if (saved) return saved.trim();
     }
-    return 'http://192.168.0.207:8080';
+    return '';
   });
+
+  // DB의 학원 정보가 변경되거나 로드되면 입력 필드를 동적으로 최신화
+  useEffect(() => {
+    if (academyInfo?.operation_settings?.base_server_url) {
+      const dbUrl = String(academyInfo.operation_settings.base_server_url).trim();
+      setBaseServerUrl(dbUrl);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ams_base_server_url', dbUrl);
+      }
+    }
+  }, [academyInfo?.operation_settings?.base_server_url]);
+
   const [isCopiedBaseUrl, setIsCopiedBaseUrl] = useState(false);
 
   const handleSaveBaseServerUrl = async (url: string) => {

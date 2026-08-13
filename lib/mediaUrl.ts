@@ -17,7 +17,19 @@ export interface AcademyInfoMediaParam {
  * 4. 주소가 없으면 특정 IP 하드코딩 없이 빈 문자열('') 반환
  */
 export const getEffectiveBaseServerUrl = (academyInfo?: AcademyInfoMediaParam): string => {
-  // 1. [개발 환경 전용] 내 로컬 브라우저 PC Override
+  // 1. [학원 공용 DB 설정] Settings 화면에서 등록된 학원 기본 서버 주소 (최우선 반영)
+  if (academyInfo?.operation_settings?.base_server_url) {
+    const dbUrl = String(academyInfo.operation_settings.base_server_url).trim();
+    if (dbUrl) {
+      // 로컬스토리지에도 최신 DB 주소를 자동 업데이트 동기화
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('ams_base_server_url', dbUrl);
+      }
+      return dbUrl;
+    }
+  }
+
+  // 2. [개발 환경 전용] 내 로컬 개발 PC Override (ams_dev_media_server_url)
   if (process.env.NODE_ENV !== 'production' && typeof window !== 'undefined') {
     const devOverride = localStorage.getItem('ams_dev_media_server_url');
     if (devOverride && devOverride.trim()) {
@@ -25,19 +37,13 @@ export const getEffectiveBaseServerUrl = (academyInfo?: AcademyInfoMediaParam): 
     }
   }
 
-  // 2. [운영 & 학원 공통] 학원 공용 DB 설정 (최우선)
-  if (academyInfo?.operation_settings?.base_server_url) {
-    const dbUrl = String(academyInfo.operation_settings.base_server_url).trim();
-    if (dbUrl) return dbUrl;
-  }
-
-  // 3. 브라우저 저장소 (운영 환경 ams_base_server_url)
+  // 3. 브라우저 저장소 (운영 환경 캐시 ams_base_server_url)
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('ams_base_server_url');
     if (saved && saved.trim()) return saved.trim();
   }
 
-  // 4. 주소가 없으면 빈 문자열 반환
+  // 4. 주소가 설정되어 있지 않으면 빈 문자열 반환
   return '';
 };
 
