@@ -935,61 +935,97 @@ export default function TextbookPdfSettings({
                                                 </button>
                                               </div>
 
-                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                              <div className="space-y-1.5 text-[11px] pt-1">
                                                 {/* 1차 퀴즈 */}
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="w-12 font-bold text-purple-500 shrink-0">1차 퀴즈:</span>
-                                                  <input 
-                                                    type="text"
-                                                    value={unitMap.quiz1Path || ''}
-                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz1Path', e.target.value)}
-                                                    placeholder="/pdf/u1_q1.pdf"
-                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                                    }`}
-                                                  />
+                                                <div className="flex items-center gap-2 w-full">
+                                                  <span className="w-16 font-bold text-purple-500 shrink-0 text-right pr-1">1차 퀴즈</span>
+                                                  <div className="flex items-center flex-1 min-w-0 rounded border overflow-hidden">
+                                                    {baseServerUrl && (
+                                                      <span className={`px-2 py-0.5 text-[10px] font-mono border-r opacity-50 shrink-0 ${
+                                                        isLight ? 'bg-gray-100 border-gray-200 text-gray-600' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                      }`}>
+                                                        {baseServerUrl}
+                                                      </span>
+                                                    )}
+                                                    <input 
+                                                      type="text"
+                                                      value={unitMap.quiz1Path || ''}
+                                                      onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz1Path', e.target.value)}
+                                                      placeholder="/pdf/unit1/quiz1_final.pdf"
+                                                      className={`w-full min-w-0 flex-1 px-2.5 py-1 text-xs outline-none font-mono font-bold placeholder:text-gray-400 ${
+                                                        isLight ? 'bg-white text-gray-800' : 'bg-black/30 text-white'
+                                                      }`}
+                                                    />
+                                                  </div>
                                                 </div>
 
                                                 {/* 2차 퀴즈 */}
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="w-12 font-bold text-purple-400 shrink-0">2차 퀴즈:</span>
-                                                  <input 
-                                                    type="text"
-                                                    value={unitMap.quiz2Path || ''}
-                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz2Path', e.target.value)}
-                                                    placeholder="/pdf/u1_q2.pdf"
-                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                                    }`}
-                                                  />
+                                                <div className="flex items-center gap-2 w-full">
+                                                  <span className="w-16 font-bold text-purple-400 shrink-0 text-right pr-1">2차 퀴즈</span>
+                                                  <div className="flex items-center flex-1 min-w-0 rounded border overflow-hidden">
+                                                    {baseServerUrl && (
+                                                      <span className={`px-2 py-0.5 text-[10px] font-mono border-r opacity-50 shrink-0 ${
+                                                        isLight ? 'bg-gray-100 border-gray-200 text-gray-600' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                      }`}>
+                                                        {baseServerUrl}
+                                                      </span>
+                                                    )}
+                                                    <input 
+                                                      type="text"
+                                                      value={unitMap.quiz2Path || ''}
+                                                      onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz2Path', e.target.value)}
+                                                      placeholder="/pdf/unit1/quiz2_final.pdf"
+                                                      className={`w-full min-w-0 flex-1 px-2.5 py-1 text-xs outline-none font-mono font-bold placeholder:text-gray-400 ${
+                                                        isLight ? 'bg-white text-gray-800' : 'bg-black/30 text-white'
+                                                      }`}
+                                                    />
+                                                  </div>
                                                 </div>
 
                                                 {/* 3차 퀴즈 */}
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="w-12 font-bold text-purple-300 shrink-0">3차 퀴즈:</span>
-                                                  <input 
-                                                    type="text"
-                                                    value={unitMap.quiz3Path || ''}
-                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz3Path', e.target.value)}
-                                                    placeholder="/pdf/u1_q3.pdf"
-                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                                    }`}
-                                                  />
+                                                <div className="flex items-center gap-2 w-full">
+                                                  <span className="w-16 font-bold text-purple-300 shrink-0 text-right pr-1">3차 퀴즈</span>
+                                                  <div className="flex items-center flex-1 min-w-0 rounded border overflow-hidden">
+                                                    {baseServerUrl && (
+                                                      <span className={`px-2 py-0.5 text-[10px] font-mono border-r opacity-50 shrink-0 ${
+                                                        isLight ? 'bg-gray-100 border-gray-200 text-gray-600' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                      }`}>
+                                                        {baseServerUrl}
+                                                      </span>
+                                                    )}
+                                                    <input 
+                                                      type="text"
+                                                      value={unitMap.quiz3Path || ''}
+                                                      onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz3Path', e.target.value)}
+                                                      placeholder="/pdf/unit1/quiz3_final.pdf"
+                                                      className={`w-full min-w-0 flex-1 px-2.5 py-1 text-xs outline-none font-mono font-bold placeholder:text-gray-400 ${
+                                                        isLight ? 'bg-white text-gray-800' : 'bg-black/30 text-white'
+                                                      }`}
+                                                    />
+                                                  </div>
                                                 </div>
 
                                                 {/* 단원 PDF */}
-                                                <div className="flex items-center gap-1.5">
-                                                  <span className="w-12 font-bold text-sky-400 shrink-0">단원PDF:</span>
-                                                  <input 
-                                                    type="text"
-                                                    value={unitMap.unitPdfPath || ''}
-                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'unitPdfPath', e.target.value)}
-                                                    placeholder="/pdf/u1_main.pdf"
-                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                                    }`}
-                                                  />
+                                                <div className="flex items-center gap-2 w-full">
+                                                  <span className="w-16 font-bold text-sky-400 shrink-0 text-right pr-1">단원 PDF</span>
+                                                  <div className="flex items-center flex-1 min-w-0 rounded border overflow-hidden">
+                                                    {baseServerUrl && (
+                                                      <span className={`px-2 py-0.5 text-[10px] font-mono border-r opacity-50 shrink-0 ${
+                                                        isLight ? 'bg-gray-100 border-gray-200 text-gray-600' : 'bg-slate-800 border-slate-700 text-slate-400'
+                                                      }`}>
+                                                        {baseServerUrl}
+                                                      </span>
+                                                    )}
+                                                    <input 
+                                                      type="text"
+                                                      value={unitMap.unitPdfPath || ''}
+                                                      onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'unitPdfPath', e.target.value)}
+                                                      placeholder="/pdf/unit1/main_unit.pdf"
+                                                      className={`w-full min-w-0 flex-1 px-2.5 py-1 text-xs outline-none font-mono font-bold placeholder:text-gray-400 ${
+                                                        isLight ? 'bg-white text-gray-800' : 'bg-black/30 text-white'
+                                                      }`}
+                                                    />
+                                                  </div>
                                                 </div>
                                               </div>
                                             </div>
