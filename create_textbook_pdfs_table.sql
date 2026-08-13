@@ -11,6 +11,7 @@ CREATE TABLE IF NOT EXISTS ams_textbook_pdfs (
 );
 ALTER TABLE ams_textbook_pdfs ADD COLUMN IF NOT EXISTS answer_url TEXT;
 ALTER TABLE ams_textbook_pdfs ADD COLUMN IF NOT EXISTS explanation_url TEXT;
+ALTER TABLE ams_textbook_pdfs ADD COLUMN IF NOT EXISTS unit_quiz_settings_json JSONB DEFAULT NULL;
 
 -- RLS 활성화
 ALTER TABLE ams_textbook_pdfs ENABLE ROW LEVEL SECURITY;

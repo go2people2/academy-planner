@@ -100,7 +100,7 @@ export async function POST(req: NextRequest) {
     }
 
     const body = await req.json();
-    const { academyId, bookcode, pdfUrl, answerUrl, explanationUrl, quiz1Url, quiz2Url, quiz3Url, unitPdfUrl, unitQuizzesMap } = body;
+    const { academyId, bookcode, pdfUrl, answerUrl, explanationUrl, quiz1Url, quiz2Url, quiz3Url, unitPdfUrl, unitQuizzesMap, unitQuizSettingsJson } = body;
 
     if (!academyId || !bookcode) {
       return NextResponse.json({ error: '필수 파라미터(academyId, bookcode)가 누락되었습니다.' }, { status: 400 });
@@ -129,7 +129,8 @@ export async function POST(req: NextRequest) {
       quiz2_url: quiz2Url ?? '',
       quiz3_url: quiz3Url ?? '',
       unit_pdf_url: unitPdfUrl ?? '',
-      unit_quizzes_json: unitQuizzesMap ? JSON.stringify(unitQuizzesMap) : null
+      unit_quizzes_json: unitQuizzesMap ? (typeof unitQuizzesMap === 'string' ? unitQuizzesMap : JSON.stringify(unitQuizzesMap)) : null,
+      unit_quiz_settings_json: unitQuizSettingsJson !== undefined ? (typeof unitQuizSettingsJson === 'string' ? unitQuizSettingsJson : JSON.stringify(unitQuizSettingsJson)) : null
     };
 
     let { data, error: upsertErr } = await supabaseAdmin

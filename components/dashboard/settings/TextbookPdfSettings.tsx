@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { BookOpen, Save, Trash2, Loader2, AlertCircle, Search, FileText, Zap, HelpCircle } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -11,6 +11,17 @@ interface TextbookPdfSettingsProps {
   isLight?: boolean;
 }
 
+export interface UnitOverrideItem {
+  key: string;
+  kind: 'sheet' | 'custom';
+  sourceUnitKey?: string;
+  sourceIndex?: number;
+  sourceLabel?: string;
+  startPage?: number | string;
+  endPage?: number | string;
+  label: string;
+}
+
 interface BookLinks {
   pdfUrl: string;
   answerUrl: string;
@@ -19,7 +30,8 @@ interface BookLinks {
   quiz2Url?: string;
   quiz3Url?: string;
   unitPdfUrl?: string;
-  unitQuizzesMap?: Record<number, { quiz1Path?: string; quiz2Path?: string; quiz3Path?: string; unitPdfPath?: string }>;
+  unitQuizzesMap?: Record<string | number, any>;
+  unitQuizSettingsOverride?: UnitOverrideItem[] | null;
 }
 
 export default function TextbookPdfSettings({ 
@@ -37,6 +49,10 @@ export default function TextbookPdfSettings({
 
   // 💡 펼쳐진 단원별 퀴즈 관리 교재 코드
   const [expandedQuizBookcode, setExpandedBookCode] = useState<string | null>(null);
+
+  // 💡 동적으로 로드한 Google Sheet 단원 목록 캐시
+  const [fetchedUnitsMap, setFetchedUnitsMap] = useState<Record<string, any[]>>({});
+  const [isFetchingUnits, setIsFetchingUnits] = useState<Record<string, boolean>>({});
 
   // 💡 학원 내부 서버 기본 주소 (Base Server URL) - DB에 기록된 학원 주소를 최우선 동적 바인딩
   const [baseServerUrl, setBaseServerUrl] = useState<string>(() => {
@@ -135,6 +151,13 @@ export default function TextbookPdfSettings({
             } catch (e) {}
           }
 
+          let parsedOverride: UnitOverrideItem[] | null = null;
+          if (p.unit_quiz_settings_json) {
+            try {
+              parsedOverride = typeof p.unit_quiz_settings_json === 'string' ? JSON.parse(p.unit_quiz_settings_json) : p.unit_quiz_settings_json;
+            } catch (e) {}
+          }
+
           mapped[p.bookcode] = {
             pdfUrl: p.pdf_url || '',
             answerUrl: p.answer_url || '',
@@ -143,7 +166,8 @@ export default function TextbookPdfSettings({
             quiz2Url: p.quiz2_url || '',
             quiz3Url: p.quiz3_url || '',
             unitPdfUrl: p.unit_pdf_url || '',
-            unitQuizzesMap: parsedUnitMap
+            unitQuizzesMap: parsedUnitMap,
+            unitQuizSettingsOverride: Array.isArray(parsedOverride) ? parsedOverride : null
           };
         });
         setPdfsMap(mapped);
@@ -159,6 +183,38 @@ export default function TextbookPdfSettings({
   useEffect(() => {
     fetchPdfLinks();
   }, [academyInfo?.id]);
+
+  // 💡 단원 펼치기 시 Google Sheet 단원 동적 로딩
+  const handleToggleExpandQuiz = useCallback(async (bookcode: string) => {
+    if (expandedQuizBookcode === bookcode) {
+      setExpandedBookCode(null);
+      return;
+    }
+
+    setExpandedBookCode(bookcode);
+
+    // 이미 캐시되었거나 마스터에 유효한 units가 있다면 API 호출 생략
+    const currentBook = masterTextbooks.find(b => b.bookcode === bookcode);
+    const hasMasterUnits = Array.isArray(currentBook?.units) && currentBook.units.length > 0;
+    if (fetchedUnitsMap[bookcode] || hasMasterUnits) {
+      return;
+    }
+
+    setIsFetchingUnits(prev => ({ ...prev, [bookcode]: true }));
+    try {
+      const res = await fetch(`/api/textbooks/${bookcode}`);
+      if (res.ok) {
+        const unitsData = await res.json();
+        if (Array.isArray(unitsData)) {
+          setFetchedUnitsMap(prev => ({ ...prev, [bookcode]: unitsData }));
+        }
+      }
+    } catch (e) {
+      console.error(`Failed to fetch units for ${bookcode}:`, e);
+    } finally {
+      setIsFetchingUnits(prev => ({ ...prev, [bookcode]: false }));
+    }
+  }, [expandedQuizBookcode, fetchedUnitsMap, masterTextbooks]);
 
   // 입력 주소에서 기본 서버 주소를 감지하여 뒷경로만 산뜻하게 추출하는 유틸
   const cleanPath = (rawVal: string) => {
@@ -183,14 +239,14 @@ export default function TextbookPdfSettings({
   };
 
   // 💡 단원별 퀴즈 상대경로 변경 핸들러 (기존 저장 데이터 손실 방지 병합)
-  const handleUnitQuizPathChange = (bookcode: string, unitIdx: number, field: 'quiz1Path' | 'quiz2Path' | 'quiz3Path' | 'unitPdfPath', val: string) => {
+  const handleUnitQuizPathChange = (bookcode: string, unitKey: string | number, field: 'quiz1Path' | 'quiz2Path' | 'quiz3Path' | 'unitPdfPath', val: string) => {
     const saved = pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {} };
     const current = inputMap[bookcode] || saved;
     const currentUnitMap = { ...(saved.unitQuizzesMap || {}), ...(current.unitQuizzesMap || {}) };
-    const unitData = { ...(currentUnitMap[unitIdx] || {}) };
+    const unitData = { ...(currentUnitMap[unitKey] || {}) };
     
     unitData[field] = cleanPath(val);
-    currentUnitMap[unitIdx] = unitData;
+    currentUnitMap[unitKey] = unitData;
 
     setInputMap(prev => ({
       ...prev,
@@ -201,16 +257,91 @@ export default function TextbookPdfSettings({
     }));
   };
 
-  // 3. 링크 등록 및 저장 (POST)
-  const handleSave = async (bookcode: string) => {
+  // 💡 단원 오버라이드 단원명 수정 핸들러
+  const handleOverrideLabelChange = (bookcode: string, overrideList: UnitOverrideItem[], targetKey: string, newLabel: string) => {
     const saved = pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {} };
     const current = inputMap[bookcode] || saved;
+    const updatedList = overrideList.map(item => item.key === targetKey ? { ...item, label: newLabel } : item);
+
+    setInputMap(prev => ({
+      ...prev,
+      [bookcode]: {
+        ...current,
+        unitQuizSettingsOverride: updatedList
+      }
+    }));
+  };
+
+  // 💡 단원 추가 핸들러 ([+ 단원 추가])
+  const handleAddCustomUnit = (bookcode: string, currentList: UnitOverrideItem[]) => {
+    const saved = pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {} };
+    const current = inputMap[bookcode] || saved;
+    const newKey = `custom-${crypto.randomUUID()}`;
+    const newItem: UnitOverrideItem = {
+      key: newKey,
+      kind: 'custom',
+      label: `단원 ${currentList.length + 1}`
+    };
+
+    setInputMap(prev => ({
+      ...prev,
+      [bookcode]: {
+        ...current,
+        unitQuizSettingsOverride: [...currentList, newItem]
+      }
+    }));
+  };
+
+  // 💡 단원 삭제 핸들러 (로컬 상태만 제거)
+  const handleDeleteOverrideUnit = (bookcode: string, currentList: UnitOverrideItem[], targetKey: string) => {
+    const saved = pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {} };
+    const current = inputMap[bookcode] || saved;
+    const updatedList = currentList.filter(item => item.key !== targetKey);
+
+    setInputMap(prev => ({
+      ...prev,
+      [bookcode]: {
+        ...current,
+        unitQuizSettingsOverride: updatedList
+      }
+    }));
+  };
+
+  // 💡 Google Sheet 단원으로 복원 핸들러
+  const handleResetToSheetUnits = (bookcode: string) => {
+    const saved = pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {} };
+    const current = inputMap[bookcode] || saved;
+
+    setInputMap(prev => ({
+      ...prev,
+      [bookcode]: {
+        ...current,
+        unitQuizSettingsOverride: null // null로 복원 세팅
+      }
+    }));
+  };
+
+  // 3. 링크 등록 및 저장 (POST)
+  const handleSave = async (bookcode: string) => {
+    const saved = pdfsMap[bookcode] || { pdfUrl: '', answerUrl: '', explanationUrl: '', quiz1Url: '', quiz2Url: '', quiz3Url: '', unitPdfUrl: '', unitQuizzesMap: {}, unitQuizSettingsOverride: null };
+    const current = inputMap[bookcode] || saved;
+
+    // 삭제 예정 오버라이드 단원 체크 안내
+    const isOverrideDefined = current.unitQuizSettingsOverride !== undefined ? current.unitQuizSettingsOverride !== null : saved.unitQuizSettingsOverride !== null;
+    if (isOverrideDefined) {
+      const confirmSave = confirm('단원 설정 및 연결된 퀴즈/PDF 링크를 저장하시겠습니까?\n(삭제 처리한 단원에 연결된 퀴즈/PDF 링크도 함께 보관 업데이트됩니다)');
+      if (!confirmSave) return;
+    }
 
     // 기존 단원별 링크 데이터 손실 방지 병합
     const mergedUnitQuizzesMap = {
       ...(saved.unitQuizzesMap || {}),
       ...(current.unitQuizzesMap || {})
     };
+
+    const finalOverride = current.unitQuizSettingsOverride !== undefined 
+      ? current.unitQuizSettingsOverride 
+      : (saved.unitQuizSettingsOverride ?? null);
     
     if (submittingBook) return;
     setSubmittingBook(bookcode);
@@ -237,7 +368,8 @@ export default function TextbookPdfSettings({
           quiz2Url: (current.quiz2Url || '').trim(),
           quiz3Url: (current.quiz3Url || '').trim(),
           unitPdfUrl: (current.unitPdfUrl || '').trim(),
-          unitQuizzesMap: mergedUnitQuizzesMap
+          unitQuizzesMap: mergedUnitQuizzesMap,
+          unitQuizSettingsJson: finalOverride
         })
       });
 
@@ -251,7 +383,8 @@ export default function TextbookPdfSettings({
           quiz2Url: (current.quiz2Url || '').trim(),
           quiz3Url: (current.quiz3Url || '').trim(),
           unitPdfUrl: (current.unitPdfUrl || '').trim(),
-          unitQuizzesMap: mergedUnitQuizzesMap
+          unitQuizzesMap: mergedUnitQuizzesMap,
+          unitQuizSettingsOverride: finalOverride
         };
         setPdfsMap(prev => ({ ...prev, [bookcode]: savedLinks }));
         setInputMap(prev => ({ ...prev, [bookcode]: savedLinks }));
@@ -637,119 +770,238 @@ export default function TextbookPdfSettings({
 
                         {/* 🎯 단원별 1차·2차·3차 퀴즈 뒷경로 개별 설정 서브 아코디언 */}
                         <div className="pt-2">
-                          <button
-                            type="button"
-                            onClick={() => setExpandedBookCode(prev => prev === book.bookcode ? null : book.bookcode)}
-                            className={`w-full py-1.5 px-3 rounded text-xs font-black flex items-center justify-between transition-all border ${
-                              isQuizExpanded
-                                ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
-                                : isLight
-                                  ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'
-                                  : 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border-purple-500/30'
-                            }`}
-                          >
-                            <span>🎯 단원별 1차·2차·3차 퀴즈 & 단원PDF 뒷경로 설정 ({units.length}개 단원)</span>
-                            <span className="text-[10px] font-bold">{isQuizExpanded ? '▲ 닫기' : '▼ 펼치기'}</span>
-                          </button>
+                          {(() => {
+                            // 1. Google Sheet 원본 단원 목록 (동적 로드 캐시 포함)
+                            const sheetUnits = fetchedUnitsMap[book.bookcode] || 
+                              (Array.isArray(book.units) && book.units.length > 0 ? book.units :
+                              Array.isArray(book.unit_list) && book.unit_list.length > 0 ? book.unit_list : []);
 
-                          {isQuizExpanded && (
-                            <div className={`p-3 rounded-md border space-y-3 mt-2 text-xs animate-fadeIn ${
-                              isLight ? 'bg-purple-50/30 border-purple-200' : 'bg-slate-950/50 border-purple-500/20'
-                            }`}>
-                              <p className="text-[11px] opacity-75 font-normal">
-                                💡 각 단원별로 로컬 서버 상의 <strong>1차, 2차, 3차 퀴즈 및 단원 PDF 파일 상대경로</strong>를 입력하세요. (기본 서버 주소는 자동 연결됩니다)
-                              </p>
+                            // 2. 오버라이드 목록 유무 판단
+                            const savedOverride = saved.unitQuizSettingsOverride;
+                            const currentOverride = current.unitQuizSettingsOverride;
+                            const activeOverride = currentOverride !== undefined ? currentOverride : savedOverride;
+                            const isOverrideActive = Array.isArray(activeOverride);
 
-                              {units.length === 0 ? (
-                                <div className={`p-3 text-center rounded border text-xs font-semibold ${
-                                  isLight ? 'bg-amber-50/60 border-amber-200 text-amber-800' : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
-                                }`}>
-                                  등록된 단원 정보가 없습니다. 교재 마스터에서 단원을 먼저 등록해 주세요.
-                                </div>
-                              ) : (
-                                <div className="space-y-2 max-h-80 overflow-y-auto pr-1 custom-scrollbar-v">
-                                  {units.map((unit: any, uIdx: number) => {
-                                    // 💡 표시용 단원명 (display label) 및 0-based 인덱스 저장 키 (storage key)
-                                    const displayLabel = typeof unit === 'string'
-                                      ? unit
-                                      : (unit.unit || unit.title || unit.name || `단원 ${uIdx + 1}`);
-                                    const unitMap = current.unitQuizzesMap?.[uIdx] || saved.unitQuizzesMap?.[uIdx] || {};
+                            // 3. 표시할 최종 단원 목록 계산
+                            let displayOverrideList: UnitOverrideItem[] = [];
+                            if (isOverrideActive && activeOverride) {
+                              displayOverrideList = activeOverride;
+                            } else {
+                              // Google Sheet 원본 단원 기준 오버라이드 맵 자동 구성
+                              displayOverrideList = sheetUnits.map((unitObj: any, uIdx: number) => {
+                                const rawName = typeof unitObj === 'string' ? unitObj : (unitObj.unit || unitObj.title || unitObj.name || `단원 ${uIdx + 1}`);
+                                const normName = String(rawName).trim().replace(/\s+/g, '-');
+                                const startP = typeof unitObj === 'object' ? (unitObj.start_page || unitObj.startPage || '0') : '0';
+                                const endP = typeof unitObj === 'object' ? (unitObj.end_page || unitObj.endPage || '0') : '0';
+                                const sKey = `${book.bookcode}__${normName}__${startP}__${endP}`;
 
-                                    return (
-                                      <div 
-                                        key={uIdx}
-                                        className={`p-2.5 rounded border space-y-1.5 ${
-                                          isLight ? 'bg-white border-purple-150' : 'bg-slate-900 border-slate-800'
-                                        }`}
-                                      >
-                                        <div className="font-bold text-xs text-purple-600 dark:text-purple-300 flex items-center justify-between">
-                                          <span>{uIdx + 1}. {displayLabel}</span>
-                                        </div>
+                                return {
+                                  key: `sheet-${uIdx}`,
+                                  kind: 'sheet',
+                                  sourceUnitKey: sKey,
+                                  sourceIndex: uIdx,
+                                  sourceLabel: rawName,
+                                  startPage: startP,
+                                  endPage: endP,
+                                  label: rawName
+                                };
+                              });
+                            }
 
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
-                                          {/* 1차 퀴즈 */}
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="w-12 font-bold text-purple-500 shrink-0">1차 퀴즈:</span>
-                                            <input 
-                                              type="text"
-                                              value={unitMap.quiz1Path || ''}
-                                              onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'quiz1Path', e.target.value)}
-                                              placeholder="/pdf/u1_q1.pdf"
-                                              className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                              }`}
-                                            />
-                                          </div>
+                            const isFetching = isFetchingUnits[book.bookcode];
 
-                                          {/* 2차 퀴즈 */}
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="w-12 font-bold text-purple-400 shrink-0">2차 퀴즈:</span>
-                                            <input 
-                                              type="text"
-                                              value={unitMap.quiz2Path || ''}
-                                              onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'quiz2Path', e.target.value)}
-                                              placeholder="/pdf/u1_q2.pdf"
-                                              className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                              }`}
-                                            />
-                                          </div>
+                            return (
+                              <>
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleExpandQuiz(book.bookcode)}
+                                  className={`w-full py-1.5 px-3 rounded text-xs font-black flex items-center justify-between transition-all border ${
+                                    isQuizExpanded
+                                      ? 'bg-purple-600 text-white border-purple-700 shadow-sm'
+                                      : isLight
+                                        ? 'bg-purple-50 hover:bg-purple-100 text-purple-700 border-purple-200'
+                                        : 'bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 border-purple-500/30'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2">
+                                    <span>🎯 단원별 퀴즈 & PDF 뒷경로 설정 ({displayOverrideList.length}개 단원)</span>
+                                    {isOverrideActive ? (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-amber-500 text-white">
+                                        설정에서 조정됨 {displayOverrideList.length}개 단원 (원본 {sheetUnits.length}개)
+                                      </span>
+                                    ) : (
+                                      <span className="text-[9px] px-1.5 py-0.5 rounded font-bold bg-blue-500/80 text-white">
+                                        Google Sheet 기준 {sheetUnits.length}개 단원
+                                      </span>
+                                    )}
+                                  </div>
+                                  <span className="text-[10px] font-bold">{isQuizExpanded ? '▲ 닫기' : '▼ 펼치기'}</span>
+                                </button>
 
-                                          {/* 3차 퀴즈 */}
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="w-12 font-bold text-purple-300 shrink-0">3차 퀴즈:</span>
-                                            <input 
-                                              type="text"
-                                              value={unitMap.quiz3Path || ''}
-                                              onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'quiz3Path', e.target.value)}
-                                              placeholder="/pdf/u1_q3.pdf"
-                                              className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                              }`}
-                                            />
-                                          </div>
-
-                                          {/* 단원 PDF */}
-                                          <div className="flex items-center gap-1.5">
-                                            <span className="w-12 font-bold text-sky-400 shrink-0">단원PDF:</span>
-                                            <input 
-                                              type="text"
-                                              value={unitMap.unitPdfPath || ''}
-                                              onChange={(e) => handleUnitQuizPathChange(book.bookcode, uIdx, 'unitPdfPath', e.target.value)}
-                                              placeholder="/pdf/u1_main.pdf"
-                                              className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
-                                                isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
-                                              }`}
-                                            />
-                                          </div>
-                                        </div>
+                                {isQuizExpanded && (
+                                  <div className={`p-3 rounded-md border space-y-3 mt-2 text-xs animate-fadeIn ${
+                                    isLight ? 'bg-purple-50/30 border-purple-200' : 'bg-slate-950/50 border-purple-500/20'
+                                  }`}>
+                                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 border-b pb-2 border-purple-500/20">
+                                      <p className="text-[11px] opacity-75 font-normal">
+                                        💡 단원별 1·2·3차 퀴즈 및 단원 PDF 파일 상대경로를 지정하고 단원명을 직접 수정/추가할 수 있습니다.
+                                      </p>
+                                      <div className="flex items-center gap-1.5 shrink-0">
+                                        <button
+                                          type="button"
+                                          onClick={() => handleAddCustomUnit(book.bookcode, displayOverrideList)}
+                                          className="px-2.5 py-1 rounded text-[11px] font-bold bg-purple-600 hover:bg-purple-700 text-white transition-all shadow-sm flex items-center gap-1"
+                                        >
+                                          + 단원 추가
+                                        </button>
+                                        {isOverrideActive && (
+                                          <button
+                                            type="button"
+                                            onClick={() => handleResetToSheetUnits(book.bookcode)}
+                                            className="px-2.5 py-1 rounded text-[11px] font-bold bg-gray-600 hover:bg-gray-700 text-white transition-all shadow-sm"
+                                            title="수정한 단원 목록을 지우고 Google Sheet 원본 단원으로 되돌립니다 (저장 시 DB 반영)"
+                                          >
+                                            ↺ Google Sheet 단원으로 복원
+                                          </button>
+                                        )}
                                       </div>
-                                    );
-                                  })}
-                                </div>
-                              )}
-                            </div>
-                          )}
+                                    </div>
+
+                                    {isFetching ? (
+                                      <div className="py-8 text-center text-purple-400 font-bold flex items-center justify-center gap-2">
+                                        <Loader2 className="animate-spin" size={16} />
+                                        Google Sheet에서 단원 목록 불러오는 중...
+                                      </div>
+                                    ) : displayOverrideList.length === 0 ? (
+                                      <div className={`p-3 text-center rounded border text-xs font-semibold ${
+                                        isLight ? 'bg-amber-50/60 border-amber-200 text-amber-800' : 'bg-amber-950/30 border-amber-500/30 text-amber-300'
+                                      }`}>
+                                        등록된 단원 정보가 없습니다. 교재 마스터에서 단원을 먼저 등록하시거나 `[+ 단원 추가]` 버튼으로 단원을 추가해 주세요.
+                                      </div>
+                                    ) : (
+                                      <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1 custom-scrollbar-v">
+                                        {displayOverrideList.map((item: UnitOverrideItem, uIdx: number) => {
+                                          // 💡 퀴즈 매핑 조회 (1차: item.key ➔ 2차: sourceUnitKey ➔ 3차: sourceIndex 호환)
+                                          const savedMap = saved.unitQuizzesMap || {};
+                                          const currentMap = current.unitQuizzesMap || {};
+                                          const mergedMap = { ...savedMap, ...currentMap };
+
+                                          const unitMap = mergedMap[item.key] || 
+                                                          (item.sourceUnitKey ? mergedMap[item.sourceUnitKey] : null) || 
+                                                          (item.sourceIndex !== undefined ? mergedMap[item.sourceIndex] : null) || 
+                                                          {};
+
+                                          const targetQuizKey = item.key;
+
+                                          return (
+                                            <div 
+                                              key={item.key}
+                                              className={`p-2.5 rounded border space-y-2 ${
+                                                isLight ? 'bg-white border-purple-150' : 'bg-slate-900 border-slate-800'
+                                              }`}
+                                            >
+                                              <div className="flex items-center justify-between gap-2 border-b pb-1.5 border-purple-500/10">
+                                                <div className="flex items-center gap-2 flex-1">
+                                                  <span className="font-bold text-xs text-purple-600 dark:text-purple-300 shrink-0">
+                                                    {uIdx + 1}.
+                                                  </span>
+                                                  <input 
+                                                    type="text"
+                                                    value={item.label}
+                                                    onChange={(e) => handleOverrideLabelChange(book.bookcode, displayOverrideList, item.key, e.target.value)}
+                                                    placeholder="단원명 입력"
+                                                    className={`px-2 py-0.5 text-xs font-black rounded border outline-none flex-1 max-w-sm ${
+                                                      isLight ? 'bg-purple-50/50 border-purple-200 text-gray-800 focus:border-purple-500' : 'bg-black/40 border-purple-500/30 text-white focus:border-purple-400'
+                                                    }`}
+                                                  />
+                                                  {item.kind === 'custom' && (
+                                                    <span className="text-[9px] font-bold px-1.5 py-0.2 rounded bg-purple-900/60 text-purple-200">
+                                                      사용자 추가
+                                                    </span>
+                                                  )}
+                                                  {item.kind === 'sheet' && item.sourceLabel && item.sourceLabel !== item.label && (
+                                                    <span className="text-[9px] font-normal opacity-60 italic">
+                                                      (원본: {item.sourceLabel})
+                                                    </span>
+                                                  )}
+                                                </div>
+                                                <button
+                                                  type="button"
+                                                  onClick={() => handleDeleteOverrideUnit(book.bookcode, displayOverrideList, item.key)}
+                                                  className="px-2 py-0.5 text-[10px] font-bold rounded bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 transition-all shrink-0"
+                                                  title="이 단원을 화면에서 제거합니다 (저장 시 DB 반영)"
+                                                >
+                                                  삭제
+                                                </button>
+                                              </div>
+
+                                              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px]">
+                                                {/* 1차 퀴즈 */}
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="w-12 font-bold text-purple-500 shrink-0">1차 퀴즈:</span>
+                                                  <input 
+                                                    type="text"
+                                                    value={unitMap.quiz1Path || ''}
+                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz1Path', e.target.value)}
+                                                    placeholder="/pdf/u1_q1.pdf"
+                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                                    }`}
+                                                  />
+                                                </div>
+
+                                                {/* 2차 퀴즈 */}
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="w-12 font-bold text-purple-400 shrink-0">2차 퀴즈:</span>
+                                                  <input 
+                                                    type="text"
+                                                    value={unitMap.quiz2Path || ''}
+                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz2Path', e.target.value)}
+                                                    placeholder="/pdf/u1_q2.pdf"
+                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                                    }`}
+                                                  />
+                                                </div>
+
+                                                {/* 3차 퀴즈 */}
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="w-12 font-bold text-purple-300 shrink-0">3차 퀴즈:</span>
+                                                  <input 
+                                                    type="text"
+                                                    value={unitMap.quiz3Path || ''}
+                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'quiz3Path', e.target.value)}
+                                                    placeholder="/pdf/u1_q3.pdf"
+                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                                    }`}
+                                                  />
+                                                </div>
+
+                                                {/* 단원 PDF */}
+                                                <div className="flex items-center gap-1.5">
+                                                  <span className="w-12 font-bold text-sky-400 shrink-0">단원PDF:</span>
+                                                  <input 
+                                                    type="text"
+                                                    value={unitMap.unitPdfPath || ''}
+                                                    onChange={(e) => handleUnitQuizPathChange(book.bookcode, targetQuizKey, 'unitPdfPath', e.target.value)}
+                                                    placeholder="/pdf/u1_main.pdf"
+                                                    className={`w-full px-2 py-0.5 text-xs rounded border outline-none font-mono ${
+                                                      isLight ? 'bg-gray-50 border-gray-200 text-gray-800' : 'bg-black/30 border-slate-700 text-white'
+                                                    }`}
+                                                  />
+                                                </div>
+                                              </div>
+                                            </div>
+                                          );
+                                        })}
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+                              </>
+                            );
+                          })()}
                         </div>
                       </td>
 
