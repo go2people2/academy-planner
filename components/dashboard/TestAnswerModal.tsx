@@ -7,6 +7,7 @@ import {
   X, CheckCircle2, ChevronRight, Hash, FileText, Send, 
   Loader2, AlertCircle, Video, FileDown, BookOpen, Check, HelpCircle
 } from 'lucide-react';
+import { openMediaVideo } from '@/lib/mediaUrl';
 
 interface TestAnswerModalProps {
   testId: string;
@@ -335,7 +336,7 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
                           {!isCorrect && (
                             <div className="flex flex-wrap gap-2 flex-1">
                               {hasVideo && (
-                                <button onClick={() => window.open(hasVideo, '_blank')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-[2px] text-[10px] font-black hover:bg-red-500 transition-all shadow-lg shadow-red-900/20">
+                                <button onClick={() => openMediaVideo(hasVideo, undefined, '문항 해설 동영상')} className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-[2px] text-[10px] font-black hover:bg-red-500 transition-all shadow-lg shadow-red-900/20">
                                   <Video size={12} /> Solution Video
                                 </button>
                               )}

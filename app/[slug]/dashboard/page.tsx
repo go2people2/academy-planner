@@ -22,6 +22,7 @@ import TimetableSettings from '@/components/dashboard/settings/TimetableSettings
 import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
 import DigitalMathLibraryView from '@/components/dashboard/DigitalMathLibraryView';
 import VideoPlayerTestView from '@/components/dashboard/VideoPlayerTestView';
+import VideoPlayerModal from '@/components/common/VideoPlayerModal';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
@@ -148,6 +149,31 @@ export default function DashboardPage() {
   const [selectedDate, setSelectedDate] = useState(() => getTodayStr());
   const [selectedFilter, setSelectedFilter] = useState('All');
   const [selectedDays, setSelectedDays] = useState<string[]>([]);
+
+  // 🎬 전역 비디오 팝업 플레이어 모달 상태
+  const [globalVideoState, setGlobalVideoState] = useState<{
+    isOpen: boolean;
+    videoUrl: string;
+    title?: string;
+    timestampsText?: string;
+  }>({ isOpen: false, videoUrl: '' });
+
+  useEffect(() => {
+    const handleGlobalVideoOpen = (e: any) => {
+      if (e.detail?.videoUrl) {
+        setGlobalVideoState({
+          isOpen: true,
+          videoUrl: e.detail.videoUrl,
+          title: e.detail.title || '학습 동영상 플레이어',
+          timestampsText: e.detail.timestampsText || ''
+        });
+      }
+    };
+    window.addEventListener('ams-open-video-modal', handleGlobalVideoOpen as any);
+    return () => {
+      window.removeEventListener('ams-open-video-modal', handleGlobalVideoOpen as any);
+    };
+  }, []);
   const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
     if (typeof window !== 'undefined') {
       return localStorage.getItem('ams_selectedTeacherId') || 'All';
@@ -1932,6 +1958,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           </div>
         </div>
       )}
+
+      {/* 🎬 전역 비디오 팝업 플레이어 모달 */}
+      <VideoPlayerModal
+        isOpen={globalVideoState.isOpen}
+        videoUrl={globalVideoState.videoUrl}
+        title={globalVideoState.title}
+        timestampsText={globalVideoState.timestampsText}
+        onClose={() => setGlobalVideoState(prev => ({ ...prev, isOpen: false }))}
+        isLight={false}
+      />
     </div>
   );
 }
