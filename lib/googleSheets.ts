@@ -74,6 +74,10 @@ async function fetchSheetAsCsv(tabName: string) {
   }
 }
 
+export async function fetchRawSheetRows(tabName: string): Promise<string[][]> {
+  return await fetchSheetAsCsv(tabName);
+}
+
 export async function fetchTextbookMasterList(): Promise<TextbookMaster[]> {
   const rows = await fetchSheetAsCsv('master');
   if (!rows || rows.length <= 1) return [];

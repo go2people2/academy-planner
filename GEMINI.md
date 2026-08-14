@@ -97,6 +97,17 @@ ams_students.class_days / day_schedules
   - 구조 이동
   - 리팩토링 실행
 
+### 2. Production 배포 승인 분리 규칙 (Production Deployment Control)
+- **코드 수정 승인과 Production 배포 승인은 엄격히 별개의 단계이다.**
+- `구현 승인`, `수정해줘`, `진행해줘` 표현은 오직 **코드 수정 및 로컬/빌드 검증** 승인일 뿐, Vercel Production 배포 승인이 아니다.
+- 아래 명시적 배포 승인 문구가 포함되지 않은 상태에서는 `git push deploy main:master` (Production 배포)를 절대로 수행하지 않는다:
+  - `운영 배포해 주세요`
+  - `Vercel production 반영 승인합니다`
+  - `배포 진행하세요`
+- AMF 내부망 기능 등 현장 테스트가 필요한 작업은 현장 테스트 전 `완료` 또는 `정상 작동 확정`이라 표현하지 않으며, 아래와 같이 분리 보고한다:
+  - `코드 구현 및 Vercel 반영 완료`
+  - `학원 내부망 실기기 검증 대기`
+
 ### 2. 계획 우선 원칙 (Plan First Rule)
 - 수정이 필요할 경우 반드시 아래 순서로 진행한다:
   1. 현재 코드 분석

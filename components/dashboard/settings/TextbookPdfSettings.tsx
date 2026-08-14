@@ -54,6 +54,45 @@ export default function TextbookPdfSettings({
   const [fetchedUnitsMap, setFetchedUnitsMap] = useState<Record<string, any[]>>({});
   const [isFetchingUnits, setIsFetchingUnits] = useState<Record<string, boolean>>({});
 
+  // 💡 교재 카탈로그 엑셀 다운로드 상태
+  const [isDownloadingExcel, setIsDownloadingExcel] = useState(false);
+
+  const handleDownloadExcel = async () => {
+    if (isDownloadingExcel) return;
+    setIsDownloadingExcel(true);
+    try {
+      const res = await fetch('/api/textbooks/excel-download');
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || '교재 카탈로그 Excel 다운로드에 실패했습니다. 다시 시도해 주세요.');
+      }
+      
+      const blob = await res.blob();
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      
+      const contentDisposition = res.headers.get('Content-Disposition');
+      let fileName = 'AMS_교재카탈로그.xlsx';
+      if (contentDisposition) {
+        const match = contentDisposition.match(/filename\*?=['"]?(?:UTF-8'')?([^;'"\n]+)['"]?/i);
+        if (match && match[1]) {
+          fileName = decodeURIComponent(match[1]);
+        }
+      }
+      
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      window.URL.revokeObjectURL(url);
+    } catch (err: any) {
+      alert(err.message || '교재 카탈로그 Excel 다운로드 중 오류가 발생했습니다.');
+    } finally {
+      setIsDownloadingExcel(false);
+    }
+  };
+
   // 💡 학원 내부 서버 기본 주소 (Base Server URL) - DB에 기록된 학원 주소를 최우선 동적 바인딩
   const [baseServerUrl, setBaseServerUrl] = useState<string>(() => {
     if (academyInfo?.operation_settings?.base_server_url) {
@@ -559,18 +598,43 @@ export default function TextbookPdfSettings({
                 placeholder="예: http://192.168.0.207:8080"
                 className="px-3 py-1.5 text-xs font-mono font-bold rounded border border-amber-500/40 bg-slate-900 text-amber-200 outline-none w-full sm:w-64"
               />
-              {devMediaServerUrl && (
-                <button
-                  type="button"
-                  onClick={() => handleSaveDevMediaServerUrl('')}
-                  className="px-2 py-1.5 rounded text-xs font-bold bg-amber-800/60 hover:bg-amber-700 text-amber-100 shrink-0"
-                >
-                  초기화
-                </button>
-              )}
             </div>
           </div>
         )}
+
+        {/* 📊 교재 카탈로그 엑셀 다운로드 안내 및 버튼 */}
+        <div className="mt-3 pt-3 border-t border-dashed border-indigo-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div className="space-y-0.5">
+            <h4 className="text-xs font-bold flex items-center gap-1.5 text-indigo-600 dark:text-indigo-300">
+              <span>📊 Google Sheet 교재 카탈로그 Excel 다운로드</span>
+            </h4>
+            <p className="text-[11px] opacity-75">
+              현재 교재 마스터를 Excel로 내려받습니다. 파일을 수정해도 현재 시스템에는 즉시 반영되지 않으며, 추후 업로드 기능에서 사용할 수 있습니다.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={handleDownloadExcel}
+            disabled={isDownloadingExcel}
+            className={`px-3.5 py-1.5 rounded text-xs font-bold shrink-0 transition-all flex items-center gap-1.5 border shadow-sm ${
+              isLight
+                ? 'bg-emerald-600 hover:bg-emerald-700 text-white border-emerald-700'
+                : 'bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border-emerald-500/40'
+            } disabled:opacity-50`}
+          >
+            {isDownloadingExcel ? (
+              <>
+                <Loader2 size={13} className="animate-spin" />
+                <span>엑셀 다운로드 중...</span>
+              </>
+            ) : (
+              <>
+                <FileText size={13} />
+                <span>Excel 다운로드</span>
+              </>
+            )}
+          </button>
+        </div>
       </div>
 
       {/* 🔍 검색 및 탭 컨트롤 */}

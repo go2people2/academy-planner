@@ -1,8 +1,9 @@
 'use client';
 
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { 
-  X, Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, Video, ListVideo, Bookmark
+  X, Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, Video, ListVideo, Bookmark,
+  Loader2, AlertTriangle, RefreshCw
 } from 'lucide-react';
 
 export interface TimestampItem {
@@ -40,9 +41,19 @@ export default function VideoPlayerModal({
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
+  const [isError, setIsError] = useState(false);
   const [showChapters, setShowChapters] = useState(true);
 
   const controlsTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const loadingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isSeekingRef = useRef<boolean>(false);
+
+  const clearLoadingTimeout = useCallback(() => {
+    if (loadingTimeoutRef.current) {
+      clearTimeout(loadingTimeoutRef.current);
+      loadingTimeoutRef.current = null;
+    }
+  }, []);
 
   // 1. 타임스탬프 텍스트 자동 파싱 유틸
   const parsedTimestamps = useMemo<TimestampItem[]>(() => {
@@ -83,14 +94,121 @@ export default function VideoPlayerModal({
     return 0;
   }, [currentTime, parsedTimestamps]);
 
-  // 모달 오픈 시 초기화
+  // 모달 오픈 및 비디오 URL 변경 시 초기화
   useEffect(() => {
     if (isOpen) {
+      clearLoadingTimeout();
+      isSeekingRef.current = false;
       setIsPlaying(false);
       setCurrentTime(0);
-      setIsLoading(true);
+      setIsLoading(!!videoUrl);
+      setIsError(false);
+      setPlaybackRate(1.0);
+      if (videoRef.current) {
+        try {
+          videoRef.current.playbackRate = 1.0;
+        } catch (e) {
+          // ignore
+        }
+      }
     }
-  }, [isOpen, videoUrl]);
+    return () => {
+      clearLoadingTimeout();
+    };
+  }, [isOpen, videoUrl, clearLoadingTimeout]);
+
+  // unmount 시 cleanup
+  useEffect(() => {
+    return () => {
+      clearLoadingTimeout();
+    };
+  }, [clearLoadingTimeout]);
+
+  // 🎥 비디오 이벤트 기반 상태 핸들러
+  const handleLoadStart = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
+    setIsLoading(true);
+    setIsError(false);
+  };
+
+  const handleWaiting = () => {
+    if (isSeekingRef.current || loadingTimeoutRef.current !== null) {
+      return;
+    }
+    setIsLoading(true);
+  };
+
+  const handleSeeking = () => {
+    isSeekingRef.current = true;
+    clearLoadingTimeout();
+    loadingTimeoutRef.current = setTimeout(() => {
+      if (isSeekingRef.current) {
+        setIsLoading(true);
+      }
+    }, 300);
+  };
+
+  const handleCanPlay = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
+    setIsLoading(false);
+  };
+
+  const handlePlaying = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
+    setIsLoading(false);
+    setIsPlaying(true);
+  };
+
+  const handlePause = () => {
+    setIsPlaying(false);
+  };
+
+  const handleSeeked = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
+    setIsLoading(false);
+  };
+
+  const handleEnded = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
+    setIsPlaying(false);
+    setIsLoading(false);
+  };
+
+  const handleError = (e: React.SyntheticEvent<HTMLVideoElement, Event>) => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
+    setIsLoading(false);
+    setIsPlaying(false);
+    setIsError(true);
+    if (process.env.NODE_ENV !== 'production') {
+      const err = e.currentTarget.error;
+      console.error('[VideoPlayerModal Error]', {
+        code: err?.code,
+        message: err?.message,
+        src: videoUrl
+      });
+    }
+  };
+
+  // 🔄 다시 시도 로직
+  const handleRetry = () => {
+    clearLoadingTimeout();
+    isSeekingRef.current = false;
+    setIsError(false);
+    setIsLoading(true);
+    if (videoRef.current) {
+      try {
+        videoRef.current.load();
+      } catch (err) {
+        console.error('[Video Load Retry Error]', err);
+      }
+    }
+  };
 
   // 마우스 움직임 감지 시 컨트롤러 자동 노출/숨김
   const handleMouseMove = () => {
@@ -102,38 +220,49 @@ export default function VideoPlayerModal({
   };
 
   // 재생/일시정지
-  const togglePlay = () => {
+  const togglePlay = useCallback(() => {
     if (!videoRef.current) return;
-    if (isPlaying) {
-      videoRef.current.pause();
+    const vid = videoRef.current;
+    if (vid.paused) {
+      vid.play().catch(() => {});
+      setIsPlaying(true);
     } else {
-      videoRef.current.play();
+      vid.pause();
+      setIsPlaying(false);
     }
-    setIsPlaying(!isPlaying);
-  };
+  }, []);
 
   // 특정 시간(초)으로 바로 이동
   const jumpToSeconds = (targetSeconds: number) => {
     if (!videoRef.current) return;
     videoRef.current.currentTime = targetSeconds;
     setCurrentTime(targetSeconds);
-    if (!isPlaying) {
-      videoRef.current.play();
+    if (videoRef.current.paused) {
+      videoRef.current.play().catch(() => {});
       setIsPlaying(true);
     }
   };
 
-  // 10초 스킵
-  const skip = (seconds: number) => {
+  // 10초 스킵 (Clamp 처리)
+  const skip = useCallback((seconds: number) => {
     if (!videoRef.current) return;
-    jumpToSeconds(Math.min(Math.max(videoRef.current.currentTime + seconds, 0), duration));
-  };
+    const vid = videoRef.current;
+    const dur = vid.duration;
+    if (dur === undefined || isNaN(dur) || !isFinite(dur)) return;
+    const newTime = Math.max(0, Math.min(dur, vid.currentTime + seconds));
+    vid.currentTime = newTime;
+    setCurrentTime(newTime);
+  }, []);
 
   // 배속 변경
   const changePlaybackRate = (rate: number) => {
     setPlaybackRate(rate);
     if (videoRef.current) {
-      videoRef.current.playbackRate = rate;
+      try {
+        videoRef.current.playbackRate = rate;
+      } catch (e) {
+        // ignore
+      }
     }
   };
 
@@ -148,12 +277,22 @@ export default function VideoPlayerModal({
   // 전체화면 토글
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
-    if (!document.fullscreenElement) {
-      containerRef.current.requestFullscreen().catch(err => console.error(err));
-      setIsFullscreen(true);
-    } else {
-      document.exitFullscreen().catch(err => console.error(err));
-      setIsFullscreen(false);
+    try {
+      if (!document.fullscreenElement) {
+        if (containerRef.current.requestFullscreen) {
+          containerRef.current.requestFullscreen().catch(() => {});
+        } else if ((containerRef.current as any).webkitRequestFullscreen) {
+          (containerRef.current as any).webkitRequestFullscreen();
+        }
+        setIsFullscreen(true);
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen().catch(() => {});
+        }
+        setIsFullscreen(false);
+      }
+    } catch (e) {
+      console.warn('[Fullscreen error]', e);
     }
   };
 
@@ -169,14 +308,37 @@ export default function VideoPlayerModal({
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (!isOpen) return;
-      if (e.key === ' ') {
-        e.preventDefault();
-        togglePlay();
+
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tagName = target.tagName?.toUpperCase();
+        if (
+          tagName === 'INPUT' ||
+          tagName === 'TEXTAREA' ||
+          tagName === 'SELECT' ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+
+      if (e.key === ' ' || e.code === 'Space') {
+        if (videoUrl && !isError) {
+          e.preventDefault();
+          togglePlay();
+        }
       } else if (e.key === 'ArrowLeft') {
-        skip(-10);
+        if (videoUrl && !isError) {
+          e.preventDefault();
+          skip(-10);
+        }
       } else if (e.key === 'ArrowRight') {
-        skip(10);
+        if (videoUrl && !isError) {
+          e.preventDefault();
+          skip(10);
+        }
       } else if (e.key === 'f' || e.key === 'F') {
+        e.preventDefault();
         toggleFullscreen();
       } else if (e.key === 'Escape' && !isFullscreen) {
         onClose();
@@ -185,7 +347,7 @@ export default function VideoPlayerModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, isPlaying, duration, isFullscreen]);
+  }, [isOpen, isPlaying, duration, isFullscreen, videoUrl, isError, togglePlay, skip]);
 
   if (!isOpen) return null;
 
@@ -229,11 +391,29 @@ export default function VideoPlayerModal({
             </div>
           </div>
 
-          {/* 로딩 인디케이터 */}
-          {isLoading && (
-            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/60 gap-2 text-white">
-              <div className="w-10 h-10 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
-              <span className="text-xs font-bold text-slate-300">동영상 고속 서빙 스트리밍 중...</span>
+          {/* 🌀 로딩 오버레이 */}
+          {isLoading && !isError && (
+            <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-black/60 backdrop-blur-xs gap-2 text-white pointer-events-none">
+              <Loader2 size={32} className="animate-spin text-indigo-400" />
+              <span className="text-xs font-bold text-slate-300">동영상 로딩 중...</span>
+            </div>
+          )}
+
+          {/* ⚠️ 재생 실패 에러 오버레이 & 다시 시도 버튼 */}
+          {isError && (
+            <div className="absolute inset-0 z-20 flex flex-col items-center justify-center bg-black/85 p-6 text-center gap-3 text-white">
+              <AlertTriangle size={36} className="text-amber-400" />
+              <p className="text-xs font-bold leading-relaxed max-w-sm text-slate-300">
+                동영상을 불러오지 못했습니다. 학원 Wi‑Fi 연결, AMF 서버 상태 또는 파일 경로를 확인한 뒤 다시 시도해 주세요.
+              </p>
+              <button
+                type="button"
+                onClick={handleRetry}
+                className="mt-1 px-4 py-1.5 rounded-md text-xs font-bold bg-indigo-600 hover:bg-indigo-500 text-white flex items-center gap-1.5 shadow transition-all active:scale-95"
+              >
+                <RefreshCw size={14} />
+                <span>다시 시도</span>
+              </button>
             </div>
           )}
 
@@ -245,10 +425,18 @@ export default function VideoPlayerModal({
             preload="auto"
             className="w-full h-full object-contain cursor-pointer"
             onClick={togglePlay}
+            onLoadStart={handleLoadStart}
+            onWaiting={handleWaiting}
+            onSeeking={handleSeeking}
+            onCanPlay={handleCanPlay}
+            onPlaying={handlePlaying}
+            onPause={handlePause}
+            onSeeked={handleSeeked}
+            onEnded={handleEnded}
+            onError={handleError}
             onLoadedMetadata={() => {
               if (videoRef.current) {
                 setDuration(videoRef.current.duration);
-                setIsLoading(false);
               }
             }}
             onTimeUpdate={() => {
@@ -256,9 +444,6 @@ export default function VideoPlayerModal({
                 setCurrentTime(videoRef.current.currentTime);
               }
             }}
-            onEnded={() => setIsPlaying(false)}
-            onWaiting={() => setIsLoading(true)}
-            onPlaying={() => setIsLoading(false)}
           />
 
           {/* 중앙 거대 재생(Play) 버튼 오버레이 */}
