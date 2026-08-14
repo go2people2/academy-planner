@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { Library, Layers, Wrench, Search, Loader2 } from 'lucide-react';
+import { Library, Layers, Wrench, Search, Loader2, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getEffectiveBaseServerUrl } from '@/lib/mediaUrl';
 import TextbookModuleBuilder from './learningBuilder/TextbookModuleBuilder';
@@ -26,6 +26,14 @@ export default function DigitalMathLibraryView({
   const [selectedBookcode, setSelectedBookcode] = useState<string | null>(null);
   const [builtModules, setBuiltModules] = useState<Record<string, any>>({});
   const [isLoading, setIsLoading] = useState(true);
+
+  // 🎬 교재 클릭 시 전용 팝업 플레이어 모달 제어 상태
+  const [isPlayerModalOpen, setIsPlayerModalOpen] = useState(false);
+
+  const handleSelectBook = (code: string) => {
+    setSelectedBookcode(code);
+    setIsPlayerModalOpen(true);
+  };
 
   // 미디어 서버 주소 (개발 모드 Override & 공용 DB 주소 통합)
   const baseServerUrl = useMemo(() => {
@@ -164,7 +172,7 @@ export default function DigitalMathLibraryView({
             assignedBooks={portalBooks}
             builtModules={builtModules}
             selectedBookcode={selectedBookcode}
-            onSelectBook={(code: string) => setSelectedBookcode(code)}
+            onSelectBook={(code: string) => handleSelectBook(code)}
             isLight={isLight}
           />
 
@@ -175,17 +183,51 @@ export default function DigitalMathLibraryView({
             </div>
           ) : !selectedBookcode ? (
             <div className="text-center py-16 text-xs text-gray-400 font-bold italic">
-              상단 서랍에서 공부할 교재를 선택해 주세요.
+              상단 서랍에서 교재 카드를 누르시면 학습 팝업 플레이어가 짠! 하고 나타납니다.
             </div>
           ) : (
-            <StudentCoursePlayer
-              bookTitle={currentBook?.title || '교재'}
-              units={units}
-              bookModule={builtModules[selectedBookcode || ''] || {}}
-              baseServerUrl={baseServerUrl}
-              isLight={isLight}
-            />
+            <div className="p-4 rounded-md border text-center text-xs font-bold text-gray-400 bg-slate-900/40 border-slate-800">
+              선택한 교재: <span className="text-indigo-400">{currentBook?.title}</span> (서랍에서 다른 교재를 누르시면 팝업 플레이어로 열립니다.)
+            </div>
           )}
+        </div>
+      )}
+
+      {/* 🎬 [핵심] 서재 교재 선택 시 짠! 하고 뜨는 전용 팝업 플레이어 모달 */}
+      {isPlayerModalOpen && selectedBookcode && (
+        <div className="fixed inset-0 z-50 bg-black/85 backdrop-blur-md flex items-center justify-center p-3 sm:p-6 animate-fadeIn">
+          <div className="relative w-full max-w-6xl bg-slate-950 rounded-xl border border-indigo-500/30 shadow-2xl overflow-hidden max-h-[92vh] flex flex-col">
+            {/* 팝업 모달 헤더 */}
+            <div className="flex items-center justify-between px-4 py-3 bg-slate-900 border-b border-slate-800 shrink-0">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-black px-2 py-0.5 rounded bg-indigo-600 text-white tracking-wider">
+                  코스 플레이어
+                </span>
+                <h3 className="font-bold text-sm text-slate-100 line-clamp-1">
+                  📚 {currentBook?.title || '교재 학습장'}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsPlayerModalOpen(false)}
+                className="p-1.5 rounded-full bg-white/10 hover:bg-white/20 text-slate-300 hover:text-white transition-all"
+                title="닫기 (ESC)"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* 팝업 모달 본문 플레이어 (배속 칩, -10초/+10초 툴바, 300ms 로딩 지연 오버레이 포함) */}
+            <div className="p-4 overflow-y-auto flex-1 custom-scrollbar">
+              <StudentCoursePlayer
+                bookTitle={currentBook?.title || '교재'}
+                units={units}
+                bookModule={builtModules[selectedBookcode || ''] || {}}
+                baseServerUrl={baseServerUrl}
+                isLight={isLight}
+              />
+            </div>
+          </div>
         </div>
       )}
 
