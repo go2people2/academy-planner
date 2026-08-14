@@ -477,44 +477,57 @@ export default function VideoPlayerModal({
             </div>
 
             {/* 재생 컨트롤 세트 */}
-            <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <div className="flex items-center gap-1.5">
+                {/* 재생/일시정지 */}
                 <button
+                  type="button"
                   onClick={togglePlay}
-                  className="p-2.5 rounded-full bg-indigo-600 hover:bg-indigo-500 text-white shadow-md transition-all active:scale-95"
+                  disabled={isError}
+                  className="px-3 py-1.5 rounded-md bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs flex items-center gap-1.5 shadow transition-all active:scale-95 disabled:opacity-40"
                   title={isPlaying ? '일시정지 (Space)' : '재생 (Space)'}
                 >
-                  {isPlaying ? <Pause size={18} /> : <Play size={18} className="ml-0.5" />}
+                  {isPlaying ? <Pause size={14} /> : <Play size={14} className="ml-0.5" />}
+                  <span>{isPlaying ? '일시정지' : '재생'}</span>
                 </button>
 
+                {/* -10초 */}
                 <button
+                  type="button"
                   onClick={() => skip(-10)}
-                  className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all"
+                  disabled={isError}
+                  className="px-2.5 py-1.5 rounded-md bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-40"
                   title="10초 뒤로 (←)"
                 >
-                  <RotateCcw size={16} />
+                  <RotateCcw size={13} />
+                  <span>-10초</span>
                 </button>
 
+                {/* +10초 */}
                 <button
+                  type="button"
                   onClick={() => skip(10)}
-                  className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all"
+                  disabled={isError}
+                  className="px-2.5 py-1.5 rounded-md bg-white/15 hover:bg-white/25 text-white font-bold text-xs flex items-center gap-1 transition-all active:scale-95 disabled:opacity-40"
                   title="10초 앞으로 (→)"
                 >
-                  <RotateCw size={16} />
+                  <RotateCw size={13} />
+                  <span>+10초</span>
                 </button>
               </div>
 
-              <div className="flex items-center gap-3">
-                {/* 배속 조절 */}
+              <div className="flex items-center gap-2">
+                {/* 배속 조절 칩 */}
                 <div className="flex items-center gap-1 bg-white/10 p-1 rounded-lg">
                   {[0.75, 1.0, 1.25, 1.5, 2.0].map(rate => (
                     <button
                       key={rate}
+                      type="button"
                       onClick={() => changePlaybackRate(rate)}
-                      className={`px-2 py-0.5 text-[10px] font-black rounded transition-all ${
+                      className={`px-2 py-0.5 text-[11px] font-black rounded transition-all ${
                         playbackRate === rate
-                          ? 'bg-indigo-600 text-white'
-                          : 'text-slate-300 hover:bg-white/10'
+                          ? 'bg-indigo-600 text-white shadow-xs'
+                          : 'text-slate-300 hover:bg-white/15 hover:text-white'
                       }`}
                     >
                       {rate}x
@@ -523,14 +536,20 @@ export default function VideoPlayerModal({
                 </div>
 
                 {/* 음소거 */}
-                <button onClick={toggleMute} className="text-slate-300 hover:text-white">
+                <button 
+                  type="button" 
+                  onClick={toggleMute} 
+                  className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-all"
+                  title={isMuted ? '음소거 해제' : '음소거'}
+                >
                   {isMuted || volume === 0 ? <VolumeX size={18} /> : <Volume2 size={18} />}
                 </button>
 
                 {/* 전체화면 */}
                 <button
+                  type="button"
                   onClick={toggleFullscreen}
-                  className="p-2 rounded-lg bg-white/10 hover:bg-white/20 text-white transition-all"
+                  className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-all"
                   title="전체화면 (F)"
                 >
                   {isFullscreen ? <Minimize size={18} /> : <Maximize size={18} />}
