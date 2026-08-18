@@ -446,7 +446,7 @@ export default function TodaySheet({
     const courseName = rowStudent?.courseName || '정규';
 
     const student = students.find((s: any) => s.id === realId);
-    // 💡 [버그 완치] 특강 행일 때는 정규 수업 세션(student?.todaySession)을 절대 함부로 도용하지 않습니다!
+    // 💡 [버그 완치] 특강/보강 행일 때는 정규 수업 세션(student?.todaySession)을 절대 함부로 도용하지 않습니다!
     // 오직 해당 행의 고유 세션(rowStudent?.todaySession)만을 철저히 고수하여 크로스 오버를 완벽 차단합니다.
     const session: any = rowStudent?.todaySession || {};
     
@@ -473,32 +473,64 @@ export default function TodaySheet({
       prevData
     }]);
 
-    // 💡 [낙관적 업데이트] 4개 식별자(학생ID, 과목, 날짜, moved_to_hour)가 정확히 일치하는 행만 독립 갱신
+    const isPersistedSessionId = session?.id && !String(session.id).startsWith('temp');
+    const currentMovedToHour = ('moved_to_hour' in newData)
+      ? newData.moved_to_hour
+      : (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null ? session.moved_to_hour : null);
+
+    const fromMovedToHour = ('from_moved_to_hour' in newData)
+      ? newData.from_moved_to_hour
+      : (session?.moved_to_hour !== undefined && session?.moved_to_hour !== null ? session.moved_to_hour : null);
+
+    const isMakeup =
+      rowStudent?.isMakeupRow === true ||
+      session?.is_pure_makeup === true;
+    const isPureMakeupTarget = isMakeup;
+    const targetMovedHour = currentMovedToHour ?? null;
+    const fromTargetMovedHour = fromMovedToHour !== undefined ? fromMovedToHour : targetMovedHour;
+
+    const scopedTempId = `temp:${realId}:${selectedDate}:${courseName}:${isMakeup ? 'makeup' : 'regular'}:${targetMovedHour ?? 'null'}`;
+    const fromScopedTempId = `temp:${realId}:${selectedDate}:${courseName}:${isMakeup ? 'makeup' : 'regular'}:${fromTargetMovedHour ?? 'null'}`;
+
+    // 💡 [낙관적 업데이트] 기존 세션 ID 또는 from_moved_to_hour로 정확히 이전 세션을 찾아 신규 시각으로 갱신
     setStudents((prev: any[]) => (prev || []).map(s => {
-      const isTargetStudent = s.id === studentId;
-      if (!isTargetStudent) return s;
+      const sRealId = s.originalId || s.id;
+      if (sRealId !== realId) return s;
 
       const hasMission = 'mission' in newData;
       const hasNotes = 'management_notes' in newData;
 
       let updatedAllLogs = s.allLogs || [];
-      const targetMovedHour = 'moved_to_hour' in newData ? newData.moved_to_hour : (s.todaySession?.moved_to_hour ?? null);
       
-      const logIdx = updatedAllLogs.findIndex((l: any) =>
-        newData.id ? l.id === newData.id : (
-          (l.date || l.session_date) === selectedDate &&
-          (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규'))) &&
-          (l.moved_to_hour === targetMovedHour || (targetMovedHour === null && (l.moved_to_hour === null || l.moved_to_hour === undefined)))
-        )
-      );
+      const logIdx = updatedAllLogs.findIndex((l: any) => {
+        if (isPersistedSessionId) {
+          return l.id === session.id;
+        }
 
-      const hasMovedHourInNewData = 'moved_to_hour' in newData;
+        // 1. 새 구조: scopedTempId 완전 일치 (이동 전 temp ID 포함)
+        if (l.id === scopedTempId || l.id === fromScopedTempId) {
+          return true;
+        }
+
+        // 2. 레거시 임시 데이터 호환: l.id가 'temp'이거나 비어있고 모든 식별 속성이 엄격히 일치할 때만 한정
+        if (l.id === 'temp' || !l.id) {
+          const isDateMatch = (l.date || l.session_date) === selectedDate;
+          const isCourseMatch = l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규'));
+          const isHourMatch = (l.moved_to_hour ?? null) === fromTargetMovedHour;
+          const isMakeupMatch = (l.is_pure_makeup ?? false) === isPureMakeupTarget;
+          return isDateMatch && isCourseMatch && isHourMatch && isMakeupMatch;
+        }
+
+        return false;
+      });
 
       const newSess = {
         ...(logIdx !== -1 ? updatedAllLogs[logIdx] : {}),
         ...newData,
+        id: isPersistedSessionId ? session.id : (logIdx !== -1 ? updatedAllLogs[logIdx].id : scopedTempId),
         course_name: courseName,
-        ...(hasMovedHourInNewData ? { moved_to_hour: targetMovedHour } : {})
+        moved_to_hour: targetMovedHour,
+        is_pure_makeup: isPureMakeupTarget
       };
 
       if (logIdx !== -1) {
@@ -507,17 +539,18 @@ export default function TodaySheet({
         updatedAllLogs = [{ ...newSess, date: selectedDate, session_date: selectedDate }, ...updatedAllLogs];
       }
 
-      // todaySession은 정규 수업 저장 시에만 반영 (특강 세션은 allLogs로만 관리)
-      const isRegularCourse = courseName === '정규' || !courseName;
+      // todaySession은 오직 정규 원래 수업(moved_to_hour === null && !isMakeup)일 때만 반영
+      const isRegularOriginalCourse = (courseName === '정규' || !courseName) && targetMovedHour === null && !isMakeup;
 
       return {
         ...s,
         ...(hasNotes ? { management_notes: newData.management_notes } : {}),
-        ...(isRegularCourse ? { 
+        ...(isRegularOriginalCourse ? { 
           todaySession: {
             ...(s.todaySession || {}),
             ...newSess,
-            ...(hasMovedHourInNewData ? { moved_to_hour: targetMovedHour } : {})
+            moved_to_hour: null,
+            is_pure_makeup: false
           } 
         } : {}),
         allLogs: updatedAllLogs
@@ -526,7 +559,15 @@ export default function TodaySheet({
 
     // 💡 이제 학생미션(mission)과 관리주의점(management_notes)도 분기 우회하지 않고,
     // 온전히 하나의 일지 저장 API(onSave)를 타고 ams_session_logs 테이블에 안전하게 하루하루 박제 보존됩니다!
-    const savePayload = { ...newData, course_name: courseName };
+    const savePayload = {
+      ...newData,
+      id: isPersistedSessionId ? session.id : undefined,
+      session_date: selectedDate,
+      course_name: courseName,
+      moved_to_hour: currentMovedToHour ?? null,
+      from_moved_to_hour: fromMovedToHour !== undefined && fromMovedToHour !== null ? fromMovedToHour : undefined,
+      is_pure_makeup: isPureMakeupTarget,
+    };
 
     if (Object.keys(savePayload).length > 1 || 'mission' in savePayload || 'management_notes' in savePayload) {
       const success = await onSave(realId, savePayload);
@@ -572,10 +613,12 @@ export default function TodaySheet({
       const rowStudent = filteredStudents.find((fs: any) => String(fs.id) === String(match.studentId));
       const courseName = rowStudent?.courseName || '정규';
       
+      const targetMovedHour = rowStudent?.todaySession?.moved_to_hour ?? null;
       let updatedAllLogs = s.allLogs || [];
       const logIdx = updatedAllLogs.findIndex((l: any) =>
         (l.date || l.session_date) === saveDate &&
-        (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규')))
+        (l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규'))) &&
+        (l.moved_to_hour === targetMovedHour || (targetMovedHour === null && (l.moved_to_hour === null || l.moved_to_hour === undefined)))
       );
 
       const newSess = {
@@ -1080,7 +1123,7 @@ export default function TodaySheet({
         <div className="flex items-center gap-6">
           <div className="flex flex-col gap-0.5 items-start">
             <div className="flex items-center gap-3">
-              <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> Daily Sheet</h3>
+              <h3 className="text-[13px] font-black uppercase tracking-widest text-blue-500 flex items-center gap-2.5"><TableIcon size={16} /> TodaySheet</h3>
               <div className={`flex p-0.5 rounded-[4px] border ${isLight ? 'bg-gray-100 border-[#e3e2e0]' : 'bg-zinc-950 border-zinc-800'}`}>
                 <button
                   onClick={() => setActiveTab('daily')}
@@ -1568,9 +1611,12 @@ export default function TodaySheet({
 
               return filteredStudents.map((s: any, idx: number) => {
                 const getStartTime = (st: any) => {
-                  const normalizeHour = (val: number) => {
-                    let h = val >= 100 ? Math.floor(val / 100) : val;
-                    if (h < 10) h += 12;
+                  const normalizeHour = (val: number | string) => {
+                    if (!val) return 99;
+                    let num = typeof val === 'number' ? val : parseInt(String(val), 10);
+                    if (isNaN(num) || num <= 0) return 99;
+                    let h = num >= 100 ? Math.floor(num / 100) : num;
+                    if (h > 0 && h < 10) h += 12;
                     return h;
                   };
 
@@ -1609,7 +1655,7 @@ export default function TodaySheet({
                 return (
                   <React.Fragment key={`${s.id}_row_${idx}`}>
                     <TodaySheetRow
-                      key={`${s.id}-${selectedDate}`}
+                      key={`${s.id}-${selectedDate}-${s.courseName || '정규'}-${s.todaySession?.moved_to_hour ?? 'reg'}`}
                       student={s}
                       cooperatingCells={cooperatingCells}
                       rowIndex={idx}

@@ -965,14 +965,19 @@ function StudentRowItem({
   
   // 💡 [시간 이동 / 보강 감지 정밀화] (당일 정규 수업의 수동 시간이동에만 뱃지 생성)
   const movedHourVal = (() => {
-    if (student.todaySession?.is_pure_makeup || (student as any).__courseType === 'makeup') return null;
-    if (student.todaySession?.moved_to_hour && !student.todaySession?.is_pure_makeup && student.todaySession.moved_to_hour > 0) {
+    if (student.todaySession?.is_pure_makeup === true) return null;
+
+    if (
+      student.todaySession?.moved_to_hour &&
+      student.todaySession.moved_to_hour > 0
+    ) {
       return student.todaySession.moved_to_hour;
     }
+
     return null;
   })();
   const isTimeShifted = movedHourVal !== undefined && movedHourVal !== null && movedHourVal > 0;
-  const isMakeup = student.__courseType === 'makeup' || isTimeShifted || (student.todaySession?.attendance_status && student.todaySession.attendance_status.startsWith('보강'));
+  const isMakeup = student.todaySession?.is_pure_makeup === true;
   const isAbsent = ['수업취소', '수업제외', '결석'].includes(student.todaySession?.attendance_status || '');
   
   const settings = academyInfo?.operation_settings || {};
@@ -1058,6 +1063,66 @@ function StudentRowItem({
       };
     }
   }, [student, currentDay, movedHourVal]);
+
+  // 💡 선택과목 전체 시간표 목록 (하단 표시용)
+  const electiveSchedules = useMemo(() => {
+    const rawElective = student.book_courses?.['__elective_courses'];
+    if (!rawElective) return [];
+
+    try {
+      const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+      if (!Array.isArray(parsed)) return [];
+
+      const order: Record<string, number> = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+      const formatHour = (val: any): string => {
+        if (val === undefined || val === null || val === '') return '';
+        const num = typeof val === 'string' ? parseInt(String(val).replace(/[^0-9]/g, ''), 10) : Number(val);
+        if (isNaN(num) || num <= 0) return '';
+        let h = num >= 100 ? Math.floor(num / 100) : num;
+        let m = num >= 100 ? num % 100 : 0;
+        if (h <= 12) h += 12;
+        let displayH = h > 12 ? h - 12 : h;
+        if (displayH === 0) displayH = 12;
+        return m === 0 ? `${displayH}시` : `${displayH}시 ${m}분`;
+      };
+
+      const result: { subject: string; dayTimes: { day: string; timeStr: string; isToday: boolean }[] }[] = [];
+
+      parsed.forEach((c: any) => {
+        if (!c || c.is_deleted === true) return;
+        const subject = (c.subject || c.course_name || c.name || '특강').trim();
+        let days: string[] = [];
+        if (Array.isArray(c.days)) {
+          days = c.days.filter((d: any) => typeof d === 'string' && d.trim());
+        } else if (typeof c.days === 'string') {
+          days = c.days.split(',').map((d: string) => d.trim()).filter(Boolean);
+        }
+
+        const sortedDays = days.sort((a, b) => (order[a] || 0) - (order[b] || 0));
+        const dayTimes: { day: string; timeStr: string; isToday: boolean }[] = [];
+
+        sortedDays.forEach(day => {
+          const dayScheduleHour = c.schedules?.[day]?.[0];
+          const hoursArrHour = Array.isArray(c.hours) ? c.hours[0] : null;
+          const rawTime = dayScheduleHour ?? hoursArrHour ?? c.time;
+          const timeStr = formatHour(rawTime);
+          dayTimes.push({
+            day,
+            timeStr,
+            isToday: day === currentDay
+          });
+        });
+
+        if (dayTimes.length > 0) {
+          result.push({ subject, dayTimes });
+        }
+      });
+
+      return result;
+    } catch {
+      return [];
+    }
+  }, [student.book_courses, currentDay]);
 
   const handleCardClick = (e: React.MouseEvent) => {
     try {
@@ -1207,23 +1272,22 @@ function StudentRowItem({
               </span>
             )}
             {isMakeup && !isSelected && !isChecked && (
-              student.isScheduledToday ? (
-                <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-tight ${
-                  isLight 
-                    ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-xs' 
-                    : 'bg-blue-500/20 text-blue-400 border-blue-500/20'
-                }`}>
-                  {timeDisplayInfo.badgeText || '이동'}
-                </span>
-              ) : (
-                <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-tight ${
-                  isLight 
-                    ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-xs' 
-                    : 'bg-emerald-500/20 text-emerald-500 border-emerald-500/20'
-                }`}>
-                  {timeDisplayInfo.badgeText || '보강'}
-                </span>
-              )
+              <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-tight ${
+                isLight 
+                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200 shadow-xs' 
+                  : 'bg-emerald-500/20 text-emerald-500 border-emerald-500/20'
+              }`}>
+                {timeDisplayInfo.badgeText || '보강'}
+              </span>
+            )}
+            {!isMakeup && isTimeShifted && !isSelected && !isChecked && (
+              <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded border uppercase tracking-tight ${
+                isLight 
+                  ? 'bg-blue-50 text-blue-700 border-blue-200 shadow-xs' 
+                  : 'bg-blue-500/20 text-blue-400 border-blue-500/20'
+              }`}>
+                {timeDisplayInfo.badgeText || '이동'}
+              </span>
             )}
           </div>
           <span className={`text-[11px] font-medium truncate ${isSelected || isChecked ? 'text-blue-100' : (isLight ? 'text-[#37352f]' : 'text-gray-200')}`}>
@@ -1348,6 +1412,32 @@ function StudentRowItem({
             );
           })}
         </div>
+
+        {electiveSchedules.length > 0 && (
+          <div className="flex flex-col gap-0.5 mt-1 border-t border-dashed border-white/5 pt-0.5">
+            {electiveSchedules.map((item, idx) => (
+              <div key={`${item.subject}-${idx}`} className="flex items-center gap-1 text-[9.5px]">
+                <span className={`font-bold px-1 py-0.2 rounded text-[8.5px] ${isLight ? 'bg-indigo-50 text-indigo-700' : 'bg-indigo-500/15 text-indigo-300'}`}>
+                  {item.subject}
+                </span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {item.dayTimes.map((dt, dIdx) => (
+                    <div key={dIdx} className={`flex items-center gap-0.5 px-1 py-0.2 rounded-md ${dt.isToday ? (isLight ? 'bg-indigo-50 ring-1 ring-indigo-200' : 'bg-white/10 ring-1 ring-indigo-500/30') : ''}`}>
+                      <span className={`text-[10px] font-bold ${dt.isToday ? (isLight ? 'text-indigo-800 font-black' : 'text-indigo-300 font-black') : (isLight ? 'text-gray-600' : 'text-gray-300')}`}>
+                        {dt.day}
+                      </span>
+                      {dt.timeStr && (
+                        <span className={`text-[10px] font-black leading-none ${dt.isToday ? (isLight ? 'text-indigo-900 font-black' : 'text-indigo-200 font-black') : (isLight ? 'text-indigo-600' : 'text-indigo-400/90')}`}>
+                          {dt.timeStr}
+                        </span>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
       
       <div className="flex items-center gap-2 shrink-0 ml-2">

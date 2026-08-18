@@ -35,6 +35,7 @@ academy-planner/
 │   └── student/
 │       ├── LearningDashboard.tsx # 학생 모바일 메인 학습 카드 (학원공부, 숙제, 오늘테스트)
 │       └── TextbookSystem.tsx   # 교재 시스템 및 진도 체크리스트
+├── md/                         # 다른 AI 공유용 핵심 문서 모음 (DB 스키마, 권한, 폴더 구조 등)
 ├── hooks/                      # 공통 전역 커스텀 훅 (교재 시스템 상태 등)
 ├── lib/
 │   ├── sessionFieldMap.ts      # TodaySheet 컬럼과 DB 컬럼 간 중앙 매핑 정의
@@ -68,11 +69,11 @@ academy-planner/
 ### 2) 데이터 단일 출처 (Single Source of Truth) & 수동 이월 원칙
 - **학생 미션(`mission`) / 주의점(`management_notes`) / 안내장(`special_notes`)**:
   - 과거 일지 데이터를 페이지 로드 시 자동으로 끌어와서 셀을 채우는 자동 수혈(Past Fallback)을 **100% 금지**합니다.
-  - 미션은 **헤더의 요술봉(`🪄`) 버튼을 눌렀을 때만 선택적으로 최신 과거 기록을 이월**하며, 작성되지 않은 날짜의 셀은 100% 빈 칸으로 깔끔하게 시작됩니다.
+  - 미션은 **헤더의 요술봉(`🪄`) 버튼을 눌렀을 때만 선택적으로 최신 과거 기록을 이월**하며, 작성되지 않은 날짜의 셀은 100% 빈 칸으로 시작됩니다.
 
 ### 3) TodaySheet 입력 및 DOM Sync 하이브리드 구조
 - 대용량 그리드 렌더링 성능 확보를 위해 `TodaySheetCell`은 React State 제어와 함께 `lib/todaySheetDomSync.ts`를 통해 `requestAnimationFrame` 단위로 DOM `textarea.value`와 `scrollHeight`를 직접 동기화합니다.
 - 셀을 선택하고 백스페이스/Delete 키로 지우거나 복사/붙여넣기 시 0.1밀리초 내로 DOM과 로컬 State가 매끄럽게 동기화됩니다.
 
 ### 4) `ams_students` 데이터 보호 규칙
-- 시간표 저장(`ams_timetables`) 및 일지 저장 로직이 `ams_students`의 `class_days`나 `day_schedules`를 Update하거나 덮어쓰는 코드를 추가하는 것을 엄격히 금지합니다.
+- 시간표 저장(`ams_timetables`) 및 일지 저장 로직이 `ams_students`의 `class_days`나 `day_schedules`를 Update하거나 덮어쓰는 코드를 엄격히 금지합니다.

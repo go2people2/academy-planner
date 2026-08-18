@@ -3,13 +3,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle, ClipboardCheck, Calendar, ChevronDown, RefreshCw } from 'lucide-react';
+import { Loader2, BookOpen, TrendingUp, MessageSquare, Globe, ExternalLink, FileText, Lock, Check, History, AlertTriangle, ClipboardCheck, Calendar, ChevronDown, RefreshCw, Video } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
 import { getInitial } from '@/lib/utils';
-import { TextbookOption, ExamSchedule } from '@/types/dashboard';
-
-// 💡 분리된 컴포넌트 임포트
+import TestAnswerModal from '@/components/dashboard/TestAnswerModal';
+import VideoPlayerModal from '@/components/common/VideoPlayerModal';
+import StudentLectureTab from '@/components/student/StudentLectureTab';
 import StudentHeader from '@/components/student/StudentHeader';
 import LearningDashboard from '@/components/student/LearningDashboard';
 import TextbookSystem from '@/components/student/TextbookSystem';
@@ -49,6 +48,38 @@ export default function StudentPortal() {
   const router = useRouter();
   const { slug } = useParams();
   
+  // 🎬 전역 동영상 팝업 모달 상태
+  const [videoModalData, setVideoModalData] = useState<{
+    isOpen: boolean;
+    videoUrl: string;
+    title: string;
+    timestampsText: string;
+  }>({
+    isOpen: false,
+    videoUrl: '',
+    title: '',
+    timestampsText: ''
+  });
+
+  useEffect(() => {
+    const handleOpenVideoModal = (e: Event) => {
+      const customEvent = e as CustomEvent;
+      if (customEvent.detail) {
+        setVideoModalData({
+          isOpen: true,
+          videoUrl: customEvent.detail.videoUrl || '',
+          title: customEvent.detail.title || '학습 동영상 플레이어',
+          timestampsText: customEvent.detail.timestampsText || ''
+        });
+      }
+    };
+
+    window.addEventListener('ams-open-video-modal', handleOpenVideoModal);
+    return () => {
+      window.removeEventListener('ams-open-video-modal', handleOpenVideoModal);
+    };
+  }, []);
+
   const {
     student,
     setStudent,
@@ -932,6 +963,15 @@ export default function StudentPortal() {
             />
           </div>
 
+          <div className={activeTab === 'lecture' ? 'block' : 'hidden lg:block'}>
+            <StudentLectureTab
+              student={student}
+              availableTextbooks={availableTextbooks}
+              academy={academy}
+              isLight={false}
+            />
+          </div>
+
           <div className={activeTab === 'suggestion' ? 'block' : 'hidden lg:block'}>
             <StudentSuggestion 
               suggestion={suggestion} setSuggestion={setSuggestion} 
@@ -984,6 +1024,7 @@ export default function StudentPortal() {
         }
 
         mobileTabs.push(
+          { id: 'lecture', targetCourse: '', label: '강의', icon: <Video size={16} /> },
           { id: 'wrong-answer', targetCourse: '', label: '오답 제출', icon: <AlertTriangle size={16} /> },
           { id: 'exam-submit', targetCourse: '', label: '답안 제출', icon: <FileText size={16} /> },
           { id: 'history', targetCourse: '', label: '히스토리', icon: <History size={16} /> },
@@ -1024,6 +1065,15 @@ export default function StudentPortal() {
           </div>
         );
       })()}
+
+      {/* 🎬 전역 동영상 모달 팝업 수신기 */}
+      <VideoPlayerModal
+        isOpen={videoModalData.isOpen}
+        videoUrl={videoModalData.videoUrl}
+        title={videoModalData.title}
+        timestampsText={videoModalData.timestampsText}
+        onClose={() => setVideoModalData(prev => ({ ...prev, isOpen: false }))}
+      />
 
       {/* 테스트 답안 모달 */}
       <AnimatePresence>

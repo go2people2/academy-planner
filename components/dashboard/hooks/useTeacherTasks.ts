@@ -337,10 +337,29 @@ export function useTeacherTasks({
           if (itemKey.includes('_special_')) {
             const parts = itemKey.split('_special_');
             realStudentId = parts[0];
-            courseName = parts[1] || '특강';
+            let rawCourse = parts.slice(1).join('_special_');
+            rawCourse = rawCourse.replace(/_\d+$/, '').trim();
+
+            const student = students.find(s => s.id === realStudentId || s.originalId === realStudentId);
+            let matchedSubject = (student as any)?.courseName || (student as any)?.electiveCourse?.subject;
+
+            if (!matchedSubject && student?.book_courses?.['__elective_courses']) {
+              try {
+                const parsed = typeof student.book_courses['__elective_courses'] === 'string'
+                  ? JSON.parse(student.book_courses['__elective_courses'])
+                  : student.book_courses['__elective_courses'];
+                if (Array.isArray(parsed) && parsed.length > 0) {
+                  const match = parsed.find((c: any) => c?.subject && (rawCourse.includes(c.subject) || c.subject.includes(rawCourse)));
+                  if (match) matchedSubject = match.subject;
+                  else if (parsed[0]?.subject) matchedSubject = parsed[0].subject;
+                }
+              } catch (e) {}
+            }
+
+            courseName = matchedSubject || (rawCourse && rawCourse !== 'undefined' ? rawCourse : '특강');
           }
 
-          const student = students.find(s => s.id === realStudentId);
+          const student = students.find(s => s.id === realStudentId || s.originalId === realStudentId);
           return buildMakeupPayload({
             studentId: realStudentId,
             studentName: student?.name,

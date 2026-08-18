@@ -44,5 +44,7 @@ next-env.d.ts
 /library/
 /books/
 /scratch/
+/current_work/
+/upload_perplexity/
 check_*.js
 

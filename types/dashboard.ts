@@ -12,6 +12,7 @@ export interface HomeworkItem {
 
 export interface SessionLog {
   id?: string;
+  student_id?: string;
   date: string;
   session_date?: string; // 💡 추가 (구형 스키마 하위 호환성용)
   course_name?: string; // 💡 과목 구분 ('정규', '방학특강', '확통' 등)
@@ -46,6 +47,7 @@ export interface SessionLog {
   timer_started_at?: number; // 💡 추가 (타이머 시작 시각)
   timer_duration?: number; // 💡 추가 (타이머 시간 - 분)
   moved_to_hour?: number | null; // 💡 추가 (시간 이동/보강 시 변경된 교시)
+  from_moved_to_hour?: number | null; // 💡 추가 (시간 이동 시 변경 전 교시 추적용)
   mission?: string; // 💡 추가 (학생용 개별 미션)
   todo_achievement?: number; // 💡 추가 (투두 달성률)
   hasHwTo?: boolean; // 💡 추가 (숙제 이월 여부)
@@ -91,6 +93,7 @@ export interface Student {
   level_tag?: string; // 💡 추가 (반/레벨 태그 정보)
   login_suffix?: string; // 💡 추가 (중복 원생 로그인 추가번호)
   isSpecialClass?: boolean; // 💡 추가 (방학특강 행 여부)
+  isMakeupRow?: boolean; // 💡 추가 (보강 행 여부)
   originalId?: string; // 💡 추가 (원래 학생 ID)
   electiveCourse?: any; // 💡 추가 (방학특강 과목 정보)
   courseName?: string; // 💡 추가 (과목명 - 정규 또는 특강과목명)

@@ -25,7 +25,7 @@
   - 제출 시 완료된 진도/숙제에 포함된 교재 코드(`[BK...]`)를 실제 교재 제목으로 자동 변환(Translation)하여 DB에 저장함으로써 승인 시 교재 제목과 단원명으로 예쁘게 노출됨.
 
 ### ④ TodaySheet 입력 반응속도 & UI 헤더 선명화 (Completed)
-- 셀 선택 후 Backspace / Delete 입력 시 DOM value와 height가 `requestAnimationFrame` 단위로 0.1밀리초 만에 즉시 비워지며 깜빡임 완벽 차단.
+- 셀 선택 후 Backspace / Delete 입력 시 DOM value와 height가 `requestAnimationFrame` 단위로 0.1밀리초 만에 즉시 비워지며 깜빡임 차단.
 - TodaySheet 상단 헤더의 전체 선택 체크박스 테두리(`border-gray-400` / `border-white/30`) 및 `체크박스` ↔ `이름` ↔ `도구` 칼럼 사이의 세로 구분선(`border-r-2 border-r-zinc-700` / `border-r-gray-300`)을 선명하게 강화하여 가시성을 극대화함.
 
 ---

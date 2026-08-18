@@ -223,6 +223,7 @@ useEffect(() => {
               showAllTools={showAllTools}
               onReorderTools={onReorderTools}
               isLight={props.isLight}
+              selectedDate={selectedDate || rowDate}
               onApplyTestPreset={(preset: any, cid: 'test_id' | 'next_quiz') => {
                 states.setFormData((prev: any) => {
                   const updates: any = {};

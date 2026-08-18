@@ -169,12 +169,9 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       }
 
       const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
-      const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !l.is_pure_makeup);
-      const rawMakeupLogs = todayLogs.filter((l: any) => 
-        l.is_pure_makeup || 
-        (l.attendance_status && l.attendance_status.startsWith('보강')) || 
-        (l.attendance_reason && l.attendance_reason.includes('보강'))
-      );
+      const isLogMakeup = (log: any) => log?.is_pure_makeup === true;
+      const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isLogMakeup(l));
+      const rawMakeupLogs = todayLogs.filter((l: any) => isLogMakeup(l));
 
       // 💡 [새로고침 중복 차단] 동일 학생/날짜 보강 세션 중 가장 최신의 1개 보강 세션만 카드 채택!
       const uniqueMakeupMap = new Map<string, any>();
@@ -215,7 +212,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
         const sessionId = mLog.id || mLog.created_at || makeupHour;
         const makeupCardId = `${s.originalId || s.id}_makeup_${sessionId}`;
 
-        const isPureMakeup = mLog.is_pure_makeup || mLog.attendance_reason?.includes('보강') || (!hasRegularSession && mLog.attendance_status?.startsWith('보강'));
+        const isPureMakeup = isLogMakeup(mLog);
         if (hasRegularSession && !isPureMakeup) return;
 
         const mCard = {
@@ -224,6 +221,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
           originalId: s.originalId || s.id,
           courseName: mLog.course_name || '정규',
           __courseType: 'makeup',
+          isMakeupRow: true,
           todaySession: mLog
         };
 
@@ -235,7 +233,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       // 3. 선택과목/특강 카드
       activeElectives.forEach((c: any, cIdx: number) => {
         const courseSubject = c.subject?.trim() || '특강';
-        const electiveLog = todayLogs.find((l: any) => l.course_name === courseSubject);
+        const electiveLog = todayLogs.find((l: any) => l.course_name === courseSubject && !isLogMakeup(l));
         const specialId = `${s.id}_special_${c.id || courseSubject}_${cIdx}`;
         
         expandedResult.push({
@@ -251,7 +249,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
       // 4. 정규 등원일이 아니지만 보강만 있는 학생 (정규 카드/특강 카드가 없는 경우)
       if (!hasRegularSession && activeElectives.length === 0 && makeupLogs.length === 0 && (status.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || session)) {
-        const isMakeupSession = session?.is_pure_makeup || (session?.attendance_status && session.attendance_status.startsWith('보강')) || (session?.attendance_reason && session.attendance_reason.includes('보강'));
+        const isMakeupSession = session ? isLogMakeup(session) : false;
         expandedResult.push({
           ...s,
           courseName: session?.course_name || '정규',
@@ -384,28 +382,80 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
   const handleTimeShift = async (student: any, hour: number) => {
     const day = getDayOfWeek(selectedDate);
-    const regularHours = student.day_schedules?.[day] || [];
-    const isOriginalRegularHour = (() => {
-      if (regularHours.length === 0) return false;
-      const startVal = regularHours[0];
-      let origH = startVal >= 100 ? Math.floor(startVal / 100) : startVal;
-      if (origH > 0 && origH <= 12) origH += 12;
-      
-      let clickH = hour;
-      if (clickH > 0 && clickH <= 12) clickH += 12;
-      
-      return origH === clickH;
+    const isMakeup = student.__courseType === 'makeup' || student.todaySession?.is_pure_makeup === true || String(student.id || '').includes('_makeup_');
+
+    // 💡 [시간 정규화] 시간 포맷(16, 1600, '16:00' 등) 통일
+    const normalizeH = (val: any): number | null => {
+      if (val === null || val === undefined || val === '') return null;
+      const num = parseInt(String(val), 10);
+      if (isNaN(num)) return null;
+      let h = num >= 100 ? Math.floor(num / 100) : num;
+      if (h > 0 && h < 10) h += 12;
+      return h;
+    };
+
+    const clickH = normalizeH(hour);
+
+    // 💡 [원래 시간표 수업 판별] 정규 다중 시간 및 선택과목(특강) 시간표 완벽 일치 판정
+    const isOriginalScheduledHour = !isMakeup && (() => {
+      if (clickH === null) return false;
+
+      // 1. 선택과목인 경우: __elective_courses에서 과목, 요일, 시간 일치 검사
+      if (student.__courseType === 'elective' || student.isSpecialClass) {
+        const rawElective = student.book_courses?.['__elective_courses'];
+        if (!rawElective) return false;
+        try {
+          const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (!Array.isArray(parsed)) return false;
+          const currentSubject = student.courseName || student.electiveCourse?.subject || student.todaySession?.course_name;
+          return parsed.some((c: any) => {
+            if (!c) return false;
+            const cSub = c.subject || c.course_name || c.name;
+            if (currentSubject && cSub !== currentSubject) return false;
+            const days = c.days;
+            const matchesDay = days && (
+              Array.isArray(days)
+                ? days.some((d: any) => typeof d === 'string' && d.trim() === day)
+                : (typeof days === 'string' && days.includes(day))
+            );
+            if (!matchesDay) return false;
+
+            const electiveHours = (c.schedules && Array.isArray(c.schedules[day]) && c.schedules[day].length > 0)
+              ? [normalizeH(c.schedules[day][0])]
+              : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
+
+            if (electiveHours.length > 0) {
+              return electiveHours.includes(clickH);
+            }
+            return false;
+          });
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // 2. 정규 수업인 경우: day_schedules[day]의 시작 시간(첫 번째 시간)과 일치 검사
+      const regSched = student.day_schedules?.[day];
+      const regularStartHour = (Array.isArray(regSched) && regSched.length > 0) ? normalizeH(regSched[0]) : null;
+      return regularStartHour !== null && regularStartHour === clickH;
     })();
 
-    if (isOriginalRegularHour) {
+    const isElective = student.__courseType === 'elective' || student.isSpecialClass;
+    const courseName = isElective
+      ? (student.courseName || student.electiveCourse?.subject || student.__courseSubject || '선택과목')
+      : (student.courseName || student.todaySession?.course_name || '정규');
+
+    if (isOriginalScheduledHour) {
       const currentStatus = student.todaySession?.attendance_status || '';
       const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:')) 
         ? ATTENDANCE_STATUS.BEFORE 
         : currentStatus;
       await localSave(student, { 
+        course_name: courseName,
         moved_to_hour: null, 
         attendance_status: finalStatus,
-        attendance_reason: null
+        attendance_reason: null,
+        is_pure_makeup: false
       });
     } else {
       const isPureMakeupDay = student.__courseType === 'makeup' || (!student.isScheduledToday && student.todaySession?.attendance_status?.startsWith('보강'));
@@ -416,9 +466,11 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
         : (student.todaySession?.attendance_status && !student.todaySession.attendance_status.startsWith('보강') ? student.todaySession.attendance_status : ATTENDANCE_STATUS.BEFORE);
 
       await localSave(student, { 
+        course_name: courseName,
         moved_to_hour: hour, 
         attendance_status: newAttStatus, 
-        attendance_reason: '시간 변경' 
+        attendance_reason: '시간 변경',
+        is_pure_makeup: isMakeup ? true : false
       });
     }
     setActiveStudent(null);
@@ -903,7 +955,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                               <MoreHorizontal size={12} />
                             </button>
                           </div>
-                          <div className="text-center px-1"><h3 className={`text-2xl font-bold tracking-tight leading-none ${isPureAttend ? (isLight ? 'text-emerald-950 font-bold' : 'text-gray-400') : (isLight ? 'text-[#0f172a]' : 'text-white')}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
+                          <div className="text-center px-1"><h3 className={`text-2xl font-bold tracking-tight leading-none ${isPureAttend ? (isLight ? 'text-gray-500 font-semibold' : 'text-gray-500') : (isLight ? 'text-[#0f172a]' : 'text-white')}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
                             {(() => { 
                               const isES = s.grade.includes('초'); 
                               const isHS = s.grade.includes('고'); 
@@ -932,7 +984,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                             })()}
                           </div></div>
                           {(() => {
-                            const isMakeupCard = s.__courseType === 'makeup';
+                            const isMakeupCard = s.__courseType === 'makeup' || s.todaySession?.is_pure_makeup === true;
                             const badgeText = isMakeupCard 
                               ? '보강' 
                               : (isMakeupActive || (s.isScheduledToday && status.startsWith('보강'))

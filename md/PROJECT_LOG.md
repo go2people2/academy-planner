@@ -294,13 +294,9 @@ AI와 협업하여 앱을 장기적으로 안정하게 운영하기 위한 원�
    - **요구사항**: 학생이 가진 활성 교재 목록(예: 3개 교재)별로 가장 최근에 수행된 단원 및 페이지 위치를 **[진도파악]** 컬럼에 매일 자동으로 역추적/요약하여 갱신해 주는 기능.
    - **구현 방안**: 추가 DB 컬럼을 무분별하게 생성하지 않고, 기존 일지 데이터(`allLogs` 및 `completed_classwork_json`)를 기반으로 각 교재의 최신 단원을 실시간으로 역추적하여 표시하는 자동화 엔진 형태로 구축 예정.
 
-
-
-
-
-
-
-
-
-
-
+## 18. 최근 작업 기록 (2026-08-16)
+- [x] **Data v3 교재별 Excel 표준 확정**:
+    - `master`, `unit_page`, `problems`, `media`, `media_sources` 5탭 구조로 최적화 및 문서 정비 완료 (`DATA_V3_MINIMUM_SPEC.md`, `DATA_V3_EXCEL_TEMPLATE_GUIDE.md`).
+    - 문제별 Cue 타임스탬프 정보는 `problems` 탭으로 통합 명시 (`amf_video_url`, `youtube_video_url` 컬럼 제거).
+    - Excel 시간 필드(`start_time`, `end_time`, `duration_time`)는 사람이 읽기 쉬운 기간 형식(`m:ss` 또는 `h:mm:ss`)으로 작성하고 업로더가 DB 저장 시 초 단위(`seconds`)로 변환.
+    - 테넌트 보안: `academy_id`는 엑셀에 작성하지 않고 서버가 세션 기반으로 강제 부여.

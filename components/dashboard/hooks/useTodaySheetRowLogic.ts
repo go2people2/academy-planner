@@ -60,16 +60,68 @@ export function useTodaySheetRowLogic({
 
   const getInitialFormData = useCallback((date: string) => {
     const isToday = date === selectedDate;
-    const targetCourse = (student.courseName || (student.isSpecialClass ? '특강' : '정규')).trim();
-    const session = (isToday && student.todaySession?.date === date)
-      ? student.todaySession 
-      : (student.allLogs || []).find((l: any) => {
-          const lDate = l.date || l.session_date;
-          if (lDate !== date) return false;
-          const logCourse = (l.course_name || '정규').trim();
-          if (targetCourse === '정규') return !l.course_name || logCourse === '정규';
-          return logCourse === targetCourse;
-        });
+    const isSpecial = student.isSpecialClass;
+    const isMakeupRow =
+      student.isMakeupRow || (student as any).__courseType === 'makeup';
+
+    const targetCourse = (
+      isSpecial
+        ? (student.courseName || student.electiveCourse?.subject || '특강')
+        : (student.todaySession?.course_name || '정규')
+    ).trim();
+
+    const normalizeMovedHour = (value: any): number | null => {
+      if (value === null || value === undefined || value === '') return null;
+
+      const parsed = parseInt(String(value), 10);
+      if (Number.isNaN(parsed)) return null;
+
+      return parsed >= 100 ? Math.floor(parsed / 100) : parsed;
+    };
+
+    const rowSessionId = student.todaySession?.id;
+    const hasPersistedSessionId = Boolean(
+      rowSessionId && !String(rowSessionId).startsWith('temp')
+    );
+
+    const targetMovedHour = normalizeMovedHour(
+      student.todaySession?.moved_to_hour
+    );
+
+    const isSessionMatching = (s: any) => {
+      if (!s) return false;
+
+      // DB 세션 id가 있으면, 현재 행은 그 id의 세션만 사용한다.
+      if (hasPersistedSessionId) {
+        return s.id === rowSessionId;
+      }
+
+      const sDate = s.date || s.session_date;
+      if (sDate !== date) return false;
+
+      const sCourse = (s.course_name || '정규').trim();
+
+      if (isMakeupRow) {
+        return (
+          s.is_pure_makeup === true &&
+          sCourse === targetCourse &&
+          normalizeMovedHour(s.moved_to_hour) === targetMovedHour
+        );
+      }
+
+      if (isSpecial) {
+        return sCourse === targetCourse && s.is_pure_makeup !== true;
+      }
+
+      return (
+        (!s.course_name || sCourse === '정규') &&
+        s.is_pure_makeup !== true
+      );
+    };
+
+    const session = isSessionMatching(student.todaySession)
+      ? student.todaySession
+      : (student.allLogs || []).find((log: any) => isSessionMatching(log));
 
     const mergeBooks = (existingJson: any[] | undefined) => {
       const assigned = student.assigned_books || [];
@@ -190,6 +242,7 @@ export function useTodaySheetRowLogic({
       mission: translateBookCodes(initialMission),
       management_notes: translateBookCodes(initialNotes),
       moved_to_hour: session?.moved_to_hour,
+      is_pure_makeup: isMakeupRow ? true : false,
       isTodayClassDay
     };
   }, [student.allLogs, student.assigned_books, student.todaySession, student.management_notes, student.class_days, selectedDate, translateBookCodes]);
@@ -243,7 +296,7 @@ export function useTodaySheetRowLogic({
 
     if (typeof updatesOrField === 'string') {
       // ✅ [공용 계약 유지] onSave(colId, value, options?)
-      const fieldMap: any = { test_id: 'test_id', classwork: 'classwork_text', completed_classwork: 'completed_classwork_text', assign: 'homework_text', next_quiz: 'next_quiz_text', mission: 'mission', notes: 'special_notes', management_notes: 'management_notes', test_score: 'test_score', test_total_count: 'test_total_count' };
+      const fieldMap: any = { attendance: 'attendance_status', attendance_status: 'attendance_status', test_id: 'test_id', classwork: 'classwork_text', completed_classwork: 'completed_classwork_text', assign: 'homework_text', next_quiz: 'next_quiz_text', mission: 'mission', notes: 'special_notes', management_notes: 'management_notes', test_score: 'test_score', test_total_count: 'test_total_count' };
       const dbKey = fieldMap[updatesOrField] || updatesOrField;
       finalUpdates = { [dbKey]: valueOrOptions };
       options = maybeOptions || {};
@@ -378,13 +431,12 @@ export function useTodaySheetRowLogic({
       nextStatus = ATTENDANCE_STATUS.PRESENT + timeSuffix; // 보강, 수업전, 기타 빈 상태 ➡️ 출석으로 첫 순환 개시
     }
     
-    console.log(`[ATTENDANCE_TOGGLE] Student: ${student.name}, current: ${currentStatus}, next: ${nextStatus}`);
+    const isMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || String(student.id || '').includes('_makeup_') || formData.is_pure_makeup === true;
     
     const extraUpdate: any = { 
-      attendance_status: nextStatus
+      attendance_status: nextStatus,
+      is_pure_makeup: isMakeup ? true : false,
     };
-
-
 
     setFormData((prev: any) => ({ ...prev, ...extraUpdate }));
     handleSave(extraUpdate);
@@ -392,61 +444,113 @@ export function useTodaySheetRowLogic({
 
   const handleSupplementTimeSelect = async (hour: number) => {
     const day = getDayOfWeek(rowDate);
-    const regularHours = student.day_schedules?.[day] || [];
+    const isMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || String(student.id || '').includes('_makeup_') || formData.is_pure_makeup === true;
     
-    const isOriginalRegularHour = (() => {
-      if (regularHours.length === 0) return false;
-      const startVal = regularHours[0];
-      let origH = startVal >= 100 ? Math.floor(startVal / 100) : startVal;
-      if (origH > 0 && origH <= 12) origH += 12;
-      
-      let clickH = hour;
-      if (clickH > 0 && clickH <= 12) clickH += 12;
-      
-      return origH === clickH;
+    // 💡 [시간 정규화] 시간 포맷(16, 1600, '16:00' 등) 통일
+    const normalizeH = (val: any): number | null => {
+      if (val === null || val === undefined || val === '') return null;
+      const num = parseInt(String(val), 10);
+      if (isNaN(num)) return null;
+      let h = num >= 100 ? Math.floor(num / 100) : num;
+      if (h > 0 && h < 10) h += 12;
+      return h;
+    };
+
+    const clickH = normalizeH(hour);
+
+    // 💡 [원래 시간표 수업 판별] 정규 다중 시간 및 선택과목(특강) 시간표 완벽 일치 판정
+    const isOriginalScheduledHour = !isMakeup && (() => {
+      if (clickH === null) return false;
+
+      // 1. 선택과목인 경우: __elective_courses에서 과목, 요일, 시간 일치 검사
+      if (student.isSpecialClass || (student as any).__courseType === 'elective') {
+        const rawElective = student.book_courses?.['__elective_courses'];
+        if (!rawElective) return false;
+        try {
+          const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (!Array.isArray(parsed)) return false;
+          const currentSubject = student.courseName || (student as any).electiveCourse?.subject || (student as any).__courseSubject;
+          return parsed.some((c: any) => {
+            if (!c) return false;
+            const cSub = c.subject || c.course_name || c.name;
+            if (currentSubject && cSub !== currentSubject) return false;
+            const days = c.days;
+            const matchesDay = days && (
+              Array.isArray(days)
+                ? days.some((d: any) => typeof d === 'string' && d.trim() === day)
+                : (typeof days === 'string' && days.includes(day))
+            );
+            if (!matchesDay) return false;
+
+            const electiveHours = (c.schedules && Array.isArray(c.schedules[day]) && c.schedules[day].length > 0)
+              ? [normalizeH(c.schedules[day][0])]
+              : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
+
+            if (electiveHours.length > 0) {
+              return electiveHours.includes(clickH);
+            }
+            return false;
+          });
+        } catch (e) {
+          return false;
+        }
+      }
+
+      // 2. 정규 수업인 경우: day_schedules[day]의 시작 시간(첫 번째 시간)과 일치 검사
+      const regSched = student.day_schedules?.[day];
+      const regularStartHour = (Array.isArray(regSched) && regSched.length > 0) ? normalizeH(regSched[0]) : null;
+      return regularStartHour !== null && regularStartHour === clickH;
     })();
 
-    const isElective = (student as any).__courseType === 'elective' || student.isSpecialClass;
-    const courseName = student.courseName || (isElective ? ((student as any).__courseSubject || '특강') : '정규');
+    // 💡 [과목명 보존] 선택과목 행이면 student.courseName 또는 electiveCourse.subject를 무조건 최우선 사용
+    const courseName = student.isSpecialClass
+      ? (student.courseName || (student as any).electiveCourse?.subject || (student as any).__courseSubject || '특강')
+      : (student.todaySession?.course_name || student.courseName || '정규');
 
-    if (isOriginalRegularHour) {
+    const previousMovedToHour = student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null 
+      ? student.todaySession.moved_to_hour 
+      : (formData.moved_to_hour !== undefined && formData.moved_to_hour !== null ? formData.moved_to_hour : null);
+
+    if (isOriginalScheduledHour) {
       const currentStatus = formData.attendance_status || '';
-      const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:')) 
-        ? ATTENDANCE_STATUS.BEFORE 
-        : currentStatus;
+      const finalStatus = currentStatus || ATTENDANCE_STATUS.BEFORE;
       
       const payload: any = {
         course_name: courseName,
         moved_to_hour: null,
+        from_moved_to_hour: previousMovedToHour,
         attendance_status: finalStatus,
-        attendance_reason: null
+        attendance_reason: null,
+        is_pure_makeup: false,
       };
-      if (student.todaySession?.id) payload.id = student.todaySession.id;
+      if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
 
       setFormData((prev: any) => ({ 
         ...prev, 
         moved_to_hour: null, 
         attendance_status: finalStatus,
-        attendance_reason: null
+        attendance_reason: null,
+        is_pure_makeup: false,
       }));
       await onSave(student.id, payload);
     } else {
       const formatHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-      const isPureMakeupDay = (student as any).__courseType === 'makeup' || (!student.isScheduledToday && formData.attendance_status?.startsWith('보강'));
       
-      const newAttStatus = isPureMakeupDay 
+      const newAttStatus = isMakeup 
         ? `보강:${formatHour}` 
-        : (formData.attendance_status && formData.attendance_status !== '보강' && !formData.attendance_status.startsWith('보강:') ? formData.attendance_status : ATTENDANCE_STATUS.BEFORE);
+        : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
 
       const hhmmHour = hour >= 100 ? hour : hour;
 
       const payload: any = {
         course_name: courseName,
         moved_to_hour: hhmmHour,
+        from_moved_to_hour: previousMovedToHour,
         attendance_status: newAttStatus,
-        attendance_reason: '시간 변경'
+        attendance_reason: '시간 변경',
+        is_pure_makeup: isMakeup ? true : false,
       };
-      if (student.todaySession?.id) payload.id = student.todaySession.id;
+      if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
 
       setFormData((prev: any) => ({ ...prev, ...payload }));
       await onSave(student.id, payload);

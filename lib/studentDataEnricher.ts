@@ -65,17 +65,29 @@ export const parseTestResult = (testResultRaw: any, testStatus: string) => {
 export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
   const nq = parseHomeworkTo(l.homework_to);
   const tr = parseTestResult(l.test_result, l.test_status);
+  const sessionDate = l.session_date || l.date;
 
   return {
-    id: l.id, date: l.session_date, course_name: l.course_name || '정규', status: (l.status || 'none') as StudentStatus,
+    id: l.id,
+    student_id: l.student_id,
+    date: sessionDate,
+    session_date: sessionDate,
+    course_name: l.course_name || '정규',
+    status: (l.status || 'none') as StudentStatus,
     attendance_status: normalizeAttendanceStatus(l.attendance_status), 
     special_notes: translateBookCodes(l.special_notes || '', textbooks),
-    classwork_text: translateBookCodes(l.classwork_text || '', textbooks), classwork_json: l.classwork_json || [],
+    classwork_text: translateBookCodes(l.classwork_text || '', textbooks),
+    classwork_json: l.classwork_json || [],
     completed_classwork_text: translateBookCodes(l.completed_classwork_text || '', textbooks), 
     completed_classwork_json: l.completed_classwork_json || [],
-    homework_text: translateBookCodes(l.homework_text || '', textbooks), homework_json: l.homework_json || [],
-    next_quiz_text: translateBookCodes(nq.text, textbooks), next_quiz_json: nq.json, next_quiz_cut: nq.text ? nq.cut : (nq.hasHwTo ? nq.cut : 0), next_quiz_trial: nq.text ? nq.trial : (nq.hasHwTo ? nq.trial : 1),
-    test_id: translateBookCodes(l.test_status || '', textbooks), test_score: l.test_score, 
+    homework_text: translateBookCodes(l.homework_text || '', textbooks),
+    homework_json: l.homework_json || [],
+    next_quiz_text: translateBookCodes(nq.text, textbooks),
+    next_quiz_json: nq.json,
+    next_quiz_cut: nq.text ? nq.cut : (nq.hasHwTo ? nq.cut : 0),
+    next_quiz_trial: nq.text ? nq.trial : (nq.hasHwTo ? nq.trial : 1),
+    test_id: translateBookCodes(l.test_status || '', textbooks),
+    test_score: l.test_score, 
     test_score_type: tr.sType,
     test_total_count: tr.tTotal,
     test_cut: tr.tCut, 
@@ -96,7 +108,9 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
       }
       return null;
     })(),
-    hasHwTo: nq.hasHwTo, hasTestResult: tr.hasTestResult,
+    is_pure_makeup: l.is_pure_makeup === true ? true : (l.is_pure_makeup === false ? false : undefined),
+    hasHwTo: nq.hasHwTo,
+    hasTestResult: tr.hasTestResult,
     hw_checked_today: tr.hwCheckedToday,
     hw_passed_today: tr.hwPassedToday,
     approval_status: l.approval_status || 'none',
@@ -299,7 +313,19 @@ export const getEnrichedStudentData = (
   const history = calculateStudentHistory(logs, selectedDate);
   const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays, '정규');
   const todayLogs = logs.filter((l: any) => String(l.date || l.session_date) === String(selectedDate));
-  const isMakeupLog = (l: any) => l.is_pure_makeup || (l.attendance_status && l.attendance_status.startsWith('보강')) || (l.attendance_reason && l.attendance_reason.includes('보강'));
+  // 💡 순수 보강 판정: is_pure_makeup === true 가 유일한 정식 기준
+  // (과거 레거시 데이터 호환: is_pure_makeup 필드가 undefined/null이고 attendance_status가 '보강'인 경우만 제한적 fallback)
+  const isLegacyMakeupLog = (l: any): boolean => {
+    if (!l) return false;
+    if (l.is_pure_makeup === true) return true;
+    if (l.is_pure_makeup === false) return false;
+    return String(l.attendance_status || '').startsWith('보강');
+  };
+  const isMakeupLog = (l: any): boolean => {
+    if (!l) return false;
+    return l.is_pure_makeup === true || isLegacyMakeupLog(l);
+  };
+
   const movedTodayLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
   const regularTodayLog = movedTodayLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l));
   
@@ -319,12 +345,12 @@ export const getEnrichedStudentData = (
 
   const { isHoliday, isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, allClassDays, academy?.operation_settings?.holidays);
   
-  const targetLogForStatus = regularTodayLog || todayLogs[0];
-  const isMakeup = targetLogForStatus?.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT) || 
-                   (targetLogForStatus?.moved_to_hour !== undefined && targetLogForStatus?.moved_to_hour !== null && targetLogForStatus?.moved_to_hour > 0);
+  const targetLogForStatus = regularTodayLog || todayLogs.find((l: any) => isMakeupLog(l)) || todayLogs[0];
+  const isPureMakeupSession = targetLogForStatus?.is_pure_makeup === true;
+  const isMovedHourSession = targetLogForStatus?.moved_to_hour !== undefined && targetLogForStatus?.moved_to_hour !== null && targetLogForStatus?.moved_to_hour > 0;
   const isSkipped = targetLogForStatus?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
   
-  const isTodayClassDay = (isScheduledToday || isMakeup || todayLogs.length > 0) && !isSkipped;
+  const isTodayClassDay = (isScheduledToday || isPureMakeupSession || isMovedHourSession || todayLogs.length > 0) && !isSkipped;
   
   const pastLogs = logs
     .filter(l => l.date < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))

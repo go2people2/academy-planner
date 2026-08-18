@@ -299,7 +299,7 @@ function ExamPaperDetail({ exam, onEdit, onEditAnswerKey, onBack }: {
 
   // 💡 개별 학생의 시험 제출 이력 삭제
   const handleDeleteSubmission = async (sub: any) => {
-    const confirmMsg = `${sub.student_name} 학생의 시험 제출 이력을 정말로 삭제하시겠습니까?\nDaily Sheet(일지)의 테스트 결과와 점수도 함께 초기화됩니다.`;
+    const confirmMsg = `${sub.student_name} 학생의 시험 제출 이력을 정말로 삭제하시겠습니까?\nTodaySheet(일지)의 테스트 결과와 점수도 함께 초기화됩니다.`;
     if (!confirm(confirmMsg)) return;
 
     try {

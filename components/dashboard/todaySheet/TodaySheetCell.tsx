@@ -115,6 +115,7 @@ export interface TodaySheetCellProps {
   onReorderTools?: (draggedId: string, targetId: string) => void;
   isOtherClassSection?: boolean;
   onTimePickerClick?: (e: React.MouseEvent) => void;
+  selectedDate?: string;
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({ 
@@ -138,6 +139,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   masterTextbooks,
   defaultScoreCut = 80,
   defaultCountCut = 2,
+  selectedDate,
   cooperatingCells,
   onRemoveFromToday,
   toolsOrder,
@@ -366,18 +368,151 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onDragEnd={isDeleteDraggable ? () => { delete (window as any)._draggedToolId; } : undefined}
             onMouseDown={(e) => {
               e.stopPropagation();
-              e.preventDefault();
               const sAny = student as any;
-              const isMakeup = sAny?.isMakeupRow || String(student?.id || '').includes('_makeup_') || (formData?.attendance_status && formData.attendance_status.startsWith('보강'));
-              const isSpecial = sAny?.isSpecialClass || String(student?.id || '').includes('_special_');
               
-              if (isMakeup) {
+              // 1. 순수 보강 판정 (보조 안전장치 및 명시적 보강 플래그)
+              const isMakeupRow = sAny?.isMakeupRow === true ||
+                (sAny?.__courseType === 'makeup') ||
+                String(student?.id || '').includes('_makeup_') ||
+                formData?.is_pure_makeup === true ||
+                String(formData?.attendance_status || '').startsWith('보강');
+
+              // 💡 [안전 보장] 보강 행은 시간표 fallback을 참조하지 않고 즉시 Remove로 처리
+              if (isMakeupRow) {
                 onRemoveFromToday?.(student.id, '보강 삭제', 'delete');
-              } else if (isSpecial) {
-                onRemoveFromToday?.(student.id, '특강 삭제', 'delete');
+                return;
+              }
+
+              // 2. 해당 날짜 요일(dayKey) 계산
+              const targetDate = selectedDate || formData?.date || formData?.session_date || student.todaySession?.session_date || student.todaySession?.date || '';
+              const dayKey = targetDate ? getDayOfWeek(targetDate) : '';
+              if (!dayKey) {
+                onRemoveFromToday?.(student.id, '수업 삭제', 'delete');
+                return;
+              }
+
+              // 3. 시간 정규화 유틸 함수
+              const normalizeH = (val: any): number | null => {
+                if (val === null || val === undefined || val === '') return null;
+                const num = parseInt(String(val), 10);
+                if (isNaN(num)) return null;
+                let h = num >= 100 ? Math.floor(num / 100) : num;
+                if (h > 0 && h < 10) h += 12;
+                return h;
+              };
+
+              // 4. 현재 행의 실제 수업 시간(currentHour) 추출
+              // 우선순위: timeSectionLabel > formData.moved_to_hour > todaySession.moved_to_hour > 단일 등록 시간
+              let currentHour: number | null = null;
+              if (timeSectionLabel) {
+                const parsed = parseInt(timeSectionLabel.replace(/[^0-9]/g, ''), 10);
+                if (!isNaN(parsed) && parsed > 0) currentHour = normalizeH(parsed);
+              }
+              if (currentHour === null) {
+                currentHour = normalizeH(formData?.moved_to_hour ?? student.todaySession?.moved_to_hour);
+              }
+              if (currentHour === null) {
+                const daySched = student.day_schedules?.[dayKey];
+                if (Array.isArray(daySched) && daySched.length === 1) {
+                  currentHour = normalizeH(daySched[0]);
+                }
+              }
+
+              let isScheduledInTimetable = false;
+
+              if (!isMakeupRow && dayKey) {
+                if (sAny?.isSpecialClass) {
+                  // 5. 선택과목 판정: 과목, 요일, 시간이 학생의 __elective_courses에 실제 등록되어 있는지 검증
+                  const rawElective = student.book_courses?.['__elective_courses'];
+                  if (rawElective) {
+                    try {
+                      const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+                      if (Array.isArray(parsed)) {
+                        const currentSubject = student.courseName || sAny?.electiveCourse?.subject;
+                        isScheduledInTimetable = parsed.some((c: any) => {
+                          if (!c) return false;
+                          const cSub = c.subject || c.course_name || c.name;
+                          if (currentSubject && cSub !== currentSubject) return false;
+                          const days = c.days;
+                          const matchesDay = days && (
+                            Array.isArray(days)
+                              ? days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
+                              : (typeof days === 'string' && days.includes(dayKey))
+                          );
+                          if (!matchesDay) return false;
+
+                          const electiveHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
+                            ? [normalizeH(c.schedules[dayKey][0])]
+                            : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
+
+                          if (electiveHours.length > 0 && currentHour !== null) {
+                            return electiveHours.includes(currentHour);
+                          }
+                          return true;
+                        });
+                      }
+                    } catch (e) {}
+                  }
+                } else {
+                  // 6. 정규 수업 판정: student.day_schedules[dayKey] 안에 현재 행의 수업 시간이 포함되어 있는지 검증
+                  const scheduledHours: number[] = (student.day_schedules?.[dayKey] || [])
+                    .map(normalizeH)
+                    .filter((h: number | null): h is number => h !== null);
+
+                  const isClassDay = (student.class_days || []).includes(dayKey);
+
+                  if (isClassDay || scheduledHours.length > 0) {
+                    if (currentHour !== null && scheduledHours.length > 0) {
+                      isScheduledInTimetable = scheduledHours.includes(currentHour) || (formData?.moved_to_hour !== null && formData?.moved_to_hour !== undefined);
+                    } else {
+                      isScheduledInTimetable = isClassDay;
+                    }
+                  }
+                }
+              }
+
+              if (isScheduledInTimetable) {
+                // 💡 [정책 1: 시간표 등록 수업 -> Refresh]
+                const courseLabel = sAny?.isSpecialClass 
+                  ? (student.courseName || sAny?.electiveCourse?.subject || '선택과목')
+                  : '정규';
+                const confirmMsg = `오늘 ${student.name} 학생의 [${courseLabel}] 수업 당일 기록(출결, 진도, 숙제, 테스트 등)을 초기화하시겠습니까?\n\n※ 시간표 수업 행은 그대로 유지되며, 당일 작성된 내용만 초기 상태로 리셋됩니다.`;
+                if (!window.confirm(confirmMsg)) return;
+
+                // 행은 유지하고 당일 출결, 시간 이동, 전체 당일 기록 상태만 초기 상태로 리셋
+                const resetPayload: any = {
+                  attendance_status: ATTENDANCE_STATUS.BEFORE,
+                  attendance_reason: null,
+                  status: 'none',
+                  moved_to_hour: null,
+                  is_pure_makeup: false,
+                  classwork_text: '',
+                  classwork_json: [],
+                  completed_classwork_text: '',
+                  completed_classwork_json: [],
+                  homework_text: '',
+                  homework_json: [],
+                  special_notes: '',
+                  test_id: null,
+                  test_status: null,
+                  test_score: null,
+                  test_answers: null,
+                  test_completed: null,
+                  test_cut: 0,
+                  mission: '',
+                  todo_achievement: 0,
+                  next_quiz_text: '',
+                  next_quiz_cut: 0,
+                  next_quiz_trial: 1,
+                  next_quiz_json: [],
+                  hw_checked_today: false,
+                  hw_passed_today: false,
+                  approval_status: 'none'
+                };
+                onSave?.(resetPayload);
               } else {
-                // 정규 수업일 경우 출결 상태를 '수업전'으로 초기화
-                onSave?.('attendance', ATTENDANCE_STATUS.BEFORE);
+                // 💡 [정책 2: 시간표 외 수업 / 순수 보강 -> Remove]
+                onRemoveFromToday?.(student.id, '보강 삭제', 'delete');
               }
             }}
             onClick={(e) => {
@@ -838,24 +973,78 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           const rawStatus = formData.attendance_status || '';
           const cleanStatus = rawStatus.includes(':') ? rawStatus.split(':')[0] : rawStatus;
 
-          const hasExplicitStatus = cleanStatus && [
+          const hasRealAttendance = cleanStatus && [
             ATTENDANCE_STATUS.PRESENT, 
             ATTENDANCE_STATUS.ABSENT, 
             ATTENDANCE_STATUS.LATE, 
             ATTENDANCE_STATUS.EXCLUDED, 
-            ATTENDANCE_STATUS.CANCELED,
-            ATTENDANCE_STATUS.BEFORE
+            ATTENDANCE_STATUS.CANCELED
           ].includes(cleanStatus as any);
           
           const isScheduledToday = student?.isScheduledToday ?? true;
-          const isMovedHour = formData.moved_to_hour !== null && formData.moved_to_hour !== undefined && formData.moved_to_hour > 0;
-          
-          const statusText = hasExplicitStatus 
-            ? (cleanStatus.startsWith('보강:') ? ATTENDANCE_STATUS.BEFORE : cleanStatus) 
-            : (cleanStatus === '보강' || !isScheduledToday ? '보강' : ATTENDANCE_STATUS.BEFORE);
+          const normalizeH = (val: any): number | null => {
+            if (val === null || val === undefined || val === '') return null;
+            const num = parseInt(String(val), 10);
+            if (isNaN(num)) return null;
+            let h = num >= 100 ? Math.floor(num / 100) : num;
+            if (h > 0 && h < 10) h += 12;
+            return h;
+          };
 
-          const isSupplementText = !isScheduledToday && (cleanStatus === '보강' || statusText === '보강');
+          const isPureMakeupRow =
+            student.isMakeupRow === true ||
+            student.todaySession?.is_pure_makeup === true;
+
+          const isMovedHour = (() => {
+            if (isPureMakeupRow) return false;
+            if (formData.moved_to_hour === null || formData.moved_to_hour === undefined || formData.moved_to_hour <= 0) {
+              return false;
+            }
+            const targetDate = selectedDate || formData?.date || formData?.session_date || student.todaySession?.session_date || student.todaySession?.date || '';
+            const dayKey = targetDate ? getDayOfWeek(targetDate) : '';
+            if (!dayKey) return false;
+
+            const clickH = normalizeH(formData.moved_to_hour);
+            if (clickH === null) return false;
+
+            if ((student as any)?.isSpecialClass) {
+              const rawElective = student.book_courses?.['__elective_courses'];
+              if (rawElective) {
+                try {
+                  const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+                  if (Array.isArray(parsed)) {
+                    const currentSubject = student.courseName || (student as any).electiveCourse?.subject;
+                    const isOrig = parsed.some((c: any) => {
+                      if (!c) return false;
+                      const cSub = c.subject || c.course_name || c.name;
+                      if (currentSubject && cSub !== currentSubject) return false;
+                      const days = c.days;
+                      const matchesDay = days && (
+                        Array.isArray(days)
+                          ? days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
+                          : (typeof days === 'string' && days.includes(dayKey))
+                      );
+                      if (!matchesDay) return false;
+                      const electiveHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
+                        ? [normalizeH(c.schedules[dayKey][0])]
+                        : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
+
+                      if (electiveHours.length > 0) return electiveHours.includes(clickH);
+                      return false;
+                    });
+                    if (isOrig) return false;
+                  }
+                } catch (e) {}
+              }
+            } else {
+              const regularHours = (student.day_schedules?.[dayKey] || []).map(normalizeH).filter((h: number | null): h is number => h !== null);
+              if (regularHours.includes(clickH)) return false;
+            }
+            return true;
+          })();
           
+          const statusText = hasRealAttendance ? cleanStatus : ATTENDANCE_STATUS.BEFORE;
+
           return (
             <div 
               onMouseDown={(e) => e.stopPropagation()}
@@ -871,25 +1060,25 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 onTimePickerClick?.(e);
               }}
               className={`absolute inset-0 w-full h-full flex items-center justify-between px-3 text-[11px] cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
-              isSupplementText 
-                ? (isLight ? 'text-blue-700 font-medium' : 'text-blue-400 font-semibold') 
-                : statusText === ATTENDANCE_STATUS.BEFORE 
-                  ? (isLight ? 'text-gray-500 font-medium' : 'text-gray-600') 
-                  : statusText.startsWith(ATTENDANCE_STATUS.PRESENT) 
-                    ? (isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400 font-semibold') 
-                    : statusText.startsWith(ATTENDANCE_STATUS.ABSENT) 
-                      ? (isLight ? 'text-red-600 font-medium' : 'text-red-400 font-bold') 
-                      : (isLight ? 'text-amber-700 font-medium' : 'text-amber-400 font-bold')
+              statusText === ATTENDANCE_STATUS.BEFORE
+                ? (isLight ? 'text-gray-500 font-medium' : 'text-gray-600')
+                : statusText.startsWith(ATTENDANCE_STATUS.PRESENT) 
+                  ? (isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400 font-semibold') 
+                  : statusText.startsWith(ATTENDANCE_STATUS.ABSENT) 
+                    ? (isLight ? 'text-red-600 font-medium' : 'text-red-400 font-bold') 
+                    : statusText.startsWith(ATTENDANCE_STATUS.LATE)
+                      ? (isLight ? 'text-amber-700 font-medium' : 'text-amber-400 font-bold')
+                      : (isLight ? 'text-gray-500 font-medium' : 'text-gray-400')
             }`}>
               <div className="flex flex-col items-start justify-center min-w-0 flex-1 gap-0.5 py-0.5">
                 <span className="text-[11px] font-bold leading-tight">{statusText}</span>
-                {isMovedHour && (
+                {(isPureMakeupRow || isMovedHour) && (
                   <span className={`text-[10px] font-extrabold leading-none px-1 py-0.5 rounded ${
-                    !isScheduledToday 
+                    isPureMakeupRow 
                       ? (isLight ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400') 
                       : (isLight ? 'bg-purple-100 text-purple-700' : 'bg-purple-500/20 text-purple-300')
                   }`}>
-                    {!isScheduledToday ? '보강' : '이동'}
+                    {isPureMakeupRow ? '보강' : '이동'}
                   </span>
                 )}
               </div>

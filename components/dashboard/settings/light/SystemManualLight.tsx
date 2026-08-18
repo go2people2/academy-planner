@@ -50,7 +50,7 @@ export default function SystemManualLight() {
     },
     {
       icon: <Table size={20} className="text-emerald-600" />,
-      title: "Daily Sheet (오늘의 출결 및 기록표)",
+      title: "TodaySheet (오늘의 출결 및 기록표)",
       desc: (
         <div className="space-y-3 pt-2 text-gray-650 font-semibold">
           <p className="text-gray-600">가장 핵심적인 메뉴입니다! 선생님이 오늘 등원한 학생들의 '학원 공부', '집에서 할 숙제', '오늘 할 일 목록'을 부여합니다. 학생들이 제출(Submit)한 학습 기록을 일괄 승인하거나 반려하여 진행률을 확정 짓는 공간입니다. (할 일을 번호나 기호로 작성하면 체크박스로 자동 변환됩니다!)</p>

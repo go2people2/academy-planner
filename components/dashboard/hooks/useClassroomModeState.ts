@@ -93,6 +93,12 @@ export function useClassroomModeState({
     }
 
     if (student.__courseType === 'elective') {
+      if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null && student.todaySession?.moved_to_hour > 0) {
+        const mVal = student.todaySession.moved_to_hour;
+        let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
+        if (h > 0 && h <= 12 && h < 10) h += 12;
+        return h;
+      }
       if (student.electiveCourse?.schedules?.[day]) {
         const sched = student.electiveCourse.schedules[day];
         if (Array.isArray(sched) && sched.length > 0) {
@@ -108,7 +114,9 @@ export function useClassroomModeState({
         try {
           const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
           if (Array.isArray(courses)) {
+            const currentSub = student.courseName || student.__courseSubject || student.electiveCourse?.subject;
             courses.forEach((c: any) => {
+              if (currentSub && (c.subject || c.course_name || c.name) !== currentSub) return;
               if (c.days?.includes(day) && c.schedules?.[day]) {
                 const sched = c.schedules[day];
                 if (Array.isArray(sched) && sched.length > 0) {
@@ -172,11 +180,15 @@ export function useClassroomModeState({
   }, [currentTime, selectedDate, baseM]);
 
   const localSave = useCallback(async (student: any, data: any) => {
-    const isElective = student.__courseType === 'elective';
-    const isMakeup = student.__courseType === 'makeup';
-    const courseName = isElective 
-      ? (student.__courseSubject || '특강') 
-      : (isMakeup && student.courseName ? student.courseName : (student.todaySession?.course_name || '정규'));
+    const isElective = student.__courseType === 'elective' || student.isSpecialClass;
+    const isMakeup =
+      student.isMakeupRow === true ||
+      student.todaySession?.is_pure_makeup === true;
+    const courseName = data.course_name || (
+      isElective
+        ? (student.courseName || student.__courseSubject || student.electiveCourse?.subject || '선택과목')
+        : (student.courseName || student.todaySession?.course_name || '정규')
+    );
     const realId = student.originalId || student.id;
     const movedHour = data.moved_to_hour !== undefined ? data.moved_to_hour : (student.todaySession?.moved_to_hour ?? null);
     
@@ -184,10 +196,10 @@ export function useClassroomModeState({
       ...data,
       course_name: courseName,
       moved_to_hour: movedHour,
-      ...(isMakeup || student.todaySession?.is_pure_makeup ? { is_pure_makeup: true } : {})
+      is_pure_makeup: isMakeup,
     };
 
-    if (student.todaySession?.id && student.todaySession.id !== 'temp') {
+    if (student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:')) {
       payload.id = student.todaySession.id;
     }
 

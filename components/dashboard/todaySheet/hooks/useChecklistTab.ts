@@ -83,6 +83,21 @@ export function useChecklistTab({
     
     let filtered = baseList.filter(s => !s.is_deleted);
 
+    // 💡 [체크리스트 전용 dedupe] 동일 학생은 정규 카드를 우선하여 정확히 1행만 남김 (진짜 학생 ID 보정)
+    const dedupeMap = new Map<string, any>();
+    filtered.forEach(s => {
+      const realId = s.originalId || s.id;
+      if (!dedupeMap.has(realId)) {
+        dedupeMap.set(realId, { ...s, id: realId });
+      } else {
+        const existing = dedupeMap.get(realId);
+        if (existing.__courseType === 'makeup' && s.__courseType === 'regular') {
+          dedupeMap.set(realId, { ...s, id: realId });
+        }
+      }
+    });
+    filtered = Array.from(dedupeMap.values());
+
     if (selectedFilter && selectedFilter !== 'All') {
       if (selectedFilter.startsWith('Grade-')) {
         const gradeTarget = selectedFilter.replace('Grade-', '');

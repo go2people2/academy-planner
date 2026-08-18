@@ -409,8 +409,20 @@ export function useDashboardData(params: {
 
     try {
       let resData, resErr;
-      if (sessionId) {
-        const res = await supabase.from('ams_session_logs').update(filteredData).eq('id', sessionId).select().single();
+      const targetMovedHour = filteredData.moved_to_hour ?? null;
+      const targetStudent = students.find(s => s.id === realStudentId);
+      const existingLog = (targetStudent?.allLogs || []).find((l: any) =>
+        l.id === sessionId || (
+          (l.date || l.session_date) === targetSaveDate &&
+          (l.course_name === targetCourseName || (targetCourseName === '정규' && (!l.course_name || l.course_name === '정규'))) &&
+          ((l.moved_to_hour ?? null) === targetMovedHour)
+        )
+      );
+
+      const targetId = sessionId || existingLog?.id;
+
+      if (targetId) {
+        const res = await supabase.from('ams_session_logs').update(filteredData).eq('id', targetId).select().single();
         resData = res.data; resErr = res.error;
       } else {
         const payload = { ...filteredData, student_id: realStudentId, academy_id: academy.id, session_date: targetSaveDate, course_name: targetCourseName };
@@ -424,10 +436,12 @@ export function useDashboardData(params: {
         setStudents(prev => prev.map(s => {
           if (s.id !== realStudentId) return s;
           const currentAllLogs = [...(s.allLogs || [])];
+          const resMovedHour = resData.moved_to_hour ?? null;
           const logIdx = currentAllLogs.findIndex((l: any) => 
             l.id === resData.id || (
               (l.date || l.session_date) === targetSaveDate && 
-              (l.course_name === targetCourseName || (targetCourseName === '정규' && !l.course_name))
+              (l.course_name === targetCourseName || (targetCourseName === '정규' && (!l.course_name || l.course_name === '정규'))) &&
+              ((l.moved_to_hour ?? null) === resMovedHour)
             )
           );
           if (logIdx !== -1) {

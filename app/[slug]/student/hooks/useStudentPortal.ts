@@ -35,7 +35,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
   const [isTestModalOpen, setIsTestModalOpen] = useState(false);
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDashboardSlim, setIsDashboardSlim] = useState(false);
-  const [activeTab, setActiveTab] = useState<'study' | 'history' | 'suggestion' | 'wrong-answer' | 'exam-submit'>('study');
+  const [activeTab, setActiveTab] = useState<'study' | 'lecture' | 'history' | 'suggestion' | 'wrong-answer' | 'exam-submit'>('study');
   
   const [wrongAnswerStudent, setWrongAnswerStudent] = useState<any>(null);
   const [wrongAnswerAcademy, setWrongAnswerAcademy] = useState<any>(null);

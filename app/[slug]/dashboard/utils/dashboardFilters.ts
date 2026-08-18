@@ -9,7 +9,7 @@ export const getStudentStartTime = (student: any, day: string): number => {
   if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
     const mVal = student.todaySession.moved_to_hour;
     let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
-    if (h > 0 && h <= 12) h += 12;
+    if (h > 0 && h < 10) h += 12;
     return h;
   }
 
@@ -20,7 +20,7 @@ export const getStudentStartTime = (student: any, day: string): number => {
   if (isRegularClassDay && regularHours.length > 0) {
     const firstVal = regularHours[0];
     let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-    if (h < 10) h += 12;
+    if (h > 0 && h < 10) h += 12;
     return h;
   }
 
@@ -237,4 +237,90 @@ export const filterStudentList = (params: {
 
     return false;
   });
+};
+
+/**
+ * TodaySheet 시간 필터(availableHours) 드롭다운 생성 전용 헬퍼
+ * 기존 getStudentStartTime()을 전혀 건드리지 않고, 학생의 모든 활성 수업 시각(정규/선택과목/보강)을 배열로 추출합니다.
+ */
+export const getStudentActiveHours = (student: any, dayKey: string, selectedDate?: string): number[] => {
+  const hoursSet = new Set<number>();
+
+  const normalize = (val: any): number | null => {
+    if (val === undefined || val === null) return null;
+    let h = typeof val === 'number' ? val : parseInt(String(val), 10);
+    if (isNaN(h)) return null;
+    if (h >= 100) h = Math.floor(h / 100);
+    if (h > 0 && h < 10) h += 12;
+    return (h >= 0 && h <= 24) ? h : null;
+  };
+
+  // 1. 정규 수업 시간표 (당일 수업일인 경우)
+  const isRegularClassDay = (student.class_days || []).includes(dayKey);
+  const regularHours = student.day_schedules?.[dayKey] || [];
+  if (isRegularClassDay && Array.isArray(regularHours)) {
+    regularHours.forEach((hVal: any) => {
+      const h = normalize(hVal);
+      if (h !== null) hoursSet.add(h);
+    });
+  }
+
+  // 2. 선택과목(방학특강) 시간표 (기간 및 요일 활성 조건 검사)
+  const rawElective = student.book_courses?.['__elective_courses'];
+  if (rawElective) {
+    try {
+      const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+      if (Array.isArray(courses)) {
+        courses.forEach((c: any) => {
+          if (!c) return;
+          const hasDay = c.days && (
+            Array.isArray(c.days)
+              ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
+              : (typeof c.days === 'string' && c.days.includes(dayKey))
+          );
+
+          const startDate = c.startDate || c.start_date;
+          const endDate = c.endDate || c.end_date;
+          const isBefore = (selectedDate && startDate) ? (selectedDate < startDate) : false;
+          const isAfter = (selectedDate && endDate) ? (selectedDate > endDate) : false;
+
+          if (hasDay && !isBefore && !isAfter) {
+            const sched = c.schedules?.[dayKey];
+            if (Array.isArray(sched)) {
+              sched.forEach((hVal: any) => {
+                const h = normalize(hVal);
+                if (h !== null) hoursSet.add(h);
+              });
+            }
+          }
+        });
+      }
+    } catch (e) {}
+  }
+
+  // 3. 당일 세션 로그 (보강 / 시간이동 세션 시각)
+  const targetLogs = (student.allLogs || []).filter((l: any) => selectedDate ? (l.date || l.session_date) === selectedDate : true);
+  targetLogs.forEach((l: any) => {
+    let mVal = l.moved_to_hour;
+    if ((mVal === undefined || mVal === null || mVal <= 0) && l.attendance_status?.startsWith('보강:')) {
+      const match = l.attendance_status.match(/(\d{1,2}):/);
+      if (match) mVal = parseInt(match[1], 10);
+    }
+    const h = normalize(mVal);
+    if (h !== null) hoursSet.add(h);
+  });
+
+  // 4. 단일 카드 객체 자체의 todaySession 시각 및 moved_to_hour도 추가
+  if (student.todaySession) {
+    const ts = student.todaySession;
+    let mVal = ts.moved_to_hour;
+    if ((mVal === undefined || mVal === null || mVal <= 0) && ts.attendance_status?.startsWith('보강:')) {
+      const match = ts.attendance_status.match(/(\d{1,2}):/);
+      if (match) mVal = parseInt(match[1], 10);
+    }
+    const h = normalize(mVal);
+    if (h !== null) hoursSet.add(h);
+  }
+
+  return Array.from(hoursSet).sort((a, b) => a - b);
 };
