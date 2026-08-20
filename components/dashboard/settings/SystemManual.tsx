@@ -3,39 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Bell, Table, ClipboardCheck, Activity, 
   UserCog, ArrowLeftRight, Settings, Info, Keyboard, 
-  Sparkles, ChevronDown, Play 
+  Sparkles, ChevronDown 
 } from 'lucide-react';
-
-import VideoPlayerModal from '@/components/common/VideoPlayerModal';
-
-const DEFAULT_TIMESTAMPS_TEXT = `[00:00] 시작
-[00:05] 27번
-[02:10] 28번
-[04:46] 29번
-[05:57] 30번
-[06:58] 31번
-[07:47] 32번
-[08:49] 33번
-[10:33] 34번
-[12:53] 35번
-[13:16] 36번
-[14:22] 37번
-[15:44] 38번
-[17:20] 39번
-[18:50] 40번
-[20:14] 41번
-[21:11] 42번
-[22:24] 43번
-[23:27] 44번
-[25:15] 45번
-[26:33] 46번
-[28:03] 47번
-[30:52] 48번
-[34:03] 49번`;
 
 export default function SystemManual() {
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
-  const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
 
   const manuals = [
     {
@@ -199,57 +171,6 @@ export default function SystemManual() {
           </div>
         </div>
       </div>
-
-      {/* 🎬 [비디오 매뉴얼 가이드 카드] 클릭 시 영상 모달 팝업 실행 */}
-      <div 
-        onClick={() => setIsVideoModalOpen(true)}
-        className="group relative p-5 rounded-2xl bg-gradient-to-r from-purple-950/60 via-slate-900 to-indigo-950/60 border border-purple-500/30 hover:border-purple-400/60 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-5 shadow-2xl transition-all cursor-pointer overflow-hidden"
-      >
-        <div className="flex items-center gap-4 relative z-10 min-w-0">
-          {/* 섬네일 미리보기 프리뷰 박스 */}
-          <div className="relative w-24 h-16 sm:w-28 sm:h-18 rounded-lg bg-black/80 border border-purple-500/40 flex items-center justify-center shrink-0 overflow-hidden group-hover:scale-105 transition-transform shadow-lg">
-            <div className="absolute inset-0 bg-cover bg-center opacity-60" style={{ backgroundImage: "url('https://images.unsplash.com/photo-1516321318423-f06f85e504b3?w=400&q=80')" }} />
-            <div className="relative z-10 w-9 h-9 rounded-full bg-indigo-600 text-white flex items-center justify-center shadow-lg group-hover:bg-indigo-500 transition-colors">
-              <Play size={18} className="ml-0.5 fill-current" />
-            </div>
-          </div>
-
-          <div className="space-y-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <span className="px-2 py-0.5 rounded text-[10px] font-black bg-purple-500 text-white uppercase tracking-wider shadow-sm">
-                영상 매뉴얼
-              </span>
-              <h4 className="font-black text-sm text-white flex items-center gap-1.5 truncate">
-                🎬 [수능/기출] 27번~49번 문항별 타임스탬프 해설 플레이어
-              </h4>
-            </div>
-            <p className="text-xs text-slate-300 font-bold truncate">
-              버튼을 누르면 영상 팝업이 실행되며, **우측 문항 번호 클릭 시 해당 문제 위치로 시원하게 이동**합니다.
-            </p>
-          </div>
-        </div>
-
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            setIsVideoModalOpen(true);
-          }}
-          className="px-4 py-2.5 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black transition-all shrink-0 shadow-lg shadow-indigo-600/30 flex items-center gap-2 group-hover:scale-105"
-        >
-          <Play size={14} className="fill-current" />
-          <span>▶ 동영상 가이드 실행</span>
-        </button>
-      </div>
-
-      {/* 비디오 모달 */}
-      <VideoPlayerModal
-        isOpen={isVideoModalOpen}
-        videoUrl="http://192.168.0.13:8080/video/sample.mp4"
-        title="[수능/모의고사 기출] 27번~49번 문항별 해설강의 (실험실 테스트)"
-        timestampsText={DEFAULT_TIMESTAMPS_TEXT}
-        onClose={() => setIsVideoModalOpen(false)}
-      />
 
       <div className="space-y-3">
         {manuals.map((item, i) => {

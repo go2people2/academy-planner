@@ -21,7 +21,6 @@ import ExamPaperManager from '@/components/dashboard/exam/ExamPaperManager';
 import TimetableSettings from '@/components/dashboard/settings/TimetableSettings';
 import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
 import DigitalMathLibraryView from '@/components/dashboard/DigitalMathLibraryView';
-import VideoPlayerTestView from '@/components/dashboard/VideoPlayerTestView';
 import VideoPlayerModal from '@/components/common/VideoPlayerModal';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
@@ -2060,7 +2059,6 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
              {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onBatchAddStudents={handleBatchAddStudents} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} currentUser={currentUser} showDuplicateWarning={true} />}
              {viewMode === 'pdfLibrary' && <PdfLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} isLight={false} />}
              {viewMode === 'digitalLibrary' && <DigitalMathLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} currentUser={currentUser} isLight={false} />}
-             {viewMode === 'videoTest' && <VideoPlayerTestView isLight={false} />}
              {viewMode === 'todayTable' && (
               <TodaySheet 
                 students={todayStudents} 
