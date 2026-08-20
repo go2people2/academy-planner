@@ -51,6 +51,7 @@ export const ATTENDANCE_STATUS = {
   BEFORE: '수업전',
   PRESENT: '출석',
   LATE: '지각',
+  EARLY_LEAVE: '조퇴',
   ABSENT: '결석',
   MOVE: '이동',
   EXCLUDED: '수업제외',

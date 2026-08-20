@@ -19,6 +19,7 @@ import StudentSuggestion from '@/components/student/StudentSuggestion';
 import PerformanceChart from '@/components/student/PerformanceChart';
 import StudentSubmitPage from '@/components/wrong-answers/StudentSubmitPage';
 import StudentExamSubmission from '@/components/dashboard/exam/StudentExamSubmission';
+import { getHwEval, withHwEval, isValidHwEval } from '@/lib/sessionTestResult';
 
 const WRONG_ANSWER_THEMES: Record<string, { primary: string; bg: string; ring: string; buttonText?: string }> = {
   navy: { primary: '#1e3a8a', bg: '#f8faff', ring: 'focus:ring-blue-900' },
@@ -88,6 +89,7 @@ export default function StudentPortal() {
     confirmSubmitOpen,
     setConfirmSubmitOpen,
     todaySession,
+    todaySessionStatus,
     setTodaySession,
     allLogs,
     setAllLogs,
@@ -173,14 +175,9 @@ export default function StudentPortal() {
   }, [allLogs, selectedDate, selectedCourse, academy, student, availableTextbooks]);
 
   const currentSelfEval = useMemo(() => {
-    try {
-      if (lastSession?.test_result?.startsWith('{')) {
-        const res = JSON.parse(lastSession.test_result);
-        if (res.hw_eval !== undefined && res.hw_eval !== null) return res.hw_eval;
-      }
-    } catch (e) {}
-    return null;
-  }, [lastSession?.test_result]);
+    const val = getHwEval(todaySession?.test_result);
+    return val !== undefined ? val : null;
+  }, [todaySession?.test_result]);
 
   const upcomingMakeups = useMemo(() => {
     const todayStr = new Date().toISOString().split('T')[0];
@@ -474,56 +471,64 @@ export default function StudentPortal() {
   };
 
   const handleSelfEval = async (level: number) => {
-    if (!student || !academy || !lastSession?.session_date) return;
-    const targetDate = lastSession.session_date;
-    const targetLog = allLogs.find(l => l.session_date === targetDate && (l.course_name || '정규') === selectedCourse) || lastSession;
+    if (!student || !academy) return;
+    
+    // 💡 [안전 규칙] 0~10 정수 범위 검증
+    if (!isValidHwEval(level)) {
+      alert("올바르지 않은 과제 점수입니다 (0~10 사이의 점수여야 합니다).");
+      return;
+    }
+
+    // 💡 [안전 규칙] 당일 세션 후보 상태 검증
+    if (todaySessionStatus === 'ambiguous') {
+      alert("확인할 수업 기록을 하나로 정할 수 없어 점수를 저장할 수 없습니다. 선생님께 문의해 주세요.");
+      return;
+    }
+
+    if (todaySessionStatus === 'missing' || !todaySession?.id || todaySession.id === 'temp') {
+      alert("오늘 수업 기록이 아직 준비되지 않아 과제 확인 점수를 저장할 수 없습니다.");
+      return;
+    }
 
     const isToggleOff = currentSelfEval === level; 
-    let currentResult: any = {};
-    try { if (targetLog?.test_result?.startsWith('{')) currentResult = JSON.parse(targetLog.test_result); } catch (e) {}
-    
-    if (isToggleOff) {
-      delete currentResult.hw_eval;
-    } else {
-      currentResult.hw_eval = level;
-    }
-    
+    const nextScore = isToggleOff ? null : level;
+    const previousTestResult = todaySession.test_result;
+    const newTestResultStr = withHwEval(previousTestResult, nextScore);
+
+    // 낙관적 로컬 업데이트
+    setTodaySession((prev: any) => ({ ...prev, test_result: newTestResultStr }));
+    setAllLogs((prev: any[]) => prev.map(l => l.id === todaySession.id ? { ...l, test_result: newTestResultStr } : l));
+
     setIsSaving(true);
     try {
-      const updateData: any = { 
-        student_id: student.id, 
-        student_name: student.name,
-        session_date: targetDate, 
-        academy_id: academy.id, 
-        course_name: selectedCourse,
-        test_result: JSON.stringify(currentResult) 
-      };
-      let savedLog: any = null;
-      if (targetLog?.id && targetLog.id !== 'temp') { 
-        updateData.id = targetLog.id;
-        const { data, error } = await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'id' }).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
-      } else { 
-        const { data, error } = await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' }).select(); 
-        if (error) throw error;
-        if (data && data[0]) savedLog = data[0];
+      // 💡 [안전 규칙] 유효한 id 기반 UPDATE만 수행 (신규 행 upsert 금지)
+      const { data, error } = await supabase
+        .from('ams_session_logs')
+        .update({ test_result: newTestResultStr })
+        .eq('id', todaySession.id)
+        .select()
+        .single();
+
+      if (error || !data) {
+        throw error || new Error("서버로부터 갱신된 데이터를 수신하지 못했습니다.");
       }
-      
-      if (savedLog) {
-        setAllLogs(prev => prev.map(l => (l.session_date === targetDate && (l.course_name || '정규') === selectedCourse) ? { ...l, ...savedLog } : l));
-      } else {
-        setAllLogs(prev => prev.map(l => (l.session_date === targetDate && (l.course_name || '정규') === selectedCourse) ? { ...l, test_result: JSON.stringify(currentResult) } : l));
-      }
-      
+
+      // 서버 응답으로 로컬 상태 동기화 확정
+      setTodaySession((prev: any) => ({ ...prev, ...data }));
+      setAllLogs((prev: any[]) => prev.map(l => l.id === todaySession.id ? { ...l, ...data } : l));
+
       const currentNotes = todaySession?.special_notes || '';
       if (currentNotes.includes('[숙제이행:')) {
         const cleanNotes = currentNotes.replace(/\n?\[숙제이행: \d+단계\]/g, '').trim();
         await handleManualSave('special_notes', cleanNotes);
         setTodaySession((prev: any) => ({ ...prev, special_notes: cleanNotes }));
       }
-    } catch (e) { 
-      console.error(e); 
+    } catch (e: any) { 
+      console.error(e);
+      // 실패 시 원래 상태로 롤백
+      setTodaySession((prev: any) => ({ ...prev, test_result: previousTestResult }));
+      setAllLogs((prev: any[]) => prev.map(l => l.id === todaySession.id ? { ...l, test_result: previousTestResult } : l));
+      alert("과제 확인 점수 저장에 실패했습니다. 다시 시도해 주세요.");
     } finally { 
       setIsSaving(false); 
     }

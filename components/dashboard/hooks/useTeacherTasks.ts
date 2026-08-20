@@ -41,7 +41,8 @@ export const buildMakeupPayload = (params: {
     attendance_reason: '보강 수업',
     moved_to_hour: hour,
     status: 'none',
-    completed_classwork_text: noteText,
+    is_pure_makeup: true,
+    special_notes: noteText,
     course_name: courseName
   };
 };
@@ -282,7 +283,8 @@ export function useTeacherTasks({
               attendance_status: `보강:${makeupTime}~${makeupEndTime}`,
               attendance_reason: '보강 수업',
               moved_to_hour: hour,
-              completed_classwork_text: newNotes
+              is_pure_makeup: true,
+              special_notes: newNotes
             })
             .eq('id', item.id);
         });

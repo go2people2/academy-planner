@@ -1,6 +1,7 @@
 import { useState, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Student } from '@/types/dashboard';
+import { withHwEval, parseSessionTestResult } from '@/lib/sessionTestResult';
 
 export const JOURNAL_THEMES = {
   slateBlue: {
@@ -128,47 +129,70 @@ export function useHokmaJournalPrint({
     const nextScore = scoreOrder[(curIdx + 1) % scoreOrder.length];
     const overrideKey = `${studentId}_${dateKey}`;
     
+    // 💡 10점 -> 10, 7점 -> 7, 4점 -> 4, 0점 -> 0, '-' -> null (미입력)
+    let nextHwEval: number | null = null;
+    if (nextScore === '10점') nextHwEval = 10;
+    else if (nextScore === '7점') nextHwEval = 7;
+    else if (nextScore === '4점') nextHwEval = 4;
+    else if (nextScore === '0점') nextHwEval = 0;
+    else if (nextScore === '-') nextHwEval = null;
+
+    const targetStudent = (selectedStudents || []).find(s => s.id === studentId) || (allStudents || []).find(s => s.id === studentId);
+    if (!targetStudent) return;
+
+    const formattedDate = dateKey.replace(/\./g, '-');
+    const formattedDotDate = dateKey.replace(/-/g, '.');
+
+    // 해당 날짜 및 과목에 매칭되는 실제 세션 로그 탐색
+    const matchedLog = (targetStudent.allLogs || []).find((l: any) => {
+      const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
+      if (lDate !== formattedDate && l.date !== formattedDotDate && l.session_date !== formattedDotDate) return false;
+      const lCourse = l.course_name || '정규';
+      if (!targetCourse || targetCourse === '정규') {
+        return lCourse === '정규' || !l.course_name;
+      }
+      return lCourse === targetCourse;
+    });
+
+    if (!matchedLog?.id || matchedLog.id === 'temp') {
+      alert("해당 날짜의 수업 기록이 DB에 존재하지 않아 점수를 수정할 수 없습니다.");
+      return;
+    }
+
+    const previousTestResult = matchedLog.test_result;
+    const newTestResultStr = withHwEval(previousTestResult, nextHwEval);
+
+    // 낙관적 UI 업데이트
     setHwOverrides(prev => ({
       ...prev,
       [overrideKey]: nextScore
     }));
-
-    let newAchievement = 0;
-    if (nextScore === '10점') newAchievement = 100;
-    else if (nextScore === '7점') newAchievement = 70;
-    else if (nextScore === '4점') newAchievement = 40;
-    else if (nextScore === '0점' || nextScore === '-') newAchievement = 0;
-
-    const targetStudent = (selectedStudents || []).find(s => s.id === studentId) || (allStudents || []).find(s => s.id === studentId);
-    if (targetStudent) {
-      const formattedDate = dateKey.replace(/\./g, '-');
-      const formattedDotDate = dateKey.replace(/-/g, '.');
-      (targetStudent.allLogs || []).forEach((l: any) => {
-        const lDate = (l.date || l.session_date || '').replace(/\./g, '-');
-        if (lDate === formattedDate || l.date === formattedDotDate || l.session_date === formattedDotDate) {
-          const lCourse = l.course_name || '정규';
-          if (!targetCourse || targetCourse === '정규' ? (lCourse === '정규' || !l.course_name) : lCourse === targetCourse) {
-            l.todo_achievement = newAchievement;
-          }
-        }
-      });
-      if (targetStudent.todaySession) {
-        const sDate = (targetStudent.todaySession.date || targetStudent.todaySession.session_date || '').replace(/\./g, '-');
-        if (sDate === formattedDate) {
-          targetStudent.todaySession.todo_achievement = newAchievement;
-        }
-      }
-    }
+    matchedLog.test_result = newTestResultStr;
 
     try {
-      const formattedDate = dateKey.replace(/\./g, '-');
-      await supabase
+      // 💡 [안전 규칙] log.id 기반으로 test_result만 업데이트
+      const { data, error } = await supabase
         .from('ams_session_logs')
-        .update({ todo_achievement: newAchievement })
-        .eq('student_id', studentId)
-        .or(`session_date.eq.${formattedDate},date.eq.${formattedDate}`);
+        .update({ test_result: newTestResultStr })
+        .eq('id', matchedLog.id)
+        .select()
+        .single();
+
+      if (error || !data) {
+        throw error || new Error("서버 갱신 실패");
+      }
+
+      matchedLog.test_result = data.test_result;
     } catch (e) {
-      console.error('Failed to update todo_achievement override', e);
+      console.error('Failed to update hw_eval in HokmaJournal', e);
+      // 실패 시 롤백
+      setHwOverrides(prev => {
+        const next = { ...prev };
+        delete next[overrideKey];
+        return next;
+      });
+      matchedLog.test_result = previousTestResult;
+      alert("숙제 완성도 점수 저장에 실패했습니다.");
     }
   };
 

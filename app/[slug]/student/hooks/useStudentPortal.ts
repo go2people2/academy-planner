@@ -29,6 +29,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
   const [academy, setAcademy] = useState<any>(null);
   const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
   const [todaySession, setTodaySession] = useState<any>(null);
+  const [todaySessionStatus, setTodaySessionStatus] = useState<'resolved' | 'missing' | 'ambiguous'>('missing');
   const [allLogs, setAllLogs] = useState<any[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -215,7 +216,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
 
         if (logsData) {
           setAllLogs(logsData);
-          const matchedSession = logsData.find(l => {
+          const matchedCandidates = logsData.filter(l => {
             if (l.session_date !== selectedDate) return false;
             const rawCourse = l.course_name ? l.course_name.trim() : '';
             const logCourse = rawCourse || '정규';
@@ -227,22 +228,32 @@ export function useStudentPortal(slug: string | string[] | undefined) {
             return logCourse === activeCourse || (logCourse !== '정규' && (logCourse.includes(activeCourse) || activeCourse.includes(logCourse)));
           });
 
-          if (matchedSession) {
-            setTodaySession(matchedSession);
-            setLocalClasswork(matchedSession.classwork_text || '');
-            setLocalCompletedClasswork(matchedSession.completed_classwork_text || '');
-            setLocalHomework(matchedSession.homework_text || '');
+          if (matchedCandidates.length === 1) {
+            const single = matchedCandidates[0];
+            setTodaySession(single);
+            setTodaySessionStatus('resolved');
+            setLocalClasswork(single.classwork_text || '');
+            setLocalCompletedClasswork(single.completed_classwork_text || '');
+            setLocalHomework(single.homework_text || '');
+            setTodayPlan('');
+          } else if (matchedCandidates.length > 1) {
+            setTodaySession(null);
+            setTodaySessionStatus('ambiguous');
+            setLocalClasswork('');
+            setLocalCompletedClasswork('');
+            setLocalHomework('');
             setTodayPlan('');
           } else {
             setTodaySession(null);
+            setTodaySessionStatus('missing');
             setLocalClasswork('');
             setLocalCompletedClasswork('');
             setLocalHomework('');
             setTodayPlan('');
           }
-          }
         }
       }
+    }
     } catch (err) {
       console.error('Error fetching student data:', err);
     } finally {
@@ -258,6 +269,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
     confirmSubmitOpen,
     setConfirmSubmitOpen,
     todaySession,
+    todaySessionStatus,
     setTodaySession,
     allLogs,
     setAllLogs,

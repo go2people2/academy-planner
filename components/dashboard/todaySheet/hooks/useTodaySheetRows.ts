@@ -161,7 +161,16 @@ export function useTodaySheetRows({
         } catch (e) {}
       }
 
-      const isMakeupLog = (l: any) => l?.is_pure_makeup === true;
+      const isMakeupLog = (l: any) => {
+        if (!l) return false;
+        if (l.is_pure_makeup === true) return true;
+        if (l.is_pure_makeup === false) return false;
+        return (
+          typeof l.attendance_status === 'string' &&
+          l.attendance_status.startsWith('보강') &&
+          l.attendance_reason === '보강 수업'
+        );
+      };
 
       // (1) 선택과목 각각 독립 행으로 추가
       activeElectives.forEach((c: any, cIdx: number) => {

@@ -704,82 +704,106 @@ export default function TeacherTasks({
                               const isCompleted = makeup.attendance_status === '출석' || makeup.attendance_status === '결석' || makeup.attendance_status === '지각';
                               const monthlyCount = getMonthlyMakeupCount(makeup.student_id, makeup.session_date, makeup.id);
                               
+                              // 💡 [수정 정책] 보강 사유는 special_notes만 사용 (completed_classwork_text 수행진도 완전 배제)
+                              const rawNotes = (makeup.special_notes || '').trim();
+                              const reasonText = rawNotes.length > 0 ? rawNotes : null;
+
                               return (
-                                <div key={makeup.id} className={`py-2 border-b last:border-0 group/row space-y-1.5 ${
+                                <div key={makeup.id} className={`py-2.5 border-b last:border-0 group/row ${
                                   isLight ? 'border-b-[#e3e2e0]' : 'border-b-white/5'
                                 }`}>
-                                  <div className="flex items-center justify-between">
-                                    <div className="flex flex-col min-w-0 pr-2">
-                                      <div className="flex items-center gap-1.5 min-w-0">
-                                        <span className={`text-xs font-bold truncate ${isLight ? 'text-[#37352f]' : 'text-white'}`}>{makeup.student_name}</span>
-                                         <span className={`text-[8.5px] font-black px-1.5 py-0.2 rounded shrink-0 border ${makeup.course_name && makeup.course_name !== '정규' ? (isLight ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30') : (isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-500/20 text-blue-300 border-blue-500/30')}`}>
-                                           {makeup.course_name || '정규'}
-                                         </span>
-                                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 bg-blue-50 text-blue-700 border border-blue-200 rounded shrink-0">
+                                  <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-2.5">
+                                    {/* 좌측 정보 영역 (3줄 위계 구조) */}
+                                    <div className="flex flex-col flex-1 min-w-0 space-y-1">
+                                      {/* 1행: 학생 이름 + 과목 뱃지 + 회차 뱃지 */}
+                                      <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                                        <span className={`text-xs font-bold truncate ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
+                                          {makeup.student_name}
+                                        </span>
+                                        <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded shrink-0 border ${
+                                          makeup.course_name && makeup.course_name !== '정규' 
+                                            ? (isLight ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30') 
+                                            : (isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-500/20 text-blue-300 border-blue-500/30')
+                                        }`}>
+                                          {makeup.course_name || '정규'}
+                                        </span>
+                                        <span className={`text-[8.5px] font-bold px-1.5 py-0.5 rounded shrink-0 border ${
+                                          isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-500/10 text-blue-400 border-blue-500/30'
+                                        }`}>
                                           이번 달 {monthlyCount}회차
                                         </span>
-                                        <span className="text-[8.5px] font-bold px-1.5 py-0.2 bg-purple-50 text-purple-700 border border-purple-200 rounded shrink-0">
+                                      </div>
+
+                                      {/* 2행: 학년 · 등원요일 + 담당 교사 */}
+                                      <div className="flex flex-wrap items-center gap-1.5 text-[9px] font-semibold text-gray-400">
+                                        <span>
+                                          {studentObj?.grade || '정보없음'}
+                                          {studentObj?.class_days && studentObj.class_days.length > 0 ? ` · ${[...studentObj.class_days].sort((a, b) => {
+                                            const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
+                                            return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
+                                          }).join('')}` : ''}
+                                        </span>
+                                        <span className="text-gray-600">·</span>
+                                        <span className={`px-1.5 py-0.5 rounded text-[8.5px] border ${
+                                          isLight ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                                        }`}>
                                           담당: {teacherName}
                                         </span>
-                                        {(() => {
-                                          const notes = makeup.completed_classwork_text || makeup.special_notes || '';
-                                          const rMatch = notes.match(/\((.*?)\)/);
-                                          const reasonText = rMatch ? rMatch[1] : null;
-                                          if (!reasonText) return null;
-                                          return (
-                                            <span className="text-[8.5px] font-black px-1.5 py-0.2 bg-amber-500/15 text-amber-300 border border-amber-500/30 rounded shrink-0 flex items-center gap-0.5">
-                                              📅 {reasonText}
-                                            </span>
-                                          );
-                                        })()}
                                       </div>
-                                      <span className="text-[8.5px] font-black text-gray-500 uppercase mt-0.5">
-                                        {studentObj?.grade || '정보없음'}
-                                        {studentObj?.class_days && studentObj.class_days.length > 0 ? ` · ${[...studentObj.class_days].sort((a, b) => {
-                                          const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-                                          return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
-                                        }).join('')}` : ''}
-                                      </span>
+
+                                      {/* 3행: 긴 보강 사유 (원문 보존, 최대 2줄 clamp 및 break-words) */}
+                                      {reasonText && (
+                                        <div className="pt-0.5">
+                                          <span className={`inline-flex items-center gap-1 text-[8.5px] font-medium px-2 py-0.5 rounded max-w-full break-words whitespace-normal leading-relaxed line-clamp-2 border ${
+                                            isLight ? 'bg-amber-50 text-amber-800 border-amber-200' : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+                                          }`}>
+                                            📅 {reasonText}
+                                          </span>
+                                        </div>
+                                      )}
                                     </div>
 
-                                    <div className="flex items-center gap-1.5 shrink-0">
+                                    {/* 우측 출결 상태 및 액션 영역 (shrink-0, 반응형 지원) */}
+                                    <div className="flex items-center sm:flex-col sm:items-end justify-end shrink-0 pt-0.5 self-end sm:self-auto gap-1">
                                       {isCompleted ? (
-                                        <div className="flex items-center gap-1">
-                                          <span className={`text-[8.5px] font-black px-2 py-0.5 rounded ${
+                                        <div className="flex items-center sm:flex-col sm:items-end gap-1">
+                                          <span className={`text-[8.5px] font-black px-2 py-0.5 rounded whitespace-nowrap border ${
                                             makeup.attendance_status === '출석'
-                                              ? 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/30'
+                                              ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
                                               : makeup.attendance_status === '지각'
-                                              ? 'bg-amber-500/15 text-amber-400 border border-amber-500/30'
-                                              : 'bg-rose-500/15 text-rose-400 border border-rose-500/30'
+                                              ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+                                              : 'bg-rose-500/15 text-rose-400 border-rose-500/30'
                                           }`}>
                                             {makeup.attendance_status === '출석' ? '🟢 출석' : makeup.attendance_status === '지각' ? '🟡 지각' : '🔴 결석'}
                                           </span>
                                           <button 
                                             type="button"
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, `보강:${group.time}`)}
-                                            className="text-[8px] font-bold text-gray-500 hover:text-gray-300 underline underline-offset-2 px-1"
+                                            className={`text-[8px] font-bold underline underline-offset-2 px-1 transition-colors ${
+                                              isLight ? 'text-gray-400 hover:text-gray-600' : 'text-gray-500 hover:text-gray-300'
+                                            }`}
                                             title="출석 상태 재초기화"
                                           >
                                             재수정
                                           </button>
                                         </div>
                                       ) : (
-                                        <div className="flex gap-1">
+                                        <div className="flex items-center gap-1">
                                           <button 
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '출석')}
-                                            className="text-[8.5px] font-black px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 text-emerald-400 rounded transition-all"
+                                            className="text-[8.5px] font-black px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 text-emerald-400 rounded transition-all whitespace-nowrap"
                                           >
                                             출석
                                           </button>
                                           <button 
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '지각')}
-                                            className="text-[8.5px] font-black px-1.5 py-0.5 bg-amber-500/10 hover:bg-amber-500 hover:text-white border border-amber-500/20 text-amber-400 rounded transition-all"
+                                            className="text-[8.5px] font-black px-1.5 py-0.5 bg-amber-500/10 hover:bg-amber-500 hover:text-white border border-amber-500/20 text-amber-400 rounded transition-all whitespace-nowrap"
                                           >
                                             지각
                                           </button>
                                           <button 
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '결석')}
-                                            className="text-[8.5px] font-black px-1.5 py-0.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 rounded transition-all"
+                                            className="text-[8.5px] font-black px-1.5 py-0.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 rounded transition-all whitespace-nowrap"
                                           >
                                             결석
                                           </button>

@@ -60,7 +60,19 @@ export function useTodaySheetState({ currentUser }: UseTodaySheetStateProps = {}
     const defaultWidths = Object.fromEntries(DEFAULT_COLUMNS.map(col => [col.id, col.minWidth]));
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('todaySheetColWidths');
-      if (saved) { try { const parsed = JSON.parse(saved); return { ...defaultWidths, ...parsed }; } catch (e) { console.error(e); } }
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved);
+          const merged = { ...defaultWidths, ...parsed };
+          if (typeof merged['tools'] === 'number' && merged['tools'] < 114) {
+            merged['tools'] = 114;
+            localStorage.setItem('todaySheetColWidths', JSON.stringify(merged));
+          }
+          return merged;
+        } catch (e) {
+          console.error(e);
+        }
+      }
     }
     return defaultWidths;
   });

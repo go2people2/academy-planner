@@ -424,9 +424,9 @@ export function useTodaySheetRowLogic({
     } else if (currentStatus && currentStatus.startsWith(ATTENDANCE_STATUS.ABSENT)) {
       nextStatus = ATTENDANCE_STATUS.LATE + timeSuffix;   // 결석 ➡️ 지각
     } else if (currentStatus && currentStatus.startsWith(ATTENDANCE_STATUS.LATE)) {
-      const isOriginalMakeup = !student.day_schedules?.[getDayOfWeek(rowDate)]?.length && timeSuffix;
-      const revertStatus = isOriginalMakeup ? ATTENDANCE_STATUS.SUPPLEMENT : ATTENDANCE_STATUS.BEFORE;
-      nextStatus = revertStatus + timeSuffix; // 지각 ➡️ 수업전 (또는 보강)
+      nextStatus = ATTENDANCE_STATUS.EARLY_LEAVE + timeSuffix; // 지각 ➡️ 조퇴
+    } else if (currentStatus && currentStatus.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE)) {
+      nextStatus = ATTENDANCE_STATUS.BEFORE + timeSuffix; // 조퇴 ➡️ 수업전 (모든 행 동일)
     } else {
       nextStatus = ATTENDANCE_STATUS.PRESENT + timeSuffix; // 보강, 수업전, 기타 빈 상태 ➡️ 출석으로 첫 순환 개시
     }

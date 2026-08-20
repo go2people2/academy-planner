@@ -4,6 +4,7 @@ import { getTodayStr, getDayOfWeek } from '@/lib/utils';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { Student, SessionLog, TextbookOption } from '@/types/dashboard';
 import { getEnrichedStudentData } from '@/lib/studentDataEnricher';
+import { parseSessionTestResult, isValidHwEval } from '@/lib/sessionTestResult';
 
 export function useDashboardData(params: {
   slug: string | string[] | undefined;
@@ -245,17 +246,23 @@ export function useDashboardData(params: {
   const buildMergedTestResult = (existingJsonRaw: any, sessionData: any, fallbacks: {
     completed: any; mission: string; cut: string | number; achievement: number; sType: string; tTotal: number; hwCheckedToday: boolean; hwPassedToday: boolean;
   }) => {
-    let existing = {};
-    try {
-      if (existingJsonRaw) existing = (typeof existingJsonRaw === 'string' ? JSON.parse(existingJsonRaw) : existingJsonRaw);
-    } catch (e) {
-      console.error('Failed to parse existing test_result:', e);
-    }
+    const existing = parseSessionTestResult(existingJsonRaw);
 
     const isCompleted = ('test_completed' in sessionData) ? sessionData.test_completed : fallbacks.completed;
     
+    // 💡 [과제확인 점수 보존] 기존 hw_eval이 유효한 정수(0~10)라면 강사 저장 시 삭제되지 않도록 보존
+    let existingHwEval: number | undefined = undefined;
+    if (isValidHwEval(existing.hw_eval)) {
+      existingHwEval = existing.hw_eval;
+    }
+
+    const finalHwEval = isValidHwEval((sessionData as Record<string, unknown>).hw_eval)
+      ? (sessionData as Record<string, unknown>).hw_eval
+      : existingHwEval;
+
     return JSON.stringify({ 
       ...existing,
+      ...(finalHwEval !== undefined ? { hw_eval: finalHwEval } : {}),
       completed: isCompleted === true ? true : (isCompleted === false ? false : null),
       cut: ('test_cut' in sessionData) ? sessionData.test_cut : fallbacks.cut,
       mission: ('mission' in sessionData) ? sessionData.mission : fallbacks.mission,

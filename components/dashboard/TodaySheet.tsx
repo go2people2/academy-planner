@@ -408,7 +408,7 @@ export default function TodaySheet({
     base['action'] = 8; // 💡 저장 컬럼 너비를 8px로 강제 고정
     
     // 💡 7개 도구 접고 펼칠 때 셀 폭 동적 반응형 조정
-    base['tools'] = showAllTools ? 206 : 110;
+    base['tools'] = showAllTools ? 228 : Math.max(114, colWidths['tools'] || 114);
 
     if (focusColumn) {
       // 포커스된 컬럼은 화면의 상당 부분을 차지하도록 확장

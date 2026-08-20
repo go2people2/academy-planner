@@ -6,6 +6,7 @@ import { X, Printer, Palette, Edit3, Users, Search, Filter } from 'lucide-react'
 import { Student, SessionLog } from '@/types/dashboard';
 import { supabase } from '@/lib/supabase';
 import { isValidHistoryLog } from '@/lib/studentDataEnricher';
+import { getHwEval } from '@/lib/sessionTestResult';
 
 interface HokmaJournalPrintModalProps {
   isOpen: boolean;
@@ -841,11 +842,17 @@ export default function HokmaJournalPrintModal({
                 const rawDateKey = log.date || log.session_date || '';
                 let hwScore = '';
                 const overrideKey = `${student.id}_${rawDateKey}`;
+                const parsedHwEval = getHwEval(log.test_result);
+
                 if (hwOverrides[overrideKey] !== undefined) {
                   hwScore = hwOverrides[overrideKey];
                 } else if (attStatus.includes('결석')) {
                   hwScore = '-';
+                } else if (parsedHwEval !== undefined) {
+                  // 💡 [SSOT] 과제확인 점수가 존재하면 0~10점 그대로 표시 (0점도 유효하게 표시)
+                  hwScore = `${parsedHwEval}점`;
                 } else if (log.todo_achievement !== undefined && log.todo_achievement !== null && String(log.todo_achievement).trim() !== '') {
+                  // 💡 [Legacy Fallback] hw_eval이 없을 때만 기존 todo_achievement 참조
                   const numAch = Number(log.todo_achievement);
                   if (numAch >= 100) hwScore = '10점';
                   else if (numAch >= 70) hwScore = '7점';

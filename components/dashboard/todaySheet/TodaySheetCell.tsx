@@ -903,7 +903,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {colId === 'tools' && (
-          <div className="flex items-center justify-center gap-1 px-1 py-1 w-full min-h-[22px] relative group/tools">
+          <div className="flex items-center justify-center gap-1 px-1 py-1 w-full min-w-0 max-w-full overflow-hidden min-h-[22px] relative group/tools">
             {/* 우측 상단: 학생 주의사항 (노란색 스티커 마우스오버 툴팁) */}
             <div className="absolute top-0 right-0">
               <div 
@@ -977,6 +977,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             ATTENDANCE_STATUS.PRESENT, 
             ATTENDANCE_STATUS.ABSENT, 
             ATTENDANCE_STATUS.LATE, 
+            ATTENDANCE_STATUS.EARLY_LEAVE, 
             ATTENDANCE_STATUS.EXCLUDED, 
             ATTENDANCE_STATUS.CANCELED
           ].includes(cleanStatus as any);
@@ -1068,7 +1069,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     ? (isLight ? 'text-red-600 font-medium' : 'text-red-400 font-bold') 
                     : statusText.startsWith(ATTENDANCE_STATUS.LATE)
                       ? (isLight ? 'text-amber-700 font-medium' : 'text-amber-400 font-bold')
-                      : (isLight ? 'text-gray-500 font-medium' : 'text-gray-400')
+                      : statusText.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE)
+                        ? (isLight ? 'text-orange-600 font-bold' : 'text-orange-400 font-bold')
+                        : (isLight ? 'text-gray-500 font-medium' : 'text-gray-400')
             }`}>
               <div className="flex flex-col items-start justify-center min-w-0 flex-1 gap-0.5 py-0.5">
                 <span className="text-[11px] font-bold leading-tight">{statusText}</span>
@@ -1083,31 +1086,46 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 )}
               </div>
 
-              {/* 💡 [원장님 기획 완벽 구현] 출결 상태가 '결석' 또는 '지각'일 때 조그마한 사유 입력 연필 펜 버튼이 동적으로 함께 뜹니다. */}
-              {(statusText.startsWith(ATTENDANCE_STATUS.ABSENT) || statusText.startsWith(ATTENDANCE_STATUS.LATE)) && (
+              {/* 💡 [원장님 기획 완벽 구현] 출결 상태가 '결석', '지각', '조퇴'일 때 사유 입력 연필 펜 버튼이 동적으로 함께 뜹니다. */}
+              {(statusText.startsWith(ATTENDANCE_STATUS.ABSENT) || statusText.startsWith(ATTENDANCE_STATUS.LATE) || statusText.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE)) && (
                 (() => {
                   const isAbsent = statusText.startsWith(ATTENDANCE_STATUS.ABSENT);
-                  const labelType = isAbsent ? '결석' : '지각';
+                  const isLate = statusText.startsWith(ATTENDANCE_STATUS.LATE);
+                  const isEarlyLeave = statusText.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE);
+                  const labelType = isAbsent ? '결석' : isLate ? '지각' : '조퇴';
+
+                  // 기존 조퇴 사유 추출
+                  const currentProgress = (formData.completed_classwork_text || student.todaySession?.completed_classwork_text || '').trim();
+                  const earlyLeaveLinePattern = /^조퇴\s*(?:\([^)]*\))?\s*$/;
+                  let initialReason = '';
+                  if (isEarlyLeave) {
+                    const lines: string[] = currentProgress ? currentProgress.split('\n') : [];
+                    const earlyLine = lines.find((line: string) => earlyLeaveLinePattern.test(line));
+                    if (earlyLine) {
+                      const match = earlyLine.match(/^조퇴\s*(?:\(\s*(.*)\s*\))?\s*$/);
+                      if (match && match[1]) initialReason = match[1].trim();
+                    }
+                  } else {
+                    initialReason = formData.attendance_reason || student.todaySession?.attendance_reason || '';
+                  }
+
                   return (
                     <button
                       type="button"
                       onClick={(e) => {
                         e.stopPropagation(); // 💥 클릭 시 출결이 다른 상태로 돌아가는 전파 차단!
-                        const currentReason = formData.attendance_reason || student.todaySession?.attendance_reason || '';
-                        const newReason = prompt(`[${student.name}] 학생의 ${labelType} 사유를 입력해 주세요:`, currentReason);
+                        const newReason = prompt(`[${student.name}] 학생의 ${labelType} 사유를 입력해 주세요:`, initialReason);
                         if (newReason !== null) {
                           const cleanReason = newReason.trim();
                           
                           if (isAbsent) {
                             // 결석일 때는 수행진도 자리에 프리펜드 치환 진행
                             const autoProgressText = cleanReason ? `결석 (${cleanReason})` : '결석';
-                            const currentProgress = (formData.completed_classwork_text || student.todaySession?.completed_classwork_text || '').trim();
-                            
                             let finalProgressText = '';
                             if (!currentProgress) {
                               finalProgressText = autoProgressText;
                             } else {
-                              const lines = currentProgress.split('\n');
+                              const lines: string[] = currentProgress.split('\n');
                               if (lines[0].startsWith('결석')) {
                                 lines[0] = autoProgressText;
                                 finalProgressText = lines.join('\n');
@@ -1118,6 +1136,26 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                             
                             onSave({ 
                               attendance_reason: cleanReason,
+                              completed_classwork_text: finalProgressText
+                            });
+                          } else if (isEarlyLeave) {
+                            // 💡 조퇴일 때는 수행진도에 '조퇴(사유)' 형식으로 저장 (기존 진도 보존 및 중복 방지)
+                            const autoProgressText = cleanReason ? `조퇴(${cleanReason})` : '조퇴';
+                            let finalProgressText = '';
+                            if (!currentProgress) {
+                              finalProgressText = autoProgressText;
+                            } else {
+                              const lines: string[] = currentProgress.split('\n');
+                              const existingIdx = lines.findIndex((line: string) => earlyLeaveLinePattern.test(line));
+                              if (existingIdx !== -1) {
+                                lines[existingIdx] = autoProgressText;
+                                finalProgressText = lines.join('\n');
+                              } else {
+                                finalProgressText = `${currentProgress}\n${autoProgressText}`;
+                              }
+                            }
+
+                            onSave({
                               completed_classwork_text: finalProgressText
                             });
                           } else {
@@ -1131,11 +1169,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       className={`p-1 rounded transition-all flex items-center justify-center shrink-0 shadow-sm ml-1 border ${
                         isAbsent 
                           ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20' 
-                          : 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
+                          : isLate
+                            ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
+                            : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border-orange-500/20'
                       }`}
                       title={
-                        formData.attendance_reason 
-                          ? `${labelType} 사유: ${formData.attendance_reason} (클릭하여 수정)` 
+                        initialReason 
+                          ? `${labelType} 사유: ${initialReason} (클릭하여 수정)` 
                           : `클릭하여 ${labelType} 사유 입력`
                       }
                     >
