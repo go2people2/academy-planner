@@ -195,28 +195,43 @@ export default function DashboardPage() {
     }
   }, [selectedDate]);
 
-  // 💡 [보안/편의 개선] 로그인한 사용자 권한에 따른 선생님 필터 초기화
-  useEffect(() => {
-    if (currentUser) {
-      if (currentUser.role === 'teacher') {
-        // 일반 교사는 본인 전용 데이터이므로 필터를 항상 'All'로 초기화하여 가림 현상 방지
-        setSelectedTeacherId('All');
-        localStorage.removeItem('ams_selectedTeacherId');
-      } else {
-        // 관리자(admin/master)는 기존 선택되어 있던 선생님 ID가 있다면 그 값을 유지
-        const savedTeacherId = localStorage.getItem('ams_selectedTeacherId');
-        if (savedTeacherId) {
-          setSelectedTeacherId(savedTeacherId);
-        }
-      }
-    }
-  }, [currentUser?.id, currentUser?.role]);
+  // 💡 [보안/편의 개선] 로그인한 사용자 권한 및 활성 교사 목록에 따른 선생님 필터 초기화/복원/저장
+  const normalizedSlugStr = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
+  const teacherStorageKey = currentUser?.id && normalizedSlugStr 
+    ? `ams_selectedTeacherId_${normalizedSlugStr}_${currentUser.id}` 
+    : null;
 
   useEffect(() => {
-    if (selectedTeacherId) {
-      localStorage.setItem('ams_selectedTeacherId', selectedTeacherId);
+    if (!currentUser) return;
+
+    if (currentUser.role === 'teacher') {
+      // 일반 교사는 본인 전용 데이터이므로 필터를 항상 'All'로 유지 (본인 학생만 서버/쿼리 레벨에서 로드됨)
+      setSelectedTeacherId('All');
+      if (teacherStorageKey) localStorage.removeItem(teacherStorageKey);
+    } else {
+      // 관리자(admin/master)는 신규 키 -> 레거시 키 순으로 복원
+      let targetTeacherId = 'All';
+      if (teacherStorageKey) {
+        const savedNew = localStorage.getItem(teacherStorageKey);
+        if (savedNew) {
+          targetTeacherId = savedNew;
+        } else {
+          const legacySaved = localStorage.getItem('ams_selectedTeacherId');
+          if (legacySaved) {
+            targetTeacherId = legacySaved;
+          }
+        }
+      }
+      setSelectedTeacherId(targetTeacherId);
     }
-  }, [selectedTeacherId]);
+  }, [currentUser?.id, currentUser?.role, teacherStorageKey]);
+
+  // 💡 선택한 선생님 필터 상태 로컬스토리지 연동
+  useEffect(() => {
+    if (teacherStorageKey && selectedTeacherId) {
+      localStorage.setItem(teacherStorageKey, selectedTeacherId);
+    }
+  }, [selectedTeacherId, teacherStorageKey]);
 
   // 💡 선택한 시간대 필터 상태 로컬스토리지 연동
   useEffect(() => {
@@ -254,6 +269,20 @@ export default function DashboardPage() {
 
   const [students, setStudents] = useState<Student[]>([]);
   const [teachers, setTeachers] = useState<any[]>([]);
+
+  // 💡 [Fallback Effect] 데이터 로딩 완료 후, 선택된 선생님이 활성 교사 목록(재원생 1명 이상)에서 사라졌다면 'All'로 안전하게 되돌림
+  useEffect(() => {
+    if (isLoading || !currentUser || currentUser.role === 'teacher') return;
+    if (selectedTeacherId === 'All') return;
+
+    const activeTeacherIdSet = new Set(
+      students.filter(s => !s.is_deleted && s.teacher_id).map(s => s.teacher_id)
+    );
+
+    if (!activeTeacherIdSet.has(selectedTeacherId)) {
+      setSelectedTeacherId('All');
+    }
+  }, [isLoading, currentUser?.role, selectedTeacherId, students]);
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [isRefreshingBooks, setIsRefreshingBooks] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
   ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck, Zap, AlertTriangle,
@@ -9,13 +9,14 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
+import { Student, Teacher } from '@/types/dashboard';
 
 interface SidebarProps {
   currentUser?: any; // 💡 추가
   viewMode: string;
   setViewMode: (mode: any) => void;
   todayCount: number;
-  students: any[];
+  students: Student[];
   selectedFilter: string;
   setSelectedFilter: (filter: string) => void;
   selectedDays: string[]; 
@@ -26,7 +27,7 @@ interface SidebarProps {
   setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
   academyInfo: any; 
   onUpdateAcademyInfo?: (updates: any) => Promise<void>;
-  teachers: any[];
+  teachers: Teacher[];
   selectedTeacherId: string;
   setSelectedTeacherId: (id: string) => void;
   isClassroomModeOpen: boolean;
@@ -74,6 +75,15 @@ export default function Sidebar({
 
   const isAdmin = user?.role === 'admin' || user?.role === 'master';
   const announcements = academyInfo?.announcements || {};
+
+  const activeTeachers = useMemo(() => {
+    const activeTeacherIdSet = new Set(
+      (students || [])
+        .filter(s => !s.is_deleted && s.teacher_id)
+        .map(s => s.teacher_id as string)
+    );
+    return (teachers || []).filter(t => activeTeacherIdSet.has(t.id));
+  }, [students, teachers]);
 
   useEffect(() => {
     // 초기 테마 설정 로드
@@ -219,7 +229,7 @@ export default function Sidebar({
               progress: <SidebarLink key="progress" id="progress" icon={<Activity size={14} className="text-teal-400" />} label="교재별진도" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} isDragging={draggedId === 'progress'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               exams: <SidebarLink key="exams" id="exams" icon={<FileText size={14} className="text-blue-400" />} label="기출문제 관리" active={viewMode === 'exams'} onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }} isDragging={draggedId === 'exams'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               wrongAnswersAdmin: <SidebarLink key="wrongAnswersAdmin" id="wrongAnswersAdmin" icon={<BookOpen size={14} className="text-emerald-400" />} label="오답노트 관리" active={viewMode === 'wrongAnswersAdmin'} onClick={() => { setViewMode('wrongAnswersAdmin'); setSelectedFilter('All'); }} isDragging={draggedId === 'wrongAnswersAdmin'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              studentEdit: <SidebarLink key="studentEdit" id="studentEdit" icon={<UserCog size={14} className="text-amber-400" />} label="학생정보수정" active={viewMode === 'studentEdit'} onClick={() => { setViewMode('studentEdit'); setSelectedFilter('All'); setSelectedTeacherId('All'); setSelectedDays([]); }} isDragging={draggedId === 'studentEdit'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
+              studentEdit: <SidebarLink key="studentEdit" id="studentEdit" icon={<UserCog size={14} className="text-amber-400" />} label="학생정보수정" active={viewMode === 'studentEdit'} onClick={() => { setViewMode('studentEdit'); setSelectedFilter('All'); setSelectedDays([]); }} isDragging={draggedId === 'studentEdit'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
               monthlyChanges: <SidebarLink key="monthlyChanges" id="monthlyChanges" icon={<ArrowLeftRight size={14} className="text-indigo-400" />} label="이번 달 변동 사항" active={viewMode === 'monthlyChanges'} onClick={() => { setViewMode('monthlyChanges'); setSelectedFilter('All'); }} isDragging={draggedId === 'monthlyChanges'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
             };
             return menuMap[id] ?? null;
@@ -368,7 +378,7 @@ export default function Sidebar({
                 <div className="relative group">
                   <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-200 outline-none appearance-none cursor-pointer hover:bg-white/20 hover:text-white hover:border-white/30 transition-all">
                     <option value="All" className="bg-[#121212]">All Teachers (전체 교사)</option>
-                    {(teachers || []).map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                    {activeTeachers.map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
                   </select>
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors"><UserCircle size={12} /></div>
                 </div>
