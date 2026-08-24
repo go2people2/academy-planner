@@ -127,16 +127,16 @@ export function useTodaySheetRowLogic({
       const assigned = student.assigned_books || [];
       const current = existingJson || [];
       const merged = [...current];
-      const currentRowTargetTag = student.isSpecialClass 
+      const currentRowTargetTag = student.isSpecialClass
         ? `선택:${student.courseName || student.electiveCourse?.subject || ''}`
         : '정규';
 
       assigned.forEach(bookName => {
         const courseVal = String(student.book_courses?.[bookName] || '');
         if (courseVal.includes('-keep') || courseVal.includes('-done')) return;
-        
+
         const { targetTag } = parseBookCourseValue(courseVal);
-        
+
         const isMatch = (targetTag === '공통') ||
                         (!student.isSpecialClass && (targetTag === '정규' || !targetTag.startsWith('선택:'))) ||
                         (student.isSpecialClass && (targetTag === currentRowTargetTag));
@@ -164,7 +164,7 @@ export function useTodaySheetRowLogic({
     let resolvedNextQuizJson = session?.next_quiz_json || [];
     let resolvedNextQuizCut = session?.next_quiz_cut || 0;
     let resolvedNextQuizTrial = session?.next_quiz_trial || 1;
-    
+
     if (!resolvedNextQuizText && session?.homework_to) {
       try {
         const raw = session.homework_to;
@@ -216,7 +216,7 @@ export function useTodaySheetRowLogic({
 
     // 💡 [단순명확 원칙] 주의점(management_notes)은 당일 세션 기록(session.management_notes)만 사용 (마스터 주의점 자동 fallback 금지)
     const initialNotes = sessionNotes || '';
-    
+
     return {
       attendance_status: normalizeAttendanceStatus(session?.attendance_status),
       status: session?.status || 'none',
@@ -264,7 +264,7 @@ export function useTodaySheetRowLogic({
     }
 
     // student.todaySession 이 부모로부터 변경되어 내려온 경우 실시간 동기화
-    const isSessionPropsChanged = prevSessionRef.current !== student.todaySession || 
+    const isSessionPropsChanged = prevSessionRef.current !== student.todaySession ||
       prevSessionRef.current?.moved_to_hour !== student.todaySession?.moved_to_hour ||
       prevSessionRef.current?.attendance_status !== student.todaySession?.attendance_status;
 
@@ -286,8 +286,8 @@ export function useTodaySheetRowLogic({
 
   // 5. Handlers
   // 💡 [하이브리드 계약] handleSave(updatesOrField, valueOrOptions?, maybeOptions?)
-  const handleSave = useCallback(async (updatesOrField: Record<string, any> | string, valueOrOptions?: any, maybeOptions?: any) => {
-    if (isSaving) return;
+  const handleSave = useCallback(async (updatesOrField: Record<string, any> | string, valueOrOptions?: any, maybeOptions?: any): Promise<boolean> => {
+    if (isSaving) return false;
     recentlySavedRef.current = true;
 
     // 0. 계약 분석 및 데이터 정규화
@@ -310,8 +310,8 @@ export function useTodaySheetRowLogic({
 
     // 1. 중복 저장 방지 (Tab/Enter 직후 따라오는 Blur 1회 무시)
     if (isBlurCall && skipBlurRef.current) {
-      skipBlurRef.current = false; 
-      return;
+      skipBlurRef.current = false;
+      return false;
     }
 
     // 2. DOM 병합 배제 (Refs 수집을 걷어내고 오직 전달된 업데이트 정보만 단독 저장)
@@ -335,14 +335,14 @@ export function useTodaySheetRowLogic({
 
     const finalData = { ...formData, ...mergedUpdates };
     const initial = getInitialFormData(rowDate);
-    
+
     // 💡 [개선] 출결 상태는 오직 출결 관련 액션에서만 저장되도록 보호
     // 명시적으로 mergedUpdates에 attendance_status가 포함된 경우에만 payload에 포함
     const isAttendanceUpdate = 'attendance_status' in mergedUpdates;
     const isExplicitMovedHourUpdate = 'moved_to_hour' in mergedUpdates;
-    
+
     const savePayload: any = { ...mergedUpdates };
-    
+
     // 일반 필드 저장 시 attendance_status가 payload에 포함되지 않도록 제거
     if (!isAttendanceUpdate) {
       delete savePayload.attendance_status;
@@ -354,7 +354,7 @@ export function useTodaySheetRowLogic({
       if (typeof fVal === 'boolean' || typeof iVal === 'boolean') return fVal !== iVal;
       return String(fVal || '') !== String(iVal || '');
     });
-    if (!hasChange) return;
+    if (!hasChange) return false;
 
     // 3. 저장 실행 및 플래그 설정
     setIsSaving(true);
@@ -363,7 +363,7 @@ export function useTodaySheetRowLogic({
     setFormData(finalData);
 
     // 💡 [원장님 특별 피드백 반영 - 실시간 DOM 밸류 수동 동기화]
-    // 비제어 컴포넌트 껍데기가 옛날 값을 고집하여 일치하지 않거나, 
+    // 비제어 컴포넌트 껍데기가 옛날 값을 고집하여 일치하지 않거나,
     // 나중에 포커스가 스쳐 나갈 때(onBlur) 옛날 값으로 DB가 다시 오염되는 역버그를 완벽 철통 수비합니다!
     if ('completed_classwork_text' in mergedUpdates && ccwRef.current) {
       ccwRef.current.value = mergedUpdates.completed_classwork_text || '';
@@ -390,12 +390,12 @@ export function useTodaySheetRowLogic({
       managementNotesRef.current.value = mergedUpdates.management_notes || '';
     }
 
-    // 💡 [수정] 어떤 경우에도 전체 객체(finalData)를 보내지 않고, 
+    // 💡 [수정] 어떤 경우에도 전체 객체(finalData)를 보내지 않고,
     // 오직 변경된 필드만 포함된 savePayload(Partial)만 전송하여 출석 필드를 보호
     const payloadKeys = Object.keys(savePayload);
     const saveType = isAttendanceUpdate ? 'ATTENDANCE' : 'GENERAL_INFO';
     console.debug(`[SAVE][${saveType}] student: ${student.name}, fields:`, payloadKeys);
-    
+
     const success = await onSave(student.id, savePayload);
     setIsSaving(false);
     // 💡 [안정화] 저장이 완료된 후 부모 DB 비동기 네트워크 상태 반영이 지연되어
@@ -410,10 +410,10 @@ export function useTodaySheetRowLogic({
 
   const handleAttendanceToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
-    
+
     const currentStatus = formData.attendance_status;
     let nextStatus: string;
-    
+
     let timeSuffix = '';
     if (currentStatus && currentStatus.includes(':')) {
       timeSuffix = currentStatus.substring(currentStatus.indexOf(':'));
@@ -430,10 +430,10 @@ export function useTodaySheetRowLogic({
     } else {
       nextStatus = ATTENDANCE_STATUS.PRESENT + timeSuffix; // 보강, 수업전, 기타 빈 상태 ➡️ 출석으로 첫 순환 개시
     }
-    
+
     const isMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || String(student.id || '').includes('_makeup_') || formData.is_pure_makeup === true;
-    
-    const extraUpdate: any = { 
+
+    const extraUpdate: any = {
       attendance_status: nextStatus,
       is_pure_makeup: isMakeup ? true : false,
     };
@@ -445,7 +445,7 @@ export function useTodaySheetRowLogic({
   const handleSupplementTimeSelect = async (hour: number) => {
     const day = getDayOfWeek(rowDate);
     const isMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || String(student.id || '').includes('_makeup_') || formData.is_pure_makeup === true;
-    
+
     // 💡 [시간 정규화] 시간 포맷(16, 1600, '16:00' 등) 통일
     const normalizeH = (val: any): number | null => {
       if (val === null || val === undefined || val === '') return null;
@@ -507,14 +507,14 @@ export function useTodaySheetRowLogic({
       ? (student.courseName || (student as any).electiveCourse?.subject || (student as any).__courseSubject || '특강')
       : (student.todaySession?.course_name || student.courseName || '정규');
 
-    const previousMovedToHour = student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null 
-      ? student.todaySession.moved_to_hour 
+    const previousMovedToHour = student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null
+      ? student.todaySession.moved_to_hour
       : (formData.moved_to_hour !== undefined && formData.moved_to_hour !== null ? formData.moved_to_hour : null);
 
     if (isOriginalScheduledHour) {
       const currentStatus = formData.attendance_status || '';
       const finalStatus = currentStatus || ATTENDANCE_STATUS.BEFORE;
-      
+
       const payload: any = {
         course_name: courseName,
         moved_to_hour: null,
@@ -525,9 +525,9 @@ export function useTodaySheetRowLogic({
       };
       if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
 
-      setFormData((prev: any) => ({ 
-        ...prev, 
-        moved_to_hour: null, 
+      setFormData((prev: any) => ({
+        ...prev,
+        moved_to_hour: null,
         attendance_status: finalStatus,
         attendance_reason: null,
         is_pure_makeup: false,
@@ -535,9 +535,9 @@ export function useTodaySheetRowLogic({
       await onSave(student.id, payload);
     } else {
       const formatHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-      
-      const newAttStatus = isMakeup 
-        ? `보강:${formatHour}` 
+
+      const newAttStatus = isMakeup
+        ? `보강:${formatHour}`
         : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
 
       const hhmmHour = hour >= 100 ? hour : hour;
@@ -555,26 +555,26 @@ export function useTodaySheetRowLogic({
       setFormData((prev: any) => ({ ...prev, ...payload }));
       await onSave(student.id, payload);
     }
-    
+
     setIsSupplementTimePickerOpen(false);
   };
 
   const selectFeedback = (level: 'gradeA' | 'gradeB' | 'gradeC' | 'gradeD' | 'gradeE' | 'gradeF' | 'none') => {
-    const presets = currentUser?.homework_presets || { 
-      'gradeA': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*', 
-      'gradeB': '숙제를 잘 수행했습니다.', 
-      'gradeC': '숙제 수행이 보통입니다.', 
-      'gradeD': '숙제가 미흡한 부분이 있습니다.', 
+    const presets = currentUser?.homework_presets || {
+      'gradeA': '숙제를 아주 완벽하게 잘 해왔습니다. *^^*',
+      'gradeB': '숙제를 잘 수행했습니다.',
+      'gradeC': '숙제 수행이 보통입니다.',
+      'gradeD': '숙제가 미흡한 부분이 있습니다.',
       'gradeE': '숙제를 거의 해오지 않았습니다.',
       'gradeF': ''
     };
     let currentNotes = formData.special_notes || '';
     const newComment = presets[level] || '';
-    
+
     if (level === 'none') {
       let updatedNotes = currentNotes;
-      Object.values(presets).forEach(p => { 
-        if (p && updatedNotes.includes(String(p))) updatedNotes = updatedNotes.replace(String(p), '').trim(); 
+      Object.values(presets).forEach(p => {
+        if (p && updatedNotes.includes(String(p))) updatedNotes = updatedNotes.replace(String(p), '').trim();
       });
       setFormData((prev: any) => ({ ...prev, special_notes: updatedNotes }));
       if (notesRef.current) notesRef.current.value = updatedNotes;
@@ -584,12 +584,12 @@ export function useTodaySheetRowLogic({
     }
 
     let updatedNotes = currentNotes;
-    Object.values(presets).forEach(p => { 
-      if (p && updatedNotes.includes(String(p))) updatedNotes = updatedNotes.replace(String(p), newComment).trim(); 
+    Object.values(presets).forEach(p => {
+      if (p && updatedNotes.includes(String(p))) updatedNotes = updatedNotes.replace(String(p), newComment).trim();
     });
-    
+
     if (updatedNotes === currentNotes) updatedNotes = currentNotes ? `${currentNotes}\n${newComment}`.trim() : newComment;
-    
+
     setFormData((prev: any) => ({ ...prev, special_notes: updatedNotes }));
     if (notesRef.current) notesRef.current.value = updatedNotes;
     handleSave('notes', updatedNotes);

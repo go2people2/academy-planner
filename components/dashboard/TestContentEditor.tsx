@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Save, Hash, FileText, Plus, Trash2, Video, FileDown, BookOpen, Check } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface QuestionSolution {
   ans: string;
@@ -20,6 +21,13 @@ interface TestContentEditorProps {
 
 export default function TestContentEditor({ test, onSave, onClose }: TestContentEditorProps) {
   const [isSaving, setIsSaving] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: true,
+    onClose,
+    isSaving
+  });
   const [formData, setFormData] = useState({
     test_code: '',
     title: '',
@@ -34,11 +42,11 @@ export default function TestContentEditor({ test, onSave, onClose }: TestContent
       const formattedAnswers = Array.from({ length: test.total_questions }).map((_, i) => {
         const item = rawAnswers[i];
         if (typeof item === 'string') return { ans: item, video: '', pdf: '', desc: '' };
-        return { 
-          ans: item?.ans || '', 
-          video: item?.video || '', 
-          pdf: item?.pdf || '', 
-          desc: item?.desc || '' 
+        return {
+          ans: item?.ans || '',
+          video: item?.video || '',
+          pdf: item?.pdf || '',
+          desc: item?.desc || ''
         };
       });
 

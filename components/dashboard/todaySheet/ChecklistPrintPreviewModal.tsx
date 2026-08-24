@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Printer, X, FileText, Download, Loader2, FileSpreadsheet } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface ChecklistPrintPreviewModalProps {
   isOpen: boolean;
@@ -28,7 +29,7 @@ export default function ChecklistPrintPreviewModal({
   const [mounted, setMounted] = useState(false);
   const [selectedTopicIds, setSelectedTopicIds] = useState<string[]>([]);
   const [customTitle, setCustomTitle] = useState('');
-  
+
   // 이미지 저장 엔진 로드 관련 상태 (dom-to-image)
   const [domToImageLoaded, setDomToImageLoaded] = useState(false);
   const [isSavingImage, setIsSavingImage] = useState(false);
@@ -40,6 +41,13 @@ export default function ChecklistPrintPreviewModal({
   // Excel 저장 엔진 로드 관련 상태 (SheetJS)
   const [xlsxLoaded, setXlsxLoaded] = useState(false);
   const [isSavingExcel, setIsSavingExcel] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen,
+    onClose,
+    isSaving: isSavingImage || isSavingPdf || isSavingExcel
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -221,7 +229,7 @@ export default function ChecklistPrintPreviewModal({
 
       // A4 규격(210 x 297)에 맞춰 삽입
       doc.addImage(dataUrl, 'PNG', 0, 0, 210, 297);
-      
+
       // 다운로드 트리거
       doc.save(`${customTitle || '체크리스트'}_${selectedDate}.pdf`);
     } catch (e) {
@@ -406,7 +414,7 @@ export default function ChecklistPrintPreviewModal({
         }
       `}</style>
 
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
         exit={{ opacity: 0, scale: 0.95 }}
@@ -490,13 +498,13 @@ export default function ChecklistPrintPreviewModal({
                 <button
                   key={t.id}
                   onClick={() => {
-                    setSelectedTopicIds(prev => 
+                    setSelectedTopicIds(prev =>
                       prev.includes(t.id) ? prev.filter(id => id !== t.id) : [...prev, t.id]
                     );
                   }}
                   className={`px-3 py-1 rounded-full cursor-pointer transition-all border text-[10px] font-black ${
-                    isSelected 
-                      ? 'bg-blue-600 border-blue-500 text-white shadow-sm shadow-blue-500/10' 
+                    isSelected
+                      ? 'bg-blue-600 border-blue-500 text-white shadow-sm shadow-blue-500/10'
                       : 'bg-white border-gray-200 text-gray-400 hover:border-gray-300'
                   }`}
                 >

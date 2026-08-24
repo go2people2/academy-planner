@@ -74,11 +74,11 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
     session_date: sessionDate,
     course_name: l.course_name || '정규',
     status: (l.status || 'none') as StudentStatus,
-    attendance_status: normalizeAttendanceStatus(l.attendance_status), 
+    attendance_status: normalizeAttendanceStatus(l.attendance_status),
     special_notes: translateBookCodes(l.special_notes || '', textbooks),
     classwork_text: translateBookCodes(l.classwork_text || '', textbooks),
     classwork_json: l.classwork_json || [],
-    completed_classwork_text: translateBookCodes(l.completed_classwork_text || '', textbooks), 
+    completed_classwork_text: translateBookCodes(l.completed_classwork_text || '', textbooks),
     completed_classwork_json: l.completed_classwork_json || [],
     homework_text: translateBookCodes(l.homework_text || '', textbooks),
     homework_json: l.homework_json || [],
@@ -87,11 +87,11 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
     next_quiz_cut: nq.text ? nq.cut : (nq.hasHwTo ? nq.cut : 0),
     next_quiz_trial: nq.text ? nq.trial : (nq.hasHwTo ? nq.trial : 1),
     test_id: translateBookCodes(l.test_status || '', textbooks),
-    test_score: l.test_score, 
+    test_score: l.test_score,
     test_score_type: tr.sType,
     test_total_count: tr.tTotal,
-    test_cut: tr.tCut, 
-    test_completed: tr.isTestCompleted, 
+    test_cut: tr.tCut,
+    test_completed: tr.isTestCompleted,
     mission: translateBookCodes(tr.missionSnapshot, textbooks),
     todo_achievement: tr.todoAchievement,
     report_sent_at: l.report_sent_at,
@@ -116,7 +116,19 @@ export const buildSessionLog = (l: any, textbooks: any[]): SessionLog => {
     approval_status: l.approval_status || 'none',
     test_result: l.test_result || null,
     attendance_reason: l.attendance_reason || null,
-    management_notes: l.management_notes || ''
+    management_notes: l.management_notes || '',
+    academy_id: l.academy_id,
+    absence_session_id: l.absence_session_id ?? null,
+    absence_date: l.absence_date ?? null,
+    session_snapshot: (() => {
+      if (!l.session_snapshot) return null;
+      if (typeof l.session_snapshot === 'object') return l.session_snapshot;
+      try {
+        return JSON.parse(l.session_snapshot);
+      } catch (e) {
+        return null;
+      }
+    })()
   };
 };
 
@@ -157,7 +169,10 @@ export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, stud
     return logCourse === trimmedTarget;
   });
 
-  const logsToProcess = filteredLogs.length > 0 ? filteredLogs : pastLogs;
+  const logsToProcess = filteredLogs;
+  if (logsToProcess.length === 0) {
+    return "";
+  }
 
   // 가장 최근에 유효한 숙제가 작성되었던 1회의 과거 수업 찾기 (무효 문구는 스킵하고 그 전 수업 계속 추적)
   for (const log of logsToProcess) {
@@ -176,20 +191,20 @@ export const calculateAggregatedHw = (pastLogs: SessionLog[], academy: any, stud
 
 // 6. 오늘의 세션 데이터 결정 및 이월 로직
 export const determineTodaySession = (
-  student: any, todayLog: SessionLog | undefined, baseSession: SessionLog | undefined, 
+  student: any, todayLog: SessionLog | undefined, baseSession: SessionLog | undefined,
   isTodayClassDay: boolean, selectedDate: string, academy: any
 ) => {
   // 💡 [단일 명확 규칙] 오직 지난 수업의 예정된 다음 테스트(next_quiz_text)만 승계 대상으로 지정
   const activePlanText = baseSession?.next_quiz_text || "";
   const activePlanCut = Number(baseSession?.next_quiz_cut) || 0;
   const activePlanTrial = Number(baseSession?.next_quiz_trial) || 1;
-  
+
   const todayMission = todayLog?.mission || "";
   const defaultScoreType = baseSession?.test_score_type || 'score';
 
   if (todayLog) {
     todayLog.mission = todayMission;
-    
+
     if (!todayLog.test_score_type) todayLog.test_score_type = defaultScoreType;
 
     // 💡 [원장님 2번 지침 100% 보장 수정]
@@ -213,20 +228,20 @@ export const determineTodaySession = (
     }
 
     if (!isTodayClassDay && !todayLog.next_quiz_text && activePlanText) {
-      todayLog.next_quiz_text = activePlanText; 
-      todayLog.next_quiz_cut = activePlanCut; 
+      todayLog.next_quiz_text = activePlanText;
+      todayLog.next_quiz_cut = activePlanCut;
       todayLog.next_quiz_trial = activePlanTrial;
     }
     return todayLog;
   }
 
-  return { 
-    id: 'temp', date: selectedDate, status: 'none', 
-    attendance_status: ATTENDANCE_STATUS.BEFORE, 
-    test_id: activePlanText, 
-    test_cut: activePlanCut, 
-    mission: '', next_quiz_text: !isTodayClassDay ? activePlanText : '', 
-    next_quiz_cut: !isTodayClassDay ? activePlanCut : 0, next_quiz_trial: !isTodayClassDay ? activePlanTrial : 1, 
+  return {
+    id: 'temp', date: selectedDate, status: 'none',
+    attendance_status: ATTENDANCE_STATUS.BEFORE,
+    test_id: activePlanText,
+    test_cut: activePlanCut,
+    mission: '', next_quiz_text: !isTodayClassDay ? activePlanText : '',
+    next_quiz_cut: !isTodayClassDay ? activePlanCut : 0, next_quiz_trial: !isTodayClassDay ? activePlanTrial : 1,
     test_completed: undefined,
     test_score_type: defaultScoreType
   } as any;
@@ -237,12 +252,12 @@ export const isValidHistoryLog = (l: any) => {
   if (!l) return false;
   const hasStatus = l.status && l.status !== 'none';
   const hasAttendance = l.attendance_status && l.attendance_status !== '출석전' && l.attendance_status !== 'BEFORE';
-  const hasContent = (l.classwork_text || '').trim() || 
-                     (l.completed_classwork_text || '').trim() || 
-                     (l.homework_text || '').trim() || 
+  const hasContent = (l.classwork_text || '').trim() ||
+                     (l.completed_classwork_text || '').trim() ||
+                     (l.homework_text || '').trim() ||
                      (l.mission || '').trim();
   const hasTest = l.test_completed || (l.test_score !== undefined && l.test_score !== null && l.test_score !== '');
-  
+
   return hasStatus || hasAttendance || hasContent || hasTest;
 };
 
@@ -279,7 +294,7 @@ export const selectBaseSession = (logs: SessionLog[], targetDate: string, holida
 
   const isLogHoliday = (holidays || []).some((h: any) => h.date === lastDirectLog.date);
   const isMakeup = lastDirectLog.attendance_status?.startsWith(ATTENDANCE_STATUS.SUPPLEMENT);
-  
+
   if (!isLogHoliday || isMakeup) {
     return lastDirectLog;
   }
@@ -305,11 +320,11 @@ export const findTeacherInfo = (teachers: any[], teacherId?: string, fallbackNam
 
 // 12. 학생 1명의 데이터 보강 (최종 조합)
 export const getEnrichedStudentData = (
-  s: any, logsData: any[], selectedDate: string, 
+  s: any, logsData: any[], selectedDate: string,
   availableTextbooks: any[], academy: any, teachers: any[], tasksData: any[]
 ) => {
   const logs = (logsData || []).map(l => buildSessionLog(l, availableTextbooks));
-  
+
   const history = calculateStudentHistory(logs, selectedDate);
   const baseSession = selectBaseSession(logs, selectedDate, academy?.operation_settings?.holidays, '정규');
   const todayLogs = logs.filter((l: any) => String(l.date || l.session_date) === String(selectedDate));
@@ -328,7 +343,7 @@ export const getEnrichedStudentData = (
 
   const movedTodayLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
   const regularTodayLog = movedTodayLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l));
-  
+
   let electiveDays: string[] = [];
   const rawElective = s.book_courses?.['__elective_courses'];
   if (rawElective) {
@@ -344,20 +359,20 @@ export const getEnrichedStudentData = (
   const allClassDays = Array.from(new Set([...(s.class_days || []), ...electiveDays]));
 
   const { isHoliday, isTodayClassDay: isScheduledToday } = evaluateTodayStatus(selectedDate, allClassDays, academy?.operation_settings?.holidays);
-  
+
   const targetLogForStatus = regularTodayLog || todayLogs.find((l: any) => isMakeupLog(l)) || todayLogs[0];
   const isPureMakeupSession = targetLogForStatus?.is_pure_makeup === true;
   const isMovedHourSession = targetLogForStatus?.moved_to_hour !== undefined && targetLogForStatus?.moved_to_hour !== null && targetLogForStatus?.moved_to_hour > 0;
   const isSkipped = targetLogForStatus?.attendance_status === ATTENDANCE_STATUS.EXCLUDED;
-  
+
   const isTodayClassDay = (isScheduledToday || isPureMakeupSession || isMovedHourSession || todayLogs.length > 0) && !isSkipped;
-  
+
   const pastLogs = logs
     .filter(l => l.date < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))
     .sort((a, b) => b.date.localeCompare(a.date));
   const targetCourseName = (s as any).isSpecialClass ? ((s as any).electiveCourse?.subject || '특강') : '정규';
   const aggregatedHw = calculateAggregatedHw(pastLogs, academy, s, targetCourseName);
-  
+
   const regularTodaySession = determineTodaySession(s, regularTodayLog, baseSession, isScheduledToday, selectedDate, academy);
   const todaySession = isScheduledToday ? regularTodaySession : determineTodaySession(s, targetLogForStatus, baseSession, isTodayClassDay, selectedDate, academy);
 
@@ -378,7 +393,7 @@ export const getEnrichedStudentData = (
     is_deleted: !!s.is_deleted, class_days: s.class_days || [], assigned_books: s.assigned_books || [],
     suggestions: (tasksData || []).filter(t => t.title === `[건의] ${s.name}`),
     history, isRedLight: history.includes('poor') || history.includes('bad'),
-    lastSession: baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', homework_text: aggregatedHw } as any : undefined), 
+    lastSession: baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', homework_text: aggregatedHw } as any : undefined),
     todaySession, todaySessions: allTodaySessions as SessionLog[], allLogs: logs,
     isTodayClassDay,
     isScheduledToday: !!isScheduledToday,

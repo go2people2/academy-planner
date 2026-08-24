@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Calendar, School, AlertTriangle, Save, Loader2, Trash2 
+import {
+  Calendar, School, AlertTriangle, Save, Loader2, Trash2
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 
@@ -18,7 +18,7 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
   const [isSaving, setIsSaving] = useState(false);
   const [editingExamId, setEditingExamId] = useState<string | null>(null);
   const [editExamData, setEditExamData] = useState<any>({});
-  
+
   const EXAM_TYPES = [
     { id: '1-MID', label: '1학기 중간' },
     { id: '1-FINAL', label: '1학기 기말' },
@@ -105,6 +105,37 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
     });
   }, [students, groupedExams]);
 
+  const normalizeGradeList = (value: string) => {
+    const rawItems = (value || '').split(',');
+    const grades = rawItems
+      .map((item) => item.trim())
+      .filter(Boolean);
+
+    const isValid = grades.length > 0 && grades.every((item) => /^[1-3]$/.test(item));
+
+    if (!isValid) {
+      return { value: null, error: '학년은 1, 2, 3 중 하나 이상을 쉼표로 구분해 입력하세요. 예: 1,2 또는 1,2,3' };
+    }
+
+    return {
+      value: [...new Set(grades)]
+        .sort((a, b) => Number(a) - Number(b))
+        .join(','),
+      error: null,
+    };
+  };
+
+  const formatGradeDisplay = (gradeVal?: string | null) => {
+    if (!gradeVal) return '';
+    const parts = gradeVal.split(',').map(s => s.trim()).filter(Boolean);
+    if (parts.length === 0) return '';
+    // 만약 기존 레거시(중3, 고2 등)라면 그대로 노출
+    if (parts.every(p => /^[1-3]$/.test(p))) {
+      return `적용 학년: ${parts.join('·')}학년`;
+    }
+    return `적용 학년: ${gradeVal}`;
+  };
+
   const handleSetCurrentPeriod = async () => {
     if (!onUpdateAcademyInfo) return;
     const periodKey = `${selectedYear}-${selectedType}`;
@@ -114,15 +145,53 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
   };
 
   const handleAddExam = async () => {
-    if (!newExam.school_name || !newExam.target_date || !academyInfo?.id) { alert('학교와 날짜를 확인해 주세요.'); return; }
+    if (!newExam.school_name || !newExam.target_date || !academyInfo?.id) {
+      alert('학교와 날짜를 확인해 주세요.');
+      return;
+    }
+
+    const { value: normalizedGrades, error: gradeError } = normalizeGradeList(newExam.grade);
+    if (gradeError || !normalizedGrades) {
+      alert(gradeError || '적용 학년을 입력해 주세요.');
+      return;
+    }
+
     setIsSaving(true);
     try {
       const periodKey = `${selectedYear}-${selectedType}`;
       const finalExamName = newExam.subject ? `${periodKey}:${newExam.subject}` : periodKey;
-      const payload = { academy_id: academyInfo.id, school_name: newExam.school_name, grade: newExam.grade || null, exam_name: finalExamName, target_date: newExam.target_date, end_date: newExam.end_date || newExam.target_date };
+      const targetDate = newExam.target_date;
+      const endDate = newExam.end_date || targetDate;
+
+      // 💡 [중복 방지] 같은 academy 안에서 current_exam_period + school_name + normalized grade list + target_date + end_date 중복 체크
+      const isDuplicate = examSchedules.some(ex => {
+        const isSamePeriod = ex.exam_name && ex.exam_name.startsWith(periodKey);
+        const isSameSchool = ex.school_name?.trim() === newExam.school_name.trim();
+        const isSameGrade = normalizeGradeList(ex.grade || '').value === normalizedGrades;
+        const isSameStart = ex.target_date === targetDate;
+        const isSameEnd = (ex.end_date || ex.target_date) === endDate;
+        const isSameSubject = (ex.exam_name.split(':')[1] || '') === (newExam.subject || '');
+        return isSamePeriod && isSameSchool && isSameGrade && isSameStart && isSameEnd && isSameSubject;
+      });
+
+      if (isDuplicate) {
+        alert('이미 동일한 학교/학년/기간의 시험 일정이 등록되어 있습니다.');
+        setIsSaving(false);
+        return;
+      }
+
+      const payload = {
+        academy_id: academyInfo.id,
+        school_name: newExam.school_name.trim(),
+        grade: normalizedGrades,
+        exam_name: finalExamName,
+        target_date: targetDate,
+        end_date: endDate
+      };
+
       const { error } = await supabase.from('ams_exam_schedules').insert([payload]);
       if (error) throw error;
-      setNewExam({ ...newExam, subject: '', target_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0] });
+      setNewExam({ school_name: '', grade: '', subject: '', target_date: new Date().toISOString().split('T')[0], end_date: new Date().toISOString().split('T')[0] });
       await fetchExams();
     } catch (e: any) { alert(`오류: ${e.message}`); } finally { setIsSaving(false); }
   };
@@ -138,10 +207,17 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
       alert('학교와 시작 날짜는 필수입니다.');
       return;
     }
+
+    const { value: normalizedGrades, error: gradeError } = normalizeGradeList(editExamData.grade);
+    if (gradeError || !normalizedGrades) {
+      alert(gradeError || '적용 학년을 입력해 주세요.');
+      return;
+    }
+
     const finalExamName = editExamData.subject ? `${selectedYear}-${selectedType}:${editExamData.subject}` : `${selectedYear}-${selectedType}`;
     const payload = {
-      school_name: editExamData.school_name,
-      grade: editExamData.grade || null,
+      school_name: editExamData.school_name.trim(),
+      grade: normalizedGrades,
       exam_name: finalExamName,
       target_date: editExamData.target_date,
       end_date: editExamData.end_date || editExamData.target_date
@@ -166,7 +242,231 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
     });
   };
 
-  const ExamList = ({ title, list }: { title: string, list: any[] }) => (
+  const currentActiveLabel = useMemo(() => {
+    const parts = currentPeriod.split('-');
+    if (parts.length >= 3) {
+      const y = parts[0];
+      const typeKey = `${parts[1]}-${parts[2]}`;
+      const found = EXAM_TYPES.find(t => t.id === typeKey);
+      return `${y}년 ${found ? found.label : typeKey}`;
+    }
+    return currentPeriod;
+  }, [currentPeriod, EXAM_TYPES]);
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <div className="bg-white border border-[#e3e2e0] rounded-lg overflow-hidden shadow-sm p-4 space-y-4">
+        {/* 1행: 시험 기간 선택 */}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div className="flex flex-wrap items-center gap-3">
+            <div className="flex items-center gap-2 bg-gray-50 border border-[#edece9] rounded px-2.5 py-1">
+              <Calendar size={15} className="text-rose-500 opacity-70" />
+              <input
+                type="number"
+                value={selectedYear}
+                onChange={e => setSelectedYear(e.target.value)}
+                className="w-16 bg-transparent text-[13px] font-black text-gray-800 outline-none text-center"
+              />
+            </div>
+
+            <div className="flex items-center gap-1.5 flex-nowrap">
+              {EXAM_TYPES.map(type => (
+                <button
+                  key={type.id}
+                  onClick={() => setSelectedType(type.id)}
+                  className={`px-3 py-1.5 text-[11px] font-black rounded border whitespace-nowrap transition-all ${
+                    selectedType === type.id
+                      ? 'bg-rose-50 border-rose-200 text-rose-700 shadow-sm'
+                      : 'bg-white border-[#edece9] text-gray-500 hover:text-gray-900 hover:bg-gray-50'
+                  }`}
+                >
+                  {type.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2.5 shrink-0">
+            <span className="text-[11px] font-bold text-gray-500">
+              현재 활성: <span className="text-rose-600 font-black">{currentActiveLabel}</span>
+            </span>
+            <button
+              onClick={handleSetCurrentPeriod}
+              className={`px-4 py-1.5 rounded text-[11px] font-black uppercase tracking-wider transition-all shrink-0 ${
+                currentPeriod === `${selectedYear}-${selectedType}`
+                  ? 'bg-rose-50 text-rose-700 border border-rose-200 shadow-sm'
+                  : 'bg-rose-600 text-white hover:bg-rose-500 shadow-sm active:scale-95'
+              }`}
+            >
+              {currentPeriod === `${selectedYear}-${selectedType}` ? 'Active' : 'Set Active'}
+            </button>
+          </div>
+        </div>
+
+        {/* 2행: 학교별 시험 일정 등록 */}
+        <div className="border-t border-[#edece9] pt-3.5 space-y-2.5">
+          <p className="text-[11px] font-black text-gray-600 tracking-wider">학교별 시험 일정 등록</p>
+          <div className="flex flex-wrap items-center gap-2.5">
+            <input
+              type="text"
+              placeholder="학교명 *"
+              value={newExam.school_name}
+              onChange={e => {
+                const val = e.target.value;
+                setNewExam((prev: any) => ({ ...prev, school_name: val }));
+              }}
+              className="flex-1 min-w-[150px] bg-white border border-[#edece9] rounded px-3 py-1.5 text-[12px] font-bold text-gray-800 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+            />
+            <input
+              type="text"
+              placeholder="적용 학년 * (예: 1,2 또는 1,2,3)"
+              title="해당 학교에서 시험 일정이 적용되는 학년을 입력하세요. 예: 1,2 / 3"
+              value={newExam.grade}
+              onChange={e => {
+                const val = e.target.value;
+                setNewExam((prev: any) => ({ ...prev, grade: val }));
+              }}
+              className="flex-1 min-w-[180px] bg-white border border-[#edece9] rounded px-3 py-1.5 text-[12px] font-bold text-gray-800 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+            />
+            <div className="flex items-center gap-1">
+              <input
+                type="date"
+                value={newExam.target_date}
+                onChange={e => {
+                  const val = e.target.value;
+                  setNewExam((prev: any) => ({ ...prev, target_date: val }));
+                }}
+                className="w-32 bg-white border border-[#edece9] rounded px-2.5 py-1.5 text-[12px] text-gray-800 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+              />
+              <span className="text-gray-400 text-[11px]">~</span>
+              <input
+                type="date"
+                value={newExam.end_date}
+                onChange={e => {
+                  const val = e.target.value;
+                  setNewExam((prev: any) => ({ ...prev, end_date: val }));
+                }}
+                className="w-32 bg-white border border-[#edece9] rounded px-2.5 py-1.5 text-[12px] text-gray-800 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
+              />
+            </div>
+            <button
+              onClick={handleAddExam}
+              disabled={isSaving}
+              className="px-5 py-1.5 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-black rounded uppercase tracking-wider transition-all shadow-sm active:scale-95 flex items-center gap-1.5 shrink-0"
+            >
+              {isSaving ? <Loader2 size={12} className="animate-spin" /> : <><Save size={12} /> Add</>}
+            </button>
+          </div>
+
+          {/* 고등 과목 선택 (필요시 하단에 작게 노출) */}
+          {isHighSchool(newExam.school_name) && (
+            <div className="pt-2 flex flex-wrap gap-1.5 items-center">
+              <span className="text-[10px] font-bold text-gray-500 mr-1">고등 과목:</span>
+              {HIGH_SUBJECTS.map(sub => (
+                <button
+                  key={sub}
+                  onClick={() => setNewExam((prev: any) => ({ ...prev, subject: sub }))}
+                  className={`px-2 py-0.5 text-[10px] font-black rounded border transition-all ${
+                    newExam.subject === sub
+                      ? 'bg-rose-100 border-rose-300 text-rose-800'
+                      : 'bg-white border-[#edece9] text-gray-500 hover:bg-gray-50'
+                  }`}
+                >
+                  {sub}
+                </button>
+              ))}
+              <input
+                type="text"
+                placeholder="기타"
+                value={HIGH_SUBJECTS.includes(newExam.subject) ? '' : newExam.subject}
+                onChange={e => {
+                  const val = e.target.value;
+                  setNewExam((prev: any) => ({ ...prev, subject: val }));
+                }}
+                className="ml-2 w-16 bg-transparent border-b border-gray-300 px-1 py-0.5 text-[10px] font-bold text-gray-800 outline-none focus:border-rose-500"
+              />
+            </div>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-4">
+        {pendingSchools.length > 0 && (
+          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-wrap gap-2.5 items-center shadow-sm">
+            <div className="flex items-center gap-2 mr-2 border-r border-amber-200 pr-4">
+              <AlertTriangle size={16} className="text-amber-600" />
+              <span className="text-[11px] font-black text-amber-600 uppercase tracking-widest">미등록</span>
+            </div>
+            {pendingSchools.map(school => (
+              <button
+                key={school}
+                onClick={() => setNewExam({ ...newExam, school_name: school })}
+                className="px-3 py-1.5 bg-white border border-amber-200 rounded-md text-[13px] font-black text-amber-900 hover:bg-amber-50 hover:border-amber-400 transition-all flex items-center gap-2 group shadow-sm"
+              >
+                <School size={12} className="text-amber-600 opacity-60 group-hover:opacity-100" />
+                {school}
+              </button>
+            ))}
+          </div>
+        )}
+
+        <div className="flex gap-6">
+          <ExamListLight
+            title="MIDDLE"
+            list={groupedExams.middle}
+            editingExamId={editingExamId}
+            editExamData={editExamData}
+            setEditExamData={setEditExamData}
+            setEditingExamId={setEditingExamId}
+            handleUpdateExam={handleUpdateExam}
+            handleDeleteExam={handleDeleteExam}
+            startEditing={startEditing}
+            formatGradeDisplay={formatGradeDisplay}
+          />
+          <ExamListLight
+            title="HIGH"
+            list={groupedExams.high}
+            editingExamId={editingExamId}
+            editExamData={editExamData}
+            setEditExamData={setEditExamData}
+            setEditingExamId={setEditingExamId}
+            handleUpdateExam={handleUpdateExam}
+            handleDeleteExam={handleDeleteExam}
+            startEditing={startEditing}
+            formatGradeDisplay={formatGradeDisplay}
+          />
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+interface ExamListLightProps {
+  title: string;
+  list: any[];
+  editingExamId: string | null;
+  editExamData: any;
+  setEditExamData: React.Dispatch<React.SetStateAction<any>>;
+  setEditingExamId: React.Dispatch<React.SetStateAction<string | null>>;
+  handleUpdateExam: (id: string) => Promise<void>;
+  handleDeleteExam: (id: string) => Promise<void>;
+  startEditing: (exam: any, subject: string) => void;
+  formatGradeDisplay: (gradeVal?: string | null) => string;
+}
+
+function ExamListLight({
+  title,
+  list,
+  editingExamId,
+  editExamData,
+  setEditExamData,
+  setEditingExamId,
+  handleUpdateExam,
+  handleDeleteExam,
+  startEditing,
+  formatGradeDisplay
+}: ExamListLightProps) {
+  return (
     <div className="flex-1 space-y-2">
       <div className="flex items-center gap-2 px-1">
         <div className={`w-1.5 h-3.5 rounded-full ${title === 'MIDDLE' ? 'bg-blue-600' : 'bg-rose-600'}`} />
@@ -180,16 +480,60 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
           list.map(exam => {
             const subject = exam.exam_name.split(':')[1] || '';
             const diff = Math.ceil((new Date(exam.target_date).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24));
-            
+
             if (editingExamId === exam.id) {
               return (
                 <div key={exam.id} className="flex flex-wrap items-center gap-2 px-4 py-3 bg-blue-50/30 transition-all">
-                  <input type="text" value={editExamData.school_name} onChange={e => setEditExamData({...editExamData, school_name: e.target.value})} className="w-24 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500" placeholder="학교명" />
-                  <input type="text" value={editExamData.grade} onChange={e => setEditExamData({...editExamData, grade: e.target.value})} className="w-12 bg-white border border-[#edece9] rounded text-center px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500" placeholder="학년" />
-                  <input type="text" value={editExamData.subject} onChange={e => setEditExamData({...editExamData, subject: e.target.value})} className="w-16 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500" placeholder="과목" />
-                  <input type="date" value={editExamData.target_date} onChange={e => setEditExamData({...editExamData, target_date: e.target.value})} className="w-28 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500" />
+                  <input
+                    type="text"
+                    value={editExamData.school_name || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setEditExamData((prev: any) => ({ ...prev, school_name: val }));
+                    }}
+                    className="w-24 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500"
+                    placeholder="학교명"
+                  />
+                  <input
+                    type="text"
+                    value={editExamData.grade || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setEditExamData((prev: any) => ({ ...prev, grade: val }));
+                    }}
+                    className="w-28 bg-white border border-[#edece9] rounded text-center px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500"
+                    placeholder="예: 1,2 / 3"
+                    title="적용 학년 (1, 2, 3 쉼표 구분)"
+                  />
+                  <input
+                    type="text"
+                    value={editExamData.subject || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setEditExamData((prev: any) => ({ ...prev, subject: val }));
+                    }}
+                    className="w-16 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500"
+                    placeholder="과목"
+                  />
+                  <input
+                    type="date"
+                    value={editExamData.target_date || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setEditExamData((prev: any) => ({ ...prev, target_date: val }));
+                    }}
+                    className="w-28 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500"
+                  />
                   <span className="text-gray-400 text-[10px]">~</span>
-                  <input type="date" value={editExamData.end_date} onChange={e => setEditExamData({...editExamData, end_date: e.target.value})} className="w-28 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500" />
+                  <input
+                    type="date"
+                    value={editExamData.end_date || ''}
+                    onChange={e => {
+                      const val = e.target.value;
+                      setEditExamData((prev: any) => ({ ...prev, end_date: val }));
+                    }}
+                    className="w-28 bg-white border border-[#edece9] rounded px-2 py-1 text-[12px] text-gray-800 focus:outline-none focus:border-blue-500"
+                  />
                   <div className="flex gap-1 ml-auto">
                     <button onClick={() => handleUpdateExam(exam.id)} className="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-[10px] font-black rounded shadow-sm">저장</button>
                     <button onClick={() => setEditingExamId(null)} className="px-3 py-1 bg-gray-500 hover:bg-gray-400 text-white text-[10px] font-black rounded shadow-sm">취소</button>
@@ -202,7 +546,7 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
               <div key={exam.id} className="flex items-center justify-between px-4 py-2.5 group hover:bg-gray-50/50 transition-all text-[#37352f]">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <span className="text-[14px] font-black text-[#37352f] truncate">{exam.school_name}</span>
-                  {exam.grade && <span className="px-1.5 py-0.5 rounded bg-gray-150 text-[10px] font-bold text-gray-600 whitespace-nowrap">{exam.grade}학년</span>}
+                  {exam.grade && <span className="px-2 py-0.5 rounded bg-gray-150 text-[11px] font-bold text-rose-700 whitespace-nowrap">{formatGradeDisplay(exam.grade)}</span>}
                   {subject && <span className="px-1.5 py-0.5 rounded border border-gray-200 text-[10px] font-bold text-gray-550 bg-gray-50 whitespace-nowrap truncate">{subject}</span>}
                 </div>
                 <div className="flex items-center gap-3 shrink-0">
@@ -228,152 +572,5 @@ export default function SchoolExamSettingsLight({ academyInfo, students, onUpdat
         )}
       </div>
     </div>
-  );
-
-  return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-      <div className="bg-white border border-[#e3e2e0] rounded-lg overflow-hidden shadow-sm">
-        <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-6 bg-gray-50/50">
-          <div className="flex items-center gap-4 flex-1">
-            <div className="flex items-center gap-2">
-              <Calendar size={16} className="text-rose-500 opacity-60" />
-              <input 
-                type="number" 
-                value={selectedYear} 
-                onChange={e => setSelectedYear(e.target.value)} 
-                className="w-20 bg-white border border-[#edece9] rounded px-3 py-1.5 text-[14px] font-black text-gray-800 outline-none focus:border-rose-500 transition-all text-center focus:ring-1 focus:ring-rose-500/30" 
-              />
-            </div>
-            
-            <div className="h-5 w-px bg-gray-200" />
-
-            <div className="flex gap-1">
-              {EXAM_TYPES.map(type => (
-                <button 
-                  key={type.id} 
-                  onClick={() => setSelectedType(type.id)} 
-                  className={`px-3 py-1.5 text-[11px] font-black rounded border transition-all ${
-                    selectedType === type.id 
-                      ? 'bg-rose-50 border-rose-200 text-rose-700 shadow-sm' 
-                      : 'bg-white border-[#edece9] text-gray-400 hover:text-[#37352f] hover:bg-gray-50'
-                  }`}
-                >
-                  {type.label.replace('학기 ', '')}
-                </button>
-              ))}
-            </div>
-
-            <div className="h-5 w-px bg-gray-200" />
-
-            <div className="flex items-center gap-2 flex-1 max-w-2xl">
-              <input 
-                type="text" 
-                placeholder="학교명" 
-                value={newExam.school_name} 
-                onChange={e => setNewExam({...newExam, school_name: e.target.value})} 
-                className="flex-1 min-w-[140px] bg-white border border-[#edece9] rounded px-3 py-1.5 text-[13px] font-bold text-gray-800 outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30" 
-              />
-              <input 
-                type="text" 
-                placeholder="학년" 
-                value={newExam.grade} 
-                onChange={e => setNewExam({...newExam, grade: e.target.value})} 
-                className="w-14 bg-white border border-[#edece9] rounded px-2 py-1.5 text-[13px] font-bold text-gray-800 text-center outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30" 
-              />
-              <div className="flex flex-col gap-1.5">
-                <input
-                  type="date"
-                  value={newExam.target_date}
-                  onChange={e => setNewExam({ ...newExam, target_date: e.target.value })}
-                  className="w-full bg-white border border-[#edece9] rounded-md px-3 py-1.5 text-[13px] text-gray-800 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <input
-                  type="date"
-                  value={newExam.end_date}
-                  onChange={e => setNewExam({ ...newExam, end_date: e.target.value })}
-                  className="w-full bg-white border border-[#edece9] rounded-md px-3 py-1.5 text-[13px] text-gray-800 focus:outline-none focus:border-rose-500 focus:ring-1 focus:ring-rose-500/30"
-                />
-              </div>
-              <button 
-                onClick={handleAddExam} 
-                disabled={isSaving} 
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-black rounded transition-all shadow-md active:scale-95 flex items-center gap-2"
-              >
-                {isSaving ? <Loader2 size={12} className="animate-spin" /> : <><Save size={12} /> Add</>}
-              </button>
-            </div>
-          </div>
-
-          <div className="h-5 w-px bg-gray-200" />
-
-          {/* 4. 활성화 버튼 */}
-          <button 
-            onClick={handleSetCurrentPeriod} 
-            className={`px-5 py-2.5 rounded text-[11px] font-black uppercase tracking-widest transition-all ${
-              currentPeriod === `${selectedYear}-${selectedType}` 
-                ? 'bg-rose-50 text-rose-700 border border-rose-200 shadow-sm' 
-                : 'bg-rose-600 text-white hover:bg-rose-500 shadow-md'
-            }`}
-          >
-            {currentPeriod === `${selectedYear}-${selectedType}` ? 'Active' : 'Set Active'}
-          </button>
-        </div>
-
-        {/* 고등 과목 선택 (필요시 하단에 작게 노출) */}
-        {isHighSchool(newExam.school_name) && (
-          <div className="px-4 py-2.5 bg-rose-50/30 border-t border-[#edece9] flex flex-wrap gap-1.5 items-center">
-            {HIGH_SUBJECTS.map(sub => (
-              <button 
-                key={sub} 
-                onClick={() => setNewExam({...newExam, subject: sub})} 
-                className={`px-2.5 py-1 text-[10px] font-black rounded border transition-all ${
-                  newExam.subject === sub 
-                    ? 'bg-rose-100 border-rose-300 text-rose-800' 
-                    : 'bg-white border-[#edece9] text-gray-500 hover:bg-gray-50'
-                }`}
-              >
-                {sub}
-              </button>
-            ))}
-            <input 
-              type="text" 
-              placeholder="기타" 
-              value={HIGH_SUBJECTS.includes(newExam.subject) ? '' : newExam.subject} 
-              onChange={e => setNewExam({...newExam, subject: e.target.value})} 
-              className="ml-2 w-20 bg-transparent border-b border-gray-300 px-2 py-0.5 text-[11px] font-bold text-gray-800 outline-none focus:border-rose-500" 
-            />
-          </div>
-        )}
-      </div>
-
-      <div className="space-y-4">
-        {/* 미등록 학교 (시인성 강화) */}
-        {pendingSchools.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 flex flex-wrap gap-2.5 items-center shadow-sm">
-            <div className="flex items-center gap-2 mr-2 border-r border-amber-200 pr-4">
-              <AlertTriangle size={16} className="text-amber-600" />
-              <span className="text-[11px] font-black text-amber-600 uppercase tracking-widest">미등록</span>
-            </div>
-            {pendingSchools.map(school => (
-              <button 
-                key={school} 
-                onClick={() => setNewExam({ ...newExam, school_name: school })} 
-                className="px-3 py-1.5 bg-white border border-amber-200 rounded-md text-[13px] font-black text-amber-900 hover:bg-amber-50 hover:border-amber-400 transition-all flex items-center gap-2 group shadow-sm"
-              >
-                <School size={12} className="text-amber-600 opacity-60 group-hover:opacity-100" />
-                {school}
-              </button>
-            ))}
-          </div>
-        )}
-
-        <div className="flex gap-6">
-          <ExamList title="MIDDLE" list={groupedExams.middle} />
-          <ExamList title="HIGH" list={groupedExams.high} />
-        </div>
-      </div>
-    </motion.div>
   );
 }

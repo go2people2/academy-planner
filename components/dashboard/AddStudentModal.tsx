@@ -4,6 +4,7 @@ import { useState, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, UserPlus, Phone, Calendar, BookOpen, Save, Loader2, Plus, Trash2, Search, Check } from 'lucide-react';
 import { TextbookOption } from '@/types/dashboard';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface AddStudentModalProps {
   onClose: () => void;
@@ -17,8 +18,15 @@ const DAYS = ['월', '화', '수', '목', '금', '토', '일'];
 
 export default function AddStudentModal({ onClose, onSave, masterTextbooks, teachers = [], currentUser }: AddStudentModalProps) {
   const [isSaving, setIsSaving] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: true,
+    onClose,
+    isSaving
+  });
   const [bookSearch, setBookSearch] = useState('');
-  
+
   const todayStr = new Date().toISOString().slice(0, 10);
   const [formData, setFormData] = useState({
     name: '',
@@ -40,8 +48,8 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
   const [endTimes, setEndTimes] = useState<Record<string, string>>({});
 
   const filteredBooks = useMemo(() => {
-    return (masterTextbooks || []).filter(b => 
-      b.title?.toLowerCase().includes(bookSearch.toLowerCase()) || 
+    return (masterTextbooks || []).filter(b =>
+      b.title?.toLowerCase().includes(bookSearch.toLowerCase()) ||
       b.grade?.toLowerCase().includes(bookSearch.toLowerCase())
     );
   }, [masterTextbooks, bookSearch]);
@@ -57,7 +65,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     }
 
     setIsSaving(true);
-    
+
     const cleanedData = {
       ...formData,
       phone: formData.phone.replace(/[^0-9]/g, ''),
@@ -84,17 +92,17 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     const isStartValid = startTimeStr && startTimeStr.length === 5 && startTimeStr.includes(':');
     const isEndValid = endTimeStr && endTimeStr.length === 5 && endTimeStr.includes(':');
 
-    const finalStartVal = isStartValid 
-      ? parseInt(startTimeStr.replace(':', '')) 
+    const finalStartVal = isStartValid
+      ? parseInt(startTimeStr.replace(':', ''))
       : (formData.day_schedules[day]?.[0] || 1600);
-      
-    const finalEndVal = isEndValid 
-      ? parseInt(endTimeStr.replace(':', '')) 
+
+    const finalEndVal = isEndValid
+      ? parseInt(endTimeStr.replace(':', ''))
       : (formData.day_schedules[day]?.[1] || 1900);
 
     if (!isNaN(finalStartVal) && !isNaN(finalEndVal)) {
       const newSchedules = { ...formData.day_schedules, [day]: [finalStartVal, finalEndVal] };
-      
+
       if (isStartValid || isEndValid) {
         const newDays = formData.class_days.includes(day) ? formData.class_days : [...formData.class_days, day];
         setFormData(prev => ({ ...prev, day_schedules: newSchedules, class_days: newDays }));
@@ -109,14 +117,14 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
       const newSchedules = { ...formData.day_schedules };
       delete newSchedules[day];
       setFormData(prev => ({ ...prev, class_days: newDays, day_schedules: newSchedules }));
-      
+
       setStartTimes(prev => ({ ...prev, [day]: '' }));
       setEndTimes(prev => ({ ...prev, [day]: '' }));
     } else {
       const newDays = [...formData.class_days, day];
       const newSchedules = { ...formData.day_schedules, [day]: [1600, 1900] };
       setFormData(prev => ({ ...prev, class_days: newDays, day_schedules: newSchedules }));
-      
+
       setStartTimes(prev => ({ ...prev, [day]: '16:00' }));
       setEndTimes(prev => ({ ...prev, [day]: '19:00' }));
     }
@@ -142,7 +150,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
     selectedDays.forEach(day => {
       newStarts[day] = baseStart;
       newEnds[day] = baseEnd;
-      
+
       const startVal = baseStart ? parseInt(baseStart.replace(':', '')) : 1600;
       const endVal = baseEnd ? parseInt(baseEnd.replace(':', '')) : 1900;
       newSchedules[day] = [startVal, endVal];
@@ -159,7 +167,7 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
       const newBooks = isSelected
         ? prev.assigned_books.filter(b => b !== bookcode)
         : [...prev.assigned_books, bookcode];
-      
+
       const newBookCourses = { ...prev.book_courses };
       if (!isSelected) {
         const currentMonth = new Date().getMonth() + 1;
@@ -249,8 +257,8 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                 </div>
                 <div className="space-y-1.5">
                   <label className="text-[10px] font-black text-gray-500 uppercase ml-1">Assigned Teacher</label>
-                  <select 
-                    value={formData.teacher_id} 
+                  <select
+                    value={formData.teacher_id}
                     onChange={(e) => setFormData({...formData, teacher_id: e.target.value})}
                     className="w-full bg-black/40 border border-white/10 rounded-[2px] py-3 px-4 text-white text-sm focus:border-blue-500 outline-none appearance-none cursor-pointer font-bold text-blue-400"
                   >
@@ -274,11 +282,11 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                   <label className="text-[10px] font-black text-blue-400 uppercase ml-1 flex items-center gap-1">
                     <Calendar size={12} /> Registration Date (입학/등록일)
                   </label>
-                  <input 
-                    type="date" 
-                    value={formData.registration_date} 
+                  <input
+                    type="date"
+                    value={formData.registration_date}
                     onChange={(e) => setFormData({...formData, registration_date: e.target.value})}
-                    className="w-full bg-black/40 border border-blue-500/30 rounded-[2px] py-2.5 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-medium" 
+                    className="w-full bg-black/40 border border-blue-500/30 rounded-[2px] py-2.5 px-4 text-white text-sm focus:border-blue-500 outline-none transition-all font-medium"
                   />
                   <p className="text-[9px] text-gray-500 ml-1">이 날짜 이전에는 시간표에 원생이 나타나지 않습니다 (자유 변경 가능)</p>
                 </div>
@@ -309,13 +317,13 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                           </div>
                           {isSelected && <div className="bg-emerald-500 text-black p-0.5 rounded-full"><Check size={10} strokeWidth={4} /></div>}
                         </div>
-                        
+
                         {isSelected && (
                           <div className="mt-2 pt-2 border-t border-white/5 flex items-center justify-between">
                             <span className="text-[8px] font-black text-emerald-500/50 uppercase tracking-widest">Select Course</span>
                             <div className="flex gap-1">
                               {['E','D','C','B','A'].map(c => (
-                                <button 
+                                <button
                                   key={c}
                                   type="button"
                                   onClick={() => updateBookCourse(book.bookcode, c as any)}
@@ -359,10 +367,10 @@ export default function AddStudentModal({ onClose, onSave, masterTextbooks, teac
                   {DAYS.map(day => {
                     const isDaySelected = formData.class_days.includes(day);
                     return (
-                      <button 
+                      <button
                         key={`bar-${day}`}
                         type="button"
-                        onClick={() => handleDayToggle(day)} 
+                        onClick={() => handleDayToggle(day)}
                         className={`text-[10px] font-black h-8 rounded-[2px] flex items-center justify-center transition-all ${
                           isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:bg-white/10'
                         }`}

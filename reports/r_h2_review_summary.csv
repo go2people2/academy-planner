@@ -1,0 +1,14 @@
+group_key,audit_id,anonymous_student_id,session_date,session_log_id,raw_course_name,normalized_course_name,is_pure_makeup,moved_to_hour,has_test_payload,has_hw_payload,has_classwork_payload,has_completed_payload,apparent_empty_candidate,manual_review_status
+GRP-01,AUD-0001,stu_****b277e234,2026-08-19,3238,"정규","정규",false,,Y,Y,N,Y,N,PENDING
+GRP-01,AUD-0002,stu_****b277e234,2026-08-19,3234,"정규","정규",false,16,Y,Y,N,Y,N,PENDING
+GRP-02,AUD-0003,stu_****316a36ec,2026-08-10,2841,"정규","정규",false,19,Y,Y,N,N,N,PENDING
+GRP-02,AUD-0004,stu_****316a36ec,2026-08-10,2880,"정규","정규",false,,Y,Y,N,Y,N,PENDING
+GRP-03,AUD-0005,stu_****c3c43572,2026-08-10,2783,"정규","정규",false,16,Y,Y,N,N,N,PENDING
+GRP-03,AUD-0006,stu_****c3c43572,2026-08-10,2881,"정규","정규",false,,Y,Y,N,Y,N,PENDING
+GRP-04,AUD-0007,stu_****4f606668,2026-08-07,2711,"정규","정규",false,,Y,Y,N,Y,N,PENDING
+GRP-04,AUD-0008,stu_****4f606668,2026-08-07,2750,"정규","정규",false,16,Y,Y,N,N,N,PENDING
+GRP-04,AUD-0009,stu_****4f606668,2026-08-07,2752,"정규","정규",false,17,Y,Y,N,N,N,PENDING
+GRP-05,AUD-0010,stu_****423183dd,2026-08-07,2759,"정규","정규",false,17,Y,Y,N,Y,N,PENDING
+GRP-05,AUD-0011,stu_****423183dd,2026-08-07,2753,"정규","정규",false,16,Y,Y,N,Y,N,PENDING
+GRP-06,AUD-0012,stu_****b4ca66ac,2026-08-07,2685,"정규","정규",false,,Y,Y,N,Y,N,PENDING
+GRP-06,AUD-0013,stu_****b4ca66ac,2026-08-07,2751,"정규","정규",false,19,Y,Y,N,N,N,PENDING

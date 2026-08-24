@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { X, ClipboardList, Plus, Trash2, Check, Percent } from 'lucide-react';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface TestItem {
   name: string;
@@ -17,10 +18,16 @@ interface TestEditorProps {
   onClose: () => void;
 }
 
-export default function TestEditor({ 
-  title = "Smart Test Editor", testData, onUpdate, onClose 
+export default function TestEditor({
+  title = "Smart Test Editor", testData, onUpdate, onClose
 }: TestEditorProps) {
   const [mounted, setMounted] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: true,
+    onClose
+  });
   const [tests, setTests] = useState<TestItem[]>([]);
 
   useEffect(() => {
@@ -51,7 +58,7 @@ export default function TestEditor({
     // 💡 텍스트 합치기
     // 💡 데일리 시트 셀 자체에는 순수 시험명 목록만 저장하여 옆 칸의 점수와 중복 노출되는 문제 해결
     const formattedText = validTests.map(t => t.name.trim()).join(', ');
-    
+
     // 💡 평균 점수 계산
     const scores = validTests.map(t => parseInt(t.score)).filter(s => !isNaN(s));
     const average = scores.length > 0 ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length) : null;
@@ -62,11 +69,11 @@ export default function TestEditor({
 
   return createPortal(
     <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.95, y: 20 }}
-        animate={{ opacity: 1, scale: 1, y: 0 }} 
+        animate={{ opacity: 1, scale: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
-        onClick={(e) => e.stopPropagation()} 
+        onClick={(e) => e.stopPropagation()}
         className="pointer-events-auto relative w-full max-w-[400px] bg-[#0a0a0a]/95 backdrop-blur-2xl border border-emerald-500/30 rounded-sm shadow-[0_40px_100px_rgba(0,0,0,0.9)] flex flex-col overflow-hidden"
       >
         {/* 헤더 */}
@@ -89,8 +96,8 @@ export default function TestEditor({
             {tests.map((test, idx) => (
               <div key={idx} className="flex items-center gap-2 group">
                 <div className="flex-1 bg-white/[0.03] border border-white/5 rounded-[2px] flex items-center px-3 py-2 group-hover:border-emerald-500/30 transition-all">
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={test.name}
                     placeholder="테스트 명칭"
                     onChange={(e) => {
@@ -102,7 +109,7 @@ export default function TestEditor({
                   />
                   <div className="w-px h-3 bg-white/10 mx-2" />
                   <div className="flex items-center gap-1 w-16">
-                    <input 
+                    <input
                       type="text"
                       value={test.score}
                       placeholder="점수"
@@ -116,7 +123,7 @@ export default function TestEditor({
                     <span className="text-[10px] font-bold text-gray-600">점</span>
                   </div>
                 </div>
-                <button 
+                <button
                   onClick={() => setTests(tests.filter((_, i) => i !== idx))}
                   className="w-8 h-8 flex items-center justify-center text-gray-700 hover:text-red-500 transition-colors shrink-0"
                 >
@@ -125,7 +132,7 @@ export default function TestEditor({
               </div>
             ))}
 
-            <button 
+            <button
               onClick={() => setTests([...tests, { name: '', score: '' }])}
               className="w-full py-3 border border-dashed border-white/10 rounded-[2px] text-[10px] font-black uppercase text-gray-500 hover:text-emerald-400 hover:border-emerald-500/30 transition-all flex items-center justify-center gap-2"
             >
@@ -133,7 +140,7 @@ export default function TestEditor({
             </button>
           </div>
 
-          <button 
+          <button
             onClick={handleSave}
             className="w-full bg-emerald-600 py-4 rounded-sm font-black text-[12px] uppercase tracking-widest text-white shadow-xl shadow-emerald-900/20 hover:bg-emerald-500 transition-all flex items-center justify-center gap-2"
           >

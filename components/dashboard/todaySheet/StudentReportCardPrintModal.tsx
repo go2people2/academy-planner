@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Printer, X, FileSpreadsheet } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface StudentReportCardPrintModalProps {
   isOpen: boolean;
@@ -27,15 +28,10 @@ export default function StudentReportCardPrintModal({
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (isOpen) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onClose();
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, onClose]);
+  useModalEsc({
+    isOpen,
+    onClose
+  });
 
   if (!isOpen || !mounted) return null;
 
@@ -138,7 +134,7 @@ export default function StudentReportCardPrintModal({
       return session.test_id;
     }
     if (session.test_score_type === 'count') {
-      return session.test_total_count 
+      return session.test_total_count
         ? `${session.test_id} (${session.test_score}개 / ${session.test_total_count}개)`
         : `${session.test_id} (${session.test_score}개)`;
     }
@@ -217,7 +213,7 @@ export default function StudentReportCardPrintModal({
           >
             {pageCards.map((student, cardIdx) => {
               const globalIdx = pageIdx * 6 + cardIdx + 1;
-              
+
               // 1. 빈 칸용 공백 카드 렌더링
               if (!student) {
                 return (
@@ -271,7 +267,7 @@ export default function StudentReportCardPrintModal({
 
                     {/* 표 (6개 행 고정 높이) */}
                     <div className="flex-1 flex flex-col border border-black rounded-[2px] overflow-hidden text-[9.5px]">
-                      
+
                       {/* 1. Mission */}
                       <div className="flex border-b border-black min-h-[22px] flex-1">
                         <div style={{...headerStyle, printColorAdjust: 'exact', WebkitPrintColorAdjust: 'exact'}} className="w-20 flex items-center justify-end pr-2 font-black border-r border-black select-none text-right shrink-0">

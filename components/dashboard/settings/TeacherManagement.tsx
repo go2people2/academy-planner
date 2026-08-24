@@ -1,9 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, UserPlus, UserCircle, Trash2, X, Key, Lock, Save, Loader2, Hash } from 'lucide-react';
 import { getInitial } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface TeacherManagementProps {
   teachers: any[];
@@ -15,6 +16,13 @@ interface TeacherManagementProps {
 export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeacher, onUpdateTeacher }: TeacherManagementProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: isAddModalOpen,
+    onClose: () => setIsAddModalOpen(false),
+    isSaving
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempName, setLocalTempName] = useState('');
   const [tempInitials, setLocalTempInitials] = useState('');
@@ -44,7 +52,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
         <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest flex items-center gap-2"><Users size={16} /> Current Teachers</h3>
         <button onClick={() => setIsAddModalOpen(true)} className="px-4 py-2 bg-blue-600 rounded-[2px] text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-500 transition-all shadow-lg shadow-blue-900/20"><UserPlus size={14} /> Add New Teacher</button>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {teachers.map(t => (
           <div key={t.id} className="bg-white/5 border border-white/10 rounded-[4px] p-5 flex items-center justify-between group hover:border-blue-500/30 transition-all">
@@ -58,27 +66,27 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
                     <div className="flex flex-col gap-1">
                       <span className="text-[8px] text-gray-500 uppercase font-black">이름</span>
                       <input autoFocus value={tempName} onChange={(e) => setLocalTempName(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { 
-                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
-                          setEditingId(null); 
+                        onKeyDown={(e) => { if (e.key === 'Enter') {
+                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname });
+                          setEditingId(null);
                         } }}
                         className="bg-black/60 border border-blue-500/50 rounded px-2 py-0.5 text-xs font-black text-white outline-none w-32" />
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[8px] text-gray-500 uppercase font-black">약칭 (Initials)</span>
                       <input value={tempInitials} onChange={(e) => setLocalTempInitials(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { 
-                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
-                          setEditingId(null); 
+                        onKeyDown={(e) => { if (e.key === 'Enter') {
+                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname });
+                          setEditingId(null);
                         } }}
                         className="bg-black/60 border border-amber-500/50 rounded px-2 py-0.5 text-[10px] font-black text-white outline-none w-24" />
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[8px] text-gray-500 uppercase font-black">별칭/직함 (ACA2000)</span>
                       <input value={tempNickname} onChange={(e) => setLocalTempNickname(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { 
-                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
-                          setEditingId(null); 
+                        onKeyDown={(e) => { if (e.key === 'Enter') {
+                          onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname });
+                          setEditingId(null);
                         } }}
                         placeholder="예: 대표원장"
                         className="bg-black/60 border border-indigo-500/50 rounded px-2 py-0.5 text-[10px] font-black text-white placeholder-gray-600 outline-none w-32" />
@@ -87,11 +95,11 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
                   </div>
                 ) : (
                   <div>
-                    <h4 onClick={() => { 
-                      setEditingId(t.id); 
-                      setLocalTempName(t.name); 
-                      setLocalTempInitials(t.initials || ''); 
-                      setLocalTempNickname(t.nickname || ''); 
+                    <h4 onClick={() => {
+                      setEditingId(t.id);
+                      setLocalTempName(t.name);
+                      setLocalTempInitials(t.initials || '');
+                      setLocalTempNickname(t.nickname || '');
                     }} className="text-sm font-black text-white cursor-pointer hover:text-blue-400 transition-colors flex items-center gap-2">
                       {t.name}
                       <span className="text-[10px] font-black text-amber-500 bg-amber-500/10 px-1.5 py-0.5 rounded border border-amber-500/20">({t.initials || getInitial(t.name)})</span>
@@ -104,7 +112,7 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
                   </div>
                 )}
                 <div className="flex items-center gap-2 mt-1">
-                  <button 
+                  <button
                     onClick={() => { const nextRole = t.role === 'admin' ? 'teacher' : 'admin'; if (confirm(`'${t.name}' 선생님의 권한을 ${nextRole.toUpperCase()}(으)로 변경하시겠습니까?`)) onUpdateTeacher(t.id, { role: nextRole }); }}
                     className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded-[2px] transition-all ${t.role === 'admin' ? 'bg-amber-500/20 text-amber-500 border border-amber-500/30' : 'bg-white/5 text-gray-500 border border-white/10 hover:border-blue-500/30 hover:text-blue-400'}`}
                   >{t.role}</button>
@@ -149,8 +157,8 @@ export default function TeacherManagement({ teachers, onAddTeacher, onDeleteTeac
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Role (권한)</label>
                     <div className="relative">
-                      <select 
-                        value={formData.role} 
+                      <select
+                        value={formData.role}
                         onChange={e => setFormData({ ...formData, role: e.target.value as any })}
                         className="w-full bg-black border border-white/10 rounded-[2px] px-4 py-3 text-sm text-white pl-10 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer"
                       >

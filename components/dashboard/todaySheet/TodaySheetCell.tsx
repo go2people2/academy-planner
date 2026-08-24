@@ -4,10 +4,10 @@ import React, { useState, useRef, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, ArrowLeftRight, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3, RefreshCw
 } from 'lucide-react';
-import { Student, TextbookOption, StudentStatus } from '@/types/dashboard';
+import { Student, TextbookOption, StudentStatus, AbsenceLinkContext } from '@/types/dashboard';
 import { getDayOfWeek, getCoursePrefix, parseBookCourseValue } from '@/lib/utils';
 import { isValidHomeworkText } from '@/lib/studentDataEnricher';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
@@ -18,6 +18,7 @@ import TextbookSystem from '@/components/student/TextbookSystem';
 import { CellTextHighlighter } from './CellTextHighlighter';
 import { CellTooltip } from './CellTooltip';
 import { useTodaySheetCellEditor } from '../hooks/useTodaySheetCellEditor';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 export const resolveTargetSession = (student?: any, hour?: number | null, courseName?: string) => {
   if (!student) return undefined;
@@ -58,7 +59,7 @@ export interface TodaySheetCellProps {
   defaultScoreCut?: number;
   defaultCountCut?: number;
   isLight?: boolean;
-  
+
   // Refs
   testRef: React.RefObject<HTMLTextAreaElement | null>;
   cwRef: React.RefObject<HTMLTextAreaElement | null>;
@@ -80,7 +81,7 @@ export interface TodaySheetCellProps {
   handleKeyDown: (e: React.KeyboardEvent, colId: string) => void;
   onCellMouseDown: (e: React.MouseEvent, studentId: string, colId: string) => void;
   onCellMouseEnter: (studentId: string, colId: string) => void;
-  
+
   // Field Specific Handlers
   onAttendanceClick: (e: React.MouseEvent) => void;
   onTestScoreTypeToggle: () => void;
@@ -88,7 +89,7 @@ export interface TodaySheetCellProps {
   isFeedbackOpen: boolean;
   onSelectFeedback: (level: 'gradeA' | 'gradeB' | 'gradeC' | 'gradeD' | 'gradeE' | 'gradeF' | 'none') => void;
   onCloseFeedback: () => void;
-  
+
   // Modal Triggers
   onOpenCwEditor: (e?: React.MouseEvent) => void;
   onOpenCcwEditor: (e?: React.MouseEvent) => void; // 💡 추가
@@ -101,13 +102,15 @@ export interface TodaySheetCellProps {
   onSetNextQuizCut: (val: number) => void;
   onSetTodayTestCut: (val: number) => void; // 💡 추가
   onSetNextQuizTrial: (num: number) => void;
-  onSave: (data?: any, directValue?: any, options?: any) => void;
+  onSave: (data?: any, directValue?: any, options?: any) => Promise<boolean>;
   onInputChange?: (field: string, value: string) => void;
   rowIndex?: number;
   onApplyTestPreset?: (preset: any, colId: 'test_id' | 'next_quiz') => void;
   onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
   masterTextbooks?: any[];
-  cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number }>; // 📝 [추가] 실시간 협업 편집 중인 셀 맵
+  cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number, lockVersion?: number }>; // 📝 [추가] 실시간 협업 편집 중인 셀 맵
+  myClientId?: string;
+  onForceTakeover?: (studentId: string, colId: string) => void;
   onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
   toolsOrder?: string[];
   isToolsEditMode?: boolean;
@@ -116,15 +119,22 @@ export interface TodaySheetCellProps {
   isOtherClassSection?: boolean;
   onTimePickerClick?: (e: React.MouseEvent) => void;
   selectedDate?: string;
+  onNavigateTab?: (mode: string | AbsenceLinkContext) => void;
+  onRefreshAbsenceSession?: (context: {
+    studentId: string;
+    sessionDate: string;
+    courseName: string;
+    movedToHour: number | null;
+  }) => Promise<boolean>;
 }
 
-export const TodaySheetCell = React.memo(function TodaySheetCell({ 
-  col, styles, student, formData, isEditing, isActive, isInRange, isSelected, 
-  isCompleted, saveStatus, isSaving, isHistoryExpanded, displayDateShort, statusMap, 
+export const TodaySheetCell = React.memo(function TodaySheetCell({
+  col, styles, student, formData, isEditing, isActive, isInRange, isSelected,
+  isCompleted, saveStatus, isSaving, isHistoryExpanded, displayDateShort, statusMap,
   testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, managementNotesRef, tdRef, scoreInputRef,
-  onSelectOne, onToggleHistory, onViewProgress, onViewDetail, handleCellInteraction, handleKeyDown, 
-  onCellMouseDown, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle, 
-  onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback, 
+  onSelectOne, onToggleHistory, onViewProgress, onViewDetail, handleCellInteraction, handleKeyDown,
+  onCellMouseDown, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle,
+  onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback,
   onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal,
   onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave,
   onInputChange,
@@ -141,6 +151,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   defaultCountCut = 2,
   selectedDate,
   cooperatingCells,
+  myClientId,
+  onForceTakeover,
   onRemoveFromToday,
   toolsOrder,
   isToolsEditMode = false,
@@ -148,9 +160,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onReorderTools,
   isOtherClassSection,
   onTimePickerClick,
-  isLight = false
+  isLight = false,
+  onNavigateTab,
+  onRefreshAbsenceSession
 }: TodaySheetCellProps) {
-  
+
   const wasAlreadyActive = useRef(false);
   const colId = col.id;
 
@@ -159,17 +173,36 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const [noteText, setNoteText] = useState(student.management_notes || '');
   const [isSavingNote, setIsSavingNote] = useState(false);
 
+  // 💡 [추가] 결석 사유 및 후속 보강 확인 팝오버 상태
+  const [isAbsencePopupOpen, setIsAbsencePopupOpen] = useState(false);
+  const [absenceReasonInput, setAbsenceReasonInput] = useState('');
+  const [isSavingAbsenceReason, setIsSavingAbsenceReason] = useState(false);
+  const [absenceRefreshError, setAbsenceRefreshError] = useState(false);
+
+  // 💡 [공통 Esc 키 닫기]
+  useModalEsc({
+    isOpen: isAbsencePopupOpen,
+    onClose: () => setIsAbsencePopupOpen(false),
+    isSaving: isSavingAbsenceReason
+  });
+
+  useModalEsc({
+    isOpen: isNotePopupOpen,
+    onClose: () => setIsNotePopupOpen(false),
+    isSaving: isSavingNote
+  });
+
   // 💡 [추가] 교재 클릭 시 단원/페이지 드로어 모달 상태
   const [selectedBookForDrawer, setSelectedBookForDrawer] = useState<string | null>(null);
 
   // 💡 [교재 저장 버퍼] TextbookSystem에 전달할 ccw/hw 최신값을 독립 ref로 관리
   const ccwBookBuf = useRef(formData?.completed_classwork_text ?? student.todaySession?.completed_classwork_text ?? '');
   const hwBookBuf = useRef(formData?.homework_text ?? student.todaySession?.homework_text ?? '');
-  
+
   // 부모 state 동기화: 부모 값이 갱신되었을 때, 현재 버퍼보다 신규 내용(더 긴 텍스트 또는 포함 관계)이 있으면 반영하되 이전 입력값을 지우지 않음
   const incomingCcw = formData?.completed_classwork_text ?? student.todaySession?.completed_classwork_text ?? '';
   const incomingHw = formData?.homework_text ?? student.todaySession?.homework_text ?? '';
-  
+
   useEffect(() => {
     ccwBookBuf.current = incomingCcw;
   }, [incomingCcw]);
@@ -206,8 +239,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     };
 
     const itemClass = `w-[21px] h-[21px] rounded-[4px] transition-all shrink-0 flex items-center justify-center cursor-pointer ${
-      isToolsEditMode 
-        ? 'border border-dashed border-amber-500 bg-amber-500/10 cursor-grab active:cursor-grabbing hover:border-amber-500' 
+      isToolsEditMode
+        ? 'border border-dashed border-amber-500 bg-amber-500/10 cursor-grab active:cursor-grabbing hover:border-amber-500'
         : 'opacity-75 hover:opacity-100 hover:scale-110 active:scale-95'
     }`;
 
@@ -215,7 +248,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       case 'profile':
         if (!onViewDetail) return null;
         return (
-          <div 
+          <div
             key="profile"
             onClick={(e) => { e.stopPropagation(); onViewDetail(student.id); }}
             className={`${itemClass} ${isLight ? 'bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-600 hover:text-white shadow-sm' : 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/40 hover:text-emerald-200 shadow-sm'}`}
@@ -227,14 +260,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         );
       case 'history':
         return (
-          <div 
+          <div
             key="history"
-            onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }} 
+            onClick={(e) => { e.stopPropagation(); onToggleHistory(student.id); }}
             className={`${itemClass} ${
-              isHistoryExpanded 
-                ? (isLight ? 'bg-blue-600 text-white border border-blue-600 shadow-md' : 'bg-white text-gray-900 border border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]') 
+              isHistoryExpanded
+                ? (isLight ? 'bg-blue-600 text-white border border-blue-600 shadow-md' : 'bg-white text-gray-900 border border-blue-500 shadow-[0_0_8px_rgba(59,130,246,0.4)]')
                 : (isLight ? 'bg-gray-100 text-gray-700 border border-gray-300 hover:bg-gray-200 hover:text-black shadow-sm' : 'bg-white/20 text-gray-300 border border-white/10 hover:bg-white/30 hover:text-white shadow-sm')
-            }`} 
+            }`}
             title="이전 기록 보기"
             {...dragHandlers}
           >
@@ -244,9 +277,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       case 'progress':
         if (!onViewProgress) return null;
         return (
-          <div 
+          <div
             key="progress"
-            onClick={(e) => { e.stopPropagation(); onViewProgress(student.id); }} 
+            onClick={(e) => { e.stopPropagation(); onViewProgress(student.id); }}
             className={`${itemClass} ${isLight ? 'bg-indigo-50 text-indigo-700 border border-indigo-300 hover:bg-indigo-600 hover:text-white shadow-sm' : 'bg-indigo-500/20 text-indigo-300 border border-indigo-500/30 hover:bg-indigo-500/40 hover:text-indigo-200 shadow-sm'}`}
             title="진도표 바로가기"
             {...dragHandlers}
@@ -256,7 +289,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         );
       case 'tag':
         return (
-          <div 
+          <div
             key="tag"
             onClick={(e) => {
               e.stopPropagation();
@@ -267,7 +300,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               else if (currentTag === '나') nextTag = '다';
               else if (currentTag === '다') nextTag = '라';
               else nextTag = '';
-              
+
               if (onUpdateStudentInfo) {
                 onUpdateStudentInfo(student.id, 'level_tag', nextTag);
               } else {
@@ -275,7 +308,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               }
             }}
             className={`w-[21px] h-[21px] shrink-0 flex items-center justify-center rounded-[4px] cursor-pointer text-[12px] select-none transition-all ${
-              isToolsEditMode 
+              isToolsEditMode
                 ? (isLight ? 'border border-dashed border-amber-500 bg-amber-50 cursor-grab active:cursor-grabbing text-amber-800 font-bold' : 'border border-dashed border-amber-500/60 bg-amber-500/10 cursor-grab active:cursor-grabbing hover:border-amber-500 text-amber-300 font-black')
                 : `opacity-90 hover:opacity-100 hover:scale-110 active:scale-95 ${
                     student.level_tag === '가' ? (isLight ? "bg-emerald-50 text-emerald-800 font-bold border border-emerald-300" : "bg-emerald-500/20 text-emerald-300 font-black border border-emerald-400/80") :
@@ -293,7 +326,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         );
       case 'portal':
         return (
-          <div 
+          <div
             key="portal"
             onClick={(e) => {
               e.stopPropagation();
@@ -309,7 +342,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         );
       case 'timeshift':
         return (
-          <div 
+          <div
             key="timeshift"
             onClick={(e) => {
               e.stopPropagation();
@@ -326,12 +359,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         return (() => {
           const isSubmittedOrApproved = ['pending', 'approved'].includes(student.todaySession?.approval_status || '');
           const resetItemClass = `w-[21px] h-[21px] rounded-[4px] transition-all shrink-0 flex items-center justify-center cursor-pointer ${
-            isToolsEditMode 
-              ? 'cursor-grab active:cursor-grabbing hover:scale-110' 
+            isToolsEditMode
+              ? 'cursor-grab active:cursor-grabbing hover:scale-110'
               : 'opacity-75 hover:opacity-100 hover:scale-110 active:scale-95'
           }`;
           return (
-            <div 
+            <div
               key="reset"
               onClick={(e) => {
                 e.stopPropagation();
@@ -341,7 +374,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 }
               }}
               className={`${resetItemClass} ${
-                isSubmittedOrApproved 
+                isSubmittedOrApproved
                   ? (isLight ? "bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-600 hover:text-white cursor-pointer shadow-sm animate-pulse" : "bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 cursor-pointer shadow-sm animate-pulse")
                   : (isLight ? "bg-gray-100 text-gray-400 border border-gray-200 opacity-70 cursor-not-allowed" : "bg-white/10 text-gray-400 border border-white/20 opacity-70 cursor-not-allowed")
               }`}
@@ -359,7 +392,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       case 'delete':
         const isDeleteDraggable = isToolsEditMode && showAllTools;
         return (
-          <div 
+          <div
             key="delete"
             draggable={isDeleteDraggable}
             onDragStart={isDeleteDraggable ? (e) => handleDragStart(e, 'delete') : undefined}
@@ -369,7 +402,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onMouseDown={(e) => {
               e.stopPropagation();
               const sAny = student as any;
-              
+
               // 1. 순수 보강 판정 (보조 안전장치 및 명시적 보강 플래그)
               const isMakeupRow = sAny?.isMakeupRow === true ||
                 (sAny?.__courseType === 'makeup') ||
@@ -473,7 +506,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
               if (isScheduledInTimetable) {
                 // 💡 [정책 1: 시간표 등록 수업 -> Refresh]
-                const courseLabel = sAny?.isSpecialClass 
+                const courseLabel = sAny?.isSpecialClass
                   ? (student.courseName || sAny?.electiveCourse?.subject || '선택과목')
                   : '정규';
                 const confirmMsg = `오늘 ${student.name} 학생의 [${courseLabel}] 수업 당일 기록(출결, 진도, 숙제, 테스트 등)을 초기화하시겠습니까?\n\n※ 시간표 수업 행은 그대로 유지되며, 당일 작성된 내용만 초기 상태로 리셋됩니다.`;
@@ -528,17 +561,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       case 'separator':
         if (!isToolsEditMode) {
           return (
-            <div 
-              key="separator" 
+            <div
+              key="separator"
               onMouseDown={(e) => e.stopPropagation()}
-              className={`h-5 w-[1px] mx-1 self-center shrink-0 ${isLight ? 'bg-gray-300' : 'bg-white/20'}`} 
+              className={`h-5 w-[1px] mx-1 self-center shrink-0 ${isLight ? 'bg-gray-300' : 'bg-white/20'}`}
               title="상시 노출 경계선"
             />
           );
         }
         const isSeparatorDraggable = showAllTools;
         return (
-          <div 
+          <div
             key="separator"
             draggable={isSeparatorDraggable}
             onDragStart={(e) => {
@@ -553,8 +586,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onDragEnd={() => { delete (window as any)._draggedToolId; }}
             onMouseDown={(e) => e.stopPropagation()}
             className={`w-2.5 h-6 flex items-center justify-center rounded transition-colors shrink-0 select-none mx-0.5 ${
-              isSeparatorDraggable 
-                ? 'cursor-grab active:cursor-grabbing hover:bg-amber-500/20' 
+              isSeparatorDraggable
+                ? 'cursor-grab active:cursor-grabbing hover:bg-amber-500/20'
                 : 'cursor-not-allowed opacity-40'
             }`}
             title={isSeparatorDraggable ? "경계선 (드래그하여 상시 노출 개수 조절)" : "도구를 펼쳐야 경계선을 조절할 수 있습니다"}
@@ -611,9 +644,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
   const isLockActive = isSubmitted && isProtectedCol;
 
-  // 📝 [추가] 다른 기기에서 실시간 편집 중인지 판별
+  // 📝 [추가] 다른 기기에서 실시간 편집 중인지 판별 (내 기기인 경우는 제외)
   const coopData = cooperatingCells?.[`${student.id}_${colId}`];
-  const isCooperating = !!coopData;
+  const isCooperating = Boolean(coopData && (!myClientId || coopData.clientId !== myClientId));
 
   const handleLockedCellDoubleClick = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -670,20 +703,20 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   };
 
   // 💡 폰트 사이즈와 높이를 픽셀 단위로 강제 (들썩임 방지 핵심)
-  const textColClass = colId === 'assign' 
+  const textColClass = colId === 'assign'
     ? (isLight ? 'text-[#0f172a] font-normal' : 'text-blue-200 font-normal')
     : colId === 'classwork' || colId === 'completed_classwork'
     ? (isLight ? 'text-[#0f172a] font-normal' : 'text-blue-100 font-normal')
-    : colId === 'mission' 
-    ? (isLight ? 'text-amber-900 font-normal' : 'text-amber-200/90 font-normal') 
+    : colId === 'mission'
+    ? (isLight ? 'text-amber-900 font-normal' : 'text-amber-200/90 font-normal')
     : (isLight ? 'text-[#1e293b] font-normal' : 'text-white font-normal');
   const commonTextStyle = `w-full text-[12px] leading-[14px] text-left ${textColClass} ${dynamicPadding} m-0 border-0 outline-none box-border appearance-none scrollbar-hide`;
 
 
   return (
-    <td 
+    <td
       ref={tdRef}
-      style={styles} 
+      style={styles}
       tabIndex={0}
       data-col-id={colId}
       className={`relative group/td outline-none align-top ${isLight ? 'border-r border-[#e3e2e0] text-[#37352f]' : 'border-r border-white/12 text-white'} ${
@@ -732,7 +765,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           e.stopPropagation();
           const confirmForceEdit = window.confirm("다른 조교가 이미 편집 중인 셀입니다. 강제로 편집 권한을 가져오시겠습니까?");
           if (confirmForceEdit) {
-            handleCellInteraction(e, colId, 'dblclick');
+            if (onForceTakeover) {
+              onForceTakeover(student.id, colId);
+            } else {
+              handleCellInteraction(e, colId, 'dblclick');
+            }
           }
         } else {
           handleCellInteraction(e, colId, 'dblclick');
@@ -740,7 +777,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       }}
       onKeyDown={(e) => {
         const navigationKeys = [
-          'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 
+          'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight',
           'Tab', 'Escape', 'Shift', 'Control', 'Alt', 'Meta',
           'Backspace', 'Delete'
         ];
@@ -755,7 +792,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             e.stopPropagation();
             const confirmForceEdit = window.confirm("다른 조교가 이미 편집 중인 셀입니다. 강제로 편집 권한을 가져오시겠습니까?");
             if (confirmForceEdit) {
-              handleCellInteraction(e as any, colId, 'dblclick');
+              if (onForceTakeover) {
+                onForceTakeover(student.id, colId);
+              } else {
+                handleCellInteraction(e as any, colId, 'dblclick');
+              }
             }
           }
         } else {
@@ -768,53 +809,53 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       )}
 
       {colId === 'action' ? (
-        <button 
+        <button
           type="button"
-          onClick={(e) => { 
-            e.stopPropagation(); 
-            onSave(colId); 
-          }} 
+          onClick={(e) => {
+            e.stopPropagation();
+            onSave(colId);
+          }}
           disabled={isSaving}
           className={`absolute inset-0 w-full h-full transition-all duration-300 outline-none border-0 p-0 m-0 z-30 cursor-pointer ${
-            isSaving ? 'bg-blue-500 animate-pulse cursor-wait' : 
-            saveStatus === 'success' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' : 
-            isCompleted ? 'bg-emerald-500/30 hover:bg-emerald-500/50' : 
-            saveStatus === 'error' ? 'bg-rose-500 animate-bounce shadow-[0_0_10px_rgba(244,63,94,0.4)]' : 
+            isSaving ? 'bg-blue-500 animate-pulse cursor-wait' :
+            saveStatus === 'success' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.4)]' :
+            isCompleted ? 'bg-emerald-500/30 hover:bg-emerald-500/50' :
+            saveStatus === 'error' ? 'bg-rose-500 animate-bounce shadow-[0_0_10px_rgba(244,63,94,0.4)]' :
             'bg-white/10 hover:bg-blue-600/50'
           }`}
           title={
-            isSaving ? '저장 중...' : 
-            saveStatus === 'success' ? '저장 성공' : 
-            isCompleted ? '저장 완료됨' : 
-            saveStatus === 'error' ? '저장 실패 (클릭하여 재시도)' : 
+            isSaving ? '저장 중...' :
+            saveStatus === 'success' ? '저장 성공' :
+            isCompleted ? '저장 완료됨' :
+            saveStatus === 'error' ? '저장 실패 (클릭하여 재시도)' :
             '저장되지 않음 (클릭하여 수동 저장)'
           }
         />
       ) : (
         <div className={`flex items-start min-h-[22px] h-full w-full ${['select', 'action', 'date'].includes(colId) ? 'justify-center' : 'justify-start'}`}>
-        
+
         {colId === 'select' && (
           <div className="flex items-center justify-center w-full min-h-[22px] py-1 relative z-30 group/select select-none">
             {isSelected ? (
               <div className="flex items-center justify-center">
-                <input 
-                  type="checkbox" 
-                  checked={isSelected} 
-                  onChange={(e) => onSelectOne?.(student.id, e.target.checked, (e.nativeEvent as any).shiftKey)} 
-                  className="w-4 h-4 rounded border-white/20 bg-blue-600 checked:bg-blue-600 cursor-pointer" 
+                <input
+                  type="checkbox"
+                  checked={isSelected}
+                  onChange={(e) => onSelectOne?.(student.id, e.target.checked, (e.nativeEvent as any).shiftKey)}
+                  className="w-4 h-4 rounded border-white/20 bg-blue-600 checked:bg-blue-600 cursor-pointer"
                 />
               </div>
             ) : (
               <>
                 <div className="group-hover/select:hidden flex items-center justify-center">
-                  <input 
-                    type="checkbox" 
-                    checked={isSelected} 
-                    onChange={(e) => onSelectOne?.(student.id, e.target.checked, (e.nativeEvent as any).shiftKey)} 
-                    className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer" 
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={(e) => onSelectOne?.(student.id, e.target.checked, (e.nativeEvent as any).shiftKey)}
+                    className="w-4 h-4 rounded border-white/20 bg-white/5 checked:bg-blue-600 cursor-pointer"
                   />
                 </div>
-                <button 
+                <button
                   onClick={() => onSelectOne?.(student.id, !isSelected)}
                   className="hidden group-hover/select:flex items-center justify-center w-5 h-5 rounded bg-white/5 border border-white/10 hover:border-blue-500/50 hover:bg-blue-600/10 text-[9px] font-normal text-gray-400 hover:text-blue-400 transition-colors"
                 >
@@ -906,7 +947,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="flex items-center justify-center gap-1 px-1 py-1 w-full min-w-0 max-w-full overflow-hidden min-h-[22px] relative group/tools">
             {/* 우측 상단: 학생 주의사항 (노란색 스티커 마우스오버 툴팁) */}
             <div className="absolute top-0 right-0">
-              <div 
+              <div
                 className="group/note relative cursor-pointer z-[60]"
                 onClick={(e) => handleOpenNotesPopup(e)}
                 onMouseEnter={(e) => {
@@ -918,8 +959,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 tabIndex={0}
               >
                 <div className={`w-0 h-0 border-t-[16px] border-l-[16px] border-l-transparent transition-all ${
-                  formData.management_notes 
-                    ? 'border-t-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]' 
+                  formData.management_notes
+                    ? 'border-t-amber-500 drop-shadow-[0_0_10px_rgba(245,158,11,0.5)]'
                     : 'border-t-white/10 hover:border-t-amber-500/40'
                 }`} />
               </div>
@@ -928,7 +969,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             {/* 좌측 상단: 건의사항 (파란색) */}
             {student.suggestions && student.suggestions.length > 0 && (
               <div className="absolute top-0 left-0">
-                <div 
+                <div
                   className="group/suggestion relative cursor-pointer z-[60]"
                   onMouseEnter={(e) => handleOpenTooltip(e, 'suggestion')}
                   onMouseLeave={() => setActiveTooltip(null)}
@@ -942,7 +983,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             )}
 
             {/* 💡 [리팩토링] Portal 툴팁 전용 컴포넌트 */}
-            <CellTooltip 
+            <CellTooltip
               activeTooltip={activeTooltip}
               tooltipCoords={tooltipCoords}
               managementNotes={formData.management_notes}
@@ -953,9 +994,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             {(() => {
               const order = toolsOrder || ['timeshift', 'profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
               const isExpanded = showAllTools;
-              
+
               const itemsToRender: React.ReactNode[] = [];
-              
+
               for (const toolId of order) {
                 if (!isExpanded && toolId === 'separator') {
                   break;
@@ -963,7 +1004,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 const item = renderToolItem(toolId);
                 if (item) itemsToRender.push(item);
               }
-              
+
               return itemsToRender;
             })()}
           </div>
@@ -974,14 +1015,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           const cleanStatus = rawStatus.includes(':') ? rawStatus.split(':')[0] : rawStatus;
 
           const hasRealAttendance = cleanStatus && [
-            ATTENDANCE_STATUS.PRESENT, 
-            ATTENDANCE_STATUS.ABSENT, 
-            ATTENDANCE_STATUS.LATE, 
-            ATTENDANCE_STATUS.EARLY_LEAVE, 
-            ATTENDANCE_STATUS.EXCLUDED, 
+            ATTENDANCE_STATUS.PRESENT,
+            ATTENDANCE_STATUS.ABSENT,
+            ATTENDANCE_STATUS.LATE,
+            ATTENDANCE_STATUS.EARLY_LEAVE,
+            ATTENDANCE_STATUS.EXCLUDED,
             ATTENDANCE_STATUS.CANCELED
           ].includes(cleanStatus as any);
-          
+
           const isScheduledToday = student?.isScheduledToday ?? true;
           const normalizeH = (val: any): number | null => {
             if (val === null || val === undefined || val === '') return null;
@@ -996,58 +1037,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             student.isMakeupRow === true ||
             student.todaySession?.is_pure_makeup === true;
 
-          const isMovedHour = (() => {
-            if (isPureMakeupRow) return false;
-            if (formData.moved_to_hour === null || formData.moved_to_hour === undefined || formData.moved_to_hour <= 0) {
-              return false;
-            }
-            const targetDate = selectedDate || formData?.date || formData?.session_date || student.todaySession?.session_date || student.todaySession?.date || '';
-            const dayKey = targetDate ? getDayOfWeek(targetDate) : '';
-            if (!dayKey) return false;
+          const hasMovedHour =
+            formData.moved_to_hour !== null &&
+            formData.moved_to_hour !== undefined &&
+            formData.moved_to_hour > 0;
 
-            const clickH = normalizeH(formData.moved_to_hour);
-            if (clickH === null) return false;
+          const isMovedHour = hasMovedHour && !isPureMakeupRow;
 
-            if ((student as any)?.isSpecialClass) {
-              const rawElective = student.book_courses?.['__elective_courses'];
-              if (rawElective) {
-                try {
-                  const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
-                  if (Array.isArray(parsed)) {
-                    const currentSubject = student.courseName || (student as any).electiveCourse?.subject;
-                    const isOrig = parsed.some((c: any) => {
-                      if (!c) return false;
-                      const cSub = c.subject || c.course_name || c.name;
-                      if (currentSubject && cSub !== currentSubject) return false;
-                      const days = c.days;
-                      const matchesDay = days && (
-                        Array.isArray(days)
-                          ? days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
-                          : (typeof days === 'string' && days.includes(dayKey))
-                      );
-                      if (!matchesDay) return false;
-                      const electiveHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
-                        ? [normalizeH(c.schedules[dayKey][0])]
-                        : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
-
-                      if (electiveHours.length > 0) return electiveHours.includes(clickH);
-                      return false;
-                    });
-                    if (isOrig) return false;
-                  }
-                } catch (e) {}
-              }
-            } else {
-              const regularHours = (student.day_schedules?.[dayKey] || []).map(normalizeH).filter((h: number | null): h is number => h !== null);
-              if (regularHours.includes(clickH)) return false;
-            }
-            return true;
-          })();
-          
           const statusText = hasRealAttendance ? cleanStatus : ATTENDANCE_STATUS.BEFORE;
 
           return (
-            <div 
+            <div
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 if (isOtherClassSection || e.shiftKey) {
@@ -1055,7 +1055,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 } else {
                   onAttendanceClick(e);
                 }
-              }} 
+              }}
               onContextMenu={(e) => {
                 e.preventDefault();
                 onTimePickerClick?.(e);
@@ -1063,10 +1063,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               className={`absolute inset-0 w-full h-full flex items-center justify-between px-3 text-[11px] cursor-pointer select-none transition-colors hover:bg-white/[0.05] z-30 ${
               statusText === ATTENDANCE_STATUS.BEFORE
                 ? (isLight ? 'text-gray-500 font-medium' : 'text-gray-600')
-                : statusText.startsWith(ATTENDANCE_STATUS.PRESENT) 
-                  ? (isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400 font-semibold') 
-                  : statusText.startsWith(ATTENDANCE_STATUS.ABSENT) 
-                    ? (isLight ? 'text-red-600 font-medium' : 'text-red-400 font-bold') 
+                : statusText.startsWith(ATTENDANCE_STATUS.PRESENT)
+                  ? (isLight ? 'text-emerald-700 font-medium' : 'text-emerald-400 font-semibold')
+                  : statusText.startsWith(ATTENDANCE_STATUS.ABSENT)
+                    ? (isLight ? 'text-red-600 font-medium' : 'text-red-400 font-bold')
                     : statusText.startsWith(ATTENDANCE_STATUS.LATE)
                       ? (isLight ? 'text-amber-700 font-medium' : 'text-amber-400 font-bold')
                       : statusText.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE)
@@ -1077,8 +1077,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 <span className="text-[11px] font-bold leading-tight">{statusText}</span>
                 {(isPureMakeupRow || isMovedHour) && (
                   <span className={`text-[10px] font-extrabold leading-none px-1 py-0.5 rounded ${
-                    isPureMakeupRow 
-                      ? (isLight ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400') 
+                    isPureMakeupRow
+                      ? (isLight ? 'bg-blue-100 text-blue-700' : 'bg-blue-500/20 text-blue-400')
                       : (isLight ? 'bg-purple-100 text-purple-700' : 'bg-purple-500/20 text-purple-300')
                   }`}>
                     {isPureMakeupRow ? '보강' : '이동'}
@@ -1086,15 +1086,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 )}
               </div>
 
-              {/* 💡 [원장님 기획 완벽 구현] 출결 상태가 '결석', '지각', '조퇴'일 때 사유 입력 연필 펜 버튼이 동적으로 함께 뜹니다. */}
-              {(statusText.startsWith(ATTENDANCE_STATUS.ABSENT) || statusText.startsWith(ATTENDANCE_STATUS.LATE) || statusText.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE)) && (
+              {/* 💡 [출결 사유 관리] '결석'(팝오버/보강연동) 및 '조퇴'(사유 입력)만 버튼 노출 (지각은 출결 상태만 기록) */}
+              {(statusText.startsWith(ATTENDANCE_STATUS.ABSENT) || statusText.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE)) && (
                 (() => {
                   const isAbsent = statusText.startsWith(ATTENDANCE_STATUS.ABSENT);
-                  const isLate = statusText.startsWith(ATTENDANCE_STATUS.LATE);
                   const isEarlyLeave = statusText.startsWith(ATTENDANCE_STATUS.EARLY_LEAVE);
-                  const labelType = isAbsent ? '결석' : isLate ? '지각' : '조퇴';
+                  const labelType = isAbsent ? '결석' : '조퇴';
 
-                  // 기존 조퇴 사유 추출
                   const currentProgress = (formData.completed_classwork_text || student.todaySession?.completed_classwork_text || '').trim();
                   const earlyLeaveLinePattern = /^조퇴\s*(?:\([^)]*\))?\s*$/;
                   let initialReason = '';
@@ -1109,78 +1107,364 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     initialReason = formData.attendance_reason || student.todaySession?.attendance_reason || '';
                   }
 
-                  return (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation(); // 💥 클릭 시 출결이 다른 상태로 돌아가는 전파 차단!
-                        const newReason = prompt(`[${student.name}] 학생의 ${labelType} 사유를 입력해 주세요:`, initialReason);
-                        if (newReason !== null) {
-                          const cleanReason = newReason.trim();
-                          
-                          if (isAbsent) {
-                            // 결석일 때는 수행진도 자리에 프리펜드 치환 진행
-                            const autoProgressText = cleanReason ? `결석 (${cleanReason})` : '결석';
-                            let finalProgressText = '';
-                            if (!currentProgress) {
-                              finalProgressText = autoProgressText;
-                            } else {
-                              const lines: string[] = currentProgress.split('\n');
-                              if (lines[0].startsWith('결석')) {
-                                lines[0] = autoProgressText;
-                                finalProgressText = lines.join('\n');
-                              } else {
-                                finalProgressText = `${autoProgressText}\n${currentProgress}`;
-                              }
-                            }
-                            
-                            onSave({ 
-                              attendance_reason: cleanReason,
-                              completed_classwork_text: finalProgressText
-                            });
-                          } else if (isEarlyLeave) {
-                            // 💡 조퇴일 때는 수행진도에 '조퇴(사유)' 형식으로 저장 (기존 진도 보존 및 중복 방지)
-                            const autoProgressText = cleanReason ? `조퇴(${cleanReason})` : '조퇴';
-                            let finalProgressText = '';
-                            if (!currentProgress) {
-                              finalProgressText = autoProgressText;
-                            } else {
-                              const lines: string[] = currentProgress.split('\n');
-                              const existingIdx = lines.findIndex((line: string) => earlyLeaveLinePattern.test(line));
-                              if (existingIdx !== -1) {
-                                lines[existingIdx] = autoProgressText;
-                                finalProgressText = lines.join('\n');
-                              } else {
-                                finalProgressText = `${currentProgress}\n${autoProgressText}`;
-                              }
-                            }
+                  const isValidSessionLogId = (value: unknown): boolean => {
+                    const normalized = String(value ?? '').trim();
+                    return /^[1-9]\d*$/.test(normalized);
+                  };
 
-                            onSave({
-                              completed_classwork_text: finalProgressText
-                            });
-                          } else {
-                            // 지각일 때는 수행진도를 전혀 터치하지 않고, 오직 출결 사유 필드만 저장!
-                            onSave({ 
-                              attendance_reason: cleanReason
-                            });
-                          }
+                  const normalizeMovedHour = (value: unknown): number | null => {
+                    if (value === null || value === undefined || value === '') return null;
+                    const numeric = parseInt(String(value), 10);
+                    if (Number.isNaN(numeric)) return null;
+                    return numeric >= 100 ? Math.floor(numeric / 100) : numeric;
+                  };
+
+                  const isSpecial = student.isSpecialClass;
+                  const isPureMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || student.todaySession?.is_pure_makeup === true;
+                  const currentRowCourse = (isSpecial ? (student.courseName || student.electiveCourse?.subject || '특강') : (student.todaySession?.course_name || '정규')).trim();
+                  const currentRowDate = selectedDate || student.todaySession?.session_date || student.todaySession?.date || '';
+                  const rawSessionId = student.todaySession?.id;
+                  const currentMovedToHour = student.todaySession?.moved_to_hour;
+                  const currentNormHour = normalizeMovedHour(currentMovedToHour);
+
+                  const matchingAbsenceLog = (student.allLogs || []).find((log: any) => {
+                    const isDbAbsent = String(log.attendance_status || '').trim().startsWith('결석');
+                    const logNormHour = normalizeMovedHour(log.moved_to_hour);
+                    const logDate = log.session_date || log.date || '';
+                    const logCourse = (log.course_name || '정규').trim();
+
+                    return (
+                      isValidSessionLogId(log.id) &&
+                      log.is_pure_makeup !== true &&
+                      isDbAbsent &&
+                      logDate === currentRowDate &&
+                      logCourse === currentRowCourse &&
+                      logNormHour === currentNormHour
+                    );
+                  });
+
+                  const persistedAbsenceSessionId = isValidSessionLogId(rawSessionId)
+                    ? String(rawSessionId)
+                    : (matchingAbsenceLog?.id ? String(matchingAbsenceLog.id) : null);
+
+                  const linkedMakeups = (isAbsent && persistedAbsenceSessionId && student.allLogs)
+                    ? student.allLogs.filter((l: any) => {
+                        return (
+                          l.is_pure_makeup === true &&
+                          String(l.absence_session_id ?? '') === String(persistedAbsenceSessionId ?? '')
+                        );
+                      }).sort((a: any, b: any) => (a.session_date || a.date || '').localeCompare(b.session_date || b.date || ''))
+                    : [];
+
+                  const hasLinkedMakeup = linkedMakeups.length > 0;
+                  const earliestLinkedMakeup = hasLinkedMakeup ? linkedMakeups[0] : null;
+
+                  const handleSaveAbsence = async () => {
+                    const currentAttendanceStatus = formData.attendance_status || student.todaySession?.attendance_status || '';
+                    if (!String(currentAttendanceStatus).startsWith('결석')) {
+                      alert('결석 상태인 수업에서만 결석 사유와 보강을 연결할 수 있습니다.');
+                      return;
+                    }
+
+                    setIsSavingAbsenceReason(true);
+                    setAbsenceRefreshError(false);
+                    try {
+                      const cleanReason = absenceReasonInput.trim();
+                      const autoProgressText = cleanReason ? `결석 (${cleanReason})` : '결석';
+                      let finalProgressText = '';
+                      if (!currentProgress) {
+                        finalProgressText = autoProgressText;
+                      } else {
+                        const lines: string[] = currentProgress.split('\n');
+                        if (lines[0].startsWith('결석')) {
+                          lines[0] = autoProgressText;
+                          finalProgressText = lines.join('\n');
+                        } else {
+                          finalProgressText = `${autoProgressText}\n${currentProgress}`;
                         }
-                      }}
-                      className={`p-1 rounded transition-all flex items-center justify-center shrink-0 shadow-sm ml-1 border ${
-                        isAbsent 
-                          ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20' 
-                          : isLate
-                            ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border-amber-500/20'
-                            : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border-orange-500/20'
-                      }`}
-                      title={
-                        initialReason 
-                          ? `${labelType} 사유: ${initialReason} (클릭하여 수정)` 
-                          : `클릭하여 ${labelType} 사유 입력`
                       }
+
+                      const absencePayload = {
+                        attendance_reason: cleanReason,
+                        completed_classwork_text: finalProgressText,
+                        ...(String(currentAttendanceStatus).startsWith('결석') ? { attendance_status: currentAttendanceStatus } : {})
+                      };
+
+                      const saveSuccess = await onSave(absencePayload);
+                      if (!saveSuccess) {
+                        return;
+                      }
+
+                      if (onRefreshAbsenceSession) {
+                        try {
+                          const refreshed = await onRefreshAbsenceSession({
+                            studentId: student.originalId || student.id,
+                            sessionDate: currentRowDate,
+                            courseName: currentRowCourse,
+                            movedToHour: currentNormHour
+                          });
+                          if (!refreshed) {
+                            setAbsenceRefreshError(true);
+                          }
+                        } catch (refreshErr) {
+                          setAbsenceRefreshError(true);
+                        }
+                      }
+                    } catch (e) {
+                      console.error('Failed to save absence reason');
+                    } finally {
+                      setIsSavingAbsenceReason(false);
+                    }
+                  };
+
+                  return (
+                    <div
+                      className="inline-flex items-center gap-1 shrink-0 ml-1 relative"
+                      {...(persistedAbsenceSessionId ? { 'data-absence-session-id': persistedAbsenceSessionId } : {})}
                     >
-                      <Edit3 size={11} strokeWidth={2.5} />
-                    </button>
+                      {isAbsent && !isPureMakeup && persistedAbsenceSessionId && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setAbsenceReasonInput(initialReason);
+                            setIsAbsencePopupOpen(prev => !prev);
+                          }}
+                          className={`w-2 h-2 rounded-full transition-all shrink-0 cursor-pointer ${
+                            hasLinkedMakeup ? 'bg-emerald-500 ring-2 ring-emerald-500/30' : (isLight ? 'bg-zinc-400 hover:bg-zinc-500' : 'bg-zinc-500 hover:bg-zinc-400')
+                          }`}
+                          title={hasLinkedMakeup ? `연결된 보강 일정 있음 (${linkedMakeups.length}건)` : '연결된 보강 일정 없음'}
+                          aria-label={hasLinkedMakeup ? `연결된 보강 일정 있음 (${linkedMakeups.length}건)` : '연결된 보강 일정 없음'}
+                        />
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isAbsent) {
+                            setAbsenceReasonInput(initialReason);
+                            setIsAbsencePopupOpen(prev => !prev);
+                            return;
+                          }
+
+                          const newReason = prompt(`[${student.name}] 학생의 ${labelType} 사유를 입력해 주세요:`, initialReason);
+                          if (newReason !== null) {
+                            const cleanReason = newReason.trim();
+                            if (isEarlyLeave) {
+                              const autoProgressText = cleanReason ? `조퇴(${cleanReason})` : '조퇴';
+                              let finalProgressText = '';
+                              if (!currentProgress) {
+                                finalProgressText = autoProgressText;
+                              } else {
+                                const lines: string[] = currentProgress.split('\n');
+                                const existingIdx = lines.findIndex((line: string) => earlyLeaveLinePattern.test(line));
+                                if (existingIdx !== -1) {
+                                  lines[existingIdx] = autoProgressText;
+                                  finalProgressText = lines.join('\n');
+                                } else {
+                                  finalProgressText = `${currentProgress}\n${autoProgressText}`;
+                                }
+                              }
+
+                              onSave({
+                                completed_classwork_text: finalProgressText
+                              });
+                            } else {
+                              onSave({
+                                attendance_reason: cleanReason
+                              });
+                            }
+                          }
+                        }}
+                        className={`p-1 rounded transition-all flex items-center justify-center shrink-0 shadow-sm border ${
+                          isAbsent
+                            ? 'bg-red-500/10 hover:bg-red-500/20 text-red-400 border-red-500/20'
+                            : 'bg-orange-500/10 hover:bg-orange-500/20 text-orange-400 border-orange-500/20'
+                        }`}
+                        title={
+                          initialReason
+                            ? `${labelType} 사유: ${initialReason} (클릭하여 수정)`
+                            : `클릭하여 ${labelType} 사유 입력`
+                        }
+                        aria-label={`${labelType} 사유 관리`}
+                      >
+                        <Edit3 size={11} strokeWidth={2.5} />
+                      </button>
+
+                      {/* 💡 결석 사유 및 후속 보강 확인 팝오버 (100% 불투명 배경 및 createPortal 최상위 레이어) */}
+                      {typeof window !== 'undefined' && createPortal(
+                        <AnimatePresence>
+                          {isAbsencePopupOpen && (
+                            <div
+                              className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/50"
+                              onClick={(e) => { e.stopPropagation(); setIsAbsencePopupOpen(false); }}
+                            >
+                              <motion.div
+                                initial={{ opacity: 0, scale: 0.95, y: -4 }}
+                                animate={{ opacity: 1, scale: 1, y: 0 }}
+                                exit={{ opacity: 0, scale: 0.95, y: -4 }}
+                                transition={{ duration: 0.12 }}
+                                onClick={(e) => e.stopPropagation()}
+                                className={`w-[340px] rounded-xl shadow-2xl p-4.5 border text-left flex flex-col gap-3.5 ${
+                                  isLight
+                                    ? 'bg-[#ffffff] border-slate-300 text-slate-900 shadow-slate-900/20'
+                                    : 'bg-[#18181b] border-zinc-700 text-zinc-100 shadow-black/80'
+                                }`}
+                                style={{ backgroundColor: isLight ? '#ffffff' : '#18181b' }}
+                              >
+                                {/* 팝오버 헤더 */}
+                                <div className={`flex items-center justify-between border-b pb-2.5 ${
+                                  isLight ? 'border-slate-200' : 'border-zinc-800'
+                                }`}>
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[13px] font-black text-rose-500">결석 사유 / 보강 관리</span>
+                                    <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded ${
+                                      isLight ? 'bg-slate-100 text-slate-600' : 'bg-zinc-800 text-zinc-400'
+                                    }`}>
+                                      {currentRowCourse}
+                                    </span>
+                                  </div>
+                                  <button
+                                    type="button"
+                                    onClick={() => setIsAbsencePopupOpen(false)}
+                                    className={`p-1 rounded transition-colors ${
+                                      isLight
+                                        ? 'hover:bg-slate-100 text-slate-400 hover:text-slate-700'
+                                        : 'hover:bg-zinc-800 text-zinc-400 hover:text-zinc-200'
+                                    }`}
+                                    aria-label="닫기"
+                                  >
+                                    <X size={15} />
+                                  </button>
+                                </div>
+
+                                {/* 결석 사유 입력 섹션 */}
+                                <div className="space-y-1.5">
+                                  <label className={`text-[11px] font-bold block ${
+                                    isLight ? 'text-slate-600' : 'text-zinc-400'
+                                  }`}>
+                                    결석 사유 입력
+                                  </label>
+                                  <div className="flex items-center gap-1.5">
+                                    <input
+                                      type="text"
+                                      value={absenceReasonInput}
+                                      onChange={(e) => setAbsenceReasonInput(e.target.value)}
+                                      onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                          e.preventDefault();
+                                          handleSaveAbsence();
+                                        } else if (e.key === 'Escape') {
+                                          e.preventDefault();
+                                          setIsAbsencePopupOpen(false);
+                                        }
+                                      }}
+                                      placeholder="예: 감기 몸살, 가족 여행 등"
+                                      autoFocus
+                                      className={`flex-1 text-[12px] px-3 py-2 rounded-lg border outline-none font-medium transition-all ${
+                                        isLight
+                                          ? 'bg-slate-50 border-slate-300 focus:border-blue-500 focus:bg-white text-slate-900 placeholder:text-slate-400'
+                                          : 'bg-zinc-900 border-zinc-700 focus:border-blue-500 focus:bg-zinc-950 text-zinc-100 placeholder:text-zinc-500'
+                                      }`}
+                                      style={{ backgroundColor: isLight ? '#f8fafc' : '#18181b' }}
+                                    />
+                                    <button
+                                      type="button"
+                                      disabled={isSavingAbsenceReason}
+                                      onClick={handleSaveAbsence}
+                                      className="px-3.5 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-[11px] font-black transition-colors shrink-0 disabled:opacity-50 shadow-sm cursor-pointer"
+                                    >
+                                      {isSavingAbsenceReason ? '저장중' : '저장'}
+                                    </button>
+                                  </div>
+                                </div>
+
+                                {/* 후속 보강 안내 섹션 */}
+                                <div
+                                  className={`p-3 rounded-lg border flex flex-col gap-2.5 ${
+                                    isLight ? 'bg-slate-50 border-slate-200 text-slate-800' : 'bg-[#202024] border-zinc-700 text-zinc-100'
+                                  }`}
+                                  style={{ backgroundColor: isLight ? '#f8fafc' : '#202024' }}
+                                >
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-1.5">
+                                      <span className={`w-2.5 h-2.5 rounded-full shrink-0 ${hasLinkedMakeup ? 'bg-emerald-500 ring-2 ring-emerald-500/30' : (isLight ? 'bg-slate-400' : 'bg-zinc-500')}`} />
+                                      <span className={`text-[12px] font-black ${hasLinkedMakeup ? (isLight ? 'text-emerald-700' : 'text-emerald-400') : (isLight ? 'text-slate-700' : 'text-zinc-300')}`}>
+                                        {hasLinkedMakeup ? `연결된 보강 일정 ${linkedMakeups.length}건` : '연결된 보강 일정 없음'}
+                                      </span>
+                                    </div>
+                                  </div>
+
+                                  {hasLinkedMakeup && earliestLinkedMakeup && (
+                                    <div className={`text-[11px] font-medium pl-4 py-1 rounded ${
+                                      isLight ? 'bg-slate-100/80 text-slate-600' : 'bg-zinc-900/80 text-zinc-400'
+                                    }`}>
+                                      보강 일정: <span className={`font-bold ${isLight ? 'text-slate-900' : 'text-zinc-100'}`}>{earliestLinkedMakeup.session_date || earliestLinkedMakeup.date}</span>
+                                      {earliestLinkedMakeup.attendance_status?.startsWith('보강:') && (
+                                        <span className="ml-1 text-blue-500 font-bold">{earliestLinkedMakeup.attendance_status.replace('보강:', '')}</span>
+                                      )}
+                                      <span className="ml-1 opacity-75">· {earliestLinkedMakeup.course_name || '정규'}</span>
+                                    </div>
+                                  )}
+
+                                  {/* 미저장 결석인 경우 안내 및 버튼 분기 */}
+                                  {!persistedAbsenceSessionId ? (
+                                    <div className="p-2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-500 text-[10px] font-bold text-center">
+                                      {absenceRefreshError
+                                        ? '결석 기록은 저장됐지만 보강 연결 정보를 불러오지 못했습니다. 새로고침 후 다시 시도해 주세요.'
+                                        : '결석 기록을 먼저 저장한 뒤 보강을 연결할 수 있습니다.'}
+                                    </div>
+                                  ) : (
+                                    <div className="pt-0.5 flex items-center justify-between">
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (onNavigateTab) {
+                                            (window as any)._pendingAbsenceRestore = {
+                                              studentId: student.originalId || student.id,
+                                              courseName: currentRowCourse,
+                                              absenceSessionId: persistedAbsenceSessionId,
+                                              date: currentRowDate
+                                            };
+                                            // onNavigateTab 호출 시 결석 연동 preset 전달
+                                            onNavigateTab({
+                                              source: 'absence-popup',
+                                              studentId: student.originalId || student.id,
+                                              absenceSessionId: persistedAbsenceSessionId,
+                                              absenceDate: currentRowDate,
+                                              courseName: currentRowCourse,
+                                              returnDate: selectedDate || currentRowDate
+                                            } as any);
+                                          }
+                                        }}
+                                        className={`w-full py-2 px-3 rounded-lg text-[11px] font-black transition-all flex items-center justify-center gap-1.5 border cursor-pointer ${
+                                          hasLinkedMakeup
+                                            ? (isLight ? 'bg-white border-slate-300 text-slate-800 hover:bg-slate-100 shadow-sm' : 'bg-zinc-800 border-zinc-600 text-zinc-100 hover:bg-zinc-700 shadow-sm')
+                                            : (isLight ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-700 border-emerald-300 shadow-sm' : 'bg-emerald-950/60 hover:bg-emerald-900/60 text-emerald-400 border-emerald-700/60 shadow-sm')
+                                        }`}
+                                      >
+                                        {hasLinkedMakeup ? '보강 탭에서 확인' : '보강 잡기'}
+                                        <ExternalLink size={12} />
+                                      </button>
+                                    </div>
+                                  )}
+
+                                  {!hasLinkedMakeup && persistedAbsenceSessionId && (
+                                    <p className={`text-[10px] text-center font-normal ${
+                                      isLight ? 'text-slate-500' : 'text-zinc-400'
+                                    }`}>
+                                      ※ 보강 날짜와 시간은 보강 탭에서 설정합니다.
+                                    </p>
+                                  )}
+                                </div>
+                              </motion.div>
+                            </div>
+                          )}
+                        </AnimatePresence>,
+                        document.body
+                      )}
+                    </div>
                   );
                 })()
               )}
@@ -1190,8 +1474,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {colId === 'review' && (
           <div className={`relative w-full h-full flex items-start justify-between py-1 px-2 gap-2 ${isLight ? 'bg-blue-50/50' : 'bg-blue-600/[0.03]'}`}>
-            <div 
-              onMouseDown={(e) => e.stopPropagation()} 
+            <div
+              onMouseDown={(e) => e.stopPropagation()}
               className="flex-1 text-left min-w-0 select-text cursor-text"
             >
               {isValidHomeworkText(student.lastSession?.homework_text) ? (
@@ -1199,7 +1483,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   {(student.lastSession?.homework_text || '').split(/\n\s*\n/).map((para: string, i: number, arr: string[]) => (
                     <span key={i} className={`block ${i !== arr.length - 1 ? 'mb-1.5' : ''}`}>
                       {i === 0 && <span className={isLight ? 'text-blue-700 text-[14px] font-medium mr-1 align-top leading-[1.15]' : 'text-blue-500/80 text-[14px] font-normal mr-1 align-top leading-[1.15]'}>"</span>}
-                      {para.split(/(\([월화수목금토일]\))/g).map((part, j) => 
+                      {para.split(/(\([월화수목금토일]\))/g).map((part, j) =>
                         part.match(/^\([월화수목금토일]\)$/) ? <span key={j} className={isLight ? 'text-amber-800 font-medium not-italic px-0.5' : 'text-yellow-400 font-medium not-italic px-0.5'}>{part}</span> : part
                       )}
                       {i === arr.length - 1 && <span className={isLight ? 'text-blue-700 text-[14px] font-medium ml-1 align-bottom leading-[1.15]' : 'text-blue-500/80 text-[14px] font-normal ml-1 align-bottom leading-[1.15]'}>"</span>}
@@ -1216,10 +1500,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 const isPresent = ['출석', '지각'].some(st => attStatus.startsWith(st));
                 // 💡 [수정] 정규 수업일 판단: 내부 formData.isTodayClassDay(요일 기반)를 확실히 신뢰
                 const isRegularClass = formData.isTodayClassDay === true;
-                
+
                 // 💡 [수정] 정규 수업일에 '보강'으로 표시되어도 이는 단순 '시간 이동'이므로 보충(Supplement)이 아님
                 const isSupplement = attStatus.startsWith('보강') && !isRegularClass;
-                
+
                 const hasAttendance = isPresent || isSupplement || attStatus !== '';
                 if (!hasAttendance) return null;
 
@@ -1230,8 +1514,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   return (
                     <button
                       type="button"
-                      onClick={(e) => { 
-                        e.stopPropagation(); 
+                      onClick={(e) => {
+                        e.stopPropagation();
                         onSave({ hw_checked_today: !isChecked });
                       }}
                       className={`relative z-30 shrink-0 px-2 py-0.5 rounded text-[9.5px] font-medium tracking-tight border transition-colors ${
@@ -1247,11 +1531,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               })()}
 
               <div className="relative z-30">
-                <button 
-                  onClick={(e) => { e.stopPropagation(); onFeedbackToggle(); }} 
+                <button
+                  onClick={(e) => { e.stopPropagation(); onFeedbackToggle(); }}
                   className={`w-5 h-5 rounded-[3px] flex items-center justify-center transition-all border ${
-                    isFeedbackOpen 
-                      ? (isLight ? 'bg-indigo-100 text-indigo-800 border-indigo-300' : 'bg-indigo-500/30 text-indigo-200 border-indigo-500/50') 
+                    isFeedbackOpen
+                      ? (isLight ? 'bg-indigo-100 text-indigo-800 border-indigo-300' : 'bg-indigo-500/30 text-indigo-200 border-indigo-500/50')
                       : (isLight ? 'bg-indigo-50/80 text-indigo-700 border-indigo-200 hover:bg-indigo-100' : 'bg-indigo-500/10 text-indigo-300 border-indigo-500/30 hover:bg-indigo-500/30 hover:text-white hover:border-indigo-500/50')
                   }`}
                   title="특이사항에 과제 피드백 추가"
@@ -1310,7 +1594,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 const lowerBookKey = bookKey.toLowerCase();
                 const lowerBookTitle = bookTitle.toLowerCase();
                 let val = progressMap[bookKey] || progressMap[bookTitle] || '';
-                
+
                 if (!val) {
                   for (const k of Object.keys(progressMap)) {
                     const lk = k.toLowerCase();
@@ -1345,7 +1629,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 const valParts = val ? val.split('|').map(s => s.trim()).filter(Boolean) : [];
 
                 return (
-                  <div key={bIdx} 
+                  <div key={bIdx}
                     onMouseDown={(e) => {
                       e.stopPropagation();
                     }}
@@ -1358,25 +1642,25 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                         ? (isLight ? 'bg-rose-50 border-rose-300 shadow-sm animate-pulse' : 'bg-rose-500/10 border-rose-500/70 shadow-[0_0_8px_rgba(244,63,94,0.3)] animate-pulse')
                         : val && daysElapsed >= 7
                           ? (isLight ? 'bg-amber-50 border-amber-300 shadow-sm' : 'bg-amber-500/10 border-amber-500/70')
-                          : isElectiveBook 
-                            ? (isLight ? 'bg-amber-50/90 border-amber-200/90 shadow-sm' : 'bg-amber-500/10 border-amber-500/30') 
+                          : isElectiveBook
+                            ? (isLight ? 'bg-amber-50/90 border-amber-200/90 shadow-sm' : 'bg-amber-500/10 border-amber-500/30')
                             : (isLight ? 'bg-emerald-50/90 border-emerald-200/90 shadow-sm' : 'bg-emerald-500/10 border-emerald-500/20')
                     }`}>
                     {valParts.length > 1 ? (
                       <div className="flex flex-col gap-0.5 min-w-0 flex-1 py-0.5">
                         <div className="flex items-center gap-1.5 truncate">
                           <span className={`text-[8.5px] font-bold px-1 rounded shrink-0 ${
-                            isElectiveBook 
-                              ? (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black') 
-                              : targetTag === '공통' 
-                                ? 'bg-blue-600 text-white' 
+                            isElectiveBook
+                              ? (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black')
+                              : targetTag === '공통'
+                                ? 'bg-blue-600 text-white'
                                 : 'bg-emerald-600 text-white'
                           }`}>
                             {targetTag.replace('선택:', '')}
                           </span>
                           <span className={`font-black shrink-0 ${
-                            isElectiveBook 
-                              ? (isLight ? 'text-amber-900' : 'text-amber-300') 
+                            isElectiveBook
+                              ? (isLight ? 'text-amber-900' : 'text-amber-300')
                               : (isLight ? 'text-emerald-900' : 'text-emerald-400')
                           }`}>
                             {bookTitle}
@@ -1403,25 +1687,25 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       <div className="flex items-center gap-1.5 truncate min-w-0 flex-1">
                         {/* 💡 [정규] / [공통] / [과목명] 선명한 뱃지 표기 */}
                         <span className={`text-[8.5px] font-bold px-1 rounded shrink-0 ${
-                          isElectiveBook 
-                            ? (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black') 
-                            : targetTag === '공통' 
-                              ? 'bg-blue-600 text-white' 
+                          isElectiveBook
+                            ? (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black')
+                            : targetTag === '공통'
+                              ? 'bg-blue-600 text-white'
                               : 'bg-emerald-600 text-white'
                         }`}>
                           {targetTag.replace('선택:', '')}
                         </span>
 
                         <span className={`font-black shrink-0 ${
-                          isElectiveBook 
-                            ? (isLight ? 'text-amber-900' : 'text-amber-300') 
+                          isElectiveBook
+                            ? (isLight ? 'text-amber-900' : 'text-amber-300')
                             : (isLight ? 'text-emerald-900' : 'text-emerald-400')
                         }`}>
                           {bookTitle}
                         </span>
                         <span className={`truncate text-[9.5px] font-bold ${
-                          val 
-                            ? (isLight ? 'text-[#2c2b29]' : 'text-gray-300') 
+                          val
+                            ? (isLight ? 'text-[#2c2b29]' : 'text-gray-300')
                             : 'text-gray-400 italic font-normal'
                         }`}>
                           {val || ''}
@@ -1441,14 +1725,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                           onClick={async (e) => {
                             e.stopPropagation();
                             const sAny = student as any;
-                            
+
                             // 💡 1차: 오늘 일지 문장
                             const todayText = `${student.todaySession?.completed_classwork_text || ''}\n${student.todaySession?.homework_text || ''}\n${sAny.completed_classwork_text || ''}\n${sAny.homework_text || ''}`;
-                            
+
                             // 💡 2차: 지난 과거 일지 문장들 (최근 날짜순)
                             const pastLogs = (student.allLogs || []).slice().sort((a: any, b: any) => String(b.date).localeCompare(String(a.date)));
                             const pastTexts = pastLogs.map((l: any) => `${l.completed_classwork_text || ''}\n${l.homework_text || ''}`);
-                            
+
                             const candidateTexts = [todayText, ...pastTexts];
 
                             const targetMaster = masterTextbooks?.find((m: any) => m.title === bookTitle || m.bookcode === bookKey);
@@ -1460,7 +1744,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                               const res = await fetch(`/api/textbooks/${realCode}`);
                               if (res.ok) {
                                 const units = (await res.json()) || [];
-                                
+
                                 // 💡 교재의 실제 최소 페이지 ~ 최대 페이지 범위 계산 (범위 밖의 문제번호 415 등은 무시)
                                 let minBookPage = 1;
                                 let maxBookPage = 0;
@@ -1645,7 +1929,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         )}
 
         {(['mission', 'notes', 'management_notes'].includes(colId)) && (
-          <SimpleTextCell 
+          <SimpleTextCell
             ref={colId === 'mission' ? missionRef : colId === 'notes' ? notesRef : managementNotesRef}
             student={student}
             colId={colId}
@@ -1665,7 +1949,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         {(['test_id', 'classwork', 'completed_classwork', 'assign', 'next_quiz'].includes(colId)) && (
           <div className="relative w-full h-full flex items-start justify-start group/cell">
             {/* 💡 칩카드 UI가 제거되었습니다. 선생님이 직접 텍스트로 테스트를 기록합니다. */}
-            
+
             {/* 🔒 [추가] 실시간 승인 대기 보호 셀 시각 뱃지 */}
             {isLockActive && !isEditing && !isActive && (
               <div className="absolute right-1 top-1 z-30 flex items-center gap-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1 py-[1px] rounded-[3px] text-[9px] font-medium animate-pulse select-none">
@@ -1678,9 +1962,9 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
             {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
             {(isEditing || isActive) && (
-               <textarea 
-                 ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : nqRef} 
-                 defaultValue={currentText || ''} 
+               <textarea
+                 ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : nqRef}
+                 defaultValue={currentText || ''}
                  data-student-id={student.id}
                  data-col-id={colId}
                  readOnly={isLockActive}
@@ -1705,14 +1989,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     onSave(colId, (e.target as HTMLTextAreaElement).value);
                   }
                   handleKeyDown(e, colId);
-                }} 
-                onBlur={(e) => onSave(colId, e.target.value, { isBlur: true })} 
-                placeholder="-" 
-                className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`} 
-                onInput={(e) => handleLocalInput(e, colId)} 
+                }}
+                onBlur={(e) => onSave(colId, e.target.value, { isBlur: true })}
+                placeholder="-"
+                className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`}
+                onInput={(e) => handleLocalInput(e, colId)}
               />
             )}
-            
+
             {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 (하이라이팅 적용) */}
             {!isEditing && !isActive && (
               <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start w-full`}>
@@ -1731,7 +2015,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 </div>
               </div>
             )}
-            
+
             <div className="absolute right-1 top-1 flex items-center gap-1 opacity-30 group-hover/cell:opacity-100 focus-within:opacity-100 transition-all duration-200 z-30">
               {(colId === 'classwork' || colId === 'completed_classwork' || colId === 'assign') && (
                 <button onClick={colId === 'classwork' ? onOpenCwEditor : colId === 'completed_classwork' ? onOpenCcwEditor : onOpenHwEditor} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
@@ -1742,7 +2026,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
         {/* 💡 [리팩토링] 점수 입력 셀 분리 */}
         {colId === 'test_score' && (
-          <ScoreCell 
+          <ScoreCell
             student={student}
             colId={colId}
             formData={formData}

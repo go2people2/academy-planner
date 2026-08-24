@@ -7,6 +7,7 @@ import { Student, SessionLog } from '@/types/dashboard';
 import { supabase } from '@/lib/supabase';
 import { isValidHistoryLog } from '@/lib/studentDataEnricher';
 import { getHwEval } from '@/lib/sessionTestResult';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface HokmaJournalPrintModalProps {
   isOpen: boolean;
@@ -19,11 +20,11 @@ interface HokmaJournalPrintModalProps {
   academyInfo?: any; // 💡 학원 정보 데이터 전달
 }
 
-import { 
-  useHokmaJournalPrint, 
-  JOURNAL_THEMES, 
-  ThemeKey, 
-  PEN_COLORS 
+import {
+  useHokmaJournalPrint,
+  JOURNAL_THEMES,
+  ThemeKey,
+  PEN_COLORS
 } from './hooks/useHokmaJournalPrint';
 
 export default function HokmaJournalPrintModal({
@@ -36,6 +37,12 @@ export default function HokmaJournalPrintModal({
   masterTextbooks,
   academyInfo
 }: HokmaJournalPrintModalProps) {
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen,
+    onClose
+  });
+
   const academyName = academyInfo?.academy_name || academyInfo?.name || '호크마';
   const logoSrc = academyInfo?.logo_url || '';
 
@@ -120,11 +127,11 @@ export default function HokmaJournalPrintModal({
           const cleanName = rawRealName ? rawRealName.replace(/^(특강|방학특강|선택과목)\s*-\s*/, '') : student.name;
 
           items.push({
-            student: { 
-              ...student, 
-              id: studentRealId, 
+            student: {
+              ...student,
+              id: studentRealId,
               name: cleanName,
-              courseName: '정규', 
+              courseName: '정규',
               isSpecialClass: false
             },
             courseName: '정규',
@@ -143,7 +150,7 @@ export default function HokmaJournalPrintModal({
             else if (ec && typeof ec === 'object' && ec.subject) electiveSubjects.push(ec.subject.trim());
           });
         }
-        
+
         // 💡 student.book_courses.__elective_courses 구조 파싱
         const bookElectives = (student as any).book_courses?.['__elective_courses'];
         if (bookElectives) {
@@ -347,7 +354,7 @@ export default function HokmaJournalPrintModal({
           border-bottom: 3px double var(--theme-line-color);
           padding-bottom: 1mm;
         }
-        
+
         /* 결재란 (확인란) */
         .hj-sign-table {
           border-collapse: collapse;
@@ -458,7 +465,7 @@ export default function HokmaJournalPrintModal({
         .font-black {
           font-weight: 900;
         }
-        
+
         /* 4. 한달을 돌아보며 레이아웃 */
         .hj-feedback-box {
           width: 100%;
@@ -502,7 +509,7 @@ export default function HokmaJournalPrintModal({
           <h2 className="text-base font-black tracking-wider flex items-center gap-2 whitespace-nowrap text-slate-100">
             <Printer size={18} className="text-amber-500" /> 월간 {academyName} 일지 인쇄
           </h2>
-          
+
           <div className="flex items-center gap-2.5 flex-wrap">
             {/* 1. 기간 설정 그룹 */}
             <div className="flex items-center h-9 bg-slate-950 px-1 rounded-lg border border-slate-800">
@@ -638,7 +645,7 @@ export default function HokmaJournalPrintModal({
               className="bg-transparent text-xs font-bold text-white outline-none w-20 placeholder:text-slate-500"
             />
             {searchQuery && (
-              <button 
+              <button
                 onClick={() => setSearchQuery('')}
                 className="text-slate-400 hover:text-white text-xs font-bold"
               >
@@ -700,7 +707,7 @@ export default function HokmaJournalPrintModal({
 
             const allSessionLogs = [...(student.allLogs || [])];
             if (student.todaySession) {
-              const exists = allSessionLogs.some(l => 
+              const exists = allSessionLogs.some(l =>
                 (l.date || l.session_date) === (student.todaySession?.date || student.todaySession?.session_date) &&
                 ((l.course_name || '정규') === targetCourse)
               );
@@ -714,9 +721,9 @@ export default function HokmaJournalPrintModal({
               if (!rawDateStr) return;
               const logDate = new Date(rawDateStr);
               const logCourse = log.course_name || '정규';
-              
+
               const isTargetGeneric = ['특강', '방학특강', '선택과목'].includes(targetCourse?.trim());
-              const isCourseMatch = isSpecial 
+              const isCourseMatch = isSpecial
                 ? (isTargetGeneric ? ['특강', '방학특강', '선택과목'].includes(logCourse.trim()) : logCourse === targetCourse)
                 : (logCourse === '정규' || !log.course_name || log.course_name.trim() === '');
 
@@ -768,7 +775,7 @@ export default function HokmaJournalPrintModal({
           // 💡 [안정화] 합의된 결석(수업제외, 수업취소) 걷어내기 및 정규 수업 요일이 아니면서 비어있는 유령 세션 제거
           const validMonthLogs = monthLogs.filter((log) => {
             if (log.attendance_status && ['수업제외', '수업취소'].includes(log.attendance_status)) return false;
-            
+
             // 💡 [유령 세션 가드] 정규 일지 출력 시, 정규 수업 요일(class_days)이 아니면서 아무 기록도 없는 빈 세션은 자동 제외
             if (!isSpecial) {
               const rawDateStr = (log.date || log.session_date || '').replace(/\./g, '-');
@@ -787,14 +794,14 @@ export default function HokmaJournalPrintModal({
 
           // 💡 [안정화] 예정만 잡아놓고 미응시한 날(예: /8/2)은 제외하고, 실제로 채점(예: 6/8/2 또는 90점)이 완료된 건만 앞페이지에 인쇄합니다.
           const testLogs = validMonthLogs.filter((log) => {
-            const hasTestId = log.test_id && 
-                              log.test_id.trim() !== '' && 
-                              log.test_id.trim() !== '없음' && 
+            const hasTestId = log.test_id &&
+                              log.test_id.trim() !== '' &&
+                              log.test_id.trim() !== '없음' &&
                               log.test_id.trim() !== '-';
             if (!hasTestId) return false;
-            
-            const hasScoreField = log.test_score !== undefined && 
-                                  log.test_score !== null && 
+
+            const hasScoreField = log.test_score !== undefined &&
+                                  log.test_score !== null &&
                                   String(log.test_score).trim() !== '';
             if (hasScoreField) return true;
 
@@ -824,11 +831,11 @@ export default function HokmaJournalPrintModal({
             const rows = Array.from({ length: logsPerSheet }).map((_, idx) => {
               const globalIdx = startIdx + idx;
               const log = validMonthLogs[globalIdx] as SessionLog | undefined;
-              
+
               if (log) {
                 const logDate = new Date(log.date || log.session_date || '');
                 const dateText = `${logDate.getMonth() + 1}/${logDate.getDate()}`;
-                
+
                 let attendanceSign = '';
                 const attStatus = log.attendance_status || '';
                 if (attStatus.includes('출석') || attStatus.includes('보강')) {
@@ -956,7 +963,7 @@ export default function HokmaJournalPrintModal({
             return (
               <React.Fragment key={`${student.id}-sheet-${sheetIdx}-${stIdx}`}>
                 {/* PAGE 1: 앞면 */}
-                <div 
+                <div
                   className="hokma-page"
                   style={{
                     position: 'relative',
@@ -971,8 +978,8 @@ export default function HokmaJournalPrintModal({
                 >
                   {/* 중앙 초대형 워터마크 배경 (앞페이지: 하단 배치) */}
                   {logoSrc && (
-                    <div 
-                      style={{ 
+                    <div
+                      style={{
                         position: 'absolute',
                         inset: 0,
                         display: 'flex',
@@ -985,16 +992,16 @@ export default function HokmaJournalPrintModal({
                         overflow: 'hidden'
                       }}
                     >
-                      <img 
-                        src={logoSrc} 
-                        alt="Watermark Single" 
-                        style={{ 
+                      <img
+                        src={logoSrc}
+                        alt="Watermark Single"
+                        style={{
                           width: '580px',
                           maxHeight: '580px',
                           transform: 'rotate(-12deg) translateY(20px)',
                           objectFit: 'contain',
                           filter: currentThemeConfig.logoFilter
-                        }} 
+                        }}
                       />
                     </div>
                   )}
@@ -1103,9 +1110,9 @@ export default function HokmaJournalPrintModal({
                         <tr>
                           <th className="hj-first-col">숙제 완성도</th>
                           {rows.map((r, i) => (
-                            <td 
-                              key={i} 
-                              className="hj-handwriting cursor-pointer hover:bg-amber-100/60 transition-colors select-none" 
+                            <td
+                              key={i}
+                              className="hj-handwriting cursor-pointer hover:bg-amber-100/60 transition-colors select-none"
                               style={{ fontSize: '20px' }}
                               onClick={() => r.dateText && handleToggleHwScore(student.id, r.rawDateKey, r.hwScore, targetCourse)}
                               title={r.dateText ? '클릭 시 숙제 점수 변경 (10점 -> 7점 -> 4점 -> 0점 -> -)' : ''}
@@ -1154,7 +1161,7 @@ export default function HokmaJournalPrintModal({
               </div>
 
                 {/* PAGE 2: 뒷면 */}
-                <div 
+                <div
                   className="hokma-page"
                   style={{
                     position: 'relative',
@@ -1169,8 +1176,8 @@ export default function HokmaJournalPrintModal({
                 >
                   {/* 중앙 초대형 워터마크 배경 */}
                   {logoSrc && (
-                    <div 
-                      style={{ 
+                    <div
+                      style={{
                         position: 'absolute',
                         inset: 0,
                         display: 'flex',
@@ -1182,16 +1189,16 @@ export default function HokmaJournalPrintModal({
                         overflow: 'hidden'
                       }}
                     >
-                      <img 
-                        src={logoSrc} 
-                        alt="Watermark Single" 
-                        style={{ 
+                      <img
+                        src={logoSrc}
+                        alt="Watermark Single"
+                        style={{
                           width: '620px',
                           maxHeight: '620px',
                           transform: 'rotate(-12deg)',
                           objectFit: 'contain',
                           filter: currentThemeConfig.logoFilter
-                        }} 
+                        }}
                       />
                     </div>
                   )}

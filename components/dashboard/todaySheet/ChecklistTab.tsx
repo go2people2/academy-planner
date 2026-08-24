@@ -2,6 +2,7 @@ import React, { useState, useEffect, forwardRef, useImperativeHandle, useMemo } 
 import { supabase } from '@/lib/supabase';
 import { Trash2, Plus, Loader2, CheckSquare, AlertTriangle, MinusSquare, Square, GripVertical, Archive, ArchiveRestore, Search } from 'lucide-react';
 import ChecklistPrintPreviewModal from './ChecklistPrintPreviewModal';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 export interface ChecklistTabProps {
   students: any[];
@@ -14,13 +15,13 @@ export interface ChecklistTabProps {
 
 import { useChecklistTab } from './hooks/useChecklistTab';
 
-export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({ 
-  students, 
-  allStudents = [], 
-  academyInfo, 
-  selectedFilter = 'All', 
+export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
+  students,
+  allStudents = [],
+  academyInfo,
+  selectedFilter = 'All',
   selectedTeacherId = 'All',
-  isLight = false 
+  isLight = false
 }, ref) => {
   const {
     topics,
@@ -60,6 +61,12 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
     selectedTeacherId,
   });
 
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: isArchiveModalOpen,
+    onClose: () => setIsArchiveModalOpen(false)
+  });
+
   // 열 필터 헤더 전용 아이콘 렌더링
   const renderColumnFilterIcon = (topicId: string) => {
     const isCurrent = activeChecklistFilter.topicId === topicId;
@@ -76,12 +83,12 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
         return <Square className="text-blue-400 fill-blue-500/5 hover:opacity-80 transition-all cursor-pointer animate-pulse" size={14} strokeWidth={2.5} />;
       default:
         return (
-          <div 
+          <div
             className={`w-3.5 h-3.5 rounded-[3px] border transition-all cursor-pointer flex items-center justify-center text-[8px] font-black ${
-              isLight 
-                ? 'border-gray-400 text-gray-500 hover:border-blue-600 hover:bg-blue-50 hover:text-blue-600' 
+              isLight
+                ? 'border-gray-400 text-gray-500 hover:border-blue-600 hover:bg-blue-50 hover:text-blue-600'
                 : 'border-white/20 text-white/30 hover:border-blue-400 hover:bg-blue-50/5 hover:text-blue-400'
-            }`} 
+            }`}
             title="클릭하여 이 열 조건으로 학생 필터링"
           >
             F
@@ -113,7 +120,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
         .order('created_at', { ascending: true });
 
       if (err1) throw err1;
-      
+
       let rawTopics = topicsData || [];
       // 로컬에 저장된 드래그 순서가 있는 경우 순서 재정렬
       const savedOrderJson = localStorage.getItem(`ams_checklist_topics_order_${academyInfo.id}`);
@@ -139,7 +146,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
 
       if (rawTopics.length > 0) {
         const topicIds = rawTopics.map(t => t.id);
-        
+
         // 2) 아이템 조회
         const { data: itemsData, error: err2 } = await supabase
           .from('ams_checklist_items')
@@ -151,7 +158,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
         // items 상태 재조합 [studentId][topicId]
         const itemsMap: Record<string, Record<string, any>> = {};
         (itemsData || []).forEach(item => {
-          const key = item.course_name && item.course_name !== '정규' 
+          const key = item.course_name && item.course_name !== '정규'
             ? `${item.student_id}_special_${item.course_name}_0`
             : item.student_id;
 
@@ -199,8 +206,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
   // 2. 상태 순환 토글 핸들러 (none -> checked -> hold -> na -> none)
   const handleCycleStatus = async (studentObj: any, topicId: string, currentVal: any) => {
     const virtualStudentId = typeof studentObj === 'string' ? studentObj : studentObj.id;
-    const realStudentUuid = typeof studentObj === 'object' && studentObj.originalId 
-      ? studentObj.originalId 
+    const realStudentUuid = typeof studentObj === 'object' && studentObj.originalId
+      ? studentObj.originalId
       : virtualStudentId.split('_special_')[0];
 
     const currentStatus = currentVal.status || 'none';
@@ -232,7 +239,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
 
     // 2) DB Upsert
     try {
-      const courseName = typeof studentObj === 'object' 
+      const courseName = typeof studentObj === 'object'
         ? (studentObj.isSpecialClass ? (studentObj.electiveCourse?.subject?.trim() || studentObj.courseName || '특강') : '정규')
         : '정규';
 
@@ -261,7 +268,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       }
 
       if (error) throw error;
-      
+
       if (data && data[0]) {
         setItems(prev => {
           const studentMap = { ...(prev[virtualStudentId] || {}) };
@@ -288,8 +295,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
       default:
         return (
           <div className={`w-4 h-4 rounded-[3px] border transition-all ${
-            isLight 
-              ? 'border-gray-400 hover:border-blue-600 hover:bg-blue-50 shadow-sm' 
+            isLight
+              ? 'border-gray-400 hover:border-blue-600 hover:bg-blue-50 shadow-sm'
               : 'border-white/20 hover:border-blue-500 hover:bg-blue-500/10'
           }`} />
         );
@@ -313,8 +320,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
     if ((currentVal.memo || '') === nextMemo) return;
 
     const virtualStudentId = typeof studentObj === 'string' ? studentObj : studentObj.id;
-    const realStudentUuid = typeof studentObj === 'object' && studentObj.originalId 
-      ? studentObj.originalId 
+    const realStudentUuid = typeof studentObj === 'object' && studentObj.originalId
+      ? studentObj.originalId
       : virtualStudentId.split('_special_')[0];
 
     // 1) 로컬 상태 낙관적 갱신
@@ -331,7 +338,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
 
     // 2) DB Upsert
     try {
-      const courseName = typeof studentObj === 'object' 
+      const courseName = typeof studentObj === 'object'
         ? (studentObj.isSpecialClass ? (studentObj.electiveCourse?.subject?.trim() || studentObj.courseName || '특강') : '정규')
         : '정규';
 
@@ -350,7 +357,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
         .select();
 
       if (error) throw error;
-      
+
       if (data && data[0]) {
         setItems(prev => {
           const studentMap = { ...(prev[virtualStudentId] || {}) };
@@ -541,8 +548,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
           <button
             onClick={() => setIsArchiveModalOpen(true)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[10px] font-black border transition-all shadow-md cursor-pointer ${
-              isLight 
-                ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100' 
+              isLight
+                ? 'bg-amber-50 border-amber-300 text-amber-800 hover:bg-amber-100'
                 : 'border-amber-500/30 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20'
             }`}
             title="보관 처리된 체크리스트 항목들을 확인 및 복구합니다."
@@ -556,8 +563,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
             <button
               onClick={() => setActiveChecklistFilter({ topicId: null, status: 'none' })}
               className={`flex items-center gap-1 px-2.5 py-1.5 rounded-[2px] text-[10px] font-black border transition-all shadow-md cursor-pointer animate-fade-in ${
-                isLight 
-                  ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100' 
+                isLight
+                  ? 'bg-rose-50 border-rose-300 text-rose-700 hover:bg-rose-100'
                   : 'border-red-500/30 bg-red-500/10 text-red-400 hover:bg-red-500 hover:text-white'
               }`}
               title="활성화된 열 필터를 초기화합니다."
@@ -570,8 +577,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
           <button
             onClick={() => setShowAllDays(prev => !prev)}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-[2px] text-[10px] font-black border transition-all shadow-md cursor-pointer ${
-              showAllDays 
-                ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white' 
+              showAllDays
+                ? 'bg-blue-600 hover:bg-blue-500 border-blue-500 text-white'
                 : (isLight ? 'bg-gray-100 border-[#e3e2e0] text-gray-700 hover:bg-gray-200' : 'bg-[#151515] hover:bg-[#202020] border-white/5 text-gray-400')
             }`}
             title="오늘 요일 외의 모든 학생들을 체크리스트 명단에 소환합니다."
@@ -608,16 +615,16 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                 isLight ? 'border-[#e3e2e0] bg-gray-100 text-[#37352f]' : 'border-white/5 bg-[#121212] text-gray-200'
               }`}>
                 학생 이름
-                <div 
+                <div
                   onMouseDown={(e) => handleResizeStart(e, 'name')}
                   className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40"
                   title="드래그하여 이름 열 너비 조절"
                 />
               </th>
               {activeTopics.map(t => (
-                <th 
-                  key={t.id} 
-                  colSpan={2} 
+                <th
+                  key={t.id}
+                  colSpan={2}
                   draggable
                   onDragStart={(e) => {
                     setDraggedTopicId(t.id);
@@ -663,15 +670,15 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                       <Archive size={11} strokeWidth={2.5} />
                     </button>
                     {/* 삭제 버튼 */}
-                    <button 
-                      onClick={(e) => { e.stopPropagation(); handleDeleteTopic(t.id); }} 
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleDeleteTopic(t.id); }}
                       className="opacity-0 group-hover:opacity-100 p-1 rounded text-red-600 hover:bg-red-100 transition-all cursor-pointer"
                       title="체크 항목 영구 제거"
                     >
                       <Trash2 size={11} strokeWidth={2.5} />
                     </button>
                   </div>
-                  <div 
+                  <div
                     onMouseDown={(e) => { e.stopPropagation(); handleResizeStart(e, `${t.id}-memo`); }}
                     className="absolute right-0 top-0 bottom-0 w-2 cursor-col-resize hover:bg-blue-500/30 transition-colors z-40"
                     title="드래그하여 이 주제의 가로 폭 조절"
@@ -702,7 +709,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
               </tr>
             ) : (
               displayStudents.map((student, idx) => {
-                const rowBg = isLight 
+                const rowBg = isLight
                   ? (idx % 2 === 0 ? "bg-white hover:bg-blue-50/50" : "bg-[#f9f9f8] hover:bg-blue-50/50")
                   : (idx % 2 === 0 ? "bg-[#0f0f0f] hover:bg-[#1a1a1a]" : "bg-[#151515] hover:bg-[#1a1a1a]");
                 return (
@@ -723,7 +730,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                         <React.Fragment key={`${student.id}-${t.id}`}>
                           {/* 체크 상태 순환 셀 */}
                           <td className={`py-1 px-2 border-r text-center ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}>
-                            <button 
+                            <button
                               onClick={() => handleCycleStatus(student, t.id, cellData)}
                               className="inline-flex items-center justify-center p-0.5 rounded hover:bg-gray-200/50 transition-all cursor-pointer animate-fade-in"
                               title="클릭하여 상태 순환 (공란 -> 완료 -> 보류 -> 제외)"
@@ -733,7 +740,7 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                           </td>
                           {/* 메모 입력 셀 */}
                           <td className={`py-0.5 px-1.5 border-r align-middle ${isLight ? 'border-[#e3e2e0]' : 'border-white/5'}`}>
-                            <input 
+                            <input
                               type="text"
                               defaultValue={cellData.memo}
                               onBlur={(e) => handleSaveMemo(student, t.id, e.target.value, cellData)}
@@ -744,8 +751,8 @@ export const ChecklistTab = forwardRef<any, ChecklistTabProps>(({
                               }}
                               placeholder="-"
                               className={`w-full bg-transparent border border-transparent rounded-[2px] px-1 py-0.5 text-[10px] font-bold outline-none transition-all ${
-                                isLight 
-                                  ? 'text-[#37352f] hover:border-[#e3e2e0] focus:border-blue-500 focus:bg-white' 
+                                isLight
+                                  ? 'text-[#37352f] hover:border-[#e3e2e0] focus:border-blue-500 focus:bg-white'
                                   : 'text-gray-300 hover:border-white/10 focus:border-blue-500 focus:bg-[#1a1a1a]'
                               }`}
                             />

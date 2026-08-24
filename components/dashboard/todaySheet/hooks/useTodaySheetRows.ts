@@ -2,8 +2,8 @@
 
 import { useMemo } from 'react';
 import { Student } from '@/types/dashboard';
-import { getDayOfWeek } from '@/lib/utils';
-import { calculateAggregatedHw, selectBaseSession, determineTodaySession, isValidHomeworkText } from '@/lib/studentDataEnricher';
+import { getDayOfWeek, getTodayStr } from '@/lib/utils';
+import { calculateAggregatedHw, selectBaseSession, determineTodaySession, isValidHomeworkText, isValidHistoryLog } from '@/lib/studentDataEnricher';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
 
 interface UseTodaySheetRowsParams {
@@ -102,217 +102,293 @@ export function useTodaySheetRows({
       const hasStandardDate = /^\d{2}\.\d{2}\(/;
       if (hasStandardDate.test(hw)) return log;
 
-      if (!dateVal) return log;
-
-      const dateStr = dateVal.slice(5).replace('-', '.');
-      const dayName = getDayOfWeek(dateVal);
-      return {
-        ...log,
-        homework_text: `${dateStr}(${dayName})\n${hw}`
-      };
+      return log;
     };
 
     const expandedResult: any[] = [];
-    Array.from(uniqueOriginalStudents.values()).forEach((s: any) => {
-      const regularHours = s.day_schedules?.[dayKey] || [];
-      const rawElective = s.book_courses?.['__elective_courses'];
-      const activeElectives: any[] = [];
-      const seenCourseKeys = new Set<string>();
+    const isPastDate = selectedDate < getTodayStr();
 
-      if (rawElective) {
-        try {
-          let courses: any[] = [];
-          if (typeof rawElective === 'string') {
-            courses = JSON.parse(rawElective);
-          } else if (Array.isArray(rawElective)) {
-            courses = rawElective;
+    if (isPastDate) {
+      // 💡 [과거 날짜 불변성 보존] 과거 날짜는 현재 시간표를 참조하지 않고 실제 존재하는 세션 로그(ams_session_logs)만을 기반으로 행 생성
+      Array.from(uniqueOriginalStudents.values()).forEach((s: any) => {
+        const studentPastLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
+        if (studentPastLogs.length === 0) return; // 과거에 실제 로그가 없는 학생은 빈 예정 행 생성 안 함
+
+        studentPastLogs.forEach((log: any, logIdx: number) => {
+          const snapshot = log.session_snapshot;
+          const isMakeup = log.is_pure_makeup === true ||
+            (typeof log.attendance_status === 'string' && log.attendance_status.startsWith('보강') && log.attendance_reason === '보강 수업') ||
+            snapshot?.sessionType === 'makeup';
+
+          const courseName = snapshot?.courseName || log.course_name || '정규';
+          const isSpecial = !isMakeup && courseName !== '정규';
+
+          // 시간 계산: 1. log.moved_to_hour -> 2. snapshot.scheduledHours -> 3. 미기록(99)
+          const movedH = (log.moved_to_hour !== undefined && log.moved_to_hour !== null && log.moved_to_hour > 0)
+            ? log.moved_to_hour
+            : null;
+
+          const snapshotH = (snapshot?.scheduledHours && Array.isArray(snapshot.scheduledHours) && snapshot.scheduledHours.length > 0)
+            ? snapshot.scheduledHours[0]
+            : null;
+
+          const activeHour = movedH !== null ? movedH : snapshotH;
+          const normalizedHour = (() => {
+            if (activeHour === null || activeHour === undefined) return null;
+            let h = typeof activeHour === 'number' ? activeHour : parseInt(String(activeHour), 10);
+            if (isNaN(h) || h <= 0) return null;
+            if (h >= 100) h = Math.floor(h / 100);
+            if (h > 0 && h < 10) h += 12;
+            return h;
+          })();
+
+          // 과거 행의 요일 표시 정보 (스냅샷이 있으면 스냅샷의 scheduledDays 사용, 없으면 빈 배열)
+          const pastScheduledDays = snapshot?.scheduledDays || [];
+
+          const pastLogsBeforeTarget = (s.allLogs || [])
+            .filter((l: any) => (l.date || l.session_date) < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))
+            .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
+
+          const aggregatedHw = calculateAggregatedHw(pastLogsBeforeTarget, academyInfo, s, courseName);
+          const baseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, courseName);
+          const lastSession = baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', homework_text: aggregatedHw } as any : undefined);
+
+          let rowId = s.originalId || s.id;
+          if (isMakeup) {
+            rowId = `${rowId}_makeup_${courseName}_${normalizedHour ?? 'none'}_${log.id || logIdx}`;
+          } else if (isSpecial) {
+            rowId = `${rowId}_special_${courseName}_${log.id || logIdx}`;
           }
-          if (Array.isArray(courses)) {
-            courses.forEach((c: any) => {
-              if (!c) return;
-              const cKey = c.id || c.subject?.trim() || JSON.stringify(c);
-              if (seenCourseKeys.has(cKey)) return;
 
-              const hasDay = c.days && (
-                Array.isArray(c.days) 
-                  ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
-                  : (typeof c.days === 'string' && c.days.includes(dayKey))
-              );
-
-              // 특강 기간 검사
-              const electiveStartDate = c.startDate || c.start_date;
-              const electiveEndDate = c.endDate || c.end_date;
-              const isBeforeStartDate = electiveStartDate ? (selectedDate < electiveStartDate) : false;
-              const isAfterEndDate = electiveEndDate ? (selectedDate > electiveEndDate) : false;
-
-              const courseSubject = c.subject?.trim() || '특강';
-              const hasLogToday = (s.allLogs || []).some((l: any) => {
-                if ((l.date || l.session_date) !== selectedDate) return false;
-                const logCourse = (l.course_name || '정규').trim();
-                return logCourse === courseSubject;
-              });
-
-              if ((hasDay || hasLogToday) && !isBeforeStartDate && !isAfterEndDate) {
-                seenCourseKeys.add(cKey);
-                activeElectives.push(c);
-              }
-            });
-          }
-        } catch (e) {}
-      }
-
-      const isMakeupLog = (l: any) => {
-        if (!l) return false;
-        if (l.is_pure_makeup === true) return true;
-        if (l.is_pure_makeup === false) return false;
-        return (
-          typeof l.attendance_status === 'string' &&
-          l.attendance_status.startsWith('보강') &&
-          l.attendance_reason === '보강 수업'
-        );
-      };
-
-      // (1) 선택과목 각각 독립 행으로 추가
-      activeElectives.forEach((c: any, cIdx: number) => {
-        const courseSubject = c.subject?.trim() || '특강';
-        const electiveLog = (s.allLogs || []).find((l: any) => {
-          if ((l.date || l.session_date) !== selectedDate) return false;
-          if (isMakeupLog(l)) return false;
-          const logCourse = (l.course_name || '정규').trim();
-          return logCourse === courseSubject;
-        });
-
-        const specialHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
-          ? c.schedules[dayKey]
-          : [1300, 1600];
-
-        const pastElectiveLogs = (s.allLogs || [])
-          .filter((l: any) => (l.date || l.session_date) < selectedDate)
-          .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
-
-        const electiveAggregatedHw = calculateAggregatedHw(pastElectiveLogs, academyInfo, s, courseSubject);
-        const electiveBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, courseSubject);
-        const electiveLastSession = electiveBaseSession ? { ...electiveBaseSession, homework_text: electiveAggregatedHw } : (electiveAggregatedHw ? { id: 'temp', homework_text: electiveAggregatedHw } as any : undefined);
-        const electiveTodaySession = determineTodaySession(s, electiveLog, electiveBaseSession, true, selectedDate, academyInfo);
-
-        const specialId = `${s.originalId || s.id}_special_${c.id || courseSubject}_${cIdx}`;
-        if (!expandedResult.some(item => item.id === specialId)) {
           expandedResult.push({
             ...s,
-            id: specialId,
+            id: rowId,
             originalId: s.originalId || s.id,
-            isSpecialClass: true,
-            courseName: courseSubject,
+            isSpecialClass: isSpecial,
+            isMakeupRow: isMakeup,
+            __courseType: isMakeup ? 'makeup' : (isSpecial ? 'elective' : 'regular'),
+            courseName: courseName,
             day_schedules: {
-              ...s.day_schedules,
-              [dayKey]: specialHours
+              [dayKey]: normalizedHour !== null ? [normalizedHour] : []
             },
-            electiveCourse: {
-              ...c,
-              subject: courseSubject
-            },
-            lastSession: electiveLastSession,
-            todaySession: electiveTodaySession
+            class_days: pastScheduledDays,
+            electiveCourse: isSpecial ? {
+              subject: courseName,
+              days: pastScheduledDays,
+              schedules: normalizedHour !== null ? { [dayKey]: [normalizedHour] } : {}
+            } : undefined,
+            lastSession: lastSession,
+            todaySession: log
           });
+        });
+      });
+    } else {
+      // 💡 [오늘 및 미래 날짜] 현재 시간표를 기준으로 예정 행 생성 (기존 로직 유지)
+      Array.from(uniqueOriginalStudents.values()).forEach((s: any) => {
+        const regularHours = s.day_schedules?.[dayKey] || [];
+        const rawElective = s.book_courses?.['__elective_courses'];
+        const activeElectives: any[] = [];
+        const seenCourseKeys = new Set<string>();
+
+        if (rawElective) {
+          try {
+            let courses: any[] = [];
+            if (typeof rawElective === 'string') {
+              courses = JSON.parse(rawElective);
+            } else if (Array.isArray(rawElective)) {
+              courses = rawElective;
+            }
+            if (Array.isArray(courses)) {
+              courses.forEach((c: any) => {
+                if (!c) return;
+                const cKey = c.id || c.subject?.trim() || JSON.stringify(c);
+                if (seenCourseKeys.has(cKey)) return;
+
+                const hasDay = c.days && (
+                  Array.isArray(c.days)
+                    ? c.days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
+                    : (typeof c.days === 'string' && c.days.includes(dayKey))
+                );
+
+                // 특강 기간 검사
+                const electiveStartDate = c.startDate || c.start_date;
+                const electiveEndDate = c.endDate || c.end_date;
+                const isBeforeStartDate = electiveStartDate ? (selectedDate < electiveStartDate) : false;
+                const isAfterEndDate = electiveEndDate ? (selectedDate > electiveEndDate) : false;
+
+                const courseSubject = c.subject?.trim() || '특강';
+                const hasLogToday = (s.allLogs || []).some((l: any) => {
+                  if ((l.date || l.session_date) !== selectedDate) return false;
+                  const logCourse = (l.course_name || '정규').trim();
+                  return logCourse === courseSubject;
+                });
+
+                if ((hasDay || hasLogToday) && !isBeforeStartDate && !isAfterEndDate) {
+                  seenCourseKeys.add(cKey);
+                  activeElectives.push(c);
+                }
+              });
+            }
+          } catch (e) {}
         }
-      });
 
-      const realId = s.originalId || s.id;
-      const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
-      
-      // 💡 [시간 이동 정밀 복원] 순수 시간이동 로그만 정규 로그로 채택 (보강 로그는 정규 로그 선출에서 100% 제외)
-      const movedRegularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
-      const regularLog = movedRegularLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l));
-      const rawMakeupLogs = todayLogs.filter((l: any) => {
-        const isExcludedRegular = l.is_pure_makeup !== true && (l.moved_to_hour == null) && (l.course_name === '정규' || !l.course_name);
-        if (isExcludedRegular) return false;
-        return isMakeupLog(l);
-      });
+        const isMakeupLog = (l: any) => {
+          if (!l) return false;
+          if (l.is_pure_makeup === true) return true;
+          if (l.is_pure_makeup === false) return false;
+          return (
+            typeof l.attendance_status === 'string' &&
+            l.attendance_status.startsWith('보강') &&
+            l.attendance_reason === '보강 수업'
+          );
+        };
 
-      // 💡 [중복 완벽 차단] 개별 보강 세션 고유 채택 (고유 ID 우선)
-      const uniqueMakeupMap = new Map<string, any>();
-      rawMakeupLogs.forEach((mLog: any) => {
-        const key = mLog.id || `${mLog.student_id || realId}_${mLog.course_name || '정규'}_${mLog.moved_to_hour || 'none'}_${mLog.created_at || 'temp'}`;
-        uniqueMakeupMap.set(key, mLog);
-      });
-      const makeupLogs = Array.from(uniqueMakeupMap.values());
+        // (1) 선택과목 각각 독립 행으로 추가
+        activeElectives.forEach((c: any, cIdx: number) => {
+          const courseSubject = c.subject?.trim() || '특강';
+          const electiveLog = (s.allLogs || []).find((l: any) => {
+            if ((l.date || l.session_date) !== selectedDate) return false;
+            if (isMakeupLog(l)) return false;
+            const logCourse = (l.course_name || '정규').trim();
+            return logCourse === courseSubject;
+          });
 
-      const allElectiveDaysForStudent = new Set<string>();
-      if (rawElective) {
-        try {
-          const allCourses = typeof rawElective === 'string' ? JSON.parse(rawElective) : Array.isArray(rawElective) ? rawElective : [];
-          if (Array.isArray(allCourses)) {
-            allCourses.forEach((c: any) => {
-              if (!c) return;
-              if (Array.isArray(c.days)) {
-                c.days.forEach((d: any) => { if (typeof d === 'string') allElectiveDaysForStudent.add(d.trim()); });
-              } else if (typeof c.days === 'string') {
-                c.days.split(/[,\s]+/).forEach((d: string) => { if (d.trim()) allElectiveDaysForStudent.add(d.trim()); });
-              }
+          const specialHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
+            ? c.schedules[dayKey]
+            : [1300, 1600];
+
+          const pastElectiveLogs = (s.allLogs || [])
+            .filter((l: any) => (l.date || l.session_date) < selectedDate)
+            .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
+
+          const electiveAggregatedHw = calculateAggregatedHw(pastElectiveLogs, academyInfo, s, courseSubject);
+          const electiveBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, courseSubject);
+          const electiveLastSession = electiveBaseSession ? { ...electiveBaseSession, homework_text: electiveAggregatedHw } : (electiveAggregatedHw ? { id: 'temp', homework_text: electiveAggregatedHw } as any : undefined);
+          const electiveTodaySession = determineTodaySession(s, electiveLog, electiveBaseSession, true, selectedDate, academyInfo);
+
+          const isElectivePureMakeup = isMakeupLog(electiveTodaySession || {});
+          const activeElectiveMovedHour = (!isElectivePureMakeup && electiveTodaySession?.moved_to_hour !== undefined && electiveTodaySession?.moved_to_hour !== null && electiveTodaySession?.moved_to_hour > 0) ? electiveTodaySession.moved_to_hour : null;
+          const normalizedElectiveMovedHour = (() => {
+            if (activeElectiveMovedHour === null) return null;
+            let h = activeElectiveMovedHour >= 100 ? Math.floor(activeElectiveMovedHour / 100) : activeElectiveMovedHour;
+            if (h > 0 && h < 10) h += 12;
+            return h;
+          })();
+
+          const effectiveSpecialHours = (normalizedElectiveMovedHour !== null)
+            ? [normalizedElectiveMovedHour]
+            : specialHours;
+
+          const specialId = `${s.originalId || s.id}_special_${c.id || courseSubject}_${cIdx}`;
+          if (!expandedResult.some(item => item.id === specialId)) {
+            expandedResult.push({
+              ...s,
+              id: specialId,
+              originalId: s.originalId || s.id,
+              isSpecialClass: true,
+              courseName: courseSubject,
+              day_schedules: {
+                ...s.day_schedules,
+                [dayKey]: effectiveSpecialHours
+              },
+              electiveCourse: {
+                ...c,
+                subject: courseSubject
+              },
+              lastSession: electiveLastSession,
+              todaySession: electiveTodaySession
             });
           }
-        } catch (e) {}
-      }
-
-      const isRegularClassDay = (s.class_days || []).includes(dayKey);
-      const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
-      const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);
-
-      let shouldShowRegular = false;
-      const rawAtt = regularTodaySession?.attendance_status || '';
-      const isCanceled = rawAtt.includes('수업취소') || rawAtt.includes('수업제외');
-
-      // 💡 [시간 이동 반영] 정규 세션에 시간이동(moved_to_hour) 정보가 있으면 해당 이동 시간을 정규 시간표로 대체 (순수 보강 로그는 정규 시간 변경 제외)
-      const isPureMakeup = isMakeupLog(regularTodaySession || {});
-      const activeMovedHour = (!isPureMakeup && regularTodaySession?.moved_to_hour !== undefined && regularTodaySession?.moved_to_hour !== null && regularTodaySession?.moved_to_hour > 0) ? regularTodaySession.moved_to_hour : null;
-      const normalizedMovedHour = (() => {
-        if (activeMovedHour === null) return null;
-        let h = activeMovedHour >= 100 ? Math.floor(activeMovedHour / 100) : activeMovedHour;
-        if (h > 0 && h < 10) h += 12;
-        return h;
-      })();
-      const effectiveRegularHours = (normalizedMovedHour !== null)
-        ? [normalizedMovedHour]
-        : regularHours;
-
-      if (isRegularClassDay) {
-        // 1. 원래 오늘 정규 수업일인 경우에만 정규 행 배치
-        shouldShowRegular = true;
-      }
-
-      if (shouldShowRegular) {
-        const pastRegularLogs = (s.allLogs || [])
-          .filter((l: any) => {
-            const lDate = l.date || l.session_date || '';
-            if (lDate >= selectedDate) return false;
-            const course = l.course_name ? l.course_name.trim() : '정규';
-            if (course !== '정규') return false;
-
-            const attStatus = l.attendance_status || '';
-            if (attStatus.startsWith('결석')) return false;
-
-            const hw = l.homework_text ? l.homework_text.trim() : '';
-            return isValidHomeworkText(hw);
-          })
-          .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
-
-        const rawRegularLastSession = pastRegularLogs.length > 0 ? pastRegularLogs[0] : s.lastSession;
-        const regularLastSession = formatLastSessionHomework(rawRegularLastSession);
-
-        expandedResult.push({
-          ...s,
-          id: realId,
-          originalId: realId,
-          isSpecialClass: false,
-          courseName: '정규',
-          day_schedules: {
-            ...s.day_schedules,
-            [dayKey]: effectiveRegularHours
-          },
-          lastSession: regularLastSession,
-          todaySession: regularTodaySession
         });
-      }
+
+        const realId = s.originalId || s.id;
+        const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
+
+        // 💡 [시간 이동 정밀 복원] 순수 시간이동 로그만 정규 로그로 채택 (보강 로그는 정규 로그 선출에서 100% 제외)
+        const movedRegularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+        const regularLog = movedRegularLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isMakeupLog(l));
+        const rawMakeupLogs = todayLogs.filter((l: any) => {
+          const isExcludedRegular = l.is_pure_makeup !== true && (l.moved_to_hour == null) && (l.course_name === '정규' || !l.course_name);
+          if (isExcludedRegular) return false;
+          return isMakeupLog(l);
+        });
+
+        // 💡 [중복 완벽 차단] 개별 보강 세션 고유 채택 (고유 ID 우선)
+        const uniqueMakeupMap = new Map<string, any>();
+        rawMakeupLogs.forEach((mLog: any) => {
+          const key = mLog.id || `${mLog.student_id || realId}_${mLog.course_name || '정규'}_${mLog.moved_to_hour || 'none'}_${mLog.created_at || 'temp'}`;
+          uniqueMakeupMap.set(key, mLog);
+        });
+        const makeupLogs = Array.from(uniqueMakeupMap.values());
+
+        const allElectiveDaysForStudent = new Set<string>();
+        if (rawElective) {
+          try {
+            const allCourses = typeof rawElective === 'string' ? JSON.parse(rawElective) : Array.isArray(rawElective) ? rawElective : [];
+            if (Array.isArray(allCourses)) {
+              allCourses.forEach((c: any) => {
+                if (!c) return;
+                if (Array.isArray(c.days)) {
+                  c.days.forEach((d: any) => { if (typeof d === 'string') allElectiveDaysForStudent.add(d.trim()); });
+                } else if (typeof c.days === 'string') {
+                  c.days.split(/[,\s]+/).forEach((d: string) => { if (d.trim()) allElectiveDaysForStudent.add(d.trim()); });
+                }
+              });
+            }
+          } catch (e) {}
+        }
+
+        const isRegularClassDay = (s.class_days || []).includes(dayKey);
+        const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
+        const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);
+
+        let shouldShowRegular = false;
+        const rawAtt = regularTodaySession?.attendance_status || '';
+        const isCanceled = rawAtt.includes('수업취소') || rawAtt.includes('수업제외');
+
+        // 💡 [시간 이동 반영] 정규 세션에 시간이동(moved_to_hour) 정보가 있으면 해당 이동 시간을 정규 시간표로 대체 (순수 보강 로그는 정규 시간 변경 제외)
+        const isPureMakeup = isMakeupLog(regularTodaySession || {});
+        const activeMovedHour = (!isPureMakeup && regularTodaySession?.moved_to_hour !== undefined && regularTodaySession?.moved_to_hour !== null && regularTodaySession?.moved_to_hour > 0) ? regularTodaySession.moved_to_hour : null;
+        const normalizedMovedHour = (() => {
+          if (activeMovedHour === null) return null;
+          let h = activeMovedHour >= 100 ? Math.floor(activeMovedHour / 100) : activeMovedHour;
+          if (h > 0 && h < 10) h += 12;
+          return h;
+        })();
+
+        const effectiveRegularHours = (normalizedMovedHour !== null)
+          ? [normalizedMovedHour]
+          : regularHours;
+
+        if (isRegularClassDay) {
+          // 1. 원래 오늘 정규 수업일인 경우에만 정규 행 배치
+          shouldShowRegular = true;
+        }
+
+        if (shouldShowRegular) {
+          const pastRegularLogs = (s.allLogs || [])
+            .filter((l: any) => (l.date || l.session_date) < selectedDate)
+            .sort((a: any, b: any) => String(b.date || b.session_date).localeCompare(String(a.date || a.session_date)));
+
+          const regularAggregatedHw = calculateAggregatedHw(pastRegularLogs, academyInfo, s, '정규');
+          const regularLastSession = regularBaseSession
+            ? { ...regularBaseSession, homework_text: regularAggregatedHw }
+            : (regularAggregatedHw ? { id: 'temp', homework_text: regularAggregatedHw } as any : undefined);
+
+          expandedResult.push({
+            ...s,
+            id: realId,
+            originalId: realId,
+            isSpecialClass: false,
+            courseName: '정규',
+            day_schedules: {
+              ...s.day_schedules,
+              [dayKey]: effectiveRegularHours
+            },
+            lastSession: regularLastSession,
+            todaySession: regularTodaySession
+          });
+        }
 
       // (3) 보강 전용 독립 행 추가 (독립 등록된 보강인 경우만 별도 행 생성, 정규 수업 시간이동은 정규 행 이동으로 처리)
       makeupLogs.forEach((mLog: any) => {
@@ -363,6 +439,7 @@ export function useTodaySheetRows({
         }
       });
     });
+  }
 
     result = expandedResult;
 

@@ -2,17 +2,18 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  ClipboardList, Calendar, Plus, Check, Trash2, Clock, 
+import {
+  ClipboardList, Calendar, Plus, Check, Trash2, Clock,
   User, CheckCircle, AlertCircle, Search, Sparkles, Loader2, CalendarRange, X, EyeOff, ExternalLink,
-  Edit, Users, MessageSquare, CheckCircle2, Circle, FileText, Edit2
+  Edit, Users, MessageSquare, CheckCircle2, Circle, FileText, Edit2, ArrowLeft
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { getTodayStr } from '@/lib/utils';
-import { SessionLog, Student, Teacher } from '@/types/dashboard';
+import { SessionLog, Student, Teacher, AbsenceLinkContext } from '@/types/dashboard';
 import TaskLinksTab from './TaskLinksTab';
 import SurveyManagement from './SurveyManagement';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 import { useTeacherTasks } from './hooks/useTeacherTasks';
 
@@ -23,6 +24,8 @@ export interface TeacherTasksProps {
   currentUser: any;
   onRefreshStudents: (showLoader?: boolean) => Promise<void>;
   isLight?: boolean;
+  absenceLinkPreset?: AbsenceLinkContext | null;
+  onClearAbsenceLinkPreset?: () => void;
 }
 
 export default function TeacherTasks({
@@ -31,7 +34,9 @@ export default function TeacherTasks({
   teachers,
   currentUser,
   onRefreshStudents,
-  isLight = false
+  isLight = false,
+  absenceLinkPreset,
+  onClearAbsenceLinkPreset
 }: TeacherTasksProps) {
   const {
     activeTab,
@@ -117,6 +122,23 @@ export default function TeacherTasks({
     teachers,
     currentUser,
     onRefreshStudents,
+    absenceLinkPreset,
+    onClearAbsenceLinkPreset
+  });
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: isTaskModalOpen,
+    onClose: () => setIsTaskModalOpen(false)
+  });
+
+  useModalEsc({
+    isOpen: isMakeupModalOpen,
+    onClose: () => {
+      setIsMakeupModalOpen(false);
+      setEditMakeupGroup(null);
+      setSelectedStudentIds([]);
+    }
   });
 
   // --- Filtering & Memos ---
@@ -224,7 +246,7 @@ export default function TeacherTasks({
     list.sort((a, b) => {
       const nameCompare = a.name.localeCompare(b.name, 'ko');
       if (nameCompare !== 0) return nameCompare;
-      
+
       if (a.courseName === '정규') return -1;
       if (b.courseName === '정규') return 1;
       return a.courseName.localeCompare(b.courseName, 'ko');
@@ -304,7 +326,7 @@ export default function TeacherTasks({
     filteredMakeups.forEach(makeup => {
       const timeKey = getMakeupTimeKey(makeup);
       const groupKey = `${makeup.session_date}|${timeKey}`;
-      
+
       if (!groups[groupKey]) {
         groups[groupKey] = {
           date: makeup.session_date,
@@ -338,13 +360,35 @@ export default function TeacherTasks({
     setSelectedStudentIds(prev => prev.filter(id => !filteredIds.includes(id)));
   };
 
+  // 💡 [결석 연동 보강 이번 달 회차 계산]
+  // 현재 원본 결석 세션(absence_session_id)에 연결된 보강 중, 보강 예정일(makeupDate)과 같은 달의 순수 보강 수 + 1
+  const linkedMakeupRound = useMemo(() => {
+    if (!absenceLinkPreset || absenceLinkPreset.source !== 'absence-popup') return null;
+    if (!makeupDate) return 1;
+
+    const monthKey = makeupDate.slice(0, 7);
+    const targetStudent = students.find(s => s.id === absenceLinkPreset.studentId || s.originalId === absenceLinkPreset.studentId);
+    const sourceLogs = targetStudent?.allLogs || makeups;
+
+    const linkedCountThisMonth = (sourceLogs || []).filter((log: any) => {
+      const logDate = String(log.session_date || log.date || '');
+      return (
+        log.is_pure_makeup === true &&
+        String(log.absence_session_id ?? '') === String(absenceLinkPreset.absenceSessionId ?? '') &&
+        logDate.slice(0, 7) === monthKey
+      );
+    }).length;
+
+    return linkedCountThisMonth + 1;
+  }, [absenceLinkPreset, makeupDate, students, makeups]);
+
   const getDDay = (targetDateStr: string) => {
     if (targetDateStr === '9999-12-31') return '상시';
     const target = new Date(targetDateStr);
     const today = new Date(getTodayStr());
     const diffTime = target.getTime() - today.getTime();
     const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-    
+
     if (diffDays === 0) return 'D-Day';
     if (diffDays < 0) return `지남 (${Math.abs(diffDays)}일)`;
     return `D-${diffDays}`;
@@ -352,7 +396,7 @@ export default function TeacherTasks({
 
   return (
     <div className={`h-full flex flex-col overflow-hidden p-6 space-y-6 ${isLight ? 'bg-[#f7f7f5] text-[#37352f]' : 'bg-[#050505] text-white'}`}>
-      
+
       {/* 1. Header & Tab Switches */}
       <div className={`flex items-center justify-between shrink-0 p-5 rounded-2xl border ${
         isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-black/40 border-white/10 backdrop-blur-2xl'
@@ -372,51 +416,51 @@ export default function TeacherTasks({
         <div className={`flex p-1 rounded-xl flex-wrap gap-1 border ${
           isLight ? 'bg-[#f0f0ed] border-[#e3e2e0]' : 'bg-white/5 border-white/10'
         }`}>
-          <button 
+          <button
             onClick={() => setActiveTab('makeups')}
             className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'makeups' 
-                ? 'bg-blue-600 text-white shadow-sm' 
+              activeTab === 'makeups'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
             }`}
           >
             <CalendarRange size={14} /> 보강 관리
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('tasks')}
             className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'tasks' 
-                ? 'bg-blue-600 text-white shadow-sm' 
+              activeTab === 'tasks'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
             }`}
           >
             <Sparkles size={14} /> 업무 목록
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('suggestions')}
             className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'suggestions' 
-                ? 'bg-blue-600 text-white shadow-sm' 
+              activeTab === 'suggestions'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
             }`}
           >
             <MessageSquare size={14} /> 학생 건의
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('surveys')}
             className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'surveys' 
-                ? 'bg-blue-600 text-white shadow-sm' 
+              activeTab === 'surveys'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
             }`}
           >
             <Users size={14} /> 설문/수요조사
           </button>
-          <button 
+          <button
             onClick={() => setActiveTab('links')}
             className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'links' 
-                ? 'bg-blue-600 text-white shadow-sm' 
+              activeTab === 'links'
+                ? 'bg-blue-600 text-white shadow-sm'
                 : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
             }`}
           >
@@ -428,10 +472,10 @@ export default function TeacherTasks({
       {/* 2. Main Work Area */}
       <div className="flex-1 overflow-hidden relative">
         <AnimatePresence mode="wait">
-          
+
           {/* TAB 1: Tasks Board */}
           {activeTab === 'tasks' && (
-            <motion.div 
+            <motion.div
               key="tasks-tab"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -441,10 +485,10 @@ export default function TeacherTasks({
               <div className="flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-4">
                   <span className="text-[10px] font-black uppercase tracking-widest text-gray-500">전체 등록된 할 일 ({visibleTasks.length}개)</span>
-                  
+
                   {/* 내 담당 업무만 보기 토글 */}
                   <label className="flex items-center gap-2 cursor-pointer select-none">
-                    <input 
+                    <input
                       type="checkbox"
                       checked={showOnlyMyTasks}
                       onChange={(e) => setShowOnlyMyTasks(e.target.checked)}
@@ -455,7 +499,7 @@ export default function TeacherTasks({
 
                   {/* 숨김 해제 버튼 (원장/마스터에게만 보임) */}
                   {(currentUser?.role === 'admin' || currentUser?.role === 'master') && hiddenTaskIds.length > 0 && (
-                    <button 
+                    <button
                       onClick={() => {
                         if (confirm('숨겨놓았던 건의사항 카드를 모두 다시 표시하시겠습니까?')) {
                           setHiddenTaskIds([]);
@@ -468,8 +512,8 @@ export default function TeacherTasks({
                     </button>
                   )}
                 </div>
-                
-                <button 
+
+                <button
                   onClick={() => setIsTaskModalOpen(true)}
                   className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 text-white rounded-md text-xs font-black hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10"
                 >
@@ -484,9 +528,9 @@ export default function TeacherTasks({
                   {visibleTasks.map((task) => {
                     const assignee = teachers.find(t => t.id === task.created_by);
                     const isOverdue = task.target_date !== '9999-12-31' && new Date(task.target_date) < new Date(getTodayStr()) && !task.is_completed;
-                    
+
                     return (
-                      <motion.div 
+                      <motion.div
                         key={task.id}
                         layout
                         className={`group relative flex flex-col justify-between border rounded-2xl p-4 transition-all ${
@@ -499,7 +543,7 @@ export default function TeacherTasks({
                               task.is_completed ? 'text-gray-400 line-through' : (isLight ? 'text-[#37352f]' : 'text-white')
                             }`}>{task.title}</h4>
                             <div className="flex items-center gap-1 shrink-0">
-                              <button 
+                              <button
                                 onClick={() => handleToggleTask(task.id, task.is_completed)}
                                 className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${
                                   task.is_completed ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' : (isLight ? 'border-gray-300 hover:border-blue-500 hover:text-blue-500' : 'border-white/20 hover:border-blue-500 hover:text-blue-500')
@@ -511,7 +555,7 @@ export default function TeacherTasks({
 
                               {/* 원장 화면 숨기기 버튼 */}
                               {task.title?.startsWith('[건의]') && (currentUser?.role === 'admin' || currentUser?.role === 'master') && (
-                                <button 
+                                <button
                                   onClick={() => handleHideTask(task.id)}
                                   className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
                                     isLight ? 'border-gray-300 text-gray-400 hover:border-amber-500 hover:text-amber-500' : 'border-white/10 text-gray-500 hover:border-amber-500 hover:text-amber-500'
@@ -522,7 +566,7 @@ export default function TeacherTasks({
                                 </button>
                               )}
 
-                              <button 
+                              <button
                                 onClick={() => handleDeleteTask(task.id)}
                                 className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
                                   isLight ? 'border-gray-300 text-gray-400 hover:border-rose-500 hover:text-rose-500' : 'border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500'
@@ -543,12 +587,12 @@ export default function TeacherTasks({
                             <User size={12} />
                             <span>{assignee?.nickname || assignee?.name || '지정되지 않음'}</span>
                           </div>
-                          
+
                           <div className={`px-2 py-0.5 rounded-[4px] uppercase font-black ${
-                            task.is_completed 
-                              ? 'bg-emerald-500/10 text-emerald-400' 
-                              : isOverdue 
-                                ? 'bg-rose-500/10 text-rose-400 animate-pulse' 
+                            task.is_completed
+                              ? 'bg-emerald-500/10 text-emerald-400'
+                              : isOverdue
+                                ? 'bg-rose-500/10 text-rose-400 animate-pulse'
                                 : task.target_date === '9999-12-31'
                                   ? 'bg-indigo-500/20 text-indigo-400 border border-indigo-500/30'
                                   : 'bg-blue-500/10 text-blue-400'
@@ -572,7 +616,7 @@ export default function TeacherTasks({
 
           {/* TAB 2: Makeup Sessions Scheduler */}
           {activeTab === 'makeups' && (
-            <motion.div 
+            <motion.div
               key="makeups-tab"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -639,7 +683,7 @@ export default function TeacherTasks({
                   </span>
                 </div>
 
-                <button 
+                <button
                   onClick={() => setIsMakeupModalOpen(true)}
                   className="flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10 shrink-0"
                 >
@@ -654,9 +698,9 @@ export default function TeacherTasks({
                   {groupedMakeups.map((group) => {
                     const formattedDate = group.date.slice(5).replace('-', '.');
                     const isToday = group.date === getTodayStr();
-                    
+
                     return (
-                      <motion.div 
+                      <motion.div
                         key={`${group.date}-${group.time}`}
                         layout
                         className={`group relative flex flex-col justify-between border rounded-2xl p-4 transition-all ${
@@ -678,14 +722,14 @@ export default function TeacherTasks({
                                 <Clock size={11} className="text-gray-400" />
                                 <span>{group.time} ({group.items.length}명)</span>
                               </div>
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => handleOpenEditGroupMakeup(group)}
                                 className="text-[8.5px] font-bold px-1.5 py-0.5 border border-blue-200 bg-blue-50 hover:bg-blue-600 text-blue-700 hover:text-white rounded transition-all"
                               >
                                 수정
                               </button>
-                              <button 
+                              <button
                                 type="button"
                                 onClick={() => handleDeleteGroupMakeups(group.items)}
                                 className="text-[8.5px] font-bold px-1.5 py-0.5 border border-rose-200 bg-rose-50 hover:bg-rose-600 text-rose-700 hover:text-white rounded transition-all"
@@ -703,7 +747,7 @@ export default function TeacherTasks({
                               const teacherName = teacherObj?.name || '담당미지정';
                               const isCompleted = makeup.attendance_status === '출석' || makeup.attendance_status === '결석' || makeup.attendance_status === '지각';
                               const monthlyCount = getMonthlyMakeupCount(makeup.student_id, makeup.session_date, makeup.id);
-                              
+
                               // 💡 [수정 정책] 보강 사유는 special_notes만 사용 (completed_classwork_text 수행진도 완전 배제)
                               const rawNotes = (makeup.special_notes || '').trim();
                               const reasonText = rawNotes.length > 0 ? rawNotes : null;
@@ -721,8 +765,8 @@ export default function TeacherTasks({
                                           {makeup.student_name}
                                         </span>
                                         <span className={`text-[8.5px] font-black px-1.5 py-0.5 rounded shrink-0 border ${
-                                          makeup.course_name && makeup.course_name !== '정규' 
-                                            ? (isLight ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30') 
+                                          makeup.course_name && makeup.course_name !== '정규'
+                                            ? (isLight ? 'bg-purple-50 text-purple-700 border-purple-200' : 'bg-fuchsia-500/20 text-fuchsia-300 border-fuchsia-500/30')
                                             : (isLight ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-blue-500/20 text-blue-300 border-blue-500/30')
                                         }`}>
                                           {makeup.course_name || '정규'}
@@ -776,7 +820,7 @@ export default function TeacherTasks({
                                           }`}>
                                             {makeup.attendance_status === '출석' ? '🟢 출석' : makeup.attendance_status === '지각' ? '🟡 지각' : '🔴 결석'}
                                           </span>
-                                          <button 
+                                          <button
                                             type="button"
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, `보강:${group.time}`)}
                                             className={`text-[8px] font-bold underline underline-offset-2 px-1 transition-colors ${
@@ -789,19 +833,19 @@ export default function TeacherTasks({
                                         </div>
                                       ) : (
                                         <div className="flex items-center gap-1">
-                                          <button 
+                                          <button
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '출석')}
                                             className="text-[8.5px] font-black px-1.5 py-0.5 bg-emerald-500/10 hover:bg-emerald-500 hover:text-white border border-emerald-500/20 text-emerald-400 rounded transition-all whitespace-nowrap"
                                           >
                                             출석
                                           </button>
-                                          <button 
+                                          <button
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '지각')}
                                             className="text-[8.5px] font-black px-1.5 py-0.5 bg-amber-500/10 hover:bg-amber-500 hover:text-white border border-amber-500/20 text-amber-400 rounded transition-all whitespace-nowrap"
                                           >
                                             지각
                                           </button>
-                                          <button 
+                                          <button
                                             onClick={() => handleMakeupAttendance(makeup.id, makeup.student_id, makeup.session_date, '결석')}
                                             className="text-[8.5px] font-black px-1.5 py-0.5 bg-rose-500/10 hover:bg-rose-500 hover:text-white border border-rose-500/20 text-rose-400 rounded transition-all whitespace-nowrap"
                                           >
@@ -810,7 +854,7 @@ export default function TeacherTasks({
                                         </div>
                                       )}
 
-                                      <button 
+                                      <button
                                         onClick={() => handleDeleteMakeup(makeup.id)}
                                         className="w-5 h-5 rounded-full flex items-center justify-center border border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500 hover:bg-rose-500/5 transition-all opacity-0 group-hover/row:opacity-100"
                                         title="보강 취소"
@@ -852,7 +896,7 @@ export default function TeacherTasks({
                                         </button>
                                       </div>
                                     ) : (
-                                      <div 
+                                      <div
                                         onClick={() => { setEditingMemoId(makeup.id); setEditingMemoText(makeup.attendance_reason || ''); }}
                                         className="flex items-center justify-between text-gray-400 hover:text-blue-300 cursor-pointer group/memo py-0.5 px-1 rounded hover:bg-white/5 transition-all"
                                         title="클릭하여 메모 수정"
@@ -900,18 +944,18 @@ export default function TeacherTasks({
 
           {/* TAB 4: Student Suggestions */}
           {activeTab === 'suggestions' && (
-            <motion.div 
+            <motion.div
               key="suggestions-tab"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -15 }}
               className="absolute inset-0 flex flex-col space-y-4 overflow-hidden"
             >
-              <SuggestionHistoryView 
-                tasks={tasks} 
-                toggleTask={(t: any) => handleToggleTask(t.id, t.is_completed)} 
-                deleteTask={handleDeleteTask} 
-                isAdmin={currentUser?.role === 'admin' || currentUser?.role === 'master'} 
+              <SuggestionHistoryView
+                tasks={tasks}
+                toggleTask={(t: any) => handleToggleTask(t.id, t.is_completed)}
+                deleteTask={handleDeleteTask}
+                isAdmin={currentUser?.role === 'admin' || currentUser?.role === 'master'}
                 isLight={isLight}
               />
             </motion.div>
@@ -919,7 +963,7 @@ export default function TeacherTasks({
 
           {/* TAB 5: Surveys Management */}
           {activeTab === 'surveys' && (
-            <motion.div 
+            <motion.div
               key="surveys-tab"
               initial={{ opacity: 0, y: 15 }}
               animate={{ opacity: 1, y: 0 }}
@@ -937,7 +981,7 @@ export default function TeacherTasks({
       <AnimatePresence>
         {isTaskModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -951,8 +995,8 @@ export default function TeacherTasks({
               <form onSubmit={handleAddTask} className="space-y-4">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">업무 제목</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={taskTitle}
                     onChange={(e) => setTaskTitle(e.target.value)}
                     required
@@ -963,7 +1007,7 @@ export default function TeacherTasks({
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">상세 내용</label>
-                  <textarea 
+                  <textarea
                     value={taskContent}
                     onChange={(e) => setTaskContent(e.target.value)}
                     rows={3}
@@ -977,8 +1021,8 @@ export default function TeacherTasks({
                     <div className="flex items-center justify-between">
                       <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">마감 기한</label>
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                        <input 
-                          type="checkbox" 
+                        <input
+                          type="checkbox"
                           checked={isPermanentTask}
                           onChange={(e) => {
                             const checked = e.target.checked;
@@ -994,8 +1038,8 @@ export default function TeacherTasks({
                         <span className="text-[9px] font-black text-gray-400 hover:text-white transition-all uppercase tracking-wider">상시 업무</span>
                       </label>
                     </div>
-                    <input 
-                      type="date" 
+                    <input
+                      type="date"
                       value={isPermanentTask ? '' : taskTargetDate}
                       onChange={(e) => setTaskTargetDate(e.target.value)}
                       disabled={isPermanentTask}
@@ -1016,8 +1060,8 @@ export default function TeacherTasks({
                           type="button"
                           onClick={() => setTaskAssignee(t.id)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-black transition-all ${
-                            isSelected 
-                              ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
+                            isSelected
+                              ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20'
                               : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white'
                           }`}
                         >
@@ -1034,8 +1078,8 @@ export default function TeacherTasks({
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => {
                       setIsTaskModalOpen(false);
                       setTaskTitle('');
@@ -1048,8 +1092,8 @@ export default function TeacherTasks({
                   >
                     취소
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-black transition-all"
                   >
                     등록
@@ -1063,7 +1107,7 @@ export default function TeacherTasks({
         {/* MODAL 2: Makeup Session Add / Edit Modal */}
         {isMakeupModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
@@ -1075,12 +1119,12 @@ export default function TeacherTasks({
                 <h3 className={`text-sm font-bold uppercase tracking-wider ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
                   {editMakeupGroup ? `보강 일정 수정` : '보강 일정 예약'}
                 </h3>
-                <button 
+                <button
                   onClick={() => {
                     setIsMakeupModalOpen(false);
                     setEditMakeupGroup(null);
                     setSelectedStudentIds([]);
-                  }} 
+                  }}
                   className={`transition-all ${isLight ? 'text-gray-400 hover:text-black' : 'text-gray-500 hover:text-white'}`}
                 >
                   <X size={16} />
@@ -1091,8 +1135,8 @@ export default function TeacherTasks({
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">보강 날짜</label>
-                    <input 
-                      type="date" 
+                    <input
+                      type="date"
                       value={makeupDate}
                       onChange={(e) => setMakeupDate(e.target.value)}
                       required
@@ -1104,7 +1148,7 @@ export default function TeacherTasks({
 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">시작 시간</label>
-                    <input 
+                    <input
                       type="time"
                       value={makeupTime}
                       onChange={(e) => setMakeupTime(e.target.value)}
@@ -1117,7 +1161,7 @@ export default function TeacherTasks({
 
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">종료 시간</label>
-                    <input 
+                    <input
                       type="time"
                       value={makeupEndTime}
                       onChange={(e) => setMakeupEndTime(e.target.value)}
@@ -1129,14 +1173,45 @@ export default function TeacherTasks({
                   </div>
                 </div>
 
+                {/* 💡 [결석 연동 보강 안내 뱃지] */}
+                {absenceLinkPreset && (
+                  <div className={`p-3 rounded-xl border flex flex-col gap-1.5 ${
+                    isLight ? 'bg-rose-50 border-rose-200 text-rose-900' : 'bg-rose-950/30 border-rose-800/60 text-rose-200'
+                  }`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] font-black flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                        결석 연동 보강 모드
+                      </span>
+                      <span className="text-[10px] font-bold opacity-75">
+                        과목: {absenceLinkPreset.courseName}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-[11px] font-medium opacity-90">
+                      <div>
+                        원인 결석일: <span className="font-bold underline">{absenceLinkPreset.absenceDate}</span>
+                      </div>
+                      {linkedMakeupRound !== null && (
+                        <div className="font-bold text-blue-600 dark:text-blue-400">
+                          이번 달 결석 연동 보강: <span className="underline">{linkedMakeupRound}회차 예정</span>
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-[9px] opacity-75">
+                      ※ 학생, 과목, 원인 결석일은 자동 고정되며 수정할 수 없습니다. 보강 예정 날짜와 시간을 선택하세요.
+                    </p>
+                  </div>
+                )}
+
                 {/* 보강 구분 & 결석 원인 날짜 입력 */}
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">보강 구분</label>
-                    <select 
+                    <select
                       value={makeupType}
+                      disabled={!!absenceLinkPreset}
                       onChange={(e) => setMakeupType(e.target.value)}
-                      className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all cursor-pointer ${
+                      className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-blue-500 transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed ${
                         isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#0a0a0a] border-white/10 text-white'
                       }`}
                     >
@@ -1154,9 +1229,10 @@ export default function TeacherTasks({
                     <input
                       type="text"
                       value={makeupReason}
+                      disabled={!!absenceLinkPreset}
                       onChange={(e) => setMakeupReason(e.target.value)}
                       placeholder="예: 8/2 결석분"
-                      className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 transition-all ${
+                      className={`w-full border rounded-lg px-3 py-2 text-xs focus:outline-none focus:border-amber-500 transition-all disabled:opacity-60 disabled:cursor-not-allowed ${
                         isLight ? 'bg-white border-amber-500/40 text-[#37352f] placeholder-gray-400' : 'bg-white/5 border-amber-500/30 text-amber-200 placeholder-gray-600'
                       }`}
                     />
@@ -1177,17 +1253,18 @@ export default function TeacherTasks({
                   </div>
                 )}
 
-                {/* 학생 검색 및 필터 영역 (수정 모드와 신규 모드 공통 제공) */}
-                <div className="space-y-2.5">
-                  <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">
-                    {editMakeupGroup ? '추가할 보강 대상 학생 검색 및 필터' : '보강 대상 학생 검색 및 필터'}
-                  </label>
-                  
+                {/* 학생 검색 및 필터 영역 (결석 연동 모드일 때는 학생 변경 차단) */}
+                {!absenceLinkPreset && (
+                  <div className="space-y-2.5">
+                    <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest block">
+                      {editMakeupGroup ? '추가할 보강 대상 학생 검색 및 필터' : '보강 대상 학생 검색 및 필터'}
+                    </label>
+
                   {/* 학년/요일 필터 셀렉트 박스 */}
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
                       <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest">학년 필터</label>
-                      <select 
+                      <select
                         value={makeupGradeFilter}
                         onChange={(e) => setMakeupGradeFilter(e.target.value)}
                         className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 transition-all cursor-pointer ${
@@ -1204,10 +1281,10 @@ export default function TeacherTasks({
                         <option value="초">초등</option>
                       </select>
                     </div>
-                    
+
                     <div className="space-y-1">
                       <label className="text-[8px] font-black text-gray-500 uppercase tracking-widest">요일 필터</label>
-                      <select 
+                      <select
                         value={makeupDayFilter}
                         onChange={(e) => setMakeupDayFilter(e.target.value)}
                         className={`w-full border rounded-lg px-2 py-1.5 text-xs focus:outline-none focus:border-blue-500 transition-all cursor-pointer ${
@@ -1230,7 +1307,7 @@ export default function TeacherTasks({
                   <div className={`flex items-center justify-between px-1 pt-1 border-t ${isLight ? 'border-t-[#e3e2e0]' : 'border-t-white/5'}`}>
                     <div className="flex items-center gap-3">
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                        <input 
+                        <input
                           type="checkbox"
                           checked={courseFilterMode === 'regularOnly'}
                           onChange={(e) => setCourseFilterMode(e.target.checked ? 'regularOnly' : 'all')}
@@ -1238,9 +1315,9 @@ export default function TeacherTasks({
                         />
                         <span className={`text-[10px] font-bold transition-all ${isLight ? 'text-gray-600 hover:text-black' : 'text-gray-300 hover:text-white'}`}>정규만</span>
                       </label>
-                      
+
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                        <input 
+                        <input
                           type="checkbox"
                           checked={courseFilterMode === 'electiveOnly'}
                           onChange={(e) => setCourseFilterMode(e.target.checked ? 'electiveOnly' : 'all')}
@@ -1252,7 +1329,7 @@ export default function TeacherTasks({
 
                     {(currentUser?.role === 'admin' || currentUser?.role === 'master') && (
                       <label className="flex items-center gap-1.5 cursor-pointer select-none">
-                        <input 
+                        <input
                           type="checkbox"
                           checked={showOnlyMyStudentsInMakeup}
                           onChange={(e) => setShowOnlyMyStudentsInMakeup(e.target.checked)}
@@ -1265,8 +1342,8 @@ export default function TeacherTasks({
 
                   <div className="relative">
                     <Search className="absolute left-3 top-2.5 text-gray-400" size={14} />
-                    <input 
-                      type="text" 
+                    <input
+                      type="text"
                       value={makeupSearch}
                       onChange={(e) => setMakeupSearch(e.target.value)}
                       placeholder="이름, 학년, 요일, 반 이름으로 검색..."
@@ -1300,14 +1377,14 @@ export default function TeacherTasks({
                           const isSpecial = itemKey.includes('_special_');
                           const courseSubject = s.courseName || '정규';
                           return (
-                            <div 
+                            <div
                               key={itemKey}
                               onClick={() => {
                                 setSelectedStudentIds(prev => isSelected ? prev.filter(id => id !== itemKey) : [...prev, itemKey]);
                               }}
                               className={`flex items-center justify-between px-3 py-1.5 rounded-md cursor-pointer text-xs font-bold transition-all ${
-                                isSelected 
-                                  ? (isSpecial ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30' : 'bg-blue-50 text-blue-700 border border-blue-200') 
+                                isSelected
+                                  ? (isSpecial ? 'bg-amber-500/10 text-amber-600 border border-amber-500/30' : 'bg-blue-50 text-blue-700 border border-blue-200')
                                   : (isLight ? 'hover:bg-gray-100 text-[#37352f]' : 'hover:bg-white/5 text-gray-400 hover:text-white')
                               }`}
                             >
@@ -1323,8 +1400,8 @@ export default function TeacherTasks({
                                 }).join('') : '요일미정'})</span>
                               </div>
                               <div className={`w-4 h-4 rounded border flex items-center justify-center transition-all ${
-                                isSelected 
-                                  ? (isSpecial ? 'border-amber-500 bg-amber-500 text-white font-black' : 'border-blue-600 bg-blue-600 text-white') 
+                                isSelected
+                                  ? (isSpecial ? 'border-amber-500 bg-amber-500 text-white font-black' : 'border-blue-600 bg-blue-600 text-white')
                                   : (isLight ? 'border-gray-300' : 'border-white/20')
                               }`}>
                                 {isSelected && <Check size={10} strokeWidth={4} />}
@@ -1354,17 +1431,17 @@ export default function TeacherTasks({
                           name = st?.name || '학생';
                         }
                         return (
-                          <div 
-                            key={itemKey} 
+                          <div
+                            key={itemKey}
                             className={`flex items-center gap-1.5 px-2 py-1 rounded text-[10px] font-black border ${
-                              isSpecial 
-                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-600' 
+                              isSpecial
+                                ? 'bg-amber-500/10 border-amber-500/30 text-amber-600'
                                 : 'bg-blue-50 border-blue-200 text-blue-700'
                             }`}
                           >
                             <span>{name}</span>
-                            <button 
-                              type="button" 
+                            <button
+                              type="button"
                               onClick={() => setSelectedStudentIds(prev => prev.filter(item => item !== itemKey))}
                               className={isSpecial ? "text-amber-500 hover:text-amber-700 transition-colors" : "text-blue-600 hover:text-blue-800 transition-colors"}
                             >
@@ -1376,10 +1453,11 @@ export default function TeacherTasks({
                     </div>
                   )}
                 </div>
+                )}
 
                 <div className="pt-2 flex justify-end gap-2">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => {
                       setIsMakeupModalOpen(false);
                       setEditMakeupGroup(null);
@@ -1395,8 +1473,8 @@ export default function TeacherTasks({
                   >
                     취소
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={!editMakeupGroup && selectedStudentIds.length === 0}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-500 disabled:opacity-30 text-white rounded-lg text-xs font-black transition-all"
                   >
@@ -1432,8 +1510,8 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin, isLight
 
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase().trim();
-      result = result.filter((t: any) => 
-        t.title.toLowerCase().includes(q) || 
+      result = result.filter((t: any) =>
+        t.title.toLowerCase().includes(q) ||
         (t.content && t.content.toLowerCase().includes(q))
       );
     }
@@ -1451,9 +1529,9 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin, isLight
               { id: 'pending', label: '미완료' },
               { id: 'completed', label: '완료됨' }
             ].map(f => (
-              <button 
-                key={f.id} 
-                onClick={() => setSugFilter(f.id as any)} 
+              <button
+                key={f.id}
+                onClick={() => setSugFilter(f.id as any)}
                 className={`text-[10px] px-3.5 py-1.5 rounded-lg font-bold transition-all ${sugFilter === f.id ? 'bg-blue-600 text-white shadow-sm' : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-500 hover:text-gray-300')}`}
               >
                 {f.label}
@@ -1471,8 +1549,8 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin, isLight
             className={`w-full border rounded-xl py-2 px-3 text-[11px] outline-none focus:border-blue-500 transition-all ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f] shadow-sm placeholder:text-gray-400' : 'bg-black/40 border-white/10 text-white placeholder:text-gray-650'}`}
           />
           {searchQuery && (
-            <button 
-              onClick={() => setSearchQuery('')} 
+            <button
+              onClick={() => setSearchQuery('')}
               className={`absolute right-2.5 top-1/2 -translate-y-1/2 ${isLight ? 'text-gray-400 hover:text-black' : 'text-gray-500 hover:text-white'}`}
             >
               <X size={14} />
@@ -1488,17 +1566,17 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin, isLight
           </div>
         ) : (
           filteredSuggestions.map((task: any) => (
-            <motion.div 
-              layout 
-              key={task.id} 
+            <motion.div
+              layout
+              key={task.id}
               className={`group bg-[#0f0f0f] border rounded-[4px] p-4 transition-all ${
                 task.is_completed ? 'border-white/5 opacity-80' : 'border-white/10 hover:border-blue-500/30'
               }`}
             >
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-start gap-4 flex-1 min-w-0">
-                  <button 
-                    onClick={() => toggleTask(task)} 
+                  <button
+                    onClick={() => toggleTask(task)}
                     className={`mt-1 transition-colors shrink-0 ${task.is_completed ? 'text-emerald-500' : 'text-gray-600 hover:text-blue-500'}`}
                   >
                     {task.is_completed ? <CheckCircle2 size={20} /> : <Circle size={20} />}
@@ -1518,8 +1596,8 @@ function SuggestionHistoryView({ tasks, toggleTask, deleteTask, isAdmin, isLight
                   </div>
                 </div>
                 {isAdmin && (
-                  <button 
-                    onClick={() => deleteTask(task.id)} 
+                  <button
+                    onClick={() => deleteTask(task.id)}
                     className="opacity-0 group-hover:opacity-100 p-2 text-gray-600 hover:text-red-500 transition-all shrink-0"
                   >
                     <Trash2 size={16} />

@@ -1,5 +1,6 @@
 'use client';
 
+import React, { useMemo } from 'react';
 import { User, Calendar as CalendarIcon, FileText, LogOut, Globe, ExternalLink, RefreshCw } from 'lucide-react';
 
 interface StudentHeaderProps {
@@ -17,6 +18,8 @@ interface StudentHeaderProps {
   selectedCourse?: string;
   setSelectedCourse?: (course: string) => void;
 }
+
+import { getActiveAvailableCourses } from '@/app/[slug]/student/hooks/useStudentPortal';
 
 export default function StudentHeader({
   student,
@@ -42,22 +45,9 @@ export default function StudentHeader({
     return formatted;
   };
 
-  const availableCourses = (() => {
-    const list: string[] = ['정규'];
-    const rawElective = student?.book_courses?.['__elective_courses'] || student?.book_courses?.["'__elective_courses'"];
-    if (rawElective) {
-      try {
-        const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
-        if (Array.isArray(parsed)) {
-          parsed.forEach((c: any) => {
-            const subj = c.subject?.trim() || '특강';
-            if (!list.includes(subj)) list.push(subj);
-          });
-        }
-      } catch (e) {}
-    }
-    return list;
-  })();
+  const availableCourses = useMemo(() => {
+    return getActiveAvailableCourses(student, selectedDate);
+  }, [student, selectedDate]);
 
   const handleCycleCourse = () => {
     if (availableCourses.length <= 1 || !setSelectedCourse) return;
@@ -73,7 +63,7 @@ export default function StudentHeader({
         {(() => {
           const teacher = teachers.find(t => t.id === student.teacher_id);
           const initial = teacher ? (teacher.initials || getInitial(teacher.name)) : '?';
-          const days = student.class_days 
+          const days = student.class_days
             ? [...student.class_days].sort((a, b) => {
                 const order = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
                 return (order[a as keyof typeof order] || 0) - (order[b as keyof typeof order] || 0);
@@ -145,7 +135,7 @@ export default function StudentHeader({
 
         {/* 데스크톱 전용: 날짜 선택기 + 시험 디데이 */}
         <div className="hidden lg:flex items-center gap-3 shrink-0 ml-auto">
-          <div 
+          <div
             onClick={(e) => {
               const input = e.currentTarget.querySelector('input');
               if (input && 'showPicker' in input) {
@@ -163,8 +153,8 @@ export default function StudentHeader({
                 </span>
               </p>
             </div>
-            <input 
-              type="date" 
+            <input
+              type="date"
               value={selectedDate}
               onChange={(e) => {
                 const newDate = e.target.value;
@@ -182,17 +172,55 @@ export default function StudentHeader({
           <div className={`flex items-center gap-3 border px-4 h-[42px] rounded-[2px] shadow-lg transition-all shrink-0 ${matchedExam ? 'bg-rose-600/10 border-rose-500/30' : 'bg-white/5 border-white/20'}`}>
             <FileText className={matchedExam ? 'text-rose-500' : 'text-gray-500'} size={18} />
             <div className="flex items-center justify-end h-full">
-              {matchedExam ? (
-                <div className="flex items-center gap-3">
-                  <span className="text-[14px] font-black text-white tracking-tight whitespace-nowrap">
-                    {new Date(matchedExam.target_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
-                  </span>
-                  <div className="w-[1px] h-3 bg-white/10" />
-                  <span className="text-[11px] font-black text-rose-500 uppercase tracking-widest whitespace-nowrap">
-                    잔여 <span className="text-[14px] ml-0.5">{getRemainingClasses(matchedExam.target_date)}</span>회
-                  </span>
-                </div>
-              ) : (
+              {matchedExam ? (() => {
+                const targetDate = matchedExam.target_date;
+                const endDate = matchedExam.end_date || targetDate;
+                const isOngoing = selectedDate >= targetDate && selectedDate <= endDate;
+
+                if (isOngoing) {
+                  const startDateStr = new Date(targetDate).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+                  const endDateStr = new Date(endDate).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+                  const rangeStr = targetDate === endDate ? startDateStr : `${startDateStr} ~ ${endDateStr}`;
+
+                  return (
+                    <div className="flex items-center gap-2.5">
+                      <span className="text-[13px] font-black text-rose-400 tracking-tight whitespace-nowrap">
+                        시험 진행 중
+                      </span>
+                      <div className="w-[1px] h-3 bg-white/10" />
+                      <span className="text-[12px] font-bold text-gray-300 whitespace-nowrap">
+                        {rangeStr}
+                      </span>
+                    </div>
+                  );
+                }
+
+                // 시험 시작 전: D-Day 및 잔여 수업 횟수 계산
+                const todayMs = new Date(selectedDate).setHours(0, 0, 0, 0);
+                const targetMs = new Date(targetDate).setHours(0, 0, 0, 0);
+                const dDayDiff = Math.ceil((targetMs - todayMs) / (1000 * 60 * 60 * 24));
+                const remainingClasses = getRemainingClasses ? getRemainingClasses(targetDate) : null;
+
+                return (
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-[14px] font-black text-white tracking-tight whitespace-nowrap">
+                      {new Date(targetDate).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric', weekday: 'short' })}
+                    </span>
+                    <div className="w-[1px] h-3 bg-white/10" />
+                    <span className="text-[12px] font-extrabold text-amber-400 whitespace-nowrap">
+                      D-{dDayDiff}
+                    </span>
+                    {remainingClasses !== null && (
+                      <>
+                        <div className="w-[1px] h-3 bg-white/10" />
+                        <span className="text-[11px] font-black text-rose-500 uppercase tracking-widest whitespace-nowrap">
+                          잔여 <span className="text-[14px] ml-0.5">{remainingClasses}</span>회
+                        </span>
+                      </>
+                    )}
+                  </div>
+                );
+              })() : (
                 <div className="flex items-center gap-2">
                   <span className="text-[11px] font-black text-gray-500 uppercase tracking-widest">No Exam</span>
                   <div className="w-[1px] h-2 bg-white/5" />
@@ -203,12 +231,12 @@ export default function StudentHeader({
           </div>
         </div>
       </div>
-      
+
       <div className="flex items-center gap-1.5 md:gap-3 ml-2">
         {/* 지점명 */}
         <span className="text-[11px] font-bold text-blue-300 whitespace-nowrap lg:hidden">{student.class_name ? student.class_name.split('-')[0].trim() : '일반반'}</span>
         {/* 모바일 미니 날짜 선택기 (lg 미만에서만 노출) */}
-        <div 
+        <div
           onClick={(e) => {
             const input = e.currentTarget.querySelector('input');
             if (input && 'showPicker' in input) {
@@ -224,8 +252,8 @@ export default function StudentHeader({
               ({new Date(selectedDate).toLocaleDateString('ko-KR', { weekday: 'short' })})
             </span>
           </span>
-          <input 
-            type="date" 
+          <input
+            type="date"
             value={selectedDate}
             onChange={(e) => {
               const newDate = e.target.value;
@@ -242,7 +270,7 @@ export default function StudentHeader({
 
         {/* 학원 홈페이지 바로가기 */}
         {academy?.operation_settings?.homepage_url && (
-          <a 
+          <a
             href={formatExternalLink(academy.operation_settings.homepage_url)}
             target="_blank"
             rel="noopener noreferrer"
@@ -255,7 +283,7 @@ export default function StudentHeader({
 
         {/* 네이버 카페 바로가기 */}
         {academy?.operation_settings?.naver_cafe_url && (
-          <a 
+          <a
             href={formatExternalLink(academy.operation_settings.naver_cafe_url)}
             target="_blank"
             rel="noopener noreferrer"
@@ -266,8 +294,8 @@ export default function StudentHeader({
           </a>
         )}
 
-        <button 
-          onClick={handleLogout} 
+        <button
+          onClick={handleLogout}
           className="flex items-center gap-2 px-3 py-2 lg:px-4 lg:py-2.5 rounded-[4px] bg-rose-500/10 text-rose-400 hover:bg-rose-500/20 hover:text-rose-300 transition-all font-black uppercase tracking-widest text-[10px] border border-rose-500/20 shrink-0"
         >
           <LogOut size={16} /> <span className="hidden lg:inline">Log Out</span>

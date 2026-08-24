@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { 
-  Calendar, TrendingUp, MessageSquare, 
+import {
+  Calendar, TrendingUp, MessageSquare,
   X, ChevronRight, ClipboardCheck
 } from 'lucide-react';
 import { Student } from '@/types/dashboard';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface MorningBriefingModalProps {
   academyInfo: any;
@@ -18,14 +19,20 @@ interface MorningBriefingModalProps {
 export default function MorningBriefingModal({ academyInfo, onClose }: MorningBriefingModalProps) {
   const [mounted, setMounted] = useState(false);
   const announcements = academyInfo?.announcements || {};
-  
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: true,
+    onClose
+  });
+
   useEffect(() => { setMounted(true); }, []);
 
   if (!mounted) return null;
 
   return (
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-6 bg-black/80 backdrop-blur-md">
-      <motion.div 
+      <motion.div
         initial={{ opacity: 0, scale: 0.9, y: 30 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         className="bg-[#0f0f0f] border border-white/10 rounded-[4px] w-full max-w-2xl shadow-[0_50px_100px_rgba(0,0,0,0.8)] overflow-hidden flex flex-col max-h-[80vh]"
@@ -50,7 +57,7 @@ export default function MorningBriefingModal({ academyInfo, onClose }: MorningBr
               const textVal = announcements?.text || '';
               const hasText = !!textVal.trim();
               const hasLegacy = announcements?.monthly || announcements?.weekly || announcements?.daily;
-              
+
               if (!hasText && !hasLegacy) {
                 return (
                   <div className="py-12 text-center border border-dashed border-white/5 rounded-[4px] bg-white/[0.01]">
@@ -85,7 +92,7 @@ export default function MorningBriefingModal({ academyInfo, onClose }: MorningBr
           <p className="text-[10px] text-gray-600 font-medium">
             * 이 브리핑은 매일 첫 로그인 시 1회 노출됩니다.
           </p>
-          <button 
+          <button
             onClick={onClose}
             className="flex items-center gap-2 px-10 py-4 bg-blue-600 text-white text-[11px] font-black uppercase tracking-[0.2em] rounded-[2px] shadow-2xl shadow-blue-900/40 hover:bg-blue-500 hover:scale-[1.02] transition-all active:scale-95"
           >

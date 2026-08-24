@@ -3,11 +3,12 @@
 import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
-import { 
-  X, CheckCircle2, ChevronRight, Hash, FileText, Send, 
+import {
+  X, CheckCircle2, ChevronRight, Hash, FileText, Send,
   Loader2, AlertCircle, Video, FileDown, BookOpen, Check, HelpCircle
 } from 'lucide-react';
 import { openMediaVideo } from '@/lib/mediaUrl';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface TestAnswerModalProps {
   testId: string;
@@ -27,7 +28,13 @@ interface TestResult {
 
 export default function TestAnswerModal({ testId: initialTestId, studentName, onClose, onSave, reviewData }: TestAnswerModalProps) {
   const [mounted, setMounted] = useState(false);
-  
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: true,
+    onClose
+  });
+
   // 💡 다중 테스트 코드 파싱: M101, M102 또는 M101\nM102 등
   const testIds = (initialTestId || '')
     .split(/[\n,]+/)
@@ -38,7 +45,7 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
   const [selectedTestId, setSelectedTestId] = useState(testIds[0] || ''); // 💡 현재 활성화된 테스트 ID
   const [testInfo, setTestInfo] = useState<any>(null);
   const [answers, setAnswers] = useState<Record<string, string>>(reviewData || {});
-  const [activeTab, setActiveTab] = useState<'mc' | 'desc'>('mc'); 
+  const [activeTab, setActiveTab] = useState<'mc' | 'desc'>('mc');
   const [scoreMode, setScoreMode] = useState<'score' | 'count'>('score');
 
   // 💡 각 테스트별 개별 채점 데이터 보관
@@ -180,10 +187,10 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
     const resultText = scoreMode === 'score' ? `${avgScore}점` : `${totalCorrect}개 / ${totalCount}개`;
 
     if (confirm(`채점 결과를 제출하시겠습니까?\n표기 방식: ${modeText}\n결과: ${resultText}`)) {
-      onSave({ 
+      onSave({
         answers: testIds.length > 1 ? currentResults : answers, // 다중 상태 연계
-        calculatedScore: avgScore, 
-        correctCount: totalCorrect, 
+        calculatedScore: avgScore,
+        correctCount: totalCorrect,
         totalCount: totalCount,
         scoreMode,
         testId: initialTestId // 기존 테스트 코드 그대로 유지
@@ -212,7 +219,7 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
           </div>
           <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-[2px] px-3 py-2 focus-within:border-blue-500 transition-all">
             <Hash size={14} className="text-gray-500" />
-            <input type="text" placeholder="시험 번호 입력 (예: M101)" value={testId} autoFocus 
+            <input type="text" placeholder="시험 번호 입력 (예: M101)" value={testId} autoFocus
               onChange={(e) => setTestId(e.target.value.toUpperCase())}
               onKeyDown={(e) => { if (e.key === 'Enter') handleLoadTest(testId); }}
               className="bg-transparent border-none text-[12px] text-white focus:outline-none w-full font-black uppercase" />
@@ -232,7 +239,7 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
       <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
         <motion.div initial={{ opacity: 0, scale: 0.9, y: 20 }} animate={{ opacity: 1, scale: 1, y: 0 }}
           className="bg-[#121212] border border-white/10 rounded-[4px] w-full max-w-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-          
+
           <div className="p-4 border-b border-white/5 bg-white/[0.02] flex flex-col gap-3">
             <div className="flex items-center justify-between w-full">
               <div className="flex items-center gap-3">
@@ -259,7 +266,7 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
                  <button onClick={onClose} className="p-2 hover:bg-white/5 rounded-full transition-colors"><X size={18} className="text-gray-500" /></button>
               </div>
             </div>
-            
+
             {/* 💡 다중 테스트 선택용 가로 탭바 */}
             {!isReviewMode && testIds.length > 1 && (
               <div className="flex flex-wrap gap-1 pt-2 border-t border-white/5">
@@ -272,8 +279,8 @@ export default function TestAnswerModal({ testId: initialTestId, studentName, on
                       key={id}
                       onClick={() => setSelectedTestId(id)}
                       className={`px-3 py-1.5 rounded-[3px] text-[10px] font-black uppercase transition-all flex items-center gap-1.5 border ${
-                        isSelected 
-                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/30 scale-[1.02]' 
+                        isSelected
+                          ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-900/30 scale-[1.02]'
                           : 'bg-white/5 border-white/5 text-gray-400 hover:text-white'
                       }`}
                     >

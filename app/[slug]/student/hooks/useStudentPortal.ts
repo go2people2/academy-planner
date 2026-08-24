@@ -24,6 +24,48 @@ export const WRONG_ANSWER_THEMES: Record<string, { primary: string; bg: string; 
   chalkboard: { primary: '#ffffff', bg: '#064e3b', ring: 'focus:ring-white', buttonText: '#064e3b' }
 };
 
+export const isActiveElectiveCourse = (
+  course: {
+    subject?: string;
+    days?: string[];
+    schedules?: Record<string, number[]>;
+    startDate?: string | null;
+    endDate?: string | null;
+  },
+  selectedDate: string,
+) => {
+  const hasSubject = Boolean(course?.subject?.trim());
+  const hasClassDays = Array.isArray(course?.days) && course.days.length > 0;
+  const hasStarted = !course?.startDate || course.startDate <= selectedDate;
+  const isNotEnded = !course?.endDate || course.endDate >= selectedDate;
+
+  return hasSubject && hasClassDays && hasStarted && isNotEnded;
+};
+
+export const getActiveAvailableCourses = (
+  student: any,
+  selectedDate: string,
+): string[] => {
+  const availableCourses: string[] = ['정규'];
+  const rawElective = student?.book_courses?.['__elective_courses'] || student?.book_courses?.["'__elective_courses'"];
+  if (rawElective) {
+    try {
+      const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+      if (Array.isArray(parsed)) {
+        parsed.forEach((c: any) => {
+          if (isActiveElectiveCourse(c, selectedDate)) {
+            const subj = c.subject?.trim() || '특강';
+            if (!availableCourses.includes(subj)) {
+              availableCourses.push(subj);
+            }
+          }
+        });
+      }
+    } catch (e) {}
+  }
+  return availableCourses;
+};
+
 export function useStudentPortal(slug: string | string[] | undefined) {
   const [student, setStudent] = useState<any>(null);
   const [academy, setAcademy] = useState<any>(null);
@@ -37,11 +79,11 @@ export function useStudentPortal(slug: string | string[] | undefined) {
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
   const [isDashboardSlim, setIsDashboardSlim] = useState(false);
   const [activeTab, setActiveTab] = useState<'study' | 'lecture' | 'history' | 'suggestion' | 'wrong-answer' | 'exam-submit'>('study');
-  
+
   const [wrongAnswerStudent, setWrongAnswerStudent] = useState<any>(null);
   const [wrongAnswerAcademy, setWrongAnswerAcademy] = useState<any>(null);
   const [wrongAnswerTheme, setWrongAnswerTheme] = useState<any>(WRONG_ANSWER_THEMES.default);
-  
+
   const [availableTextbooks, setAvailableTextbooks] = useState<TextbookOption[]>([]);
   const [examSchedules, setExamSchedules] = useState<ExamSchedule[]>([]);
   const [localClasswork, setLocalClasswork] = useState('');
@@ -63,15 +105,29 @@ export function useStudentPortal(slug: string | string[] | undefined) {
   const matchedExam = useMemo(() => {
     if (!student || !examSchedules.length) return null;
     const currentPeriod = academy?.operation_settings?.current_exam_period;
-    const normalize = (name: string) => (name || '').trim().replace(/\s+/g, '').replace(/학교$/, '');
-    
-    const studentSchool = normalize(student.school);
-    const studentGrade = (student.grade || '').trim();
+    const normalizeSchool = (name: string) => (name || '').trim().replace(/\s+/g, '').replace(/학교$/, '');
+
+    // 학생 학년에서 숫자(1~3) 추출
+    const getStudentGradeNumber = (grade?: string | null): string | null => {
+      const match = String(grade || '').match(/[1-3]/);
+      return match ? match[0] : null;
+    };
+
+    const normalizeGrade = (grade?: string | null) =>
+      String(grade || '')
+        .trim()
+        .replace(/\s+/g, '')
+        .replace(/학년$/, '');
+
+    const studentSchool = normalizeSchool(student.school);
+    const studentGradeNumber = getStudentGradeNumber(student.grade);
+    const normalizedStudentGrade = normalizeGrade(student.grade);
 
     if (!studentSchool) return null;
 
-    const upcomingSchedules = examSchedules.filter(ex => ex.target_date >= selectedDate);
-    const currentPeriodSchedules = currentPeriod 
+    // 💡 [수정 1] 시험 종료일까지 학생 페이지에서 시험 일정 노출 유지
+    const upcomingSchedules = examSchedules.filter(ex => (ex.end_date || ex.target_date) >= selectedDate);
+    const currentPeriodSchedules = currentPeriod
       ? upcomingSchedules.filter(ex => {
           if (ex.exam_name && ex.exam_name.startsWith(currentPeriod)) return true;
           const periodType = currentPeriod.split('-').slice(1).join('-');
@@ -86,18 +142,50 @@ export function useStudentPortal(slug: string | string[] | undefined) {
         })
       : upcomingSchedules;
 
-    const exactMatch = currentPeriodSchedules.find(ex => 
-      normalize(ex.school_name) === studentSchool && 
-      (ex.grade?.trim() === studentGrade)
-    );
-    if (exactMatch) return exactMatch;
+    // 💡 [수정 2] 학년 매칭 (신규 쉼표 구분 숫자 목록 지원 + 레거시 단일 학년 지원)
+    const matchedList = currentPeriodSchedules.filter(ex => {
+      const isSchoolMatch = normalizeSchool(ex.school_name) === studentSchool;
+      if (!isSchoolMatch) return false;
 
-    const schoolMatch = currentPeriodSchedules.find(ex => 
-      normalize(ex.school_name) === studentSchool && 
-      (!ex.grade || ex.grade.trim() === '')
-    );
-    
-    return schoolMatch || null;
+      const scheduleGradeRaw = String(ex.grade || '').trim();
+      if (!scheduleGradeRaw) return false;
+
+      // 1. 신규 형식: 쉼표 구분 숫자 목록 (예: "1,2,3", "2,3", "3")
+      const scheduleGrades = scheduleGradeRaw.split(',').map(s => s.trim()).filter(Boolean);
+      if (studentGradeNumber && scheduleGrades.includes(studentGradeNumber)) {
+        return true;
+      }
+
+      // 2. 레거시 형식 호환 (예: "중3", "고2", "3학년", "3")
+      const legacyNormalized = normalizeGrade(scheduleGradeRaw);
+      if (legacyNormalized && legacyNormalized === normalizedStudentGrade) {
+        return true;
+      }
+
+      return false;
+    });
+
+    if (matchedList.length === 0) return null;
+
+    // 💡 [일정 선택 우선순위]
+    // 1. 시험 시작일이 더 가까운 일정
+    // 2. 같은 시작일이면 종료일이 더 이른 일정
+    // 3. 그래도 같으면 생성일(created_at)이 더 최근인 일정
+    matchedList.sort((a, b) => {
+      const aStart = a.target_date;
+      const bStart = b.target_date;
+      if (aStart !== bStart) return aStart.localeCompare(bStart);
+
+      const aEnd = a.end_date || a.target_date;
+      const bEnd = b.end_date || b.target_date;
+      if (aEnd !== bEnd) return aEnd.localeCompare(bEnd);
+
+      const aCreated = a.created_at || '';
+      const bCreated = b.created_at || '';
+      return bCreated.localeCompare(aCreated);
+    });
+
+    return matchedList[0];
   }, [student, examSchedules, academy?.operation_settings?.current_exam_period, selectedDate]);
 
   const fetchAllStudentData = useCallback(async (studentId: string, courseParam?: string) => {
@@ -129,7 +217,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
 
           const thirtyDaysAgo = new Date();
           thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-          
+
           const { data: suggData } = await supabase.from('ams_tasks')
             .select('*')
             .eq('academy_id', acData.id)
@@ -138,7 +226,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
             .order('created_at', { ascending: false })
             .limit(5);
           if (suggData) setMySuggestions(suggData);
-        
+
           try {
             const { data: waAcData } = await supabase
               .from('academies')

@@ -43,12 +43,12 @@ const WRONG_ANSWER_THEMES: Record<string, { primary: string; bg: string; ring: s
   chalkboard: { primary: '#ffffff', bg: '#064e3b', ring: 'focus:ring-white', buttonText: '#064e3b' }
 };
 
-import { useStudentPortal } from './hooks/useStudentPortal';
+import { useStudentPortal, getActiveAvailableCourses, isActiveElectiveCourse } from './hooks/useStudentPortal';
 
 export default function StudentPortal() {
   const router = useRouter();
   const { slug } = useParams();
-  
+
   // 🎬 전역 동영상 팝업 모달 상태
   const [videoModalData, setVideoModalData] = useState<{
     isOpen: boolean;
@@ -151,7 +151,7 @@ export default function StudentPortal() {
 
       return logCourse === currentCourse || (logCourse !== '정규' && (logCourse.includes(currentCourse) || currentCourse.includes(logCourse)));
     }).sort((a, b) => b.session_date.localeCompare(a.session_date));
-    
+
     let aggregatedHw = "";
     for (const log of pastLogs) {
       if (log.homework_text && log.homework_text.trim() !== '' && log.homework_text.trim() !== '결석') {
@@ -167,10 +167,10 @@ export default function StudentPortal() {
     const baseSession = pastLogs.find(l => {
       const isLogHoliday = (academy?.operation_settings?.holidays || []).some((h: any) => h.date === l.session_date);
       const isMakeup = l.attendance_status?.startsWith('보강');
-      return (l.homework_to || l.test_status || l.classwork_text || l.homework_text) && 
-             !['결석', '수업취소', '수업제외'].includes(l.attendance_status) && (!isLogHoliday || isMakeup); 
+      return (l.homework_to || l.test_status || l.classwork_text || l.homework_text) &&
+             !['결석', '수업취소', '수업제외'].includes(l.attendance_status) && (!isLogHoliday || isMakeup);
     }) || pastLogs.find(l => !['결석', '수업취소', '수업제외'].includes(l.attendance_status)) || pastLogs[0];
-    
+
     return baseSession ? { ...baseSession, homework_text: aggregatedHw } : (aggregatedHw ? { id: 'temp', session_date: selectedDate, homework_text: aggregatedHw } : null);
   }, [allLogs, selectedDate, selectedCourse, academy, student, availableTextbooks]);
 
@@ -186,6 +186,183 @@ export default function StudentPortal() {
       .sort((a, b) => a.session_date.localeCompare(b.session_date));
   }, [allLogs]);
 
+  // 💡 [과목명 정규화 헬퍼] 무분별한 substring 오매칭 방지 및 '정규'/'정규수업' 동등 처리
+  const normalizeCourseName = useCallback((value?: string | null) => {
+    const raw = String(value || '').trim();
+    if (!raw || raw === '정규' || raw === '정규수업') {
+      return '정규';
+    }
+    return raw;
+  }, []);
+
+  // 💡 [날짜 문자열 정규화 헬퍼] session_date 또는 date 지원 (YYYY-MM-DD)
+  const getLogDate = useCallback((log: any) => {
+    return String(log?.session_date || log?.date || '').slice(0, 10);
+  }, []);
+
+  // 💡 [다음TEST 역파싱 헬퍼] next_quiz_text 우선, 없으면 homework_to JSON fallback
+  const getResolvedNextQuiz = useCallback((log: any) => {
+    if (!log) return '';
+    let text = String(log.next_quiz_text || '').trim();
+    if (!text && log.homework_to) {
+      try {
+        const raw = log.homework_to;
+        if (typeof raw === 'string' && raw.startsWith('{')) {
+          const parsed = JSON.parse(raw);
+          text = String(parsed.text || '').trim();
+        } else if (raw && typeof raw === 'string') {
+          text = raw.trim();
+        }
+      } catch (e) {}
+    }
+    return text;
+  }, []);
+
+  // 💡 [로컬 캘린더 날짜 헬퍼] UTC 파싱 오차 방지
+  const parseLocalDate = useCallback((dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }, []);
+
+  const formatLocalDate = useCallback((date: Date) => {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }, []);
+
+  // 💡 [다음 실제 수업일 계산 헬퍼] computeValidDates 기준에 맞춰 실제 수업일만 도출
+  const getNextActualClassDate = useCallback((fromDateStr: string, targetCourse: string) => {
+    if (!student || !fromDateStr) return '';
+    const normTarget = normalizeCourseName(targetCourse);
+    const holidays = academy?.operation_settings?.holidays || [];
+    const rawElectives = student.book_courses?.['__elective_courses'] || student.book_courses?.["'__elective_courses'"];
+    let electiveObj: any = null;
+    if (rawElectives && normTarget !== '정규') {
+      try {
+        const parsed = typeof rawElectives === 'string' ? JSON.parse(rawElectives) : rawElectives;
+        if (Array.isArray(parsed)) {
+          electiveObj = parsed.find((c: any) => normalizeCourseName(c.subject) === normTarget);
+        }
+      } catch (e) {}
+    }
+
+    const dayLabels = ['일', '월', '화', '수', '목', '금', '토'];
+    const baseDate = parseLocalDate(fromDateStr);
+
+    // fromDateStr 다음 날부터 최대 30일까지 탐색하여 첫 번째 실제 수업일 탐색
+    for (let i = 1; i <= 30; i++) {
+      const nextDate = new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate() + i);
+      const dateStr = formatLocalDate(nextDate);
+      const dayOfWeek = dayLabels[nextDate.getDay()];
+
+      // 1. 해당 과목 요일 일치 여부
+      const isRegularClass = normTarget === '정규' && (student.class_days || []).includes(dayOfWeek);
+      const isElectiveClass = normTarget !== '정규' && electiveObj && isActiveElectiveCourse(electiveObj, dateStr) && (electiveObj.days || []).includes(dayOfWeek);
+
+      // 2. 보강 및 실제 로그 존재 여부
+      const matchingLog = (allLogs || []).find(l => {
+        const lDate = getLogDate(l);
+        if (lDate !== dateStr) return false;
+        const logNorm = normalizeCourseName(l.course_name);
+        return logNorm === normTarget;
+      });
+      const isMakeup = matchingLog?.attendance_status?.startsWith('보강');
+      const hasLogContent = matchingLog && (
+        (matchingLog.attendance_status && !['수업전', '수업제외', '수업취소'].includes(matchingLog.attendance_status)) ||
+        matchingLog.classwork_text ||
+        matchingLog.homework_text ||
+        matchingLog.test_status ||
+        matchingLog.homework_to ||
+        matchingLog.next_quiz_text
+      );
+
+      // 3. 휴일 여부
+      const isHoliday = holidays.some((h: any) => h.date === dateStr);
+
+      if ((isRegularClass || isElectiveClass || isMakeup || hasLogContent) && (!isHoliday || isMakeup)) {
+        return dateStr;
+      }
+    }
+    return '';
+  }, [student, academy, allLogs, normalizeCourseName, getLogDate, parseLocalDate, formatLocalDate]);
+
+  // 💡 [오늘TEST & 다음TEST 표시 계산]
+  const displayTestStatus = useMemo(() => {
+    const currentCourse = normalizeCourseName(selectedCourse);
+
+    // 1. 현재 세션에 직접 입력된 오늘TEST 확인
+    const manualTodayTest = (todaySession?.test_status || todaySession?.test_score)
+      ? `${todaySession.test_status || ''}${todaySession.test_score ? ` : ${todaySession.test_score}` : ''}`.trim()
+      : '';
+    const hasManualTodayTest = Boolean(manualTodayTest);
+
+    // 2. 현재 세션에 직접 입력된 다음TEST 확인 (next_quiz_text + homework_to fallback)
+    const manualNextTest = getResolvedNextQuiz(todaySession);
+
+    // 3. 같은 과목의 과거 세션 로그들을 날짜 역순 정렬 (getLogDate 사용)
+    const pastLogs = (allLogs || []).filter(l => {
+      const logDate = getLogDate(l);
+      if (!logDate || logDate >= selectedDate) return false;
+      const logCourse = normalizeCourseName(l.course_name);
+      return logCourse === currentCourse;
+    }).sort((a, b) => getLogDate(b).localeCompare(getLogDate(a)));
+
+    // 4. 가장 최근에 다음TEST가 적혀있던 직전 세션 탐색
+    const lastSessionWithNextQuiz = pastLogs.find(l => Boolean(getResolvedNextQuiz(l)));
+    const pendingNextQuiz = getResolvedNextQuiz(lastSessionWithNextQuiz);
+    const lastQuizDate = getLogDate(lastSessionWithNextQuiz);
+
+    // 5. 직전 세션의 "다음 실제 수업일" 계산
+    let nextClassDateAfterLast = '';
+    if (lastQuizDate) {
+      nextClassDateAfterLast = getNextActualClassDate(lastQuizDate, currentCourse);
+    }
+
+    let finalTodayTest: string | null = null;
+    let finalNextTest: string | null = null;
+
+    // [오늘TEST 결정]
+    if (hasManualTodayTest) {
+      // 직접 입력값이 있으면 최우선
+      finalTodayTest = manualTodayTest;
+    } else if (pendingNextQuiz && nextClassDateAfterLast && selectedDate === nextClassDateAfterLast) {
+      // 다음 실제 수업일 당일 00:00부터 자동 승계
+      finalTodayTest = pendingNextQuiz;
+    }
+
+    // [다음TEST 결정]
+    if (manualNextTest) {
+      // 현재 세션에 새 다음TEST가 있으면 최우선
+      finalNextTest = manualNextTest;
+    } else if (!hasManualTodayTest && pendingNextQuiz && nextClassDateAfterLast && selectedDate < nextClassDateAfterLast) {
+      // 다음 수업일 전 비수업일에는 이전 다음TEST 유지
+      finalNextTest = pendingNextQuiz;
+    }
+
+    return {
+      todayTestText: finalTodayTest,
+      nextTestText: finalNextTest,
+    };
+  }, [todaySession, allLogs, selectedDate, selectedCourse, normalizeCourseName, getLogDate, getResolvedNextQuiz, getNextActualClassDate]);
+
+  // 💡 사용 가능한 활성 코스 목록 (정규 + 활성 선택과목들)
+  const availableCourses = useMemo(() => {
+    return getActiveAvailableCourses(student, selectedDate);
+  }, [student, selectedDate]);
+
+  // 💡 선택된 코스가 더 이상 활성 코스 목록에 없으면 자동으로 '정규'로 안전하게 이동
+  useEffect(() => {
+    if (selectedCourse && !availableCourses.includes(selectedCourse)) {
+      setSelectedCourse('정규');
+      if (student) {
+        try {
+          localStorage.setItem('ams_student', JSON.stringify({ ...student, _selectedCourse: '정규' }));
+        } catch (e) {}
+      }
+    }
+  }, [availableCourses, selectedCourse, student, setSelectedCourse]);
+
   // fetchAllStudentData provided by useStudentPortal hook
 
   useEffect(() => {
@@ -198,7 +375,7 @@ export default function StudentPortal() {
     // 💡 URL 파라미터에서 studentId가 있는지 먼저 확인 (선생님이 뷰어로 들어올 때)
     const params = new URLSearchParams(window.location.search);
     const paramStudentId = params.get('id');
-    
+
     if (paramStudentId) {
       fetchAllStudentData(paramStudentId);
       return;
@@ -220,13 +397,13 @@ export default function StudentPortal() {
     const channel = supabase
       .channel(`sync_session_${student.id}_${selectedDate}`)
       .on(
-        'postgres_changes', 
-        { 
-          event: 'UPDATE', 
-          schema: 'public', 
-          table: 'ams_session_logs', 
-          filter: `student_id=eq.${student.id}` 
-        }, 
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'ams_session_logs',
+          filter: `student_id=eq.${student.id}`
+        },
         (payload: any) => {
           const newData = payload.new;
           if (newData && newData.session_date === selectedDate) {
@@ -234,7 +411,7 @@ export default function StudentPortal() {
               ...prev,
               ...newData
             }));
-            
+
             // 💡 [안정화] 텍스트 필드들도 동기화 (선생님이 수정했을 때 바로 보이도록)
             // 단, 학생이 입력창에 포커스를 둔 채 열심히 타이핑 중인 경우(activeElement가 textarea/input인 경우)
             // 실시간 동기화로 인한 입력값 강제 유실을 막기 위해 텍스트 덮어쓰기를 제한합니다!
@@ -256,7 +433,7 @@ export default function StudentPortal() {
 
   const handleManualSave = async (field: 'classwork' | 'completed_classwork' | 'homework' | 'special_notes', value: string) => {
     if (!student || !academy) return;
-    
+
     // 💡 기존 값과 입력값이 완전히 같은 경우 불필요한 저장 스킵
     const dbField = field === 'special_notes' ? field : `${field}_text`;
     const currentValue = todaySession?.[dbField] || '';
@@ -272,7 +449,7 @@ export default function StudentPortal() {
       if (todaySession?.moved_to_hour !== undefined && todaySession?.moved_to_hour !== null) {
         updateData.moved_to_hour = todaySession.moved_to_hour;
       }
-      
+
       const conflictKeys = updateData.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
 
       const { data, error } = await supabase
@@ -281,7 +458,7 @@ export default function StudentPortal() {
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
-      
+
       if (savedLog) {
         setTodaySession((prev: any) => ({ ...prev, ...savedLog }));
       } else if (field === 'special_notes') {
@@ -295,13 +472,13 @@ export default function StudentPortal() {
     setIsSaving(true);
     try {
       const currentVal = todaySession?.todo_achievement !== undefined ? todaySession.todo_achievement : null;
-      const nextVal = currentVal === percentage ? null : percentage; 
+      const nextVal = currentVal === percentage ? null : percentage;
       const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
       const newResult = { ...currentResult, todo_achievement: nextVal, checked_todos: null }; // 퍼센트 수동 클릭 시 개별 상태 초기화
-      const updateData: any = { 
-        student_id: student.id, 
-        session_date: selectedDate, 
-        academy_id: academy.id, 
+      const updateData: any = {
+        student_id: student.id,
+        session_date: selectedDate,
+        academy_id: academy.id,
         course_name: selectedCourse,
         test_result: JSON.stringify(newResult)
       };
@@ -311,7 +488,7 @@ export default function StudentPortal() {
       }
 
       const conflictKeys = updateData.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
-      
+
       const { data, error } = await supabase
         .from('ams_session_logs')
         .upsert([updateData], { onConflict: conflictKeys })
@@ -327,10 +504,10 @@ export default function StudentPortal() {
             savedAchievement = parsedRes.todo_achievement !== undefined ? parsedRes.todo_achievement : null;
           }
         } catch (e) {}
-        setTodaySession((prev: any) => ({ 
-          ...prev, 
-          ...savedLog, 
-          todo_achievement: savedAchievement 
+        setTodaySession((prev: any) => ({
+          ...prev,
+          ...savedLog,
+          todo_achievement: savedAchievement
         }));
       } else {
         setTodaySession((prev: any) => ({ ...prev, todo_achievement: nextVal, test_result: JSON.stringify(newResult) }));
@@ -343,7 +520,7 @@ export default function StudentPortal() {
     setIsSaving(true);
     try {
       const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
-      
+
       let currentChecked: number[] = [];
       if (Array.isArray(currentResult.checked_todos)) {
         currentChecked = [...currentResult.checked_todos];
@@ -356,28 +533,28 @@ export default function StudentPortal() {
         }
         for (let j = 0; j < checkedCount; j++) currentChecked.push(j);
       }
-      
+
       const pos = currentChecked.indexOf(index);
       const isChecking = pos === -1;
-      
+
       if (!isChecking) {
         currentChecked.splice(pos, 1);
       } else {
         currentChecked.push(index);
       }
-      
+
       const validChecked = currentChecked.filter(idx => idx < totalCount);
       let rawPercentage = totalCount > 0 ? (validChecked.length / totalCount) * 100 : 0;
       let newPercentage = Math.floor(rawPercentage / 10) * 10;
       if (validChecked.length > 0 && newPercentage === 0) newPercentage = 10;
       if (validChecked.length === totalCount) newPercentage = 100;
-      
+
       const newResult = { ...currentResult, todo_achievement: newPercentage, checked_todos: currentChecked };
-      
-      const updateData: any = { 
-        student_id: student.id, 
-        session_date: selectedDate, 
-        academy_id: academy.id, 
+
+      const updateData: any = {
+        student_id: student.id,
+        session_date: selectedDate,
+        academy_id: academy.id,
         course_name: selectedCourse,
         test_result: JSON.stringify(newResult)
       };
@@ -387,14 +564,14 @@ export default function StudentPortal() {
       }
 
       const conflictKeys = updateData.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
-      
+
       const { data, error } = await supabase
         .from('ams_session_logs')
         .upsert([updateData], { onConflict: conflictKeys })
         .select();
       if (error) throw error;
       let savedLog = data && data[0] ? data[0] : null;
-      
+
       if (savedLog) {
         let savedAchievement = null;
         try {
@@ -403,10 +580,10 @@ export default function StudentPortal() {
             savedAchievement = parsedRes.todo_achievement !== undefined ? parsedRes.todo_achievement : null;
           }
         } catch (e) {}
-        setTodaySession((prev: any) => ({ 
-          ...prev, 
-          ...savedLog, 
-          todo_achievement: savedAchievement 
+        setTodaySession((prev: any) => ({
+          ...prev,
+          ...savedLog,
+          todo_achievement: savedAchievement
         }));
       } else {
         setTodaySession((prev: any) => ({ ...prev, todo_achievement: newPercentage, test_result: JSON.stringify(newResult) }));
@@ -417,7 +594,7 @@ export default function StudentPortal() {
   const handleApprovalSubmit = async (status: 'none' | 'submitted') => {
     if (!student) { alert("학생 정보를 불러오지 못했습니다."); return; }
     if (!academy) { alert("학원 정보를 불러오지 못했습니다."); return; }
-    
+
     setIsSaving(true);
     try {
       // 💡 교재 코드([BK...])가 들어있다면 실제 교재 제목으로 변환하여 DB에 깨끗하게 저장
@@ -434,10 +611,10 @@ export default function StudentPortal() {
 
       const targetCourse = todaySession?.course_name || selectedCourse || '정규';
 
-      const updateData: any = { 
-        student_id: student.id, 
-        session_date: selectedDate, 
-        academy_id: academy.id, 
+      const updateData: any = {
+        student_id: student.id,
+        session_date: selectedDate,
+        academy_id: academy.id,
         course_name: targetCourse,
         approval_status: status,
         completed_classwork_text: cleanCompleted,
@@ -461,18 +638,18 @@ export default function StudentPortal() {
       } else {
         setTodaySession((prev: any) => ({ ...prev, approval_status: status }));
       }
-    } catch (e: any) { 
-      console.error(e); 
+    } catch (e: any) {
+      console.error(e);
       alert("제출 처리 중 오류가 발생했습니다: " + (e.message || "알 수 없는 오류"));
-    } finally { 
-      setIsSaving(false); 
+    } finally {
+      setIsSaving(false);
       setConfirmSubmitOpen(false);
     }
   };
 
   const handleSelfEval = async (level: number) => {
     if (!student || !academy) return;
-    
+
     // 💡 [안전 규칙] 0~10 정수 범위 검증
     if (!isValidHwEval(level)) {
       alert("올바르지 않은 과제 점수입니다 (0~10 사이의 점수여야 합니다).");
@@ -490,7 +667,7 @@ export default function StudentPortal() {
       return;
     }
 
-    const isToggleOff = currentSelfEval === level; 
+    const isToggleOff = currentSelfEval === level;
     const nextScore = isToggleOff ? null : level;
     const previousTestResult = todaySession.test_result;
     const newTestResultStr = withHwEval(previousTestResult, nextScore);
@@ -523,14 +700,14 @@ export default function StudentPortal() {
         await handleManualSave('special_notes', cleanNotes);
         setTodaySession((prev: any) => ({ ...prev, special_notes: cleanNotes }));
       }
-    } catch (e: any) { 
+    } catch (e: any) {
       console.error(e);
       // 실패 시 원래 상태로 롤백
       setTodaySession((prev: any) => ({ ...prev, test_result: previousTestResult }));
       setAllLogs((prev: any[]) => prev.map(l => l.id === todaySession.id ? { ...l, test_result: previousTestResult } : l));
       alert("과제 확인 점수 저장에 실패했습니다. 다시 시도해 주세요.");
-    } finally { 
-      setIsSaving(false); 
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -541,12 +718,12 @@ export default function StudentPortal() {
       const { answers, calculatedScore, testId } = result;
       const updateData: any = { student_id: student.id, student_name: student.name, session_date: selectedDate, course_name: selectedCourse, test_status: testId || todaySession?.test_status };
       if (calculatedScore !== undefined) updateData.test_score = calculatedScore;
-      if (todaySession?.id && todaySession.id !== 'temp') { 
+      if (todaySession?.id && todaySession.id !== 'temp') {
         updateData.id = todaySession.id;
-        await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'id' }); 
-      } 
-      else { 
-        await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' }); 
+        await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'id' });
+      }
+      else {
+        await supabase.from('ams_session_logs').upsert([updateData], { onConflict: 'student_id,session_date,course_name,moved_to_hour' });
       }
       alert('테스트 답안이 제출되었습니다.'); setIsTestModalOpen(false); fetchAllStudentData(student.id);
     } catch (e) { console.error(e); alert('제출 중 오류 발생'); } finally { setIsSaving(false); }
@@ -556,19 +733,19 @@ export default function StudentPortal() {
     if (!suggestion.trim() || !student || !academy) return;
     setIsSaving(true);
     try {
-      const { data, error } = await supabase.from('ams_tasks').insert([{ 
-        academy_id: academy.id, 
-        title: `[건의] ${student.name}`, 
-        content: suggestion, 
-        start_date: selectedDate, 
-        target_date: selectedDate, 
-        display_period_type: 'custom', 
-        is_completed: false, 
+      const { data, error } = await supabase.from('ams_tasks').insert([{
+        academy_id: academy.id,
+        title: `[건의] ${student.name}`,
+        content: suggestion,
+        start_date: selectedDate,
+        target_date: selectedDate,
+        display_period_type: 'custom',
+        is_completed: false,
         created_by: student.teacher_id || '',
-        type: 'manual' 
+        type: 'manual'
       }]).select();
-      if (error) throw error; 
-      alert('선생님께 건의사항이 전달되었습니다.'); 
+      if (error) throw error;
+      alert('선생님께 건의사항이 전달되었습니다.');
       setSuggestion('');
       if (data) setMySuggestions(prev => [data[0], ...prev].slice(0, 5)); // 💡 리스트 즉시 갱신 (최대 5개)
     } catch (e) { console.error(e); alert('전송 중 오류가 발생했습니다.'); } finally { setIsSaving(false); }
@@ -576,14 +753,14 @@ export default function StudentPortal() {
 
   const handleSyncTasks = async (checkedTasks: string[], uncheckedTasks: string[]) => {
     if (!student || !academy) return;
-    
+
     let currentLines = localCompletedClasswork.split('\n').map(l => l.trim()).filter(Boolean);
-    
+
     // 제거할 태스크 삭제
     uncheckedTasks.forEach(task => {
       currentLines = currentLines.filter(line => line !== task);
     });
-    
+
     // 추가할 태스크 넣기 (중복 방지)
     checkedTasks.forEach(task => {
       if (!currentLines.includes(task)) {
@@ -618,9 +795,12 @@ export default function StudentPortal() {
 
   const getRemainingClasses = useCallback((targetDate: string) => {
     if (!targetDate || !student?.class_days) return null;
-    const today = new Date(selectedDate); const exam = new Date(targetDate);
+    const today = new Date(selectedDate);
+    const exam = new Date(targetDate);
     if (exam <= today) return 0;
-    let count = 0; const current = new Date(today); current.setDate(current.getDate() + 1);
+    let count = 0;
+    const current = new Date(today);
+    current.setDate(current.getDate() + 1);
     while (current < exam) {
       const dayName = ['일', '월', '화', '수', '목', '금', '토'][current.getDay()];
       if (student.class_days.includes(dayName)) count++;
@@ -645,12 +825,12 @@ export default function StudentPortal() {
   return (
     <div className="min-h-screen bg-[#050505] text-[#f0f0f0] font-sans flex flex-col overflow-hidden text-center">
       {/* 💡 헤더 컴포넌트 */}
-      <StudentHeader 
-        student={student} teachers={teachers} selectedDate={selectedDate} 
-        setSelectedDate={setSelectedDate} 
+      <StudentHeader
+        student={student} teachers={teachers} selectedDate={selectedDate}
+        setSelectedDate={setSelectedDate}
         validClassDates={validClassDates}
         onInvalidDateSelect={(dateStr) => setInvalidDateAlert(dateStr)}
-        matchedExam={matchedExam} 
+        matchedExam={matchedExam}
         getRemainingClasses={getRemainingClasses} handleLogout={handleLogout} getInitial={getInitial}
         academy={academy} selectedCourse={selectedCourse} setSelectedCourse={(course) => {
           setSelectedCourse(course);
@@ -663,83 +843,60 @@ export default function StudentPortal() {
       />
 
       {/* 💡 데스크톱 전용 상단 탭 바 (lg 이상에서만 노출) */}
-      {(() => {
-        const availableCourses: string[] = ['정규'];
-        const rawElective = student?.book_courses?.['__elective_courses'] || student?.book_courses?.["'__elective_courses'"];
-        if (rawElective) {
-          try {
-            const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
-            if (Array.isArray(parsed)) {
-              parsed.forEach((c: any) => {
-                const subj = c.subject?.trim() || '특강';
-                if (!availableCourses.includes(subj)) availableCourses.push(subj);
-              });
-            }
-          } catch (e) {}
-        }
-        const hasElectives = availableCourses.length > 1;
-        const isElectiveNow = selectedCourse && selectedCourse !== '정규';
-        const currentIndex = availableCourses.indexOf(selectedCourse || '정규');
-        const nextIndex = (currentIndex + 1) % availableCourses.length;
-        const nextCourse = availableCourses[nextIndex];
-
-        return (
-          <div className="bg-[#0a0a0a] border-b border-white/5 hidden lg:flex px-4 md:px-8 shrink-0">
-            {/* 1. 오늘 학습 플래너 탭 (100% 항시 유효) */}
-            <button
-              onClick={() => setActiveTab('study')}
-              className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
-                activeTab === 'study'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              📝 오늘 학습
-            </button>
-
-            {/* 2. 특강이 있는 학생인 경우 1개 스마트 전환 탭 추가 */}
-            {hasElectives && (
+      <div className="bg-[#0a0a0a] border-b border-white/5 hidden lg:flex items-center px-4 md:px-8 shrink-0">
+        {/* 1. 수업 과정별 탭 (정규수업 + 활성 선택과목들 각각 독립 탭) */}
+        <div className="flex items-center gap-1 border-r border-white/10 pr-4 mr-4">
+          {availableCourses.map(course => {
+            const isCourseActive = activeTab === 'study' && (selectedCourse || '정규') === course;
+            const isRegular = course === '정규';
+            return (
               <button
+                key={course}
                 onClick={() => {
                   setActiveTab('study');
-                  setSelectedCourse(nextCourse);
-                  try {
-                    localStorage.setItem('ams_student', JSON.stringify({ ...student, _selectedCourse: nextCourse }));
-                  } catch (e) {}
+                  setSelectedCourse(course);
+                  if (student) {
+                    try {
+                      localStorage.setItem('ams_student', JSON.stringify({ ...student, _selectedCourse: course }));
+                    } catch (e) {}
+                  }
                 }}
                 className={`px-5 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer flex items-center gap-1.5 ${
-                  isElectiveNow
-                    ? 'border-purple-500/40 text-purple-300 hover:text-purple-200'
-                    : 'border-blue-500/40 text-blue-300 hover:text-blue-200'
+                  isCourseActive
+                    ? isRegular
+                      ? 'border-blue-500 text-blue-400 bg-blue-500/5'
+                      : 'border-purple-500 text-purple-300 bg-purple-500/5'
+                    : 'border-transparent text-gray-500 hover:text-gray-300'
                 }`}
               >
-                <span>{isElectiveNow ? '📘 정규수업 전환 🔄' : `📙 ${nextCourse} 전환 🔄`}</span>
+                <span>{isRegular ? '📘 정규수업' : `📙 ${course}`}</span>
               </button>
-            )}
+            );
+          })}
+        </div>
 
-            <button
-              onClick={() => setActiveTab('wrong-answer')}
-              className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
-                activeTab === 'wrong-answer'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              ❌ 틀린 문제 제출
-            </button>
-            <button
-              onClick={() => setActiveTab('exam-submit')}
-              className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
-                activeTab === 'exam-submit'
-                  ? 'border-blue-500 text-blue-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-300'
-              }`}
-            >
-              ✏️ 답안 제출
-            </button>
-          </div>
-        );
-      })()}
+        {/* 2. 공통 기능 탭 */}
+        <button
+          onClick={() => setActiveTab('wrong-answer')}
+          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
+            activeTab === 'wrong-answer'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          ❌ 틀린 문제 제출
+        </button>
+        <button
+          onClick={() => setActiveTab('exam-submit')}
+          className={`px-6 py-3 text-sm font-black tracking-tight border-b-2 transition-all cursor-pointer ${
+            activeTab === 'exam-submit'
+              ? 'border-blue-500 text-blue-400'
+              : 'border-transparent text-gray-500 hover:text-gray-300'
+          }`}
+        >
+          ✏️ 답안 제출
+        </button>
+      </div>
 
       <main className="flex-1 flex flex-col lg:flex-row overflow-hidden pb-[64px] lg:pb-0">
         {activeTab === 'wrong-answer' ? (
@@ -778,9 +935,9 @@ export default function StudentPortal() {
             {/* ① 왼쪽 섹션: 대시보드 및 교재 시스템 */}
             <div className={`w-full lg:w-[60%] border-r border-white/5 bg-[#080808] overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 relative lg:block ${activeTab === 'study' || activeTab === 'history' ? 'block' : 'hidden lg:block'}`}>
           <div className={activeTab === 'study' ? 'block space-y-4 md:space-y-8' : 'hidden lg:block lg:space-y-8'}>
-            <LearningDashboard 
-              student={student} lastSession={lastSession} todaySession={todaySession} 
-              selectedDate={selectedDate} currentSelfEval={currentSelfEval} 
+            <LearningDashboard
+              student={student} lastSession={lastSession} todaySession={todaySession}
+              selectedDate={selectedDate} currentSelfEval={currentSelfEval}
               handleSelfEval={handleSelfEval} handleTodoAchievement={handleTodoAchievement} todayPlan={todayPlan}
               onTodoToggle={handleTodoToggle}
               isSlim={isDashboardSlim} setIsSlim={setIsDashboardSlim}
@@ -788,7 +945,7 @@ export default function StudentPortal() {
               onSyncTasks={handleSyncTasks}
             />
 
-            <TextbookSystem 
+            <TextbookSystem
               student={student} availableTextbooks={availableTextbooks} allLogs={allLogs}
               localCompletedClasswork={localCompletedClasswork} setLocalCompletedClasswork={setLocalCompletedClasswork}
               localHomework={localHomework} setLocalHomework={setLocalHomework}
@@ -828,15 +985,15 @@ export default function StudentPortal() {
                 <div className="mt-8 mb-4">
                   {approvalStatus === 'none' ? (
                     isValidClassDate ? (
-                      <button 
-                        onClick={() => setConfirmSubmitOpen(true)} 
+                      <button
+                        onClick={() => setConfirmSubmitOpen(true)}
                         disabled={isSaving}
                         className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 text-lg transition-all animate-in slide-in-from-bottom-2"
                       >
                         🚀 오늘의 학습 제출하기
                       </button>
                     ) : (
-                      <button 
+                      <button
                         disabled={true}
                         className="w-full py-4 bg-gray-800/80 border border-gray-700/50 text-gray-400 font-bold rounded-xl text-base cursor-not-allowed flex items-center justify-center gap-2 shadow-inner"
                       >
@@ -864,26 +1021,54 @@ export default function StudentPortal() {
 
         {/* 오른쪽 섹션: 테스트 상태, 히스토리, 건의사항 */}
         <div className={`w-full lg:w-[40%] bg-[#0a0a0a] flex-col overflow-y-auto custom-scrollbar-v p-3 md:p-6 xl:p-8 pt-2 md:pt-4 xl:pt-4 space-y-4 md:space-y-8 relative lg:flex ${activeTab === 'history' || activeTab === 'suggestion' ? 'flex' : 'hidden lg:flex'}`}>
-          
+
           {/* 모바일 전용: 시험일정 및 학원 채널 링크 (3번째 탭 'suggestion' 일 때 노출) */}
           <div className={`lg:hidden space-y-6 ${activeTab === 'suggestion' ? 'block' : 'hidden'}`}>
             {/* 1. 시험 일정 카드 */}
-            {matchedExam && (
-              <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 md:p-6 text-left space-y-2 md:space-y-3 shadow-lg shadow-rose-950/10 shrink-0">
-                <div className="flex items-center gap-2">
-                  <FileText className="text-rose-500" size={16} />
-                  <h3 className="text-[10px] md:text-xs font-black uppercase tracking-widest text-rose-400">다가오는 시험 일정</h3>
+            {matchedExam && (() => {
+              const targetDate = matchedExam.target_date;
+              const endDate = matchedExam.end_date || targetDate;
+              const isOngoing = selectedDate >= targetDate && selectedDate <= endDate;
+              const startDateStr = new Date(targetDate).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+              const endDateStr = new Date(endDate).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' });
+              const rangeStr = targetDate === endDate ? startDateStr : `${startDateStr} ~ ${endDateStr}`;
+
+              const todayMs = new Date(selectedDate).setHours(0, 0, 0, 0);
+              const targetMs = new Date(targetDate).setHours(0, 0, 0, 0);
+              const dDayDiff = Math.ceil((targetMs - todayMs) / (1000 * 60 * 60 * 24));
+              const remainingClasses = getRemainingClasses ? getRemainingClasses(targetDate) : null;
+
+              return (
+                <div className="bg-rose-500/10 border border-rose-500/20 rounded-xl p-4 md:p-6 text-left space-y-2 md:space-y-3 shadow-lg shadow-rose-950/10 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <FileText className="text-rose-500" size={16} />
+                    <h3 className="text-[10px] md:text-xs font-black uppercase tracking-widest text-rose-400">
+                      {isOngoing ? '시험 진행 중' : '다가오는 시험 일정'}
+                    </h3>
+                  </div>
+                  <div className="flex items-center justify-between text-[10px] md:text-xs font-bold text-gray-300 bg-white/[0.02] border border-white/5 rounded-lg p-3 md:p-4">
+                    <span className="text-rose-200 font-extrabold">
+                      {isOngoing ? rangeStr : `${startDateStr}(${new Date(targetDate).toLocaleDateString('ko-KR', { weekday: 'short' })})`}
+                    </span>
+                    {isOngoing ? (
+                      <span className="text-[11px] font-black text-rose-400 uppercase tracking-widest">
+                        진행 중
+                      </span>
+                    ) : (
+                      <span className="text-[11px] font-black text-rose-500 uppercase tracking-widest flex items-center gap-1.5">
+                        <span className="text-amber-400 font-extrabold">D-{dDayDiff}</span>
+                        {remainingClasses !== null && (
+                          <>
+                            <span className="text-white/20">·</span>
+                            <span>잔여 <span className="text-[14px] ml-0.5">{remainingClasses}</span>회</span>
+                          </>
+                        )}
+                      </span>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[10px] md:text-xs font-bold text-gray-300 bg-white/[0.02] border border-white/5 rounded-lg p-3 md:p-4">
-                  <span className="text-rose-200 font-extrabold">
-                    {new Date(matchedExam.target_date).toLocaleDateString('ko-KR', { month: 'long', day: 'numeric' })}
-                  </span>
-                  <span className="text-[11px] font-black text-rose-500 uppercase tracking-widest">
-                    잔여 <span className="text-[14px] ml-0.5">{getRemainingClasses(matchedExam.target_date)}</span>회
-                  </span>
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {/* 2. 학원 공식 채널 바로가기 버튼 */}
             {(academy?.operation_settings?.homepage_url || academy?.operation_settings?.naver_cafe_url) && (
@@ -894,7 +1079,7 @@ export default function StudentPortal() {
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   {academy?.operation_settings?.homepage_url && (
-                    <a 
+                    <a
                       href={(() => {
                         const url = academy.operation_settings.homepage_url.trim();
                         return /^https?:\/\//i.test(url) ? url : `https://${url}`;
@@ -908,7 +1093,7 @@ export default function StudentPortal() {
                     </a>
                   )}
                   {academy?.operation_settings?.naver_cafe_url && (
-                    <a 
+                    <a
                       href={(() => {
                         const url = academy.operation_settings.naver_cafe_url.trim();
                         return /^https?:\/\//i.test(url) ? url : `https://${url}`;
@@ -956,14 +1141,18 @@ export default function StudentPortal() {
               </div>
             </div>
           )}
-          
+
           <div className={activeTab === 'history' ? 'block' : 'hidden lg:block'}>
-            <TestStatusSection todaySession={todaySession} />
+            <TestStatusSection
+              todaySession={todaySession}
+              todayTestText={displayTestStatus.todayTestText}
+              nextTestText={displayTestStatus.nextTestText}
+            />
           </div>
-          
+
           <div className={activeTab === 'history' ? 'block' : 'hidden lg:block'}>
-            <LearningHistoryList 
-              allLogs={allLogs.map(l => l.session_date === selectedDate && todaySession ? { ...l, ...todaySession } : l)} isHistoryOpen={isHistoryOpen} setIsHistoryOpen={setIsHistoryOpen} 
+            <LearningHistoryList
+              allLogs={allLogs.map(l => l.session_date === selectedDate && todaySession ? { ...l, ...todaySession } : l)} isHistoryOpen={isHistoryOpen} setIsHistoryOpen={setIsHistoryOpen}
               opSettings={academy?.operation_settings || {}}
             />
           </div>
@@ -978,8 +1167,8 @@ export default function StudentPortal() {
           </div>
 
           <div className={activeTab === 'suggestion' ? 'block' : 'hidden lg:block'}>
-            <StudentSuggestion 
-              suggestion={suggestion} setSuggestion={setSuggestion} 
+            <StudentSuggestion
+              suggestion={suggestion} setSuggestion={setSuggestion}
               selectedDate={selectedDate} handleSuggestionSubmit={handleSuggestionSubmit} isSaving={isSaving}
               mySuggestions={mySuggestions}
             />
@@ -991,19 +1180,6 @@ export default function StudentPortal() {
 
       {/* 모바일 하단 플로팅 탭 네비게이션 (lg 미만에서만 노출) */}
       {(() => {
-        const availableCourses: string[] = ['정규'];
-        const rawElective = student?.book_courses?.['__elective_courses'] || student?.book_courses?.["'__elective_courses'"];
-        if (rawElective) {
-          try {
-            const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
-            if (Array.isArray(parsed)) {
-              parsed.forEach((c: any) => {
-                const subj = c.subject?.trim() || '특강';
-                if (!availableCourses.includes(subj)) availableCourses.push(subj);
-              });
-            }
-          } catch (e) {}
-        }
         const hasElectives = availableCourses.length > 1;
         const isElectiveNow = selectedCourse && selectedCourse !== '정규';
         const currentIndex = availableCourses.indexOf(selectedCourse || '정규');
@@ -1083,11 +1259,11 @@ export default function StudentPortal() {
       {/* 테스트 답안 모달 */}
       <AnimatePresence>
         {isTestModalOpen && (
-          <TestAnswerModal 
-            testId={todaySession?.test_status || ''} 
-            studentName={student.name} 
-            onClose={() => setIsTestModalOpen(false)} 
-            onSave={handleTestSubmit} 
+          <TestAnswerModal
+            testId={todaySession?.test_status || ''}
+            studentName={student.name}
+            onClose={() => setIsTestModalOpen(false)}
+            onSave={handleTestSubmit}
             reviewData={todaySession?.test_answers || undefined}
           />
         )}
@@ -1099,7 +1275,7 @@ export default function StudentPortal() {
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => !isSaving && setConfirmSubmitOpen(false)} className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
             <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.95, opacity: 0 }} className="relative bg-[#111] border border-white/10 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-left">
               <h3 className="text-lg font-black text-white mb-4">제출할 내용을 확인해주세요</h3>
-              
+
               <div className="bg-[#0c0c0e] border border-white/10 rounded-xl p-4 mb-4 text-[13px] space-y-3.5">
                 {/* 1. 과제 자가평가 (파란색 계열 가로 바 재현 - 크기 상향 및 텍스트 제거) */}
                 <div className="pb-1">
@@ -1123,11 +1299,11 @@ export default function StudentPortal() {
                         return 'bg-emerald-500 border-emerald-400';
                       };
                       return (
-                        <div 
-                          key={num} 
+                        <div
+                          key={num}
                           className={`w-full h-[14px] rounded-[2px] text-[9px] sm:text-[10px] font-black flex items-center justify-center border leading-none transition-all ${
-                            isSel 
-                              ? `${getBtnColor()} text-white shadow-lg` 
+                            isSel
+                              ? `${getBtnColor()} text-white shadow-lg`
                               : 'bg-white/5 border-white/10 text-white/30'
                           }`}
                         >
@@ -1153,11 +1329,11 @@ export default function StudentPortal() {
                     {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map(num => {
                       const isSel = todaySession?.todo_achievement !== undefined && todaySession?.todo_achievement !== null && num <= todaySession.todo_achievement;
                       return (
-                        <div 
-                          key={num} 
+                        <div
+                          key={num}
                           className={`w-full h-[14px] rounded-[2px] text-[8px] sm:text-[9px] font-black flex items-center justify-center border leading-none transition-all ${
                             isSel
-                              ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' 
+                              ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg'
                               : 'bg-white/5 border-white/10 text-white/30'
                           }`}
                         >
@@ -1190,18 +1366,18 @@ export default function StudentPortal() {
               </div>
 
               <p className="text-[12px] text-amber-500 mb-6 text-center font-semibold">제출하시면 선생님 확인 전까지 <b className="text-amber-400 font-black">수정하거나 취소할 수 없습니다.</b></p>
-              
+
               <div className="flex gap-3">
-                <button 
-                  onClick={() => setConfirmSubmitOpen(false)} 
-                  disabled={isSaving} 
+                <button
+                  onClick={() => setConfirmSubmitOpen(false)}
+                  disabled={isSaving}
                   className="flex-1 py-3 bg-white/5 hover:bg-white/10 border border-white/10 disabled:opacity-50 text-gray-300 font-bold rounded-xl transition-colors"
                 >
                   좀 더 쓸래요
                 </button>
-                <button 
-                  onClick={() => handleApprovalSubmit('submitted')} 
-                  disabled={isSaving} 
+                <button
+                  onClick={() => handleApprovalSubmit('submitted')}
+                  disabled={isSaving}
                   className="flex-1 py-3 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-violet-900/40 transition-colors flex justify-center items-center"
                 >
                   {isSaving ? <Loader2 className="animate-spin" size={20} /> : "이대로 제출하기!"}
@@ -1216,17 +1392,17 @@ export default function StudentPortal() {
       <AnimatePresence>
         {invalidDateAlert && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }} 
-              onClick={() => setInvalidDateAlert(null)} 
-              className="absolute inset-0 bg-black/70 backdrop-blur-sm" 
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setInvalidDateAlert(null)}
+              className="absolute inset-0 bg-black/70 backdrop-blur-sm"
             />
-            <motion.div 
-              initial={{ scale: 0.9, opacity: 0, y: 10 }} 
-              animate={{ scale: 1, opacity: 1, y: 0 }} 
-              exit={{ scale: 0.9, opacity: 0, y: 10 }} 
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0, y: 10 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 10 }}
               className="relative bg-[#121215] border border-amber-500/30 p-6 rounded-2xl shadow-2xl max-w-sm w-full text-center overflow-hidden"
             >
               <div className="w-12 h-12 bg-amber-500/20 border border-amber-500/40 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400">
@@ -1236,7 +1412,7 @@ export default function StudentPortal() {
               <p className="text-[13px] text-gray-300 font-semibold leading-relaxed mb-6">
                 선생님 출석부에 등록된 <span className="text-amber-400 font-bold">수업일(정규/보강/특강)</span>이 아니어서 일지를 제출하거나 조회할 수 없습니다.
               </p>
-              <button 
+              <button
                 onClick={() => setInvalidDateAlert(null)}
                 className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black rounded-xl shadow-lg shadow-amber-950/40 text-sm transition-all"
               >
@@ -1255,20 +1431,20 @@ export default function StudentPortal() {
 const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = [], activeCourse: string = '정규') => {
   if (!st) return [];
   const validDatesMap: { [date: string]: { label: string; date: string } } = {};
-  
+
   const today = new Date();
   const offset = today.getTimezoneOffset() * 60000;
-  
+
   // 오늘 기준 -7일 ~ +7일 범위 탐색
   for (let i = -7; i <= 7; i++) {
     const targetDate = new Date(today.getTime() - offset);
     targetDate.setDate(targetDate.getDate() + i);
     const dateStr = targetDate.toISOString().split('T')[0];
     const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][targetDate.getDay()];
-    
+
     // 1. 정규 수업일 여부
     const isRegularClass = activeCourse === '정규' && st.class_days?.includes(dayOfWeek);
-    
+
     // 2. 선택/특강 수업일 여부
     let isElectiveClass = false;
     const rawElective = st.book_courses?.['__elective_courses'];
@@ -1279,7 +1455,7 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = [], a
           for (const c of courses) {
             const courseSubject = c.subject?.trim() || '특강';
             if (activeCourse !== '정규' && courseSubject !== activeCourse) continue;
-            if (c.days?.includes(dayOfWeek) && c.schedules?.[dayOfWeek]) {
+            if (isActiveElectiveCourse(c, dateStr) && c.days?.includes(dayOfWeek)) {
               isElectiveClass = true;
               break;
             }
@@ -1287,7 +1463,7 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = [], a
         }
       } catch (e) {}
     }
-    
+
     // 3. 보강일 및 실제 일지 데이터 존재 여부 (기존 로그 분석)
     const matchingLog = logs?.find(l => l.session_date === dateStr);
     const hasLogContent = matchingLog && (
@@ -1298,17 +1474,17 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = [], a
       matchingLog.homework_to
     );
     const isMakeup = matchingLog?.attendance_status?.startsWith('보강');
-    
+
     // 4. 휴일 여부 체크 (휴일인데 보강이 없으면 수업 제외)
     const isHoliday = academyHolidays.some((h: any) => h.date === dateStr);
-    
+
     if ((isRegularClass || isElectiveClass || isMakeup || hasLogContent) && (!isHoliday || isMakeup)) {
       let typeLabel = '';
       if (isMakeup) typeLabel = '보강 수업';
       else if (isElectiveClass) typeLabel = `${activeCourse} 수업`;
       else if (isRegularClass) typeLabel = '정규 수업';
       else typeLabel = '기존 수업';
-      
+
       const displayLabel = `${dateStr.slice(5).replace('-', '.')} (${dayOfWeek}) - ${typeLabel}`;
       validDatesMap[dateStr] = {
         date: dateStr,
@@ -1316,7 +1492,7 @@ const getValidClassDates = (st: any, logs: any[], academyHolidays: any[] = [], a
       };
     }
   }
-  
+
   // 날짜 역정렬 (최신 날짜가 목록 가장 앞으로 오도록 정렬)
   return Object.values(validDatesMap).sort((a, b) => b.date.localeCompare(a.date));
 };

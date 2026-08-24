@@ -10,9 +10,22 @@ export interface HomeworkItem {
   note?: string;
 }
 
+export interface SessionSnapshot {
+  version: 1;
+  sessionType: 'regular' | 'elective' | 'makeup';
+  courseName: string;
+  courseId?: string | null;
+  scheduledDays: string[];
+  scheduledHours: number[];
+  isPureMakeup: boolean;
+  source: 'today_sheet';
+  capturedAt: string;
+}
+
 export interface SessionLog {
   id?: string;
   student_id?: string;
+  academy_id?: string;
   date: string;
   session_date?: string; // 💡 추가 (구형 스키마 하위 호환성용)
   course_name?: string; // 💡 과목 구분 ('정규', '방학특강', '확통' 등)
@@ -53,6 +66,18 @@ export interface SessionLog {
   hasHwTo?: boolean; // 💡 추가 (숙제 이월 여부)
   hasTestResult?: boolean; // 💡 추가 (테스트 결과 여부)
   test_answers?: any; // 💡 추가 (테스트 제출 상세 답안)
+  absence_session_id?: string | number | null; // 💡 결석 연동 보강 원본 세션 ID (bigint)
+  absence_date?: string | null; // 💡 결석 연동 보강 원본 결석일
+  session_snapshot?: SessionSnapshot | null; // 💡 세션 당시 스냅샷 불변 데이터
+}
+
+export interface AbsenceLinkContext {
+  source: 'absence-popup';
+  studentId: string;
+  absenceSessionId: string;
+  absenceDate: string;
+  courseName: string;
+  returnDate: string;
 }
 
 export interface Student {
@@ -126,7 +151,8 @@ export interface ExamSchedule {
   grade?: string; // NULL이면 전학년
   exam_name?: string;
   target_date: string;
-  created_at: string;
+  end_date?: string;
+  created_at?: string;
 }
 
 export interface Task {

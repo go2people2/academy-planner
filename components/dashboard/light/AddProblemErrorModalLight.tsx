@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { AlertTriangle, X, Loader2, CheckCircle2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface AddProblemErrorModalProps {
   isOpen: boolean;
@@ -21,6 +22,13 @@ export default function AddProblemErrorModal({
   onSuccess
 }: AddProblemErrorModalProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen,
+    onClose,
+    isSaving: isSubmitting
+  });
   const [isSuccess, setIsSuccess] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 

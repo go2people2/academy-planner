@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
-import { 
+import {
   X, Play, Pause, RotateCcw, RotateCw, Volume2, VolumeX, Maximize, Minimize, Video, ListVideo, Bookmark,
   Loader2, AlertTriangle, RefreshCw
 } from 'lucide-react';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 export interface TimestampItem {
   timeStr: string; // "02:10"
@@ -21,13 +22,13 @@ interface VideoPlayerModalProps {
   isLight?: boolean;
 }
 
-export default function VideoPlayerModal({ 
-  isOpen, 
-  videoUrl, 
-  title = '학습 동영상 플레이어', 
+export default function VideoPlayerModal({
+  isOpen,
+  videoUrl,
+  title = '학습 동영상 플레이어',
   timestampsText = '',
   onClose,
-  isLight = false 
+  isLight = false
 }: VideoPlayerModalProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -304,6 +305,12 @@ export default function VideoPlayerModal({
     return `${mins < 10 ? '0' : ''}${mins}:${secs < 10 ? '0' : ''}${secs}`;
   };
 
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: isOpen && !isFullscreen,
+    onClose
+  });
+
   // 키보드 단축키
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -340,8 +347,6 @@ export default function VideoPlayerModal({
       } else if (e.key === 'f' || e.key === 'F') {
         e.preventDefault();
         toggleFullscreen();
-      } else if (e.key === 'Escape' && !isFullscreen) {
-        onClose();
       }
     };
 
@@ -354,7 +359,7 @@ export default function VideoPlayerModal({
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-center items-center p-2 sm:p-4 animate-fadeIn">
       {/* 🎬 플레이어 메인 프레임 */}
-      <div 
+      <div
         ref={containerRef}
         onMouseMove={handleMouseMove}
         className="relative w-full max-w-6xl bg-black rounded-xl overflow-hidden border border-slate-800 shadow-2xl flex flex-col lg:flex-row h-[85vh] max-h-[720px]"
@@ -448,7 +453,7 @@ export default function VideoPlayerModal({
 
           {/* 중앙 거대 재생(Play) 버튼 오버레이 */}
           {!isPlaying && !isLoading && (
-            <div 
+            <div
               onClick={togglePlay}
               className="absolute inset-0 z-20 flex items-center justify-center bg-black/40 cursor-pointer group/play transition-all"
             >
@@ -536,9 +541,9 @@ export default function VideoPlayerModal({
                 </div>
 
                 {/* 음소거 */}
-                <button 
-                  type="button" 
-                  onClick={toggleMute} 
+                <button
+                  type="button"
+                  onClick={toggleMute}
                   className="p-1.5 rounded hover:bg-white/10 text-slate-300 hover:text-white transition-all"
                   title={isMuted ? '음소거 해제' : '음소거'}
                 >

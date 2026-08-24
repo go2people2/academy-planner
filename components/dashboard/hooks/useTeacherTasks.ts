@@ -1,7 +1,7 @@
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
-import { Student, Teacher } from '@/types/dashboard';
+import { Student, Teacher, AbsenceLinkContext } from '@/types/dashboard';
 
 export interface TeacherTaskItem {
   id: string;
@@ -27,8 +27,14 @@ export const buildMakeupPayload = (params: {
   makeupType: string;
   makeupReason?: string;
   courseName?: string;
+  absenceSessionId?: string | null;
+  absenceDate?: string | null;
 }) => {
-  const { studentId, studentName, academyId, makeupDate, makeupTime, makeupEndTime, makeupType, makeupReason, courseName = '정규' } = params;
+  const {
+    studentId, studentName, academyId, makeupDate, makeupTime,
+    makeupEndTime, makeupType, makeupReason, courseName = '정규',
+    absenceSessionId = null, absenceDate = null
+  } = params;
   const hour = makeupTime ? parseInt(makeupTime.split(':')[0]) : 19;
   const noteText = makeupReason && makeupReason.trim() ? `[${makeupType}] (${makeupReason.trim()})` : `[${makeupType}]`;
 
@@ -43,7 +49,9 @@ export const buildMakeupPayload = (params: {
     status: 'none',
     is_pure_makeup: true,
     special_notes: noteText,
-    course_name: courseName
+    course_name: courseName,
+    absence_session_id: absenceSessionId,
+    absence_date: absenceDate
   };
 };
 
@@ -53,6 +61,8 @@ export interface UseTeacherTasksProps {
   teachers: Teacher[];
   currentUser: any;
   onRefreshStudents?: (showLoader?: boolean) => Promise<void>;
+  absenceLinkPreset?: AbsenceLinkContext | null;
+  onClearAbsenceLinkPreset?: () => void;
 }
 
 export function useTeacherTasks({
@@ -61,6 +71,8 @@ export function useTeacherTasks({
   teachers,
   currentUser,
   onRefreshStudents,
+  absenceLinkPreset,
+  onClearAbsenceLinkPreset,
 }: UseTeacherTasksProps) {
   const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>('makeups');
   const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
@@ -105,6 +117,40 @@ export function useTeacherTasks({
   const [makeupDayFilter, setMakeupDayFilter] = useState<string>('all');
   const [showOnlyMyStudentsInMakeup, setShowOnlyMyStudentsInMakeup] = useState<boolean>(true);
   const [courseFilterMode, setCourseFilterMode] = useState<'all' | 'regularOnly' | 'electiveOnly'>('all');
+
+  // 💡 [연동 보강 모드] 이미 처리/오픈된 프리셋을 추적하여 최초 1회만 모달을 열고, 저장 후 재오픈 방지
+  const handledPresetRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (absenceLinkPreset && absenceLinkPreset.source === 'absence-popup') {
+      const presetKey = `${absenceLinkPreset.absenceSessionId || absenceLinkPreset.studentId}_${absenceLinkPreset.absenceDate}_${absenceLinkPreset.courseName}`;
+
+      if (handledPresetRef.current !== presetKey) {
+        handledPresetRef.current = presetKey;
+        setActiveTab('makeups');
+        setIsMakeupModalOpen(true);
+        setEditMakeupGroup(null);
+
+        const isSpecial = absenceLinkPreset.courseName && absenceLinkPreset.courseName !== '정규';
+        const itemKey = isSpecial ? `${absenceLinkPreset.studentId}_special_${absenceLinkPreset.courseName}` : absenceLinkPreset.studentId;
+
+        setSelectedStudentIds([itemKey]);
+        setMakeupType('결석 보강');
+        setMakeupReason(`${absenceLinkPreset.absenceDate} 결석분`);
+        const today = getTodayStr();
+        setMakeupDate(absenceLinkPreset.absenceDate > today ? absenceLinkPreset.absenceDate : today);
+      }
+    } else if (!absenceLinkPreset) {
+      handledPresetRef.current = null;
+      // 💡 일반 탭으로 진입했거나 결석 연동이 해제된 경우 모달 자동 오픈 및 고정값 해제
+      setIsMakeupModalOpen(false);
+      setSelectedStudentIds([]);
+      setMakeupType('결석 보강');
+      setMakeupReason('');
+      setMakeupSearch('');
+      setMakeupDate(getTodayStr());
+    }
+  }, [absenceLinkPreset]);
 
   const [makeupCardSearch, setMakeupCardSearch] = useState<string>('');
   const [makeupCardPeriod, setMakeupCardPeriod] = useState<'today' | 'month' | 'all' | 'custom'>('today');
@@ -321,7 +367,7 @@ export function useTeacherTasks({
         setMakeupSearch('');
         setMakeupType('결석 보강');
         setMakeupEndTime('21:00');
-        
+
         await fetchMakeups();
         if (onRefreshStudents) await onRefreshStudents(false);
         alert('보강 정보가 일괄 수정되었습니다.');
@@ -332,6 +378,54 @@ export function useTeacherTasks({
     } else {
       if (selectedStudentIds.length === 0) return;
       try {
+        // 💡 [결석 연동 보강 엄격 검증]
+        if (absenceLinkPreset && absenceLinkPreset.source === 'absence-popup') {
+          // 1. 날짜 검증: 보강 예정일이 원인 결석일보다 과거인 경우 저장 차단
+          if (makeupDate < absenceLinkPreset.absenceDate) {
+            alert(`보강 예정일(${makeupDate})은 원인 결석일(${absenceLinkPreset.absenceDate})보다 이전일 수 없습니다.`);
+            return;
+          }
+
+          // 2. 원본 결석 세션 정보 검증
+          const isValidSessionLogId = (value: unknown): boolean => {
+            const normalized = String(value ?? '').trim();
+            return /^[1-9]\d*$/.test(normalized);
+          };
+
+          if (!isValidSessionLogId(absenceLinkPreset.absenceSessionId)) {
+            alert('결석 세션의 식별자를 확인할 수 없습니다. 수업표를 새로고침한 뒤 다시 시도해 주세요.');
+            return;
+          }
+
+          const targetStudent = students.find(s => s.id === absenceLinkPreset.studentId || s.originalId === absenceLinkPreset.studentId);
+          const sourceAbsence = targetStudent?.allLogs?.find((l: any) => String(l.id) === String(absenceLinkPreset.absenceSessionId));
+
+          const hasValidIds = Boolean(
+            sourceAbsence?.id &&
+            sourceAbsence?.student_id &&
+            sourceAbsence?.academy_id &&
+            absenceLinkPreset?.absenceSessionId &&
+            absenceLinkPreset?.studentId &&
+            academyInfo?.id
+          );
+
+          const isValidAbsenceLink =
+            hasValidIds &&
+            sourceAbsence &&
+            String(sourceAbsence.id).trim() === String(absenceLinkPreset.absenceSessionId).trim() &&
+            String(sourceAbsence.student_id).trim() === String(absenceLinkPreset.studentId).trim() &&
+            String(sourceAbsence.academy_id).trim() === String(academyInfo.id).trim() &&
+            sourceAbsence.is_pure_makeup !== true &&
+            sourceAbsence.attendance_status?.startsWith('결석') &&
+            (sourceAbsence.session_date || sourceAbsence.date) === absenceLinkPreset.absenceDate &&
+            (sourceAbsence.course_name || '정규') === absenceLinkPreset.courseName;
+
+          if (!isValidAbsenceLink) {
+            alert('결석 연결 정보를 확인할 수 없습니다. 수업표에서 다시 시작해 주세요.');
+            return;
+          }
+        }
+
         const payloads = selectedStudentIds.map(itemKey => {
           let realStudentId = itemKey;
           let courseName = '정규';
@@ -362,6 +456,9 @@ export function useTeacherTasks({
           }
 
           const student = students.find(s => s.id === realStudentId || s.originalId === realStudentId);
+
+          const isLinked = absenceLinkPreset && absenceLinkPreset.source === 'absence-popup' && realStudentId === absenceLinkPreset.studentId;
+
           return buildMakeupPayload({
             studentId: realStudentId,
             studentName: student?.name,
@@ -371,7 +468,9 @@ export function useTeacherTasks({
             makeupEndTime,
             makeupType,
             makeupReason,
-            courseName
+            courseName: isLinked ? absenceLinkPreset.courseName : courseName,
+            absenceSessionId: isLinked ? absenceLinkPreset.absenceSessionId : null,
+            absenceDate: isLinked ? absenceLinkPreset.absenceDate : null
           });
         });
 
@@ -381,19 +480,29 @@ export function useTeacherTasks({
 
         if (error) throw error;
 
+        await fetchMakeups();
+
+        setIsMakeupModalOpen(false);
+        setEditMakeupGroup(null);
+
         setSelectedStudentIds([]);
-        setMakeupSearch('');
-        setMakeupGradeFilter('all');
-        setMakeupDayFilter('all');
         setMakeupType('결석 보강');
         setMakeupReason('');
+        setMakeupSearch('');
+        setMakeupDate(getTodayStr());
         setMakeupEndTime('21:00');
+        setMakeupGradeFilter('all');
+        setMakeupDayFilter('all');
         setShowOnlyMyStudentsInMakeup(true);
-        setIsMakeupModalOpen(false);
-        
-        await fetchMakeups();
-        if (onRefreshStudents) await onRefreshStudents(true);
-        alert('보강 예약이 추가되었습니다. 당일 Overview에 자동으로 반영됩니다.');
+
+        // 💡 [결석 연동 컨텍스트 해제] 완전한 일반 보강 목록 모드로 복귀
+        if (onClearAbsenceLinkPreset) {
+          onClearAbsenceLinkPreset();
+        }
+
+        if (onRefreshStudents) {
+          await onRefreshStudents(false);
+        }
       } catch (err) {
         console.error('Error adding makeup sessions:', err);
         alert('보강 추가에 실패했습니다.');
@@ -441,7 +550,7 @@ export function useTeacherTasks({
   const handleOpenEditGroupMakeup = useCallback((group: any) => {
     setEditMakeupGroup(group);
     setMakeupDate(group.date);
-    
+
     const timeRange = group.time;
     let startTime = '19:00';
     let endTime = '21:00';
@@ -474,7 +583,7 @@ export function useTeacherTasks({
 
       const { error } = await supabase
         .from('ams_session_logs')
-        .update({ 
+        .update({
           attendance_status: status,
           attendance_reason: '보강 수업'
         })
@@ -497,8 +606,8 @@ export function useTeacherTasks({
 
       await supabase
         .from('ams_session_logs')
-        .update({ 
-          attendance_status: 'BEFORE', 
+        .update({
+          attendance_status: 'BEFORE',
           attendance_reason: null
         })
         .eq('id', logId);
@@ -529,8 +638,8 @@ export function useTeacherTasks({
 
       await supabase
         .from('ams_session_logs')
-        .update({ 
-          attendance_status: 'BEFORE', 
+        .update({
+          attendance_status: 'BEFORE',
           attendance_reason: null
         })
         .in('id', idsToDelete);

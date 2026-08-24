@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { Printer, X, FileText, Palette } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface PrintPreviewModalProps {
   isOpen: boolean;
@@ -104,15 +105,10 @@ export default function PrintPreviewModal({
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (isOpen) {
-      const handleKeyDown = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') onClose();
-      };
-      window.addEventListener('keydown', handleKeyDown);
-      return () => window.removeEventListener('keydown', handleKeyDown);
-    }
-  }, [isOpen, onClose]);
+  useModalEsc({
+    isOpen,
+    onClose
+  });
 
   if (!isOpen || !mounted) return null;
 
@@ -169,8 +165,8 @@ export default function PrintPreviewModal({
 
   const getTimeLabel = (time: number) => {
     if (time === 999) return '보강 / 기타 수업';
-    return (time >= 12 
-      ? (time === 12 ? `오후 12:${displayMinute}` : `오후 ${time-12}:${displayMinute}`) 
+    return (time >= 12
+      ? (time === 12 ? `오후 12:${displayMinute}` : `오후 ${time-12}:${displayMinute}`)
       : `오전 ${time}:${displayMinute}`) + ' 수업';
   };
 
@@ -310,8 +306,8 @@ export default function PrintPreviewModal({
       <div className="w-full max-w-5xl flex flex-col gap-8 print:block print:gap-0">
         {pages.map((pageRows, pageIdx) => {
           return (
-            <div 
-              key={pageIdx} 
+            <div
+              key={pageIdx}
               className={`print-page-panel w-full bg-white text-gray-900 rounded-2xl shadow-2xl p-8 md:p-12 overflow-x-auto border border-gray-200 flex flex-col justify-between print:block print:border-none print:shadow-none print:p-0 print:overflow-visible print:mb-0 mb-8${pageIdx < pages.length - 1 ? ' print:break-after-page' : ''}`}
               style={{ minHeight: '680px', pageBreakAfter: pageIdx < pages.length - 1 ? 'always' : 'auto', pageBreakInside: 'avoid' }}
             >
@@ -347,8 +343,8 @@ export default function PrintPreviewModal({
                         const screenWidth = columnWidths?.[col.id] || col.minWidth || 100;
                         const widthPercent = (screenWidth / totalScreenWidth) * 100;
                         return (
-                          <th 
-                            key={col.id} 
+                          <th
+                            key={col.id}
                             style={{ width: `${widthPercent}%`, color: theme.theadText, backgroundColor: theme.theadBg }}
                             className="px-2 py-1.2 font-black border border-gray-300 uppercase tracking-widest text-[8.5px]"
                           >
@@ -363,8 +359,8 @@ export default function PrintPreviewModal({
                       if (row.type === 'divider') {
                         return (
                           <tr key={`div-${rIdx}`} className="border-y border-gray-300">
-                            <td 
-                              colSpan={displayCols.length} 
+                            <td
+                              colSpan={displayCols.length}
                               className="px-2 py-0.8 text-[8.5px] font-black tracking-wider border border-gray-300"
                               style={{ backgroundColor: theme.dividerBg, color: theme.dividerText }}
                             >
@@ -380,7 +376,7 @@ export default function PrintPreviewModal({
                       const displayDateShort = selectedDate.slice(5).replace('-', '.');
 
                       return (
-                        <tr 
+                        <tr
                           key={`row-${rIdx}`}
                           className={`border-b border-gray-200 transition-colors ${rIdx % 2 === 1 ? 'bg-gray-50/20' : 'bg-white'}`}
                         >
@@ -422,8 +418,8 @@ export default function PrintPreviewModal({
                                 if (isScoreMode) {
                                   cellContent = `${session.test_score}점`;
                                 } else {
-                                  cellContent = session.test_total_count 
-                                    ? `${session.test_score}개 / ${session.test_total_count}개` 
+                                  cellContent = session.test_total_count
+                                    ? `${session.test_score}개 / ${session.test_total_count}개`
                                     : `${session.test_score}개`;
                                 }
                               } else {
@@ -461,8 +457,8 @@ export default function PrintPreviewModal({
                             }
 
                             return (
-                              <td 
-                                key={col.id} 
+                              <td
+                                key={col.id}
                                 className="px-2 py-1.2 text-gray-800 border border-gray-300 align-middle whitespace-pre-wrap break-all leading-relaxed"
                               >
                                 {col.id === 'name' ? (

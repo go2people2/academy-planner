@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Users, UserPlus, UserCircle, Trash2, X, Key, Lock, Save, Loader2, Hash } from 'lucide-react';
 import { getInitial } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface TeacherManagementProps {
   teachers: any[];
@@ -15,6 +16,13 @@ interface TeacherManagementProps {
 export default function TeacherManagementLight({ teachers, onAddTeacher, onDeleteTeacher, onUpdateTeacher }: TeacherManagementProps) {
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: isAddModalOpen,
+    onClose: () => setIsAddModalOpen(false),
+    isSaving
+  });
   const [editingId, setEditingId] = useState<string | null>(null);
   const [tempName, setLocalTempName] = useState('');
   const [tempInitials, setLocalTempInitials] = useState('');
@@ -44,18 +52,18 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
         <h3 className="text-sm font-black text-gray-500 uppercase tracking-widest flex items-center gap-2">
           <Users size={16} /> Current Teachers
         </h3>
-        <button 
-          onClick={() => setIsAddModalOpen(true)} 
+        <button
+          onClick={() => setIsAddModalOpen(true)}
           className="px-4 py-2 bg-blue-600 rounded-md text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-500 text-white transition-all shadow-md shadow-blue-200/50"
         >
           <UserPlus size={14} /> Add New Teacher
         </button>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {teachers.map(t => (
-          <div 
-            key={t.id} 
+          <div
+            key={t.id}
             className="bg-white border border-[#e3e2e0] rounded-lg p-5 flex items-center justify-between group hover:border-blue-400 hover:shadow-sm transition-all"
           >
             <div className="flex items-center gap-4">
@@ -67,53 +75,53 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
                   <div className="flex flex-col gap-1.5">
                     <div className="flex flex-col gap-1">
                       <span className="text-[8px] text-gray-500 uppercase font-black">이름</span>
-                      <input 
-                        autoFocus 
-                        value={tempName} 
+                      <input
+                        autoFocus
+                        value={tempName}
                         onChange={(e) => setLocalTempName(e.target.value)}
-                        onKeyDown={(e) => { 
-                          if (e.key === 'Enter') { 
-                            onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
-                            setEditingId(null); 
-                          } 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname });
+                            setEditingId(null);
+                          }
                         }}
-                        className="bg-white border border-blue-400 rounded px-2 py-0.5 text-xs font-bold text-[#37352f] outline-none w-32 focus:ring-1 focus:ring-blue-500/50" 
+                        className="bg-white border border-blue-400 rounded px-2 py-0.5 text-xs font-bold text-[#37352f] outline-none w-32 focus:ring-1 focus:ring-blue-500/50"
                       />
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[8px] text-gray-500 uppercase font-black">약칭 (Initials)</span>
-                      <input 
-                        value={tempInitials} 
+                      <input
+                        value={tempInitials}
                         onChange={(e) => setLocalTempInitials(e.target.value)}
-                        onKeyDown={(e) => { 
-                          if (e.key === 'Enter') { 
-                            onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
-                            setEditingId(null); 
-                          } 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname });
+                            setEditingId(null);
+                          }
                         }}
-                        className="bg-white border border-amber-400 rounded px-2 py-0.5 text-[10px] font-bold text-[#37352f] outline-none w-24 focus:ring-1 focus:ring-blue-500/50" 
+                        className="bg-white border border-amber-400 rounded px-2 py-0.5 text-[10px] font-bold text-[#37352f] outline-none w-24 focus:ring-1 focus:ring-blue-500/50"
                       />
                     </div>
                     <div className="flex flex-col gap-1">
                       <span className="text-[8px] text-gray-500 uppercase font-black">별칭/직함 (ACA2000)</span>
-                      <input 
-                        value={tempNickname} 
+                      <input
+                        value={tempNickname}
                         onChange={(e) => setLocalTempNickname(e.target.value)}
-                        onKeyDown={(e) => { 
-                          if (e.key === 'Enter') { 
-                            onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
-                            setEditingId(null); 
-                          } 
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname });
+                            setEditingId(null);
+                          }
                         }}
                         placeholder="예: 대표원장"
-                        className="bg-white border border-indigo-400 rounded px-2 py-0.5 text-[10px] font-bold text-[#37352f] placeholder-gray-400 outline-none w-32 focus:ring-1 focus:ring-blue-500/50" 
+                        className="bg-white border border-indigo-400 rounded px-2 py-0.5 text-[10px] font-bold text-[#37352f] placeholder-gray-400 outline-none w-32 focus:ring-1 focus:ring-blue-500/50"
                       />
                     </div>
-                    <button 
-                      onClick={() => { 
-                        onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname }); 
-                        setEditingId(null); 
-                      }} 
+                    <button
+                      onClick={() => {
+                        onUpdateTeacher(t.id, { name: tempName, initials: tempInitials, nickname: tempNickname });
+                        setEditingId(null);
+                      }}
                       className="text-[9px] font-black bg-blue-600 text-white px-2 py-1 rounded mt-1.5 uppercase tracking-widest hover:bg-blue-500 transition-colors shadow-sm"
                     >
                       Save
@@ -121,13 +129,13 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
                   </div>
                 ) : (
                   <div>
-                    <h4 
-                      onClick={() => { 
-                        setEditingId(t.id); 
-                        setLocalTempName(t.name); 
-                        setLocalTempInitials(t.initials || ''); 
-                        setLocalTempNickname(t.nickname || ''); 
-                      }} 
+                    <h4
+                      onClick={() => {
+                        setEditingId(t.id);
+                        setLocalTempName(t.name);
+                        setLocalTempInitials(t.initials || '');
+                        setLocalTempNickname(t.nickname || '');
+                      }}
                       className="text-sm font-black text-[#37352f] cursor-pointer hover:text-blue-600 transition-colors flex items-center gap-2"
                     >
                       {t.name}
@@ -143,16 +151,16 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
                   </div>
                 )}
                 <div className="flex items-center gap-2 mt-2">
-                  <button 
-                    onClick={() => { 
-                      const nextRole = t.role === 'admin' ? 'teacher' : 'admin'; 
+                  <button
+                    onClick={() => {
+                      const nextRole = t.role === 'admin' ? 'teacher' : 'admin';
                       if (confirm(`'${t.name}' 선생님의 권한을 ${nextRole.toUpperCase()}(으)로 변경하시겠습니까?`)) {
-                        onUpdateTeacher(t.id, { role: nextRole }); 
+                        onUpdateTeacher(t.id, { role: nextRole });
                       }
                     }}
                     className={`text-[9px] font-black uppercase px-1.5 py-0.5 rounded transition-all ${
-                      t.role === 'admin' 
-                        ? 'bg-amber-50 text-amber-800 border border-amber-200 shadow-sm' 
+                      t.role === 'admin'
+                        ? 'bg-amber-50 text-amber-800 border border-amber-200 shadow-sm'
                         : 'bg-gray-50 text-gray-500 border border-[#e3e2e0] hover:border-blue-300 hover:text-blue-600'
                     }`}
                   >
@@ -163,8 +171,8 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
               </div>
             </div>
             {t.role !== 'admin' && (
-              <button 
-                onClick={() => onDeleteTeacher(t.id)} 
+              <button
+                onClick={() => onDeleteTeacher(t.id)}
                 className="p-2 text-gray-400 hover:text-red-600 hover:bg-rose-50 rounded-full transition-all opacity-0 group-hover:opacity-100"
               >
                 <Trash2 size={14} />
@@ -177,10 +185,10 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
       <AnimatePresence>
         {isAddModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/50 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.95 }} 
-              animate={{ opacity: 1, scale: 1 }} 
-              exit={{ opacity: 0, scale: 0.95 }} 
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
               className="bg-white border border-[#e3e2e0] rounded-lg w-full max-w-md shadow-2xl overflow-hidden text-[#37352f]"
             >
               <div className="p-6 border-b border-[#e3e2e0] flex items-center justify-between bg-gray-50/50">
@@ -188,8 +196,8 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
                   <UserPlus className="text-blue-600" size={20} />
                   <h3 className="text-sm font-black text-[#37352f] uppercase tracking-widest">Add New Teacher</h3>
                 </div>
-                <button 
-                  onClick={() => setIsAddModalOpen(false)} 
+                <button
+                  onClick={() => setIsAddModalOpen(false)}
                   className="text-gray-400 hover:text-black hover:bg-gray-100 rounded-full p-1 transition-all"
                 >
                   <X size={20} />
@@ -207,13 +215,13 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
                     <div key={f.key} className="space-y-1">
                       <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">{f.label}</label>
                       <div className="relative">
-                        <input 
-                          required={f.required} 
-                          type={f.type || 'text'} 
-                          value={(formData as any)[f.key] || ''} 
+                        <input
+                          required={f.required}
+                          type={f.type || 'text'}
+                          value={(formData as any)[f.key] || ''}
                           onChange={e => setFormData({ ...formData, [f.key]: e.target.value })}
-                          className="w-full bg-white border border-[#edece9] rounded px-4 py-3 text-sm text-[#37352f] pl-10 outline-none focus:border-blue-500 transition-all font-bold placeholder-gray-300" 
-                          placeholder={f.placeholder} 
+                          className="w-full bg-white border border-[#edece9] rounded px-4 py-3 text-sm text-[#37352f] pl-10 outline-none focus:border-blue-500 transition-all font-bold placeholder-gray-300"
+                          placeholder={f.placeholder}
                         />
                         <div className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">{f.icon}</div>
                       </div>
@@ -222,8 +230,8 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
                   <div className="space-y-1">
                     <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest ml-1">Role (권한)</label>
                     <div className="relative">
-                      <select 
-                        value={formData.role} 
+                      <select
+                        value={formData.role}
                         onChange={e => setFormData({ ...formData, role: e.target.value as any })}
                         className="w-full bg-white border border-[#edece9] rounded px-4 py-3 text-sm text-[#37352f] pl-10 outline-none focus:border-blue-500 transition-all appearance-none cursor-pointer font-bold"
                       >
@@ -236,9 +244,9 @@ export default function TeacherManagementLight({ teachers, onAddTeacher, onDelet
                     </div>
                   </div>
                 </div>
-                <button 
-                  type="submit" 
-                  disabled={isSaving} 
+                <button
+                  type="submit"
+                  disabled={isSaving}
                   className="w-full bg-blue-600 py-4 rounded text-[10px] font-black uppercase tracking-widest text-white hover:bg-blue-500 transition-all shadow-md shadow-blue-200 flex items-center justify-center gap-2 disabled:opacity-50"
                 >
                   {isSaving ? <Loader2 className="animate-spin" size={16} /> : <><Save size={16} /> Complete Registration</>}

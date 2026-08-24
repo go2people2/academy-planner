@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Tags, Save } from 'lucide-react';
 import { Student } from '@/types/dashboard';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface TagBatchInputModalProps {
   isOpen: boolean;
@@ -30,6 +31,13 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
   const [inputs, setInputs] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
   const [showStudents, setShowStudents] = useState<Record<string, boolean>>({});
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen,
+    onClose,
+    isSaving
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -70,7 +78,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
       '다': [],
       '라': [],
     };
-    
+
     const selectedRealIds = new Set(selectedStudents.map(s => s.originalId || s.id));
 
     uniqueStudents.forEach(s => {
@@ -86,15 +94,15 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
     const sortedTags = Object.keys(groups).sort((a, b) => {
       if (a === '미지정') return 1;
       if (b === '미지정') return -1;
-      
+
       const predefined = ['가', '나', '다', '라'];
       const aIndex = predefined.indexOf(a);
       const bIndex = predefined.indexOf(b);
-      
+
       if (aIndex !== -1 && bIndex !== -1) return aIndex - bIndex;
       if (aIndex !== -1) return -1;
       if (bIndex !== -1) return 1;
-      
+
       return a.localeCompare(b);
     });
 
@@ -108,7 +116,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setInputs({});
-      
+
       const handleKeyDown = (e: KeyboardEvent) => {
         if (e.key === 'Escape') {
           onClose();
@@ -122,10 +130,10 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
   const handleSave = async () => {
     if (isSaving) return;
     setIsSaving(true);
-    
+
     try {
       const updates: { studentId: string, newData: any, prevData: any }[] = [];
-      
+
       // 💡 1. 선택된 학생들 일괄 업데이트 (해당 학생의 모든 세션에 일괄 반영)
       if (selectedStudents.length > 0) {
         const text = inputs['__selected__']?.trim() || '';
@@ -167,7 +175,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
       if (updates.length > 0) {
         await onBatchSave(updates);
       }
-      
+
       onClose();
     } catch (err) {
       console.error(err);
@@ -217,7 +225,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
 
           {/* Body */}
           <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar-h">
-            
+
             {/* Target Column Selector */}
             <div className="bg-[#111] border border-white/5 rounded-lg p-3">
               <label className="block text-[12px] font-bold text-gray-300 mb-2 ml-1">입력할 칸 선택</label>
@@ -227,8 +235,8 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                     key={col.id}
                     onClick={() => setTargetCol(col.id)}
                     className={`w-full py-2 rounded-md text-[12px] font-bold transition-all ${
-                      targetCol === col.id 
-                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30 border border-blue-500' 
+                      targetCol === col.id
+                        ? 'bg-blue-600 text-white shadow-lg shadow-blue-900/30 border border-blue-500'
                         : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-gray-200 border border-white/10'
                     }`}
                   >
@@ -254,7 +262,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                       <div className="text-[10px] text-blue-300 font-bold">
                         {selectedStudents.length}명
                       </div>
-                      <button 
+                      <button
                         onClick={() => setShowStudents(prev => ({ ...prev, '__selected__': !prev['__selected__'] }))}
                         className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2 font-bold"
                       >
@@ -267,7 +275,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Textarea */}
                   <div className="flex-1 min-w-0">
                     <textarea
@@ -294,7 +302,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                         {group.students.length}명
                       </div>
                       {group.students.length > 0 && (
-                        <button 
+                        <button
                           onClick={() => setShowStudents(prev => ({ ...prev, [group.tag]: !prev[group.tag] }))}
                           className="text-[9px] text-blue-400 hover:text-blue-300 underline underline-offset-2"
                         >
@@ -308,7 +316,7 @@ export const TagBatchInputModal: React.FC<TagBatchInputModalProps> = ({
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Textarea */}
                   <div className="flex-1 min-w-0">
                     <textarea

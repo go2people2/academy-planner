@@ -4,12 +4,13 @@ import { X, BookOpen, RefreshCw, Trash2, User, Calendar, Search, Check, AlertTri
 import HokmaJournalPrintModal from './todaySheet/HokmaJournalPrintModal';
 import { Student, TextbookOption } from '@/types/dashboard';
 import { parseBookCourseValue, buildBookCourseValue } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface StudentDetailDrawerProps {
 
   student: Student;
   availableTextbooks: TextbookOption[];
-  teachers: any[]; 
+  teachers: any[];
   isRefreshingBooks: boolean;
   onRefreshBooks: () => void;
   onUpdateInfo: (studentId: string, fieldOrUpdates: string | any, value?: any) => void;
@@ -97,6 +98,22 @@ export default function StudentDetailDrawer({
     onClose,
   });
 
+  // 💡 [Esc 닫기 공통 적용 - 드로어 자체 및 내부 서브 모달]
+  useModalEsc({
+    isOpen: true,
+    onClose
+  });
+
+  useModalEsc({
+    isOpen: showDeleteConfirm,
+    onClose: () => setShowDeleteConfirm(false)
+  });
+
+  useModalEsc({
+    isOpen: doneModalOpen,
+    onClose: () => setDoneModalOpen(false)
+  });
+
   const handleApplyTimeToAllDays = () => {
     const selectedDays = DAYS.filter(day => localDays.includes(day));
     if (selectedDays.length <= 1) return;
@@ -117,7 +134,7 @@ export default function StudentDetailDrawer({
     selectedDays.forEach(day => {
       newStarts[day] = baseStart;
       newEnds[day] = baseEnd;
-      
+
       const startVal = baseStart ? parseInt(baseStart.replace(':', '')) : 1600;
       const endVal = baseEnd ? parseInt(baseEnd.replace(':', '')) : 1900;
       newSchedules[day] = [startVal, endVal];
@@ -132,9 +149,9 @@ export default function StudentDetailDrawer({
   // 💡 선택과목 저장 헬퍼
   const saveElectiveCourses = (courses: any[]) => {
     setElectiveCourses(courses);
-    const newBookCourses = { 
-      ...localBookCourses, 
-      '__elective_courses': JSON.stringify(courses) 
+    const newBookCourses = {
+      ...localBookCourses,
+      '__elective_courses': JSON.stringify(courses)
     };
     setLocalBookCourses(newBookCourses);
     onUpdateInfo(student.id, 'book_courses', newBookCourses);
@@ -169,19 +186,19 @@ export default function StudentDetailDrawer({
       return c;
     });
     setElectiveCourses(updated);
-    
-    const newBookCourses = { 
-      ...localBookCourses, 
-      '__elective_courses': JSON.stringify(updated) 
+
+    const newBookCourses = {
+      ...localBookCourses,
+      '__elective_courses': JSON.stringify(updated)
     };
     setLocalBookCourses(newBookCourses);
   };
 
   // 💡 선택과목 텍스트 입력 완료 후 최종 DB 저장 (onBlur 시 실행)
   const handleElectiveFieldBlur = () => {
-    const newBookCourses = { 
-      ...localBookCourses, 
-      '__elective_courses': JSON.stringify(electiveCourses) 
+    const newBookCourses = {
+      ...localBookCourses,
+      '__elective_courses': JSON.stringify(electiveCourses)
     };
     onUpdateInfo(student.id, 'book_courses', newBookCourses);
   };
@@ -247,16 +264,16 @@ export default function StudentDetailDrawer({
   };
 
   return (
-    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 220 }} 
+    <motion.div initial={{ x: '100%' }} animate={{ x: 0 }} exit={{ x: '100%' }} transition={{ type: 'spring', damping: 28, stiffness: 220 }}
       className="fixed inset-y-0 right-0 w-[450px] bg-[#0a0a0a]/95 backdrop-blur-3xl border-l border-white/10 shadow-2xl z-50 overflow-y-auto p-8 flex flex-col custom-scrollbar-v">
-      
+
       <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-2 px-1">
           <h3 className="text-sm font-black text-gray-300 uppercase tracking-[0.2em]">Student Profile</h3>
           {student.is_deleted && <span className="bg-red-500/10 text-red-500 text-[9px] font-black px-2 py-0.5 rounded-[2px] border border-red-500/20">퇴원생</span>}
         </div>
         <div className="flex items-center gap-2">
-          <button 
+          <button
             onClick={() => setIsHokmaPrintOpen(true)}
             className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600/20 border border-amber-500/30 text-amber-400 hover:bg-amber-600 hover:text-white rounded-[4px] text-[10px] font-black uppercase tracking-widest transition-all"
             title="이 학생의 월간 호크마 일지 인쇄"
@@ -266,7 +283,7 @@ export default function StudentDetailDrawer({
           <button onClick={onClose} className="p-2 rounded-full bg-white/5 text-gray-400 hover:bg-white/10 transition-colors"><X size={18} /></button>
         </div>
       </div>
-      
+
       <div className="flex-1 space-y-10">
         {/* 1. 기본 정보 */}
         <section className="bg-white/5 border border-white/5 rounded-[4px] p-4 space-y-4 shadow-inner">
@@ -295,8 +312,8 @@ export default function StudentDetailDrawer({
             <div className="col-span-12">
               <div className="flex items-center gap-2 bg-white/5 border border-white/5 rounded-[2px] px-3 py-2">
                 <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest shrink-0">Manager:</span>
-                <select 
-                  value={localTeacherId} 
+                <select
+                  value={localTeacherId}
                   onChange={(e) => {
                     const val = e.target.value;
                     setLocalTeacherId(val);
@@ -331,7 +348,7 @@ export default function StudentDetailDrawer({
                   }).filter(Boolean) as string[];
 
                   const hasElectives = electiveList.length > 0;
-                  const targetOptions = hasElectives 
+                  const targetOptions = hasElectives
                     ? Array.from(new Set(['정규', '공통', ...electiveList]))
                     : ['정규'];
 
@@ -343,7 +360,7 @@ export default function StudentDetailDrawer({
                         {book ? book.title : `(${code})`}
                         {isKeep && <span className="ml-1 text-[7px] font-black bg-yellow-400 text-black px-1 rounded-sm uppercase tracking-tighter">KEEP</span>}
                       </span>
-                      <select 
+                      <select
                         value={currentCourse}
                         onChange={(e) => {
                           const courseCode = e.target.value;
@@ -361,7 +378,7 @@ export default function StudentDetailDrawer({
                         {['E','D','C','B','A'].map(c => <option key={c} value={c} className="bg-[#121212]">{c}</option>)}
                       </select>
 
-                      <select 
+                      <select
                         value={parsedCourse.targetTag}
                         onChange={(e) => {
                           const newTarget = e.target.value;
@@ -382,8 +399,8 @@ export default function StudentDetailDrawer({
                           </option>
                         ))}
                       </select>
-                      
-                      <button 
+
+                      <button
                         onClick={() => {
                           const newVal = buildBookCourseValue({
                             ...parsedCourse,
@@ -399,18 +416,18 @@ export default function StudentDetailDrawer({
                         KEEP
                       </button>
 
-                      <button 
+                      <button
                         onClick={() => {
                           const book = availableTextbooks.find(b => b.bookcode === code);
                           setDoneBookCode(code);
                           setDoneBookTitle(book ? book.title : code);
-                          
+
                           let parsedGrade = localGrade || student.grade || '';
                           let parsedStartMonth = `${new Date().getMonth() + 1}월`;
                           let hasStart = false;
-                          
+
                           setDoneCourse(currentCourse);
-                          
+
                           if (rawCourseValue.includes('-start-')) {
                             const part = rawCourseValue.split('-start-')[1]; // "중2_2월"
                             if (part.includes('_')) {
@@ -420,7 +437,7 @@ export default function StudentDetailDrawer({
                               hasStart = true;
                             }
                           }
-                          
+
                           setDoneStartGrade(parsedGrade);
                           setDoneStartMonth(parsedStartMonth);
                           setHasStartInfo(hasStart);
@@ -448,9 +465,9 @@ export default function StudentDetailDrawer({
             {/* 💡 최초 학원 등록일 (백데이팅 소급 수정 기능) */}
             <div className="relative group col-span-2">
               <label className="block text-[10px] font-black text-[#565551] uppercase tracking-widest mb-1.5 px-1">최초 학원 등록일</label>
-              <input 
-                type="date" 
-                value={localCreatedAt} 
+              <input
+                type="date"
+                value={localCreatedAt}
                 onChange={(e) => {
                   const newDateVal = e.target.value;
                   setLocalCreatedAt(newDateVal);
@@ -460,7 +477,7 @@ export default function StudentDetailDrawer({
                     onUpdateInfo(student.id, 'created_at', isoString);
                   }
                 }}
-                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" 
+                className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold"
               />
             </div>
 
@@ -470,8 +487,8 @@ export default function StudentDetailDrawer({
                 className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
             <div className="relative group col-span-1">
-              <input type="tel" value={localStudentPhone} placeholder="학생 연락처" 
-                onChange={(e) => setLocalStudentPhone(e.target.value)} 
+              <input type="tel" value={localStudentPhone} placeholder="학생 연락처"
+                onChange={(e) => setLocalStudentPhone(e.target.value)}
                 onBlur={() => {
                   let cleaned = localStudentPhone.replace(/[^0-9]/g, '');
                   if (cleaned.length === 11) {
@@ -485,8 +502,8 @@ export default function StudentDetailDrawer({
                 className="w-full bg-black/20 border border-white/5 rounded-[2px] px-4 py-2.5 text-xs text-gray-100 placeholder:text-gray-500 outline-none focus:border-blue-500/50 transition-all font-bold" />
             </div>
             <div className="relative group col-span-1">
-              <input type="tel" value={localParentPhone} placeholder="부모님 연락처 (카톡용)" 
-                onChange={(e) => setLocalParentPhone(e.target.value)} 
+              <input type="tel" value={localParentPhone} placeholder="부모님 연락처 (카톡용)"
+                onChange={(e) => setLocalParentPhone(e.target.value)}
                 onBlur={() => {
                   let cleaned = localParentPhone.replace(/[^0-9]/g, '');
                   if (cleaned.length === 11) {
@@ -513,7 +530,7 @@ export default function StudentDetailDrawer({
               <span className="text-[8px] font-black text-gray-600 uppercase tracking-widest">Last Consulted</span>
               <span className="text-[10px] font-bold text-gray-400">{student.last_consulted_at ? student.last_consulted_at.replace(/-/g, '.') : '기록 없음'}</span>
             </div>
-            <button 
+            <button
               onClick={() => {
                 const now = new Date();
                 const offset = now.getTimezoneOffset() * 60000;
@@ -550,10 +567,10 @@ export default function StudentDetailDrawer({
               {DAYS.map(day => {
                 const isDaySelected = localDays.includes(day);
                 return (
-                  <button 
+                  <button
                     key={`bar-${day}`}
                     type="button"
-                    onClick={() => handleDayToggle(day)} 
+                    onClick={() => handleDayToggle(day)}
                     className={`text-[10px] font-black h-8 rounded-[2px] flex items-center justify-center transition-all ${
                       isDaySelected ? 'bg-blue-600 text-white shadow-lg' : 'bg-white/5 text-gray-500 hover:bg-white/10'
                     }`}
@@ -798,19 +815,19 @@ export default function StudentDetailDrawer({
           <div ref={dropdownRef} className="relative">
             <div className="bg-white/5 border border-white/5 rounded-[4px] p-3 bg-black/20 flex items-center gap-2 cursor-text" onClick={() => setIsDropdownOpen(true)}>
               <Search size={14} className="text-gray-500" />
-              <input 
-                type="text" 
-                placeholder="Search and add textbooks..." 
-                value={bookSearch} 
+              <input
+                type="text"
+                placeholder="Search and add textbooks..."
+                value={bookSearch}
                 onChange={(e) => {
                   setBookSearch(e.target.value);
                   setIsDropdownOpen(true);
                 }}
                 onFocus={() => setIsDropdownOpen(true)}
-                className="bg-transparent border-none text-[11px] text-white outline-none w-full placeholder:text-gray-600" 
+                className="bg-transparent border-none text-[11px] text-white outline-none w-full placeholder:text-gray-600"
               />
             </div>
-            
+
             {isDropdownOpen && (
               <div className="absolute left-0 right-0 mt-1.5 bg-[#121212] border border-white/10 rounded-[4px] shadow-2xl max-h-[220px] overflow-y-auto p-2 z-[60] custom-scrollbar-v space-y-1">
                 {filteredBooks.filter(b => !!b.bookcode).length === 0 ? (
@@ -819,8 +836,8 @@ export default function StudentDetailDrawer({
                   filteredBooks.filter(b => !!b.bookcode).map((book) => {
                     const isSelected = (student.assigned_books || []).includes(book.bookcode);
                     return (
-                      <div 
-                        key={book.bookcode} 
+                      <div
+                        key={book.bookcode}
                         onClick={() => toggleBookSelection(book.bookcode)}
                         className={`flex items-center justify-between p-2 rounded-[2px] cursor-pointer transition-all border ${isSelected ? 'bg-blue-600/15 border-blue-500/30' : 'hover:bg-white/5 border-transparent'}`}
                       >
@@ -847,16 +864,16 @@ export default function StudentDetailDrawer({
           <h5 className="text-[10px] font-black text-red-500 uppercase tracking-widest flex items-center gap-2 px-1"><AlertTriangle size={14} /> Student Management</h5>
           <div className="flex flex-col gap-2">
             {!student.is_deleted ? (
-              <button 
+              <button
                 onClick={() => {
                   const reason = prompt(`${student.name} 학생의 퇴원 사유를 입력해주세요.`);
                   if (reason !== null) {
                     const todayStr = new Date().toISOString().split('T')[0];
                     const dischargeTag = `[퇴원일: ${todayStr}] [퇴원 사유: ${reason || '사유 미기재'}]`;
-                    const updatedNotes = student.management_notes 
+                    const updatedNotes = student.management_notes
                       ? `${student.management_notes}\n${dischargeTag}`
                       : dischargeTag;
-                    onUpdateInfo(student.id, { 
+                    onUpdateInfo(student.id, {
                       is_deleted: true,
                       management_notes: updatedNotes
                     });
@@ -874,7 +891,7 @@ export default function StudentDetailDrawer({
                 >
                   <UserCheck size={14} /> 재원생으로 복구
                 </button>
-                
+
                 <div className="p-4 rounded-[4px] bg-red-500/5 border border-red-500/10 space-y-3">
                   <p className="text-[9px] text-gray-500 leading-relaxed font-medium">* 리포트(PDF) 출력 후 개인정보 파기가 필요한 경우 아래 버튼을 사용하세요.</p>
                   <button onClick={() => setShowDeleteConfirm(true)}
@@ -911,9 +928,9 @@ export default function StudentDetailDrawer({
       <AnimatePresence>
         {doneModalOpen && doneBookCode && (
           <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
-            <motion.div 
-              initial={{ scale: 0.95, opacity: 0 }} 
-              animate={{ scale: 1, opacity: 1 }} 
+            <motion.div
+              initial={{ scale: 0.95, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
               className="bg-[#121212] border border-white/10 rounded-[6px] p-6 w-full max-w-sm shadow-2xl space-y-4 text-left"
             >
@@ -921,7 +938,7 @@ export default function StudentDetailDrawer({
                 <h4 className="text-[12px] font-black text-emerald-400 uppercase tracking-wider">교재 완료 처리</h4>
                 <button onClick={() => setDoneModalOpen(false)} className="text-gray-400 hover:text-white"><X size={16} /></button>
               </div>
-              
+
               <div className="space-y-1">
                 <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">교재명</label>
                 <div className="text-[11px] font-bold text-gray-300">{doneBookTitle}</div>
@@ -930,19 +947,19 @@ export default function StudentDetailDrawer({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">시작 학년</label>
-                  <input 
-                    type="text" 
-                    value={doneStartGrade} 
-                    onChange={(e) => setDoneStartGrade(e.target.value)} 
+                  <input
+                    type="text"
+                    value={doneStartGrade}
+                    onChange={(e) => setDoneStartGrade(e.target.value)}
                     placeholder="예: 중2"
                     className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">시작 월</label>
-                  <select 
-                    value={doneStartMonth} 
-                    onChange={(e) => setDoneStartMonth(e.target.value)} 
+                  <select
+                    value={doneStartMonth}
+                    onChange={(e) => setDoneStartMonth(e.target.value)}
                     className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-2 text-xs font-bold text-white outline-none cursor-pointer"
                   >
                     {Array.from({ length: 12 }, (_, i) => `${i + 1}월`).map(m => (
@@ -955,19 +972,19 @@ export default function StudentDetailDrawer({
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">완료 학년</label>
-                  <input 
-                    type="text" 
-                    value={doneEndGrade} 
-                    onChange={(e) => setDoneEndGrade(e.target.value)} 
+                  <input
+                    type="text"
+                    value={doneEndGrade}
+                    onChange={(e) => setDoneEndGrade(e.target.value)}
                     placeholder="예: 중2"
                     className="w-full bg-black/40 border border-white/10 rounded-[2px] px-3 py-2 text-xs font-bold text-white outline-none focus:border-blue-500 transition-all"
                   />
                 </div>
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">완료 월</label>
-                  <select 
-                    value={doneEndMonth} 
-                    onChange={(e) => setDoneEndMonth(e.target.value)} 
+                  <select
+                    value={doneEndMonth}
+                    onChange={(e) => setDoneEndMonth(e.target.value)}
                     className="w-full bg-black/40 border border-white/10 rounded-[2px] px-2 py-2 text-xs font-bold text-white outline-none cursor-pointer"
                   >
                     {Array.from({ length: 12 }, (_, i) => `${i + 1}월`).map(m => (
@@ -978,13 +995,13 @@ export default function StudentDetailDrawer({
               </div>
 
               <div className="pt-4 border-t border-white/5 flex gap-2 justify-end">
-                <button 
+                <button
                   onClick={() => setDoneModalOpen(false)}
                   className="px-4 py-2 bg-white/5 hover:bg-white/10 text-gray-400 rounded-[2px] text-[10px] font-black uppercase tracking-wider transition-all"
                 >
                   취소
                 </button>
-                <button 
+                <button
                   onClick={() => {
                     const newVal = `${doneCourse}-done-${doneStartGrade}_${doneStartMonth}-${doneEndGrade}_${doneEndMonth}`;
                     const newCourses = { ...localBookCourses, [doneBookCode]: newVal };

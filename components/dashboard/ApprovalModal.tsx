@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, Check, CheckSquare, Square, XCircle } from 'lucide-react';
 import { parseInlineTests } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 export default function ApprovalModal({
   pendingStudents,
@@ -18,6 +19,13 @@ export default function ApprovalModal({
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [mounted, setMounted] = useState(false);
+
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: true,
+    onClose,
+    isSaving: isProcessing
+  });
 
   useEffect(() => {
     setMounted(true);
@@ -71,18 +79,18 @@ export default function ApprovalModal({
             {selectedIds.length === pendingStudents.length ? <CheckSquare size={16} /> : <Square size={16} />}
             전체 선택
           </button>
-          
+
           {pendingStudents.map(s => {
             const isSelected = selectedIds.includes(s.id);
             return (
               <div key={s.id} className="flex flex-col gap-2">
-                <div 
+                <div
                   onClick={() => setExpandedId(expandedId === s.id ? null : s.id)}
                   className={`p-4 rounded-xl border transition-all cursor-pointer flex items-center gap-4 ${
                     isSelected ? 'bg-emerald-600/10 border-emerald-500/30' : 'bg-white/5 border-white/10 hover:border-white/20'
                   }`}
                 >
-                  <div 
+                  <div
                     className={`shrink-0 cursor-pointer ${isSelected ? 'text-emerald-400' : 'text-gray-500'}`}
                     onClick={(e) => { e.stopPropagation(); toggleStudent(s.id); }}
                   >
@@ -152,10 +160,10 @@ export default function ApprovalModal({
                                   <p className="text-[11px] mt-0.5">
                                     {s.test_score !== undefined && s.test_score !== null ? (
                                       <span className={`font-black ${
-                                        s.test_cut !== undefined && s.test_score >= s.test_cut 
+                                        s.test_cut !== undefined && s.test_score >= s.test_cut
                                           ? 'text-blue-400' : 'text-rose-400'
                                       }`}>
-                                        {s.test_score}점 
+                                        {s.test_score}점
                                         {s.test_cut ? ` (커트라인 ${s.test_cut}점)` : ''}
                                       </span>
                                     ) : (
@@ -179,16 +187,16 @@ export default function ApprovalModal({
         </div>
 
         <div className="p-4 sm:p-6 border-t border-white/10 flex gap-3">
-          <button 
-            onClick={handleReject} 
+          <button
+            onClick={handleReject}
             disabled={selectedIds.length === 0 || isProcessing}
             className="flex-1 py-3 bg-red-500/10 hover:bg-red-500/20 text-red-400 font-black rounded-xl transition-all disabled:opacity-30 flex items-center justify-center gap-2"
           >
             <XCircle size={18} />
             선택 반려 (퇴짜)
           </button>
-          <button 
-            onClick={handleApprove} 
+          <button
+            onClick={handleApprove}
             disabled={selectedIds.length === 0 || isProcessing}
             className="flex-1 py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 transition-all disabled:opacity-30 flex items-center justify-center gap-2"
           >

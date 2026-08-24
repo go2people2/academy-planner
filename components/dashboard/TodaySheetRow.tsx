@@ -4,13 +4,14 @@ import React, { useState, useEffect } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import { X, Clock } from 'lucide-react';
-import { Student, TextbookOption } from '@/types/dashboard';
+import { Student, TextbookOption, AbsenceLinkContext } from '@/types/dashboard';
 import HomeworkEditor from './HomeworkEditor';
 import TestAnswerModal from './TestAnswerModal';
 import TestEditor from './TestEditor';
 import { HistoryRows } from './TodaySheetHistory';
 import { TodaySheetCell } from './todaySheet/TodaySheetCell';
 import { useTodaySheetRowLogic } from './hooks/useTodaySheetRowLogic';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 export interface TodaySheetRowProps {
   student: Student;
@@ -42,13 +43,22 @@ export interface TodaySheetRowProps {
   isOtherClassSection?: boolean;
   isScrolled?: boolean;
   historyLimit?: number;
-  cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number }>; // 📝 [추가] 실시간 협업 셀 맵
+  cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number, lockVersion?: number }>; // 📝 [추가] 실시간 협업 셀 맵
+  myClientId?: string;
+  onForceTakeover?: (studentId: string, colId: string) => void;
   onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
   toolsOrder?: string[];
   isToolsEditMode?: boolean;
   showAllTools?: boolean;
   onReorderTools?: (draggedId: string, targetId: string) => void;
   isLight?: boolean;
+  onNavigateTab?: (mode: string | AbsenceLinkContext) => void;
+  onRefreshAbsenceSession?: (context: {
+    studentId: string;
+    sessionDate: string;
+    courseName: string;
+    movedToHour: number | null;
+  }) => Promise<boolean>;
 }
 
 /**
@@ -56,21 +66,21 @@ export interface TodaySheetRowProps {
  */
 export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheetRowProps) {
   const {
-    student, masterTextbooks, onViewProgress, onSelectStudent, colWidths, activeColumns, 
+    student, masterTextbooks, onViewProgress, onSelectStudent, colWidths, activeColumns,
     selectedDate, isHistoryExpanded, onToggleHistory, activeCell, editingCell,
-    onActiveCellChange, onEditingCellChange, isSelected, onSelectOne, 
+    onActiveCellChange, onEditingCellChange, isSelected, onSelectOne,
     selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
     rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel, isOtherClassSection,
     cooperatingCells, onSave, onUpdateStudentInfo, onRemoveFromToday,
-    toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false
+    toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false, onNavigateTab
   } = props;
 
   // 💡 단축어 및 트리거 기호 추출
   const isMasterAdmin = currentUser?.id === 'admin';
-  const currentPresets = isMasterAdmin 
-    ? (academyInfo?.operation_settings?.default_homework_presets || {}) 
+  const currentPresets = isMasterAdmin
+    ? (academyInfo?.operation_settings?.default_homework_presets || {})
     : (currentUser?.homework_presets || {});
-  
+
 // snippets와 trigger를 새 컬럼에서 직접 가져옵니다.
 const initSnippets = (currentUser.snippets ?? []).slice(0, 10);
 while (initSnippets.length < 10) initSnippets.push('');
@@ -91,7 +101,7 @@ useEffect(() => {
 
   // 1. 커스텀 훅 호출 (모든 상태와 핸들러 포함)
   const { states, refs, handlers } = useTodaySheetRowLogic({
-    student, masterTextbooks, onSave, onUpdateStudentInfo, 
+    student, masterTextbooks, onSave, onUpdateStudentInfo,
     selectedDate, activeCell, editingCell, currentUser: props.currentUser
   });
 
@@ -129,27 +139,26 @@ useEffect(() => {
   };
 
   // 💡 [추가] 과제 피드백 팝업이 열려있을 때 Escape 키로 닫기
-  React.useEffect(() => {
-    if (!isFeedbackOpen) return;
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: isFeedbackOpen,
+    onClose: () => setIsFeedbackOpen(false)
+  });
 
-    const handleGlobalEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        e.stopPropagation();
-        setIsFeedbackOpen(false);
-      }
-    };
+  useModalEsc({
+    isOpen: isSupplementTimePickerOpen,
+    onClose: () => setIsSupplementTimePickerOpen(false)
+  });
 
-    window.addEventListener('keydown', handleGlobalEscape, true);
-    return () => {
-      window.removeEventListener('keydown', handleGlobalEscape, true);
-    };
-  }, [isFeedbackOpen, setIsFeedbackOpen]);
+  useModalEsc({
+    isOpen: isTestModalOpen,
+    onClose: () => setIsTestModalOpen(false)
+  });
 
   return (
     <>
       <tr className={`group/row transition-all duration-300 border-b ${props.isLight ? 'border-[#e3e2e0]' : 'border-white/10'} ${
-        isSelected 
+        isSelected
           ? (props.isLight ? 'bg-blue-100 hover:bg-blue-200' : 'bg-[#0f172a] hover:bg-[#1e293b]')
           : (rowIndex !== undefined && rowIndex % 2 !== 0)
             ? (props.isLight ? 'bg-[#f9f9f8] hover:bg-[#f0f0ee]' : 'bg-[#1c1c1e] hover:bg-[#2a2a2d]')
@@ -170,7 +179,6 @@ useEffect(() => {
             <TodaySheetCell
               key={col.id}
               col={col}
-              cooperatingCells={cooperatingCells}
               snippets={localSnippets}
               snippetTrigger={snippetTrigger}
               testPresets={academyInfo?.operation_settings?.test_presets || []}
@@ -218,11 +226,16 @@ useEffect(() => {
               masterTextbooks={props.masterTextbooks}
               onUpdateStudentInfo={props.onUpdateStudentInfo}
               onRemoveFromToday={onRemoveFromToday}
+              cooperatingCells={props.cooperatingCells}
+              myClientId={props.myClientId}
+              onForceTakeover={props.onForceTakeover}
               toolsOrder={toolsOrder}
               isToolsEditMode={isToolsEditMode}
               showAllTools={showAllTools}
               onReorderTools={onReorderTools}
               isLight={props.isLight}
+              onNavigateTab={onNavigateTab}
+              onRefreshAbsenceSession={props.onRefreshAbsenceSession}
               selectedDate={selectedDate || rowDate}
               onApplyTestPreset={(preset: any, cid: 'test_id' | 'next_quiz') => {
                 states.setFormData((prev: any) => {
@@ -240,12 +253,12 @@ useEffect(() => {
                     updates.next_quiz_text = existing ? `${existing} ${preset.name}` : preset.name;
                     updates.next_quiz_cut = preset.default_cut || 0;
                   }
-                  
+
                   // 로컬 상태 즉시 업데이트 및 서버 저장 요청
                   handleSave(updates);
                   return { ...prev, ...updates };
                 });
-                
+
                 onEditingCellChange?.(student.id, null);
                 if (refs.tdRefs.current[cid]) {
                   refs.tdRefs.current[cid]?.focus();
@@ -284,11 +297,13 @@ useEffect(() => {
               onSetNextQuizCut={(val) => { states.setFormData((prev: any) => ({ ...prev, next_quiz_cut: val })); handleSave({ next_quiz_cut: val }, 'next_quiz_cut'); }}
               onSetTodayTestCut={(val) => { states.setFormData((prev: any) => ({ ...prev, test_cut: val })); handleSave({ test_cut: val }, 'test_cut'); }}
               onSetNextQuizTrial={(num) => { states.setFormData((prev: any) => ({ ...prev, next_quiz_trial: num })); handleSave({ next_quiz_trial: num }, 'next_quiz_trial'); }}
-              onSave={(data, directValue) => {
-                if (typeof data === 'string') handleSave(data, directValue);
-                else handleSave(data || {}, col.id, directValue);
+              onSave={(data, directValue, options) => {
+                if (typeof data === 'string') {
+                  return handleSave(data, directValue, options);
+                }
+                return handleSave(data || {}, directValue || options);
               }}
-              onInputChange={() => {}} 
+              onInputChange={() => {}}
               rowIndex={rowIndex}
             />
           );
@@ -307,26 +322,26 @@ useEffect(() => {
             {isNqEditorOpen && <HomeworkEditor title="다음 테스트 교재 입력" student={student} homeworkJson={formData.next_quiz_json || []} masterTextbooks={masterTextbooks} academyInfo={academyInfo} onUpdate={(newJson) => { const update = { next_quiz_json: newJson }; states.setFormData((prev: any) => ({ ...prev, ...update })); handleSave(update); }} onToggleKeepBook={handleToggleKeepBook} onClose={(finalJson) => { syncTextFromData(finalJson || formData.next_quiz_json || [], 'next_quiz'); setIsNqEditorOpen(false); }} isLight={false} />}
             {isTestEditorOpen && <TestEditor testData={formData.test_id} onUpdate={(formattedText, averageScore) => { const newData = { ...formData, test_id: formattedText, test_score: averageScore !== null ? String(averageScore) : formData.test_score }; states.setFormData((prev: any) => ({ ...prev, ...newData })); handleSave(newData); }} onClose={() => setIsTestEditorOpen(false)} />}
             {isTestModalOpen && (
-              <TestAnswerModal 
-                testId={formData.test_id} 
-                studentName={student.name} 
-                onClose={() => setIsTestModalOpen(false)} 
+              <TestAnswerModal
+                testId={formData.test_id}
+                studentName={student.name}
+                onClose={() => setIsTestModalOpen(false)}
                 reviewData={formData.test_answers || undefined}
-                onSave={(res) => { 
-                  const newData = { 
-                    ...formData, 
-                    test_score: String(res.calculatedScore !== undefined ? res.calculatedScore : (res.score || '')), 
-                    test_completed: res.completed, 
-                    test_answers: res.answers 
-                  }; 
-                  states.setFormData((prev: any) => ({ ...prev, ...newData })); 
-                  handleSave({ 
-                    test_score: newData.test_score, 
-                    test_completed: res.completed, 
-                    test_answers: res.answers 
-                  }); 
-                  setIsTestModalOpen(false); 
-                }} 
+                onSave={(res) => {
+                  const newData = {
+                    ...formData,
+                    test_score: String(res.calculatedScore !== undefined ? res.calculatedScore : (res.score || '')),
+                    test_completed: res.completed,
+                    test_answers: res.answers
+                  };
+                  states.setFormData((prev: any) => ({ ...prev, ...newData }));
+                  handleSave({
+                    test_score: newData.test_score,
+                    test_completed: res.completed,
+                    test_answers: res.answers
+                  });
+                  setIsTestModalOpen(false);
+                }}
               />
             )}
           </AnimatePresence>
@@ -336,13 +351,13 @@ useEffect(() => {
       {/* Supplement Time Picker Portal */}
       {isSupplementTimePickerOpen && createPortal(
         <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <motion.div 
-            initial={{ opacity: 0, scale: 0.95 }} 
-            animate={{ opacity: 1, scale: 1 }} 
-            exit={{ opacity: 0, scale: 0.95 }} 
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0, scale: 0.95 }}
             className={`rounded-2xl p-6 w-full max-w-sm text-center border shadow-2xl ${
-              isLight 
-                ? 'bg-white border-[#e3e2e0] text-[#0f172a]' 
+              isLight
+                ? 'bg-white border-[#e3e2e0] text-[#0f172a]'
                 : 'bg-[#0a0a0a] border-blue-500/30 text-white shadow-[0_0_50px_rgba(37,99,235,0.2)]'
             }`}
           >
@@ -367,8 +382,8 @@ useEffect(() => {
                 type="button"
                 onClick={() => setIsPm(prev => !prev)}
                 className={`px-3 py-1.5 rounded-xl border text-[11px] font-extrabold transition-all flex items-center gap-1.5 shadow-xs ${
-                  isPm 
-                    ? 'bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500 hover:text-black' 
+                  isPm
+                    ? 'bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500 hover:text-black'
                     : 'bg-sky-500/15 text-sky-600 border-sky-500/30 hover:bg-sky-500 hover:text-white'
                 }`}
               >
@@ -381,12 +396,12 @@ useEffect(() => {
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => {
                 const targetHour = isPm ? (num === 12 ? 12 : num + 12) : (num === 12 ? 0 : num);
                 return (
-                  <button 
-                    key={num} 
-                    onClick={() => handleSupplementTimeSelect(targetHour)} 
+                  <button
+                    key={num}
+                    onClick={() => handleSupplementTimeSelect(targetHour)}
                     className={`py-2.5 rounded-xl border text-sm font-black transition-all shadow-xs active:scale-95 ${
-                      isLight 
-                        ? 'bg-blue-50 text-blue-950 border-blue-200/90 hover:bg-blue-600 hover:text-white hover:border-blue-600' 
+                      isLight
+                        ? 'bg-blue-50 text-blue-950 border-blue-200/90 hover:bg-blue-600 hover:text-white hover:border-blue-600'
                         : 'bg-white/5 border-white/10 text-white hover:bg-blue-600 hover:border-blue-400'
                     }`}
                   >
@@ -395,11 +410,11 @@ useEffect(() => {
                 );
               })}
             </div>
-            <button 
-              onClick={() => setIsSupplementTimePickerOpen(false)} 
+            <button
+              onClick={() => setIsSupplementTimePickerOpen(false)}
               className={`mt-5 w-full py-2 rounded-xl border text-[11px] font-bold tracking-wider transition-all flex items-center justify-center gap-2 ${
-                isLight 
-                  ? 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200 hover:text-black' 
+                isLight
+                  ? 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200 hover:text-black'
                   : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
               }`}
             >

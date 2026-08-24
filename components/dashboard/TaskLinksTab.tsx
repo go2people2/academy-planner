@@ -2,11 +2,12 @@
 
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
+import {
   Plus, Check, Trash2, ExternalLink, User, Loader2, Sparkles, X, Edit2, Globe, Lock
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr } from '@/lib/utils';
+import { useModalEsc } from '@/hooks/useModalEsc';
 
 interface TaskLinksTabProps {
   academyInfo: any;
@@ -61,7 +62,7 @@ export default function TaskLinksTab({
   const [linkScopeFilter, setLinkScopeFilter] = useState<'all' | 'shared' | 'private'>('all');
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [editingLinkTask, setEditingLinkTask] = useState<any | null>(null);
-  
+
   // Link Form States
   const [linkTitle, setLinkTitle] = useState('');
   const [linkContent, setLinkContent] = useState('');
@@ -70,12 +71,22 @@ export default function TaskLinksTab({
   const [isPrivate, setIsPrivate] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
+  // 💡 [Esc 닫기 공통 적용]
+  useModalEsc({
+    isOpen: isLinkModalOpen,
+    onClose: () => {
+      setIsLinkModalOpen(false);
+      setEditingLinkTask(null);
+    },
+    isSaving
+  });
+
   // Filter and parse link tasks
   const linkTasks = React.useMemo(() => {
     return tasks
       .filter(task => {
         if (task.type !== 'link') return false;
-        
+
         const { isPrivate: taskIsPrivate } = parseLinkContent(task.content);
 
         // 보안 규칙: 개인 링크는 오직 작성자 본인(created_by === currentUser.id)에게만 보임
@@ -91,7 +102,7 @@ export default function TaskLinksTab({
       })
       .map(task => {
         const { textContent, url, isPrivate: taskIsPrivate } = parseLinkContent(task.content);
-        
+
         return {
           ...task,
           textContent,
@@ -118,10 +129,10 @@ export default function TaskLinksTab({
       const newLinkTask = {
         academy_id: academyInfo.id,
         title: linkTitle.trim(),
-        content: JSON.stringify({ 
-          text: linkContent.trim(), 
+        content: JSON.stringify({
+          text: linkContent.trim(),
           link: formattedUrl,
-          is_private: isPrivate 
+          is_private: isPrivate
         }),
         start_date: getTodayStr(),
         target_date: '9999-12-31',
@@ -190,10 +201,10 @@ export default function TaskLinksTab({
         .from('ams_tasks')
         .update({
           title: linkTitle.trim(),
-          content: JSON.stringify({ 
-            text: linkContent.trim(), 
+          content: JSON.stringify({
+            text: linkContent.trim(),
             link: formattedUrl,
-            is_private: isPrivate 
+            is_private: isPrivate
           }),
           created_by: creatorId
         })
@@ -308,8 +319,8 @@ export default function TaskLinksTab({
             </button>
           </div>
         </div>
-        
-        <button 
+
+        <button
           onClick={handleOpenCreateModal}
           className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-500 transition-all shadow-md shadow-blue-600/10"
         >
@@ -322,7 +333,7 @@ export default function TaskLinksTab({
         {linkTasks.map((task) => {
           const assignee = teachers.find(t => t.id === task.created_by);
           return (
-            <motion.div 
+            <motion.div
               key={task.id}
               layout
               className={`group relative flex flex-col justify-between border rounded-2xl p-3.5 transition-all ${
@@ -351,11 +362,11 @@ export default function TaskLinksTab({
                   </div>
 
                   <div className="flex items-center gap-1 shrink-0">
-                    <button 
+                    <button
                       onClick={() => handleToggleLink(task.id, task.is_completed)}
                       className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all ${
-                        task.is_completed 
-                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400' 
+                        task.is_completed
+                          ? 'bg-emerald-500/20 border-emerald-500 text-emerald-400'
                           : (isLight ? 'border-gray-300 hover:border-blue-500 hover:text-blue-500' : 'border-white/20 hover:border-blue-500 hover:text-blue-500')
                       }`}
                       title="완료 처리"
@@ -363,7 +374,7 @@ export default function TaskLinksTab({
                       <Check size={10} strokeWidth={4} />
                     </button>
 
-                    <button 
+                    <button
                       onClick={() => handleOpenEditModal(task)}
                       className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
                         isLight ? 'border-gray-300 text-gray-400 hover:border-blue-500 hover:text-blue-500' : 'border-white/10 text-gray-500 hover:border-blue-500 hover:text-blue-500'
@@ -373,7 +384,7 @@ export default function TaskLinksTab({
                       <Edit2 size={10} />
                     </button>
 
-                    <button 
+                    <button
                       onClick={() => handleDeleteLink(task.id)}
                       className={`w-5 h-5 rounded-full flex items-center justify-center border transition-all opacity-0 group-hover:opacity-100 ${
                         isLight ? 'border-gray-300 text-gray-400 hover:border-rose-500 hover:text-rose-500' : 'border-white/10 text-gray-500 hover:border-rose-500 hover:text-rose-500'
@@ -384,7 +395,7 @@ export default function TaskLinksTab({
                     </button>
                   </div>
                 </div>
-                
+
                 <p className={`text-xs leading-relaxed ${
                   task.is_completed ? 'text-gray-400 line-through' : (isLight ? 'text-gray-600' : 'text-gray-400')
                 }`}>
@@ -435,7 +446,7 @@ export default function TaskLinksTab({
       <AnimatePresence>
         {isLinkModalOpen && (
           <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
-            <motion.div 
+            <motion.div
               initial={{ scale: 0.95, opacity: 0 }}
               animate={{ scale: 1, opacity: 1 }}
               exit={{ scale: 0.95, opacity: 0 }}
@@ -443,7 +454,7 @@ export default function TaskLinksTab({
                 isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-[#0f0f0f] border-white/10 text-white'
               }`}
             >
-              <button 
+              <button
                 onClick={() => { setIsLinkModalOpen(false); setEditingLinkTask(null); }}
                 className={`absolute top-4 right-4 transition-all ${isLight ? 'text-gray-400 hover:text-black' : 'text-gray-500 hover:text-white'}`}
               >
@@ -496,8 +507,8 @@ export default function TaskLinksTab({
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">업무 링크 제목</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={linkTitle}
                     onChange={(e) => setLinkTitle(e.target.value)}
                     required
@@ -510,8 +521,8 @@ export default function TaskLinksTab({
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">구글 시트 / URL 주소</label>
-                  <input 
-                    type="text" 
+                  <input
+                    type="text"
                     value={linkUrl}
                     onChange={(e) => setLinkUrl(e.target.value)}
                     required
@@ -524,7 +535,7 @@ export default function TaskLinksTab({
 
                 <div className="space-y-1">
                   <label className="text-[9px] font-black text-gray-500 uppercase tracking-widest">세부 내용 (설명)</label>
-                  <textarea 
+                  <textarea
                     value={linkContent}
                     onChange={(e) => setLinkContent(e.target.value)}
                     rows={2}
@@ -547,8 +558,8 @@ export default function TaskLinksTab({
                           type="button"
                           onClick={() => setLinkAssignee(t.id)}
                           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full border text-[11px] font-black transition-all ${
-                            isSelected 
-                              ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20' 
+                            isSelected
+                              ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-500/20'
                               : (isLight ? 'bg-gray-100 border-[#e3e2e0] text-gray-600 hover:bg-gray-200' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10 hover:text-white')
                           }`}
                         >
@@ -565,8 +576,8 @@ export default function TaskLinksTab({
                 </div>
 
                 <div className="pt-2 flex justify-end gap-2">
-                  <button 
-                    type="button" 
+                  <button
+                    type="button"
                     onClick={() => { setIsLinkModalOpen(false); setEditingLinkTask(null); }}
                     className={`px-4 py-2 rounded-lg text-xs font-bold transition-all ${
                       isLight ? 'bg-gray-100 text-gray-600 hover:bg-gray-200' : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
@@ -574,8 +585,8 @@ export default function TaskLinksTab({
                   >
                     취소
                   </button>
-                  <button 
-                    type="submit" 
+                  <button
+                    type="submit"
                     disabled={isSaving}
                     className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs font-black transition-all flex items-center gap-1.5"
                   >
