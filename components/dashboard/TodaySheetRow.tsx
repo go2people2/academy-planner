@@ -51,6 +51,8 @@ export interface TodaySheetRowProps {
   isToolsEditMode?: boolean;
   showAllTools?: boolean;
   onReorderTools?: (draggedId: string, targetId: string) => void;
+  onTimePickerClick?: (e: React.MouseEvent) => void;
+  onSnapshotModalClick?: (student: Student, session: any) => void;
   isLight?: boolean;
   onNavigateTab?: (mode: string | AbsenceLinkContext) => void;
   onRefreshAbsenceSession?: (context: {
@@ -72,7 +74,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
     rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel, isOtherClassSection,
     cooperatingCells, onSave, onUpdateStudentInfo, onRemoveFromToday,
-    toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false, onNavigateTab
+    toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false, onNavigateTab, onSnapshotModalClick
   } = props;
 
   // 💡 단축어 및 트리거 기호 추출
@@ -270,6 +272,7 @@ useEffect(() => {
               onCellMouseEnter={onCellMouseEnter || (() => {})}
               onAttendanceClick={handleAttendanceToggle}
               onTimePickerClick={() => setIsSupplementTimePickerOpen(true)}
+              onSnapshotModalClick={onSnapshotModalClick}
               onTestScoreTypeToggle={() => {
                 const next = formData.test_score_type === 'score' ? 'count' : 'score';
                 states.setFormData((prev: any) => ({ ...prev, test_score_type: next }));

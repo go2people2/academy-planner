@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, Bell, Table, ClipboardCheck, Activity, 
   UserCog, ArrowLeftRight, Settings, Info, Keyboard, 
-  Sparkles, ChevronDown 
+  Sparkles, ChevronDown, User, History as HistoryIcon, TrendingUp, ExternalLink, Lock, Unlock, Settings2
 } from 'lucide-react';
 
 export default function SystemManual() {
@@ -71,6 +71,137 @@ export default function SystemManual() {
                 </p>
               </li>
             </ul>
+          </div>
+
+          <div className="p-3 bg-zinc-900/60 rounded-[4px] border border-white/15 shadow-inner leading-relaxed mt-3 space-y-2.5">
+            <p className="text-purple-400 font-black flex items-center gap-1.5 tracking-wide text-xs">
+              <Settings2 size={13}/> 🛠️ TodaySheet 도구함 (Tools) 버튼별 완벽 동작 가이드
+            </p>
+            <p className="text-[11px] text-gray-300">
+              TodaySheet 각 행의 도구함 열에는 <b>총 8종의 기능 버튼</b>과 <b>1개의 경계선(구분선)</b>이 제공됩니다.
+            </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2 pt-1 text-[11px]">
+              {/* 1. 시간이동 */}
+              <div className="p-2 bg-black/40 rounded border border-purple-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-purple-300 font-bold">
+                  <span className="w-5 h-5 rounded bg-purple-500/20 border border-purple-500/40 flex items-center justify-center text-purple-300"><ArrowLeftRight size={11} /></span>
+                  1. 수업시간 / 교시 이동 (Timeshift)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 클릭 시 시간 선택 팝업 오픈 ➔ 시작 교시 변경 또는 보강 시간 설정<br/>
+                  • <b>활성</b>: 전 행 상시 활성화
+                </p>
+              </div>
+
+              {/* 2. 스냅샷 수정 */}
+              <div className="p-2 bg-black/40 rounded border border-blue-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-blue-300 font-bold">
+                  <span className="w-5 h-5 rounded bg-blue-500/20 border border-blue-500/40 flex items-center justify-center text-blue-300"><Settings2 size={11} /></span>
+                  2. 수업 정보 및 스냅샷 수정 (Snapshot)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 클릭 시 '당시 수업 정보 수정' 모달 오픈 ➔ 수업 구분(정규/특강/보강), 과목명, 예정 요일/시간, 진행 시간, 순수보강 여부 수정<br/>
+                  • <b>활성 조건</b>: <b>DB에 저장된 실제 일지 로그가 있는 행만 활성화</b> (임시 temp 행은 비활성 및 안내 툴팁 표시)<br/>
+                  • <b>특징</b>: 학생의 현재 시간표는 건드리지 않고 <b>해당 날짜 일지의 스냅샷만 안전하게 불변 박제/보정</b>
+                </p>
+              </div>
+
+              {/* 3. 프로필 */}
+              <div className="p-2 bg-black/40 rounded border border-emerald-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-emerald-300 font-bold">
+                  <span className="w-5 h-5 rounded bg-emerald-500/20 border border-emerald-500/40 flex items-center justify-center text-emerald-300"><User size={11} /></span>
+                  3. 학생 프로필 서랍 열기 (Profile)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 우측에서 학생 상세 정보 서랍(Drawer) 오픈<br/>
+                  • <b>활성</b>: 전 행 상시 활성화
+                </p>
+              </div>
+
+              {/* 4. 이전 기록 */}
+              <div className="p-2 bg-black/40 rounded border border-white/20 space-y-1">
+                <div className="flex items-center gap-1.5 text-gray-200 font-bold">
+                  <span className="w-5 h-5 rounded bg-white/10 border border-white/20 flex items-center justify-center text-gray-300"><HistoryIcon size={11} /></span>
+                  4. 이전 기록 보기 (History)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 클릭 시 해당 학생의 최근 과거 일지 행을 테이블 아래로 즉시 펼침/접기<br/>
+                  • <b>활성</b>: 전 행 상시 활성화
+                </p>
+              </div>
+
+              {/* 5. 진도표 */}
+              <div className="p-2 bg-black/40 rounded border border-indigo-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-indigo-300 font-bold">
+                  <span className="w-5 h-5 rounded bg-indigo-500/20 border border-indigo-500/40 flex items-center justify-center text-indigo-300"><TrendingUp size={11} /></span>
+                  5. 진도표 바로가기 (Progress)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 해당 학생의 전체 교재 단원별 진도 현황 탭으로 전환<br/>
+                  • <b>활성</b>: 전 행 상시 활성화
+                </p>
+              </div>
+
+              {/* 6. 태그 */}
+              <div className="p-2 bg-black/40 rounded border border-amber-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-amber-300 font-bold">
+                  <span className="w-5 h-5 rounded bg-amber-500/20 border border-amber-500/40 flex items-center justify-center text-amber-300 text-[10px] font-black">가</span>
+                  6. 태그 순환 변경 (Tag)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 클릭할 때마다 <b>[가(초록)] ➔ [나(파랑)] ➔ [다(노랑)] ➔ [라(빨강)] ➔ [해제(+)]</b> 순환 변경<br/>
+                  • <b>활성</b>: 전 행 상시 활성화
+                </p>
+              </div>
+
+              {/* 7. 학생 페이지 */}
+              <div className="p-2 bg-black/40 rounded border border-sky-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-sky-300 font-bold">
+                  <span className="w-5 h-5 rounded bg-sky-500/20 border border-sky-500/40 flex items-center justify-center text-sky-300"><ExternalLink size={11} /></span>
+                  7. 학생 페이지 보기 (Portal)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 학생 전용 모바일 웹 포털(`/[slug]/student?id=...`)을 새 브라우저 탭으로 오픈<br/>
+                  • <b>활성</b>: 전 행 상시 활성화
+                </p>
+              </div>
+
+              {/* 8. 학생 제출 리셋 */}
+              <div className="p-2 bg-black/40 rounded border border-rose-500/30 space-y-1">
+                <div className="flex items-center gap-1.5 text-rose-300 font-bold">
+                  <span className="w-5 h-5 rounded bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-300"><Lock size={11} /></span>
+                  8. 학생 제출 리셋 (Reset Lock)
+                </div>
+                <p className="text-gray-400 text-[10.5px]">
+                  • <b>동작</b>: 학생이 모바일에서 [제출]하여 승인 대기(Pending/Approved)된 상태를 <b>'none'으로 리셋</b> ➔ 학생이 다시 일지 내용을 수정하고 재제출할 수 있도록 잠금 해제<br/>
+                  • <b>활성 조건</b>: 제출/승인된 학생만 활성화 (미제출 상태는 잠금 아이콘 비활성)
+                </p>
+              </div>
+            </div>
+
+            {/* 9. 기록 리셋 및 보강 삭제 (위험 동작) */}
+            <div className="p-2.5 bg-rose-950/20 rounded border border-rose-500/30 space-y-1 mt-2">
+              <div className="flex items-center gap-1.5 text-rose-400 font-black">
+                <span className="w-5 h-5 rounded bg-rose-500/20 border border-rose-500/40 flex items-center justify-center text-rose-300 text-[10px]">R</span>
+                ⚠️ 9. 기록 리셋 / 보강 제외 (Reset & Remove - 위험 작업)
+              </div>
+              <p className="text-gray-300 text-[10.5px] leading-relaxed">
+                • <b>정규 시간표 수업 행</b>: 확인창 승인 시 <b>수업 행은 그대로 유지</b>되며, 당일 작성된 출결·진도·숙제·테스트 등 <b>일지 내용만 초기 상태로 안전하게 리셋</b>됩니다.<br/>
+                • <b>시간표 외 순수 보강 행</b>: 확인창 승인 시 오늘 명단에서 <b>해당 보강 행 자체가 제외(삭제)</b>됩니다.
+              </p>
+            </div>
+
+            {/* 도구함 헤더 버튼 및 순서 편집 안내 */}
+            <div className="p-2.5 bg-white/5 rounded border border-white/10 space-y-1 text-[10.5px] text-gray-300 mt-2">
+              <p className="font-bold text-amber-400">📌 [도구함 헤더 버튼 및 순서/상시노출 커스텀 안내]</p>
+              <ul className="list-disc pl-4 space-y-1 text-gray-400">
+                <li><b>헤더 [ &gt; ] 접기/펼치기 버튼</b>: 클릭 시 상시 노출 모드(기본 약 4~5개)와 전체 펼침 모드(총 8개 도구, 폭 260px)로 전환됩니다.</li>
+                <li><b>헤더 [ ⚙️ ] 도구 편집 버튼</b>: 도구 전체를 펼친 상태에서 [ ⚙️ ]를 누르면 <b>'도구 편집 모드'</b>가 켜집니다.</li>
+                <li><b>드래그로 도구 순서 변경</b>: 편집 모드에서 원하는 아이콘을 마우스로 끌어다 놓으면 순서가 즉시 변경되며, 브라우저 로컬 스토리지(`ams_tools_order`)에 영구 저장됩니다.</li>
+                <li><b>노란색 점선 세로 바(Separator)의 실제 용도</b>: 세로 바는 '컬럼 가로 크기 리사이즈용 바'가 아니라 <b>"평소 접혀 있을 때 상시 노출될 도구의 경계선"</b>입니다. 편집 모드에서 세로 바를 원하는 위치로 드래그하면, 접었을 때 세로 바 앞쪽에 있는 도구들만 화면에 상시 노출됩니다.</li>
+              </ul>
+            </div>
           </div>
         </div>
       )

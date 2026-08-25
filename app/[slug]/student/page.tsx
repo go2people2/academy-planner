@@ -809,7 +809,15 @@ export default function StudentPortal() {
     return count;
   }, [student?.class_days, selectedDate]);
 
-  const handleLogout = () => { localStorage.removeItem('ams_student'); router.push(`/${slug}/login`); };
+  const handleLogout = async () => {
+    try {
+      await fetch('/api/student/logout', { method: 'POST' });
+    } catch (e) {
+      console.error('Logout error:', e);
+    }
+    localStorage.removeItem('ams_student');
+    router.push(`/${slug}/login`);
+  };
 
   if (isLoading || !student) {
     return (

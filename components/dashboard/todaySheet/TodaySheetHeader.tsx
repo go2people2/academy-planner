@@ -248,7 +248,7 @@ export function TodaySheetHeader({
                               ? (isLight ? 'bg-blue-100 text-blue-700 hover:bg-blue-600 hover:text-white border border-blue-300' : 'bg-blue-600/30 text-blue-400 hover:bg-blue-600 hover:text-white border border-blue-500/30') 
                               : (isLight ? 'bg-gray-100 text-gray-700 hover:bg-gray-200 hover:text-black border border-gray-300' : 'bg-zinc-800 text-zinc-400 hover:bg-zinc-700 hover:text-white border border-zinc-700')
                           }`}
-                          title={showAllTools ? '7개 도구 접기' : '7개 도구 펼치기'}
+                          title={showAllTools ? '도구 접기' : '도구 전체 펼치기'}
                         >
                           {showAllTools ? <ChevronLeft size={10} strokeWidth={2.5} /> : <ChevronRight size={10} strokeWidth={2.5} />}
                         </button>

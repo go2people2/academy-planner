@@ -79,7 +79,22 @@ export default function LoginForm({ academy }: { academy: any }) {
     router.push(`/${slug}/student`);
   };
 
-  const handleSelectStudent = (s: any) => {
+  const handleSelectStudent = async (s: any) => {
+    // 💡 중복 후보에서 선택한 경우 서버 세션 쿠키 확정
+    try {
+      await fetch('/api/student/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          slug: Array.isArray(slug) ? slug[0] : slug,
+          phoneLast4: phoneLast4.trim(),
+          selectedStudentId: s.id
+        })
+      });
+    } catch (e) {
+      console.error('Candidate confirm error:', e);
+    }
+
     const todayDay = getTodayKoreanDay();
     const isRegularDay = (s.class_days || []).some((d: string) => d.trim() === todayDay);
     const electives = getActiveTodayElectives(s);
@@ -236,54 +251,37 @@ export default function LoginForm({ academy }: { academy: any }) {
             return;
           }
 
-          // 일반 4자리 또는 5자리 조회 처리
-          const inputLen = phoneLast4.length;
-          let matchedList: any[] = [];
-
-          if (inputLen === 5) {
-            const base4 = phoneLast4.slice(0, 4);
-            const suffix = phoneLast4.slice(4);
-
-            const { data: list, error: sErr } = await supabase
-              .from('ams_students')
-              .select('*')
-              .eq('academy_id', academy.id)
-              .is('is_deleted', false)
-              .eq('login_suffix', suffix)
-              .like('phone', `%${base4}`);
-
-            if (sErr) throw sErr;
-
-            matchedList = (list || []).filter(s => {
-              const sCleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
-              return sCleanPhone.endsWith(base4);
-            });
-          } else {
-            // 기존 4자리 조회
-            const { data: list, error: sErr } = await supabase
-              .from('ams_students')
-              .select('*')
-              .eq('academy_id', academy.id)
-              .is('is_deleted', false)
-              .like('phone', `%${phoneLast4}`);
-
-            if (sErr) throw sErr;
-
-            matchedList = (list || []).filter(s => {
-              const sCleanPhone = (s.phone || '').replace(/[^0-9]/g, '');
-              // 💡 4자리만 입력했을 때는 추가 번호(login_suffix)가 설정되지 않은 학생만 매칭시킵니다.
-              const hasNoSuffix = !s.login_suffix;
-              return sCleanPhone.endsWith(phoneLast4) && hasNoSuffix;
-            });
+          // 💡 [보안 강화] 서버 사이드 학생 로그인 검증 및 httpOnly 세션 쿠키 발급 API 호출
+          const activeSlug = ((Array.isArray(slug) ? slug[0] : slug) || academy?.slug || '').trim();
+          if (!activeSlug) {
+            alert('학원 정보를 불러오는 중입니다. 잠시 후 다시 시도해 주세요.');
+            setIsLoading(false);
+            return;
           }
 
-          if (matchedList.length === 0) {
-            alert('등록된 학생 정보를 찾을 수 없습니다.');
-          } else if (matchedList.length === 1) {
-            handleSelectStudent(matchedList[0]);
-          } else {
-            // 중복 시 선택 리스트 생성
-            setCandidateStudents(matchedList);
+          const res = await fetch('/api/student/login', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              slug: activeSlug,
+              phoneLast4: phoneLast4.trim()
+            })
+          });
+
+          const data = await res.json();
+
+          if (!res.ok) {
+            alert(data.error || '학원 정보 연결을 확인해 주세요.');
+            setIsLoading(false);
+            return;
+          }
+
+          if (data.status === 'multiple_candidates') {
+            // 중복 학생 후보 목록 표시
+            setCandidateStudents(data.candidates);
+          } else if (data.student) {
+            // 단일 학생 로그인 성공
+            handleSelectStudent(data.student);
           }
         } catch (err) {
           console.error('Student login error:', err);

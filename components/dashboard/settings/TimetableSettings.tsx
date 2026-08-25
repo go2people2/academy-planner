@@ -112,31 +112,6 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
     }
   }, [activeTeachers, selectedTeacherId]);
 
-  // 💡 2-2. DB 또는 학생 데이터에 방학 특강(1시~4시 타임) 배정이 존재하면 자동으로 방학 모드 활성화
-  useEffect(() => {
-    let hasVacationData = Object.keys(gridData).some(key => {
-      const [, slot] = key.split('-');
-      return ['1~2', '2~3', '3~4'].includes(slot) && gridData[key]?.student_id !== null;
-    });
-
-    if (!hasVacationData && localStudents.length > 0) {
-      hasVacationData = localStudents.some(s => {
-        if (s.is_deleted) return false;
-        const rawElective = s.book_courses?.['__elective_courses'] ?? s.book_courses?.["'__elective_courses'"];
-        if (!rawElective) return false;
-        try {
-          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
-          return Array.isArray(courses) && courses.length > 0;
-        } catch (e) {
-          return false;
-        }
-      });
-    }
-
-    if (hasVacationData) {
-      setIsVacationMode(true);
-    }
-  }, [gridData, localStudents]);
 
   // 💡 동적 행 개수 결정: 데이터가 있는 가장 큰 row_index를 구해서 맞춰 자름 (최소 15행)
   const dynamicRowCount = useMemo(() => {
@@ -298,14 +273,7 @@ export default function TimetableSettings({ academyInfo, teachers = [], students
             });
           });
 
-          const targetSlots = hasVacationStudent 
-            ? ['1~2', '2~3', '3~4', '4~5', '5~6', '6~7', '7~8', '8~9', '9~10']
-            : activeSlots;
-
-          if (hasVacationStudent) {
-            setIsVacationMode(true);
-          }
-
+          const targetSlots = activeSlots;
           setGridData(buildAutoGrid(teacherStudents, targetSlots));
         }
       }

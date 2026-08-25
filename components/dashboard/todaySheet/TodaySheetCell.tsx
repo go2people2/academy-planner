@@ -5,10 +5,10 @@ import { createPortal } from 'react-dom';
 import { supabase } from '@/lib/supabase';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
-  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, ArrowLeftRight, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3, RefreshCw
+  Check, History as HistoryIcon, TrendingUp, X, Percent, ArrowLeft, Hash, FileText, ClipboardCheck, ClipboardList, Wand2, Loader2, ArrowLeftRight, CheckCircle, MessageSquare, Clock, Circle, AlertCircle, AlertTriangle, ExternalLink, User, Lock, Trash2, Unlock, Edit3, RefreshCw, Settings2
 } from 'lucide-react';
 import { Student, TextbookOption, StudentStatus, AbsenceLinkContext } from '@/types/dashboard';
-import { getDayOfWeek, getCoursePrefix, parseBookCourseValue } from '@/lib/utils';
+import { getDayOfWeek, getCoursePrefix, parseBookCourseValue, getTodayStr } from '@/lib/utils';
 import { isValidHomeworkText } from '@/lib/studentDataEnricher';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { ScoreCell } from './cells/ScoreCell';
@@ -118,6 +118,7 @@ export interface TodaySheetCellProps {
   onReorderTools?: (draggedId: string, targetId: string) => void;
   isOtherClassSection?: boolean;
   onTimePickerClick?: (e: React.MouseEvent) => void;
+  onSnapshotModalClick?: (student: Student, session: any) => void;
   selectedDate?: string;
   onNavigateTab?: (mode: string | AbsenceLinkContext) => void;
   onRefreshAbsenceSession?: (context: {
@@ -160,6 +161,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onReorderTools,
   isOtherClassSection,
   onTimePickerClick,
+  onSnapshotModalClick,
   isLight = false,
   onNavigateTab,
   onRefreshAbsenceSession
@@ -353,6 +355,27 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             {...dragHandlers}
           >
             <ArrowLeftRight size={12.5} strokeWidth={2.5} />
+          </div>
+        );
+      case 'snapshot':
+        const hasPersistedLog = !!(student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:'));
+        return (
+          <div
+            key="snapshot"
+            onClick={(e) => {
+              e.stopPropagation();
+              if (!hasPersistedLog) return;
+              onSnapshotModalClick?.(student, student.todaySession);
+            }}
+            className={`${itemClass} ${
+              hasPersistedLog
+                ? (isLight ? 'bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-600 hover:text-white shadow-sm' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/40 hover:text-blue-200 shadow-sm')
+                : (isLight ? 'bg-gray-100 text-gray-300 border border-gray-200 opacity-40 cursor-not-allowed' : 'bg-white/5 text-gray-500 border border-white/10 opacity-40 cursor-not-allowed')
+            }`}
+            title={hasPersistedLog ? "수업 정보 및 스냅샷 수정" : "저장된 일지가 있어야 수업 정보를 수정할 수 있습니다"}
+            {...dragHandlers}
+          >
+            <Settings2 size={13} strokeWidth={2.5} />
           </div>
         );
       case 'reset':
@@ -887,36 +910,52 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
                 {(() => {
                   const teacherInitial = student.teacher_initial || '?';
-                  if (student.isSpecialClass) {
-                    const elective = student.electiveCourse;
-                    const daysArr = Array.isArray(elective?.days)
-                      ? elective.days
-                      : (Array.isArray(elective?.class_days) ? elective.class_days : []);
+                  const snapshot = student.todaySession?.session_snapshot;
+                  const isPast = selectedDate && selectedDate < getTodayStr();
 
-                    const sortedElectiveDays = daysArr
+                  // 💡 요일 정렬 헬퍼
+                  const sortDaysStr = (days: any[]) => {
+                    if (!Array.isArray(days) || days.length === 0) return '';
+                    return days
                       .map((d: any) => String(d).replace('요일', '').trim())
                       .sort((a: string, b: string) => {
                         const order: Record<string, number> = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
                         return (order[a] || 0) - (order[b] || 0);
                       })
                       .join('');
+                  };
 
-                    const daysStr = sortedElectiveDays || (student.class_days || []).join('').replace(/요일/g, '') || '무';
+                  if (student.isSpecialClass) {
+                    const elective = student.electiveCourse;
+                    let daysStr = '';
+
+                    if (isPast && snapshot?.scheduledDays !== undefined) {
+                      daysStr = sortDaysStr(snapshot.scheduledDays);
+                    } else {
+                      const daysArr = Array.isArray(elective?.days)
+                        ? elective.days
+                        : (Array.isArray(elective?.class_days) ? elective.class_days : []);
+                      daysStr = sortDaysStr(daysArr) || sortDaysStr(student.class_days || []);
+                    }
+
                     const prefix = getCoursePrefix(student.isSpecialClass, student.electiveCourse);
                     return (
                       <span className={`text-[13px] font-medium truncate transition-colors ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
                         <span className={isLight ? "text-amber-600 mr-0.5" : "text-amber-500 mr-0.5"}>{prefix}</span>
-                        {student.name}-{teacherInitial}-{daysStr}
+                        {student.name}-{teacherInitial}-{daysStr || '무'}
                       </span>
                     );
                   } else {
-                    const sortedDays = (student.class_days || []).slice().sort((a: string, b: string) => {
-                      const order: Record<string, number> = { '월': 1, '화': 2, '수': 3, '목': 4, '금': 5, '토': 6, '일': 7 };
-                      return (order[a] || 0) - (order[b] || 0);
-                    }).join('');
+                    let daysStr = '';
+                    if (isPast && snapshot?.scheduledDays !== undefined) {
+                      daysStr = sortDaysStr(snapshot.scheduledDays);
+                    } else {
+                      daysStr = sortDaysStr(student.class_days || []);
+                    }
+
                     return (
                       <span className={`text-[13px] font-medium truncate transition-colors ${isLight ? 'text-[#37352f]' : 'text-white'}`}>
-                        {student.name}-{teacherInitial}-{sortedDays || '무'}
+                        {student.name}-{teacherInitial}-{daysStr || '무'}
                       </span>
                     );
                   }

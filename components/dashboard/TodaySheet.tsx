@@ -37,7 +37,8 @@ import { useTodaySheetRows } from './todaySheet/hooks/useTodaySheetRows';
 import { useTodaySheetSelection } from './todaySheet/hooks/useTodaySheetSelection';
 import { extractRealStudentId } from '@/lib/rowIdentity';
 import { TodaySheetModals } from './todaySheet/TodaySheetModals';
-import { AbsenceLinkContext } from '@/types/dashboard';
+import { SessionSnapshotModal } from './todaySheet/SessionSnapshotModal';
+import { AbsenceLinkContext, Student, SessionSnapshot, SessionLog } from '@/types/dashboard';
 
 // --- Main Component ---
 
@@ -156,6 +157,102 @@ export default function TodaySheet({
   } | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+
+  // 💡 [신규] 수업 스냅샷 수동 수정 모달 상태
+  const [snapshotModalState, setSnapshotModalState] = useState<{
+    isOpen: boolean;
+    student: Student | null;
+    session: SessionLog | null;
+  }>({
+    isOpen: false,
+    student: null,
+    session: null
+  });
+
+  const handleOpenSnapshotModal = useCallback((student: Student, session: any) => {
+    setSnapshotModalState({
+      isOpen: true,
+      student,
+      session
+    });
+  }, []);
+
+  const handleCloseSnapshotModal = useCallback(() => {
+    setSnapshotModalState({
+      isOpen: false,
+      student: null,
+      session: null
+    });
+  }, []);
+
+  const handleSaveSnapshot = useCallback(async (targetLogId: string, updatedFields: {
+    course_name: string;
+    moved_to_hour: number | null;
+    is_pure_makeup: boolean;
+    session_snapshot: SessionSnapshot;
+  }) => {
+    if (!academyInfo?.id || !targetLogId) return false;
+
+    try {
+      const { data, error } = await supabase
+        .from('ams_session_logs')
+        .update({
+          course_name: updatedFields.course_name,
+          moved_to_hour: updatedFields.moved_to_hour,
+          is_pure_makeup: updatedFields.is_pure_makeup,
+          session_snapshot: updatedFields.session_snapshot
+        })
+        .eq('id', targetLogId)
+        .eq('academy_id', academyInfo.id)
+        .select()
+        .maybeSingle();
+
+      if (error) throw error;
+
+      // 💡 로컬 상태 즉시 갱신 (allLogs 및 todaySession 동기화)
+      if (data) {
+        setStudents((prev: any[]) => (prev || []).map((s: any) => {
+          const sRealId = s.originalId || s.id;
+          const targetStudentId = snapshotModalState.student?.originalId || snapshotModalState.student?.id;
+          if (sRealId !== targetStudentId) return s;
+
+          const updatedAllLogs = (s.allLogs || []).map((l: any) => {
+            if (String(l.id) === String(targetLogId)) {
+              return {
+                ...l,
+                course_name: data.course_name,
+                moved_to_hour: data.moved_to_hour,
+                is_pure_makeup: data.is_pure_makeup,
+                session_snapshot: data.session_snapshot
+              };
+            }
+            return l;
+          });
+
+          const isMatchingTodaySession = String(s.todaySession?.id) === String(targetLogId);
+
+          return {
+            ...s,
+            allLogs: updatedAllLogs,
+            ...(isMatchingTodaySession ? {
+              todaySession: {
+                ...s.todaySession,
+                course_name: data.course_name,
+                moved_to_hour: data.moved_to_hour,
+                is_pure_makeup: data.is_pure_makeup,
+                session_snapshot: data.session_snapshot
+              }
+            } : {})
+          };
+        }));
+      }
+
+      return true;
+    } catch (e: any) {
+      console.error('Failed to update session snapshot:', e);
+      return false;
+    }
+  }, [academyInfo?.id, snapshotModalState.student, setStudents]);
 
   // 스크롤 감지 (z-index 동적 조절용)
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -568,8 +665,8 @@ export default function TodaySheet({
     const base = { ...colWidths };
     base['action'] = 8; // 💡 저장 컬럼 너비를 8px로 강제 고정
 
-    // 💡 7개 도구 접고 펼칠 때 셀 폭 동적 반응형 조정
-    base['tools'] = showAllTools ? 228 : Math.max(114, colWidths['tools'] || 114);
+    // 💡 7개 도구 접고 펼칠 때 셀 폭 동적 반응형 조정 (스냅샷 버튼 포함)
+    base['tools'] = showAllTools ? 260 : Math.max(114, colWidths['tools'] || 114);
 
     if (focusColumn) {
       // 포커스된 컬럼은 화면의 상당 부분을 차지하도록 확장
@@ -1863,6 +1960,7 @@ export default function TodaySheet({
                       isToolsEditMode={isToolsEditMode}
                       toolsOrder={toolsOrder}
                       onReorderTools={handleReorderTools}
+                      onSnapshotModalClick={handleOpenSnapshotModal}
                     />
                   </React.Fragment>
                 );
@@ -1992,6 +2090,19 @@ export default function TodaySheet({
         activeColumns={activeColumns}
         columnWidths={colWidths}
       />
+
+      {/* 💡 [신규] 당시 수업 정보 및 스냅샷 수동 수정 모달 */}
+      {snapshotModalState.isOpen && snapshotModalState.student && snapshotModalState.session && (
+        <SessionSnapshotModal
+          isOpen={snapshotModalState.isOpen}
+          onClose={handleCloseSnapshotModal}
+          student={snapshotModalState.student}
+          session={snapshotModalState.session}
+          selectedDate={selectedDate}
+          isLight={isLight}
+          onSaveSnapshot={handleSaveSnapshot}
+        />
+      )}
     </div>
   );
 }

@@ -59,33 +59,36 @@ export default function StudentLectureTab({
     });
   }, [student, availableTextbooks]);
 
-  // 3. 현재 학원의 교재 모듈(영상 메타데이터) 로드
-  useEffect(() => {
-    const fetchLearningModules = async () => {
-      if (!academy?.id) return;
-      setIsLoadingModules(true);
-      try {
-        const session = await supabase.auth.getSession();
-        const token = session.data?.session?.access_token;
-        if (!token) return;
+  // 3. 학생 전용 안전 강의 모듈 로드 (httpOnly 쿠키 기반 인증)
+  const fetchLearningModules = useCallback(async () => {
+    setIsLoadingModules(true);
+    setIsApiError(false);
+    try {
+      const res = await fetch('/api/learning-hub/student');
 
-        const res = await fetch(`/api/learning-hub?academyId=${academy.id}`, {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-
-        if (res.ok) {
-          const data = await res.json();
-          setBuiltModules(data.modules || {});
-        }
-      } catch (e) {
-        console.error('[StudentLectureTab] Module load error:', e);
-      } finally {
-        setIsLoadingModules(false);
+      if (res.status === 401) {
+        // 비로그인 / 세션 만료 상태
+        setIsApiError(true);
+        return;
       }
-    };
 
+      if (res.ok) {
+        const data = await res.json();
+        setBuiltModules(data.modules || {});
+      } else {
+        setIsApiError(true);
+      }
+    } catch (e) {
+      console.error('[StudentLectureTab] Module load error:', e);
+      setIsApiError(true);
+    } finally {
+      setIsLoadingModules(false);
+    }
+  }, []);
+
+  useEffect(() => {
     fetchLearningModules();
-  }, [academy?.id]);
+  }, [fetchLearningModules]);
 
   // 선택된 교재의 구글 시트 단원 로드 (배열 파싱 안전화 적용)
   const fetchUnitsForBook = useCallback(async (bookcode: string) => {
@@ -217,15 +220,18 @@ export default function StudentLectureTab({
           {isLoadingUnits || isLoadingModules ? (
             <div className="flex items-center justify-center py-12 gap-2 text-xs font-bold text-gray-400">
               <Loader2 size={18} className="animate-spin text-indigo-500" />
-              <span>단원 목차를 불러오는 중입니다.</span>
+              <span>강의 목록을 불러오는 중입니다...</span>
             </div>
           ) : isApiError ? (
-            <div className="text-center py-10 space-y-2 text-xs font-bold text-rose-400">
-              <p>단원 정보를 불러오지 못했습니다. 다시 시도해 주세요.</p>
+            <div className="text-center py-10 space-y-2 text-xs font-bold text-amber-400">
+              <p>강의 목록을 불러오지 못했습니다. 학생 로그인이 필요하거나 일시적인 오류일 수 있습니다.</p>
               <button
                 type="button"
-                onClick={() => fetchUnitsForBook(selectedBookcode)}
-                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white text-[11px] inline-flex items-center gap-1"
+                onClick={() => {
+                  fetchLearningModules();
+                  if (selectedBookcode) fetchUnitsForBook(selectedBookcode);
+                }}
+                className="px-3 py-1 rounded bg-slate-800 hover:bg-slate-700 text-white text-[11px] inline-flex items-center gap-1 shadow"
               >
                 <RefreshCw size={12} />
                 <span>다시 시도</span>

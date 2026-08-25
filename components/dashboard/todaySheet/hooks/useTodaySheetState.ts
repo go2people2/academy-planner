@@ -9,17 +9,28 @@ export function useTodaySheetState({ currentUser }: UseTodaySheetStateProps = {}
   const [showAllTools, setShowAllTools] = useState(false);
   const [isToolsEditMode, setIsToolsEditMode] = useState(false);
   const [toolsOrder, setToolsOrder] = useState<string[]>(() => {
-    const defaultOrder = ['timeshift', 'profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
+    const defaultOrder = ['timeshift', 'snapshot', 'profile', 'history', 'progress', 'separator', 'tag', 'portal', 'reset', 'delete'];
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('ams_tools_order');
       if (saved) {
         try {
           const parsed = JSON.parse(saved);
           if (Array.isArray(parsed)) {
-            if (!parsed.includes('timeshift')) {
-              return ['timeshift', ...parsed];
+            let next = [...parsed];
+            if (!next.includes('timeshift')) {
+              next = ['timeshift', ...next];
             }
-            return parsed;
+            if (!next.includes('snapshot')) {
+              const tsIdx = next.indexOf('timeshift');
+              if (tsIdx !== -1) {
+                next.splice(tsIdx + 1, 0, 'snapshot');
+              } else {
+                next.unshift('snapshot');
+              }
+            }
+            // 💡 [영구 반영] 신규 도구가 추가되었으면 즉시 localStorage도 갱신
+            localStorage.setItem('ams_tools_order', JSON.stringify(next));
+            return next;
           }
         } catch (e) {
           console.error(e);

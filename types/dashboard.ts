@@ -18,7 +18,7 @@ export interface SessionSnapshot {
   scheduledDays: string[];
   scheduledHours: number[];
   isPureMakeup: boolean;
-  source: 'today_sheet';
+  source: 'today_sheet' | 'manual_edit';
   capturedAt: string;
 }
 
