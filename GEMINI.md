@@ -100,7 +100,7 @@ ams_students.class_days / day_schedules
 ### 2. Production 배포 승인 분리 규칙 (Production Deployment Control)
 - **코드 수정 승인과 Production 배포 승인은 엄격히 별개의 단계이다.**
 - `구현 승인`, `수정해줘`, `진행해줘` 표현은 오직 **코드 수정 및 로컬/빌드 검증** 승인일 뿐, Vercel Production 배포 승인이 아니다.
-- 아래 명시적 배포 승인 문구가 포함되지 않은 상태에서는 `git push deploy main:master` (Production 배포)를 절대로 수행하지 않는다:
+- 아래 명시적 배포 승인 문구가 포함되지 않은 상태에서는 `git push deploy main` (Production 배포)를 절대로 수행하지 않는다:
   - `운영 배포해 주세요`
   - `Vercel production 반영 승인합니다`
   - `배포 진행하세요`

@@ -112,7 +112,17 @@ export interface TodaySheetCellProps {
   cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number, lockVersion?: number }>; // 📝 [추가] 실시간 협업 편집 중인 셀 맵
   myClientId?: string;
   onForceTakeover?: (studentId: string, colId: string) => void;
-  onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
+  onRemoveFromToday?: (
+    id: string,
+    reason: string,
+    mode?: 'delete' | 'cancel',
+    sessionMeta?: {
+      courseName?: string;
+      sessionId?: string;
+      movedToHour?: number | null;
+      isMakeup?: boolean;
+    }
+  ) => Promise<void>;
   toolsOrder?: string[];
   isToolsEditMode?: boolean;
   showAllTools?: boolean;
@@ -359,21 +369,31 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           </div>
         );
       case 'snapshot':
+        const targetCellDate = selectedDate || formData?.session_date || formData?.date || student.todaySession?.session_date || student.todaySession?.date || '';
+        const isPastDate = !!(targetCellDate && targetCellDate < getTodayStr());
         const hasPersistedLog = !!(student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:'));
+        const isSnapshotEditable = isPastDate && hasPersistedLog;
+
+        const snapshotTitle = !isPastDate
+          ? "스냅샷 수정은 과거 수업 기록에서만 가능합니다"
+          : (!hasPersistedLog
+            ? "저장된 일지가 없어 스냅샷을 수정할 수 없습니다"
+            : "과거 수업 정보 및 스냅샷 수정");
+
         return (
           <div
             key="snapshot"
             onClick={(e) => {
               e.stopPropagation();
-              if (!hasPersistedLog) return;
+              if (!isSnapshotEditable) return;
               onSnapshotModalClick?.(student, student.todaySession);
             }}
             className={`${itemClass} ${
-              hasPersistedLog
+              isSnapshotEditable
                 ? (isLight ? 'bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-600 hover:text-white shadow-sm' : 'bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/40 hover:text-blue-200 shadow-sm')
                 : (isLight ? 'bg-gray-100 text-gray-300 border border-gray-200 opacity-40 cursor-not-allowed' : 'bg-white/5 text-gray-500 border border-white/10 opacity-40 cursor-not-allowed')
             }`}
-            title={hasPersistedLog ? "수업 정보 및 스냅샷 수정" : "저장된 일지가 있어야 수업 정보를 수정할 수 있습니다"}
+            title={snapshotTitle}
             {...dragHandlers}
           >
             <Settings2 size={13} strokeWidth={2.5} />
@@ -425,156 +445,40 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             onDragEnd={isDeleteDraggable ? () => { delete (window as any)._draggedToolId; } : undefined}
             onMouseDown={(e) => {
               e.stopPropagation();
-              const sAny = student as any;
+            }}
+            onClick={async (e) => {
+              e.stopPropagation();
+              e.preventDefault();
 
-              // 1. 순수 보강 판정 (보조 안전장치 및 명시적 보강 플래그)
-              const isMakeupRow = sAny?.isMakeupRow === true ||
+              // 💡 [단일 세션 정밀 식별 메타데이터 추출]
+              const sAny = student as any;
+              const courseName = student.courseName ||
+                (sAny?.isSpecialClass ? (sAny?.electiveCourse?.subject || student.electiveCourse?.subject) : undefined) ||
+                formData?.course_name ||
+                student.todaySession?.course_name ||
+                '정규';
+
+              const sessionId = (student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:'))
+                ? student.todaySession.id
+                : (formData?.id && formData.id !== 'temp' && !String(formData.id).startsWith('temp:') ? formData.id : undefined);
+
+              const movedToHour = formData?.moved_to_hour !== undefined
+                ? formData.moved_to_hour
+                : (student.todaySession?.moved_to_hour !== undefined ? student.todaySession.moved_to_hour : null);
+
+              const isMakeup = sAny?.isMakeupRow === true ||
                 (sAny?.__courseType === 'makeup') ||
                 String(student?.id || '').includes('_makeup_') ||
                 formData?.is_pure_makeup === true ||
                 String(formData?.attendance_status || '').startsWith('보강');
 
-              // 💡 [안전 보장] 보강 행은 시간표 fallback을 참조하지 않고 즉시 Remove로 처리
-              if (isMakeupRow) {
-                onRemoveFromToday?.(student.id, '보강 삭제', 'delete');
-                return;
-              }
-
-              // 2. 해당 날짜 요일(dayKey) 계산
-              const targetDate = selectedDate || formData?.date || formData?.session_date || student.todaySession?.session_date || student.todaySession?.date || '';
-              const dayKey = targetDate ? getDayOfWeek(targetDate) : '';
-              if (!dayKey) {
-                onRemoveFromToday?.(student.id, '수업 삭제', 'delete');
-                return;
-              }
-
-              // 3. 시간 정규화 유틸 함수
-              const normalizeH = (val: any): number | null => {
-                if (val === null || val === undefined || val === '') return null;
-                const num = parseInt(String(val), 10);
-                if (isNaN(num)) return null;
-                let h = num >= 100 ? Math.floor(num / 100) : num;
-                if (h > 0 && h < 10) h += 12;
-                return h;
-              };
-
-              // 4. 현재 행의 실제 수업 시간(currentHour) 추출
-              // 우선순위: timeSectionLabel > formData.moved_to_hour > todaySession.moved_to_hour > 단일 등록 시간
-              let currentHour: number | null = null;
-              if (timeSectionLabel) {
-                const parsed = parseInt(timeSectionLabel.replace(/[^0-9]/g, ''), 10);
-                if (!isNaN(parsed) && parsed > 0) currentHour = normalizeH(parsed);
-              }
-              if (currentHour === null) {
-                currentHour = normalizeH(formData?.moved_to_hour ?? student.todaySession?.moved_to_hour);
-              }
-              if (currentHour === null) {
-                const daySched = student.day_schedules?.[dayKey];
-                if (Array.isArray(daySched) && daySched.length === 1) {
-                  currentHour = normalizeH(daySched[0]);
-                }
-              }
-
-              let isScheduledInTimetable = false;
-
-              if (!isMakeupRow && dayKey) {
-                if (sAny?.isSpecialClass) {
-                  // 5. 선택과목 판정: 과목, 요일, 시간이 학생의 __elective_courses에 실제 등록되어 있는지 검증
-                  const rawElective = student.book_courses?.['__elective_courses'];
-                  if (rawElective) {
-                    try {
-                      const parsed = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
-                      if (Array.isArray(parsed)) {
-                        const currentSubject = student.courseName || sAny?.electiveCourse?.subject;
-                        isScheduledInTimetable = parsed.some((c: any) => {
-                          if (!c) return false;
-                          const cSub = c.subject || c.course_name || c.name;
-                          if (currentSubject && cSub !== currentSubject) return false;
-                          const days = c.days;
-                          const matchesDay = days && (
-                            Array.isArray(days)
-                              ? days.some((d: any) => typeof d === 'string' && d.trim() === dayKey)
-                              : (typeof days === 'string' && days.includes(dayKey))
-                          );
-                          if (!matchesDay) return false;
-
-                          const electiveHours = (c.schedules && Array.isArray(c.schedules[dayKey]) && c.schedules[dayKey].length > 0)
-                            ? [normalizeH(c.schedules[dayKey][0])]
-                            : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
-
-                          if (electiveHours.length > 0 && currentHour !== null) {
-                            return electiveHours.includes(currentHour);
-                          }
-                          return true;
-                        });
-                      }
-                    } catch (e) {}
-                  }
-                } else {
-                  // 6. 정규 수업 판정: student.day_schedules[dayKey] 안에 현재 행의 수업 시간이 포함되어 있는지 검증
-                  const scheduledHours: number[] = (student.day_schedules?.[dayKey] || [])
-                    .map(normalizeH)
-                    .filter((h: number | null): h is number => h !== null);
-
-                  const isClassDay = (student.class_days || []).includes(dayKey);
-
-                  if (isClassDay || scheduledHours.length > 0) {
-                    if (currentHour !== null && scheduledHours.length > 0) {
-                      isScheduledInTimetable = scheduledHours.includes(currentHour) || (formData?.moved_to_hour !== null && formData?.moved_to_hour !== undefined);
-                    } else {
-                      isScheduledInTimetable = isClassDay;
-                    }
-                  }
-                }
-              }
-
-              if (isScheduledInTimetable) {
-                // 💡 [정책 1: 시간표 등록 수업 -> Refresh]
-                const courseLabel = sAny?.isSpecialClass
-                  ? (student.courseName || sAny?.electiveCourse?.subject || '선택과목')
-                  : '정규';
-                const confirmMsg = `오늘 ${student.name} 학생의 [${courseLabel}] 수업 당일 기록(출결, 진도, 숙제, 테스트 등)을 초기화하시겠습니까?\n\n※ 시간표 수업 행은 그대로 유지되며, 당일 작성된 내용만 초기 상태로 리셋됩니다.`;
-                if (!window.confirm(confirmMsg)) return;
-
-                // 행은 유지하고 당일 출결, 시간 이동, 전체 당일 기록 상태만 초기 상태로 리셋
-                const resetPayload: any = {
-                  attendance_status: ATTENDANCE_STATUS.BEFORE,
-                  attendance_reason: null,
-                  status: 'none',
-                  moved_to_hour: null,
-                  is_pure_makeup: false,
-                  classwork_text: '',
-                  classwork_json: [],
-                  completed_classwork_text: '',
-                  completed_classwork_json: [],
-                  homework_text: '',
-                  homework_json: [],
-                  special_notes: '',
-                  test_id: null,
-                  test_status: null,
-                  test_score: null,
-                  test_answers: null,
-                  test_completed: null,
-                  test_cut: 0,
-                  mission: '',
-                  todo_achievement: 0,
-                  next_quiz_text: '',
-                  next_quiz_cut: 0,
-                  next_quiz_trial: 1,
-                  next_quiz_json: [],
-                  hw_checked_today: false,
-                  hw_passed_today: false,
-                  approval_status: 'none'
-                };
-                onSave?.(resetPayload);
-              } else {
-                // 💡 [정책 2: 시간표 외 수업 / 순수 보강 -> Remove]
-                onRemoveFromToday?.(student.id, '보강 삭제', 'delete');
-              }
-            }}
-            onClick={(e) => {
-              e.stopPropagation();
-              e.preventDefault();
+              // 💡 [Overview와 동일한 검증된 백엔드 DELETE 및 allLogs 재계산 엔진 호출]
+              await onRemoveFromToday?.(student.id, '수업 취소', 'delete', {
+                courseName,
+                sessionId,
+                movedToHour,
+                isMakeup
+              });
             }}
             className={`${itemClass} ${isLight ? 'bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-600 hover:text-white shadow-sm' : 'bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 shadow-sm'} flex items-center justify-center font-black cursor-pointer`}
             title="Reset & Remove (기록 리셋 / 보강 제외)"

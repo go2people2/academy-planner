@@ -1584,55 +1584,74 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
   };
 
-  const removeStudentFromToday = async (studentId: string, reason: string = '', mode: 'delete' | 'cancel' = 'cancel') => {
+  const removeStudentFromToday = async (
+    studentId: string,
+    reason: string = '',
+    mode: 'delete' | 'cancel' = 'cancel',
+    sessionMeta?: {
+      courseName?: string;
+      sessionId?: string;
+      movedToHour?: number | null;
+      isMakeup?: boolean;
+    }
+  ) => {
     if (isWarpMode) {
       alert('🔒 원격 지원 모드에서는 데이터를 수정할 수 없습니다.');
       return;
     }
 
-    // 💡 [선택과목/특강/보강 파생 ID 대응]
+    // 💡 [선택과목/특강/보강 파생 ID 대응 및 sessionMeta 우선 적용]
     let realStudentId = studentId;
-    let targetCourseName = '정규';
-    let targetSessionId: string | undefined = undefined;
-    let targetMovedHour: number | null = null;
+    let targetCourseName = sessionMeta?.courseName || '정규';
+    let targetSessionId: string | undefined = (sessionMeta?.sessionId && sessionMeta.sessionId !== 'temp' && !String(sessionMeta.sessionId).startsWith('temp:'))
+      ? sessionMeta.sessionId
+      : undefined;
+    let targetMovedHour: number | null = sessionMeta?.movedToHour !== undefined ? sessionMeta.movedToHour : null;
+    let isMakeupDeletion = sessionMeta?.isMakeup !== undefined ? sessionMeta.isMakeup : studentId.includes('_makeup_');
 
-    // 1. 현재 렌더링된 todayStudents 목록에서 해당 row 객체 먼저 탐색
-    const targetRow = (todayStudents as any[])?.find((s: any) => s.id === studentId);
-    if (targetRow) {
-      realStudentId = targetRow.originalId || targetRow.id;
-      targetCourseName = targetRow.courseName || targetRow.todaySession?.course_name || (targetRow.isSpecialClass ? targetRow.electiveCourse?.subject : '정규') || '정규';
-      if (targetRow.todaySession?.id && targetRow.todaySession.id !== 'temp') {
-        targetSessionId = targetRow.todaySession.id;
-      }
-      if (targetRow.todaySession?.moved_to_hour !== undefined && targetRow.todaySession?.moved_to_hour !== null) {
-        targetMovedHour = targetRow.todaySession.moved_to_hour;
-      }
-    } else if (studentId.includes('_special_')) {
-      const parts = studentId.split('_special_');
-      realStudentId = parts[0];
-      if (parts[1]) {
-        const subParts = parts[1].split('_');
-        targetCourseName = subParts[0] || '특강';
-      }
-    } else if (studentId.includes('_makeup_')) {
-      const parts = studentId.split('_makeup_');
-      realStudentId = parts[0];
-      const makeupSuffix = parts[1] || '';
-      if (makeupSuffix) {
-        const subParts = makeupSuffix.split('_');
-        if (subParts.length >= 2) {
-          targetCourseName = subParts[0];
-          targetSessionId = subParts[1];
-        } else {
-          targetSessionId = makeupSuffix;
+    // 1. sessionMeta가 지정되지 않은 경우, 현재 렌더링된 todayStudents 목록에서 해당 row 객체 탐색
+    if (!sessionMeta) {
+      const targetRow = (todayStudents as any[])?.find((s: any) => s.id === studentId);
+      if (targetRow) {
+        realStudentId = targetRow.originalId || targetRow.id;
+        targetCourseName = targetRow.courseName || targetRow.todaySession?.course_name || (targetRow.isSpecialClass ? targetRow.electiveCourse?.subject : '정규') || '정규';
+        if (targetRow.todaySession?.id && targetRow.todaySession.id !== 'temp') {
+          targetSessionId = targetRow.todaySession.id;
         }
+        if (targetRow.todaySession?.moved_to_hour !== undefined && targetRow.todaySession?.moved_to_hour !== null) {
+          targetMovedHour = targetRow.todaySession.moved_to_hour;
+        }
+      } else if (studentId.includes('_special_')) {
+        const parts = studentId.split('_special_');
+        realStudentId = parts[0];
+        if (parts[1]) {
+          const subParts = parts[1].split('_');
+          targetCourseName = subParts[0] || '특강';
+        }
+      } else if (studentId.includes('_makeup_')) {
+        const parts = studentId.split('_makeup_');
+        realStudentId = parts[0];
+        const makeupSuffix = parts[1] || '';
+        if (makeupSuffix) {
+          const subParts = makeupSuffix.split('_');
+          if (subParts.length >= 2) {
+            targetCourseName = subParts[0];
+            targetSessionId = subParts[1];
+          } else {
+            targetSessionId = makeupSuffix;
+          }
+        }
+      }
+    } else {
+      if (studentId.includes('_special_')) {
+        realStudentId = studentId.split('_special_')[0];
+      } else if (studentId.includes('_makeup_')) {
+        realStudentId = studentId.split('_makeup_')[0];
       }
     }
 
     const student = students.find(s => s.id === realStudentId || s.originalId === realStudentId);
     if (!student || !academy) return;
-
-    const isMakeupDeletion = studentId.includes('_makeup_');
 
     // 2. 세션 ID가 없는 경우 student.allLogs에서 정밀 매칭
     if (!targetSessionId || targetSessionId === 'temp' || String(targetSessionId).startsWith('temp:')) {

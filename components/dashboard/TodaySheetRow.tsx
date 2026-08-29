@@ -47,7 +47,17 @@ export interface TodaySheetRowProps {
   cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number, lockVersion?: number }>; // 📝 [추가] 실시간 협업 셀 맵
   myClientId?: string;
   onForceTakeover?: (studentId: string, colId: string) => void;
-  onRemoveFromToday?: (id: string, reason: string, mode?: 'delete' | 'cancel') => Promise<void>;
+  onRemoveFromToday?: (
+    id: string,
+    reason: string,
+    mode?: 'delete' | 'cancel',
+    sessionMeta?: {
+      courseName?: string;
+      sessionId?: string;
+      movedToHour?: number | null;
+      isMakeup?: boolean;
+    }
+  ) => Promise<void>;
   toolsOrder?: string[];
   isToolsEditMode?: boolean;
   showAllTools?: boolean;

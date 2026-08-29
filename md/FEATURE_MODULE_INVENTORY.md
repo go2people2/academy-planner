@@ -1,6 +1,7 @@
 # AMS 기능 모듈화 인벤토리 (Feature Module Inventory)
 
-> **문서 목적**: 학원별 맞춤형 구독 모델(Pricing Tier)과 마스터 관리자(`/master`)의 Feature Flagging(기능 On/Off)을 안전하게 구현하기 위해, 현재 AMS의 모든 사이드바 메뉴, `viewMode`, 컴포넌트, 데이터 의존성 및 딥링크를 전수 조사하여 체계화한 사전 설계 문서입니다.
+> **문서 성격**: 현재 코드 기준의 모듈·메뉴·의존성 전수 조사 인벤토리입니다.  
+> **SaaS 실행 계획**: Feature Flag 정책, 단계별 구현 로드맵, 보안/테넌트 격리 및 롤백 정책 등 구체적인 SaaS 실행 계획은 👉 [`md/SAAS_SIMPLIFICATION_MODULARIZATION_PLAN.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/SAAS_SIMPLIFICATION_MODULARIZATION_PLAN.md)를 참조하십시오.
 
 ---
 
@@ -31,13 +32,34 @@
 1. **TodaySheet (`todayTable`)**:
    - 일일 수업 출결, 진도 기록, 숙제 관리, 테스트 결과 입력, 상담 특이사항.
    - 단축키(Alt+Q/W/E/R SET 전환), 셀 단위 즉각 저장 및 낙관적 UI 업데이트.
+   - **당일 수업 운영(항상 ON)**: 보강 추가, 시간이동(`moved_to_hour`), 수업 제외/취소, 당일 수업 대상 자동 집계.
 2. **Overview (`board`)**:
    - 오늘 등원생 타임라인/시간대별 카드 그리드, 미등원생 관리, 실시간 출결 현황.
+   - 시간대별 등원생 이동 및 보강생 즉시 카드 배치.
 3. **전체 학생 정보 관리 (`studentEdit`)**:
    - 전교생 프로필(이름/학교/학년/연락처), 요일별(`class_days`) 및 시간표(`day_schedules`) 배정.
    - 월/화/수/목/금/토/일 전용 요일 필터 및 검색.
 4. **기본 설정 (`settings`)**:
    - 학원 기본 정보, 교사 계정 관리, 상담 주기 설정, 다크/라이트 테마 전환.
+
+---
+
+## 3. Core 내부 운영 기능 (항상 ON, 별도 Feature Flag 금지)
+
+> **⚠️ 절대 원칙**: 보강, 시간이동, 당일 수업 추가/제외는 별도의 유료 Add-on이 아닌 **학원의 일일 수업 출결·진도·숙제 기록을 위한 Core 필수 운영 체계**입니다. Master Feature Flag에서 이 기능들을 On/Off하는 키는 생성하지 않습니다.
+
+### 📌 당일 수업 제어 기능 상세 매핑
+
+| 기능명 | 주요 진입 화면 / UI 위치 | 데이터 연동 (DB 컬럼 / State) | 비활성화 금지 사유 (Core 필수 이유) |
+| :--- | :--- | :--- | :--- |
+| **보강 추가 (Makeup Session)** | TodaySheet 상단 [보강 추가] 모달<br>Overview 내 [보강 추가] 버튼 | **DB 저장**: `ams_daily_logs`<br>(`session_date`, `course_name`, `attendance_status`, `attendance_reason`, `moved_to_hour`, `absence_session_id`)<br>**파생 상태**: `is_pure_makeup` (DB 미저장, 클라이언트 판정용 파생 플래그) | 당일 정규 수업 외에 추가로 등원한 학생의 출결/진도/숙제/테스트를 기록하는 유일한 경로이므로 필수. |
+| **시간이동 (Reschedule / Move Hour)** | TodaySheet 학생 등원시간 셀 드롭다운<br>Overview 시간대 카드 드래그/이동 | **DB 저장**: `ams_daily_logs.moved_to_hour`<br>**로컬 상태**: `student.todaySession.moved_to_hour` | 정규 시간과 다른 교시로 이동한 학생의 시간대별 필터링(`selectedHour`), 카드 배치 및 출결 관리를 위해 필수. |
+| **수업 제외 / 취소 (Omit Session)** | TodaySheet 출결 상태(`결석`, `이동` 등)<br>Overview 카드 내 상태 토글 | **DB 저장**: `ams_daily_logs.attendance_status`<br>`ams_daily_logs.attendance_reason` | 결석 사유 및 수업 취소 기록을 남기고, 당일 수업 대상 통계/미등원 카운트에서 정확히 처리하기 위해 필수. |
+| **당일 수업 대상 자동 계산** | `useTodaySheetRows.ts`<br>`lib/studentDataEnricher.ts` | **DB 읽기**: `ams_students.day_schedules`, `class_days`<br>`ams_daily_logs` (`session_date`, `moved_to_hour`, 보강 상태/사유) | 요일 스케줄과 당일 로그(`moved_to_hour`, 보강 로그)를 조합하여 오늘 출석 대상을 실시간 계산하므로 시스템 붕괴 방지용 필수. |
+
+### 🔒 Feature Flag 설계 정책
+1. **FeatureKey 후보 제외**: `FeatureKey` 목록(`digital_library`, `live_classroom`, `assessment_tools`, `analytics_operations` 등)에 `makeup`, `reschedule`, `session_management`와 같은 키는 **절대로 추가하지 않습니다**.
+2. **독립 메뉴화 시 원칙**: 향후 별도의 "보강/시간이동 전용 관리 메뉴(예: 종합 보강 캘린더)"가 신설되어 메뉴 노출 여부만 토글되더라도, **TodaySheet 및 Overview 내부의 보강 추가, 시간이동, 수업 제외 기능은 영구적으로 항상 활성화(Always ON)** 상태를 유지합니다.
 
 ---
 
@@ -92,7 +114,7 @@
 
 ---
 
-## 3. 의존성 맵 및 딥링크 연계 차단 규칙 (Cross-Feature Dependencies)
+## 4. 의존성 맵 및 딥링크 연계 차단 규칙 (Cross-Feature Dependencies)
 
 ```mermaid
 graph TD
@@ -119,7 +141,7 @@ graph TD
 
 ---
 
-## 4. 다크 / 라이트 Dashboard 동기화 구조
+## 5. 다크 / 라이트 Dashboard 동기화 구조
 
 * **단일 공통 관리 컴포넌트**:
   - `TodaySheet.tsx` (다크/라이트 내부 통합)
@@ -134,10 +156,11 @@ graph TD
 
 ---
 
-## 5. 차기 구현 단계별 실행 로드맵 (Next Implementation Steps)
+## 6. 차기 구현 단계별 실행 로드맵 (Next Implementation Steps)
 
 1. **[1단계] 공통 Feature Flag 스키마 및 상수 정의 (`lib/constants/features.ts`)**:
-   - `FEATURE_KEYS = ['digital_library', 'live_classroom', 'exams_bank', 'analytics_pack']`
+   - `FEATURE_KEYS = ['digital_library', 'live_classroom', 'assessment_tools', 'analytics_operations', 'student_parent_portal', 'labs']`
+   - **원칙**: 보강, 시간이동, 수업 제외/취소는 Core 기본 운영 기능이므로 FeatureKey 목록에 절대 포함하지 않음.
    - 기본값: 플래그 데이터가 없는 기존 학원은 `ALL_ENABLED`로 fallback 처리 (기존 운영 무중단 보장).
 2. **[2단계] DB 스키마 반영**:
    - `ams_academies` 테이블의 `operation_settings` JSONB에 `enabled_features: string[]` 필드 활용 (또는 전용 컬럼).

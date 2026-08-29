@@ -368,3 +368,13 @@ AI와 협업하여 앱을 장기적으로 안정하게 운영하기 위한 원�
 3. **클라우드 비용 0원**: Vercel/Supabase 등 외부 유료 SaaS 구독료 없이 평생 무료 운영 가능.
 4. **초고속 응답 속도**: 내부 LAN 통신으로 네트워크 지연(Lag)이 0에 수렴.
 
+---
+
+## 21. SaaS 단순화·모듈화 실행 계획 수립 및 Core/Add-on 정책 확정 (2026-08-29)
+
+- **공식 실행 계획서 신설**: [`md/SAAS_SIMPLIFICATION_MODULARIZATION_PLAN.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/SAAS_SIMPLIFICATION_MODULARIZATION_PLAN.md)
+- **Core Always-ON 확정**: TodaySheet, Overview, 학생정보수정, 기본 Settings 및 **보강 추가/시간이동(`moved_to_hour`)/수업제외·취소/당일 수업 대상 자동 계산**을 절대 비활성화할 수 없는 Core 필수 운영 체계로 규정.
+- **Add-on 6대 패키지 Key 체계화**: `digital_library`, `live_classroom`, `assessment_tools`, `analytics_operations`, `student_parent_portal`, `labs`.
+- **기존 학원 무중단 보장**: 플래그 미설정 시 `DEFAULT_ACADEMY_FEATURE_FLAGS` (전체 ON) 기본값 정책 및 Phase 0 ~ Phase 6 단계별 점진적 실행 로드맵 확립.
+
+
