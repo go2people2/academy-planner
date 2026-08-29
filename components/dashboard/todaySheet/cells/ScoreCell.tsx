@@ -31,17 +31,30 @@ export const ScoreCell = React.memo(function ScoreCell({
   // 💡 로컬 Ref 신설하여 안전한 element 참조 보장 (prop이 함수일 경우 대응)
   const numeratorInputRef = React.useRef<HTMLInputElement>(null);
   const totalInputRef = React.useRef<HTMLInputElement>(null);
+  const scoreDraftRef = React.useRef<string | undefined>(undefined);
 
   const isCountMode = formData.test_score_type === 'count';
+  const prevIsEditingRef = React.useRef(isEditing);
 
-  // 💡 [동기화] 외부 formData.test_score 변경 시 DOM input value 정밀 동기화
+  // 💡 [편집 모드 진입 1회 포커스] isEditing이 true로 새로 진입할 때만 1회 포커스 부여
+  React.useEffect(() => {
+    if (isEditing && !prevIsEditingRef.current) {
+      if (numeratorInputRef.current && document.activeElement !== numeratorInputRef.current) {
+        numeratorInputRef.current.focus();
+      }
+    }
+    prevIsEditingRef.current = isEditing;
+  }, [isEditing]);
+
+  // 💡 [동기화] 외부 formData.test_score 변경 시 DOM input value 정밀 동기화 (사용자 입력 중 draft 보호)
   React.useLayoutEffect(() => {
-    if (numeratorInputRef.current && (isEditing || isActive)) {
-      if (document.activeElement !== numeratorInputRef.current) {
+    if (numeratorInputRef.current && isEditing) {
+      const isFocused = document.activeElement === numeratorInputRef.current;
+      if (!isFocused && scoreDraftRef.current === undefined) {
         numeratorInputRef.current.value = formData.test_score || '';
       }
     }
-  }, [isEditing, isActive, formData.test_score]);
+  }, [isEditing, formData.test_score]);
 
   // 💡 인라인 테스트 모드 감지 (하이픈 문법을 썼다면 점수칸은 요약 뱃지로 변신) - 학원 기준점 반영!
   const parsedTests = parseInlineTests(formData.test_id, defaultScoreCut, defaultCountCut);
@@ -88,7 +101,7 @@ export const ScoreCell = React.memo(function ScoreCell({
 
   return (
     <div className="relative w-full min-h-[22px] flex items-center justify-start group/score py-1 px-1">
-      {(isEditing || isActive) && (
+      {isEditing && (
         <div className="flex items-center w-full min-h-[22px] overflow-hidden" onClick={(e) => e.stopPropagation()}>
           <input 
             ref={(el) => {
@@ -100,7 +113,6 @@ export const ScoreCell = React.memo(function ScoreCell({
             defaultValue={formData.test_score || ''} 
             data-student-id={student.id}
             data-col-id={colId}
-            autoFocus={isEditing} 
             onKeyDown={(e) => {
               if (e.key === 'Tab' && !e.shiftKey && isCountMode) {
                 // 💡 분자에서 Tab: 분모로 내부 이동 (저장 안 함)
@@ -110,7 +122,8 @@ export const ScoreCell = React.memo(function ScoreCell({
               }
               if (e.key === 'Enter') {
                 // 💡 [Enter 저장] 단일 계약 사용
-                const scoreVal = (e.target as HTMLInputElement).value;
+                const scoreVal = scoreDraftRef.current ?? (e.target as HTMLInputElement).value;
+                scoreDraftRef.current = undefined;
                 const totalVal = isCountMode ? (totalInputRef.current?.value || formData.test_total_count) : undefined;
                 onSave({ test_score: scoreVal, test_total_count: totalVal });
               }
@@ -119,9 +132,18 @@ export const ScoreCell = React.memo(function ScoreCell({
             onBlur={(e) => {
               // 💡 분모로 이동할 때는 저장 무시
               if (isCountMode && e.relatedTarget === totalInputRef.current) return;
-              onSave({ test_score: e.target.value }, { isBlur: true });
+              const scoreVal = scoreDraftRef.current ?? e.target.value;
+              scoreDraftRef.current = undefined;
+              onSave({ test_score: scoreVal }, { isBlur: true });
             }} 
-            onChange={(e) => handleLocalInput(e, 'test_score')} 
+            onInput={(e) => {
+              scoreDraftRef.current = (e.target as HTMLInputElement).value;
+              handleLocalInput(e, 'test_score');
+            }} 
+            onChange={(e) => {
+              scoreDraftRef.current = (e.target as HTMLInputElement).value;
+              handleLocalInput(e, 'test_score');
+            }} 
             placeholder="-" 
             className={`bg-transparent border-0 outline-none text-[14px] p-0 m-0 w-full text-left ${
               isLight ? 'text-emerald-800 font-medium' : 'text-emerald-400 font-normal'
@@ -130,11 +152,9 @@ export const ScoreCell = React.memo(function ScoreCell({
         </div>
       )}
       
-      {!isEditing && !isActive && (
+      {!isEditing && (
         <div 
-          onClick={(e) => handleCellInteraction(e, colId, 'click')}
-          onDoubleClick={(e) => handleCellInteraction(e, colId, 'dblclick')}
-          className={`px-4 text-[14px] text-left pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-text transition-colors ${
+          className={`px-4 text-[14px] text-left pr-4 w-full min-h-[22px] py-1 flex items-center justify-start cursor-default select-none transition-colors ${
             isLight 
               ? 'text-emerald-800 font-medium group-hover/td:bg-gray-100/50' 
               : 'text-emerald-400 font-normal group-hover/td:bg-white/[0.02]'

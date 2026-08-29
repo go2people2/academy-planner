@@ -1,6 +1,7 @@
 export type StudentStatus = 'perfect' | 'good' | 'neutral' | 'poor' | 'bad' | 'none';
 
 export interface HomeworkItem {
+  id?: string;
   type: 'book' | 'custom';
   book_name: string;
   range: string;

@@ -7,9 +7,9 @@ import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionField
 
 interface UseTodaySheetRowLogicProps {
   student: Student;
-  masterTextbooks: TextbookOption[];
+  masterTextbooks: any[];
   onSave: (id: string, data: any) => Promise<boolean>;
-  onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
+  onUpdateStudentInfo?: (id: string, fieldOrUpdates: any, value?: any) => Promise<any>;
   selectedDate: string;
   activeCell?: { studentId: string; columnId: string } | null;
   editingCell?: { studentId: string; columnId: string } | null;
@@ -271,9 +271,10 @@ export function useTodaySheetRowLogic({
     if (isSessionPropsChanged) {
       prevSessionRef.current = student.todaySession;
       const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
+      const isPendingSave = Object.keys(pendingUpdatesRef.current).length > 0 || isSavingRef.current || recentlySavedRef.current;
 
-      // 💡 [DAILY_SHEET_AUTOFILL_RULES.md] isBatchSaving / recentlySavedRef 락 없이 !isUserTyping 일 때 무조건 formData 갱신
-      if (!isUserTyping) {
+      // 💡 [DAILY_SHEET_AUTOFILL_RULES.md] 입력 중이거나 저장/대기 중인 경우 formData 덮어쓰기 방지
+      if (!isUserTyping && !isPendingSave) {
         const newData = getInitialFormData(selectedDate);
         setFormData(newData);
       }
@@ -283,13 +284,12 @@ export function useTodaySheetRowLogic({
   // 💡 [추가] Tab/Enter 저장 직후 발생하는 Blur를 명시적으로 무시하는 플래그
   const skipBlurRef = useRef(false);
   const recentlySavedRef = useRef(false);
+  const isSavingRef = useRef(false);
+  const pendingUpdatesRef = useRef<Record<string, any>>({});
 
   // 5. Handlers
   // 💡 [하이브리드 계약] handleSave(updatesOrField, valueOrOptions?, maybeOptions?)
   const handleSave = useCallback(async (updatesOrField: Record<string, any> | string, valueOrOptions?: any, maybeOptions?: any): Promise<boolean> => {
-    if (isSaving) return false;
-    recentlySavedRef.current = true;
-
     // 0. 계약 분석 및 데이터 정규화
     let finalUpdates: Record<string, any> = {};
     let options: { isBlur?: boolean } = {};
@@ -313,6 +313,15 @@ export function useTodaySheetRowLogic({
       skipBlurRef.current = false;
       return false;
     }
+
+    // 💡 [대기열 큐 보호] 이전 저장이 진행 중일 때 들어온 새 blur/입력값은 버리지 않고 누적 대기
+    if (isSavingRef.current) {
+      pendingUpdatesRef.current = { ...pendingUpdatesRef.current, ...finalUpdates };
+      setFormData((prev: any) => ({ ...prev, ...finalUpdates }));
+      return true;
+    }
+
+    recentlySavedRef.current = true;
 
     // 2. DOM 병합 배제 (Refs 수집을 걷어내고 오직 전달된 업데이트 정보만 단독 저장)
     const mergedUpdates = { ...finalUpdates };
@@ -357,14 +366,13 @@ export function useTodaySheetRowLogic({
     if (!hasChange) return false;
 
     // 3. 저장 실행 및 플래그 설정
+    isSavingRef.current = true;
     setIsSaving(true);
     if (!isBlurCall) skipBlurRef.current = true; // 키보드 저장 시 플래그 활성화
 
     setFormData(finalData);
 
     // 💡 [원장님 특별 피드백 반영 - 실시간 DOM 밸류 수동 동기화]
-    // 비제어 컴포넌트 껍데기가 옛날 값을 고집하여 일치하지 않거나,
-    // 나중에 포커스가 스쳐 나갈 때(onBlur) 옛날 값으로 DB가 다시 오염되는 역버그를 완벽 철통 수비합니다!
     if ('completed_classwork_text' in mergedUpdates && ccwRef.current) {
       ccwRef.current.value = mergedUpdates.completed_classwork_text || '';
     }
@@ -390,23 +398,34 @@ export function useTodaySheetRowLogic({
       managementNotesRef.current.value = mergedUpdates.management_notes || '';
     }
 
-    // 💡 [수정] 어떤 경우에도 전체 객체(finalData)를 보내지 않고,
-    // 오직 변경된 필드만 포함된 savePayload(Partial)만 전송하여 출석 필드를 보호
     const payloadKeys = Object.keys(savePayload);
     const saveType = isAttendanceUpdate ? 'ATTENDANCE' : 'GENERAL_INFO';
     console.debug(`[SAVE][${saveType}] student: ${student.name}, fields:`, payloadKeys);
 
-    const success = await onSave(student.id, savePayload);
-    setIsSaving(false);
-    // 💡 [안정화] 저장이 완료된 후 부모 DB 비동기 네트워크 상태 반영이 지연되어
-    // 로컬 상태가 옛날 데이터로 덮어씌워지는 현상을 완전히 방지하기 위해 락(recentlySavedRef)을 1.5초간 유지합니다.
+    let success = false;
+    try {
+      success = await onSave(student.id, savePayload);
+    } catch (err) {
+      console.error('Failed to save student data:', err);
+    } finally {
+      isSavingRef.current = false;
+      setIsSaving(false);
+
+      // 💡 [대기열 후속 처리] 저장 중 누적된 변경사항이 있다면 즉시 후속 저장 실행
+      if (Object.keys(pendingUpdatesRef.current).length > 0) {
+        const queuedUpdates = { ...pendingUpdatesRef.current };
+        pendingUpdatesRef.current = {};
+        handleSave(queuedUpdates);
+      }
+    }
+
     setTimeout(() => {
       recentlySavedRef.current = false;
     }, 1500);
     setSaveStatus(success ? 'success' : 'error');
     setTimeout(() => setSaveStatus('idle'), 2000);
     return success;
-  }, [formData, rowDate, student.id, isSaving, onSave, onUpdateStudentInfo, getInitialFormData]);
+  }, [formData, rowDate, student.id, onSave, onUpdateStudentInfo, getInitialFormData]);
 
   const handleAttendanceToggle = (e: React.MouseEvent) => {
     e.stopPropagation();

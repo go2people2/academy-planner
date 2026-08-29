@@ -34,9 +34,6 @@ export default function HomeworkEditor({
     mounted,
     unitDataMap,
     isLoadingUnits,
-    pdfLinks,
-    activePdfUrl,
-    setActivePdfUrl,
     items,
     setItems,
     itemsRef,
@@ -44,12 +41,15 @@ export default function HomeworkEditor({
     endRefs,
     commitPageChange,
     navigateInput,
-    openFastPdf,
+    activeEditorItem,
+    setActiveEditorItem,
+    addNewRange,
   } = useHomeworkEditorState({
     student,
     homeworkJson,
     onClose,
     academyInfo,
+    masterTextbooks,
   });
 
   if (!mounted) return null;
@@ -100,6 +100,19 @@ export default function HomeworkEditor({
           )}
 
           <div className="flex items-center gap-2 relative z-10">
+            {/* 💡 [단일 버튼] 선택한 교재의 새로운 범위 행 추가 */}
+            <button
+              type="button"
+              onClick={addNewRange}
+              className={`px-3 py-1.5 rounded-[2px] font-black uppercase tracking-widest flex items-center gap-1.5 border transition-all text-[11px] ${
+                isLight
+                  ? 'bg-blue-50 text-blue-600 border-blue-200 hover:bg-blue-100 hover:border-blue-300 shadow-sm'
+                  : 'bg-blue-600/20 text-blue-300 border-blue-500/30 hover:bg-blue-600/30 hover:text-white'
+              }`}
+              title="선택한 교재의 새로운 범위 행 추가"
+            >
+              <Plus size={12} /> 범위 추가
+            </button>
             <button
               onClick={() => {
                 if (window.confirm('입력된 모든 페이지와 단원 정보를 초기화하시겠습니까? (교재 목록은 유지됩니다)')) {
@@ -121,16 +134,17 @@ export default function HomeworkEditor({
           <div className="space-y-2 max-h-[45vh] overflow-y-auto pr-2 custom-scrollbar-v px-1">
             {items.map((hw, idx) => (
               <HomeworkRow
-                key={idx}
+                key={hw.id || `${hw.book_name}_${idx}`}
                 hw={hw}
                 idx={idx}
                 masterTextbooks={masterTextbooks}
                 unitData={unitDataMap[hw.book_name] || []}
                 startRef={(el: any) => startRefs.current[idx] = el}
                 endRef={(el: any) => endRefs.current[idx] = el}
-                pdfLinks={pdfLinks}
                 isLight={isLight}
-                onOpenPdf={(url) => openFastPdf(url)}
+                isActive={activeEditorItem?.itemId === (hw.id || String(idx))}
+                canDelete={hw.type === 'custom' || items.filter(h => h.book_name === hw.book_name).length > 1}
+                onFocusItem={() => setActiveEditorItem({ itemId: hw.id || String(idx), bookName: hw.book_name })}
                 onUpdate={(updated) => {
                   const newHw = [...items];
                   newHw[idx] = updated;
@@ -141,11 +155,6 @@ export default function HomeworkEditor({
                 onReset={() => {
                   const newHw = [...items];
                   newHw[idx] = { ...newHw[idx], range: '', units: [], start_page: '', end_page: '', note: '' };
-                  setItems(newHw);
-                }}
-                onDuplicate={() => {
-                  const newHw = [...items];
-                  newHw.splice(idx + 1, 0, { type: hw.type, book_name: hw.book_name, range: '', units: [], start_page: '', end_page: '', note: '' });
                   setItems(newHw);
                 }}
                 onDelete={() => {
@@ -197,53 +206,29 @@ export default function HomeworkEditor({
           </div>
         </div>
       </motion.div>
-
-      {/* 📖 인앱 PDF 뷰어 레이어 (구글 드라이브 연동) */}
-      <AnimatePresence>
-        {activePdfUrl && (
-          <div className="fixed inset-0 z-[10000] flex items-center justify-center p-6 bg-black/80 backdrop-blur-sm pointer-events-auto no-print">
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95 }}
-              animate={{ opacity: 1, scale: 1 }}
-              exit={{ opacity: 0, scale: 0.95 }}
-              className={`relative w-full max-w-5xl h-[88vh] border rounded-lg overflow-hidden flex flex-col shadow-2xl ${
-                isLight ? 'bg-white border-gray-250' : 'bg-[#121212] border-white/10'
-              }`}
-            >
-              <div className={`px-4 py-3 flex items-center justify-between border-b ${
-                isLight ? 'bg-gray-50 border-gray-250 text-gray-800' : 'bg-[#1e1e1e] border-white/5 text-white/80'
-              }`}>
-                <span className="text-xs font-black uppercase tracking-widest flex items-center gap-2">
-                  <FileText size={14} className="text-blue-500" />
-                  교재 PDF 뷰어 (구글 드라이브)
-                </span>
-                <button
-                  onClick={() => setActivePdfUrl(null)}
-                  className="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-gray-500 hover:text-red-500 transition-all"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <div className="flex-1 bg-black relative">
-                <iframe
-                  src={activePdfUrl}
-                  className="w-full h-full border-none"
-                  allow="autoplay"
-                />
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
     </div>,
     document.body
   );
 }
 
 function HomeworkRow({
-  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, onDuplicate, startRef, endRef, onKeyDown, pdfLinks = {}, isLight = false, onOpenPdf
+  hw, idx, masterTextbooks, unitData, onUpdate, commitPageChange, onReset, onDelete, startRef, endRef, onKeyDown, isLight = false, isActive = false, canDelete = false, onFocusItem
 }: {
-  hw: HomeworkItem, idx: number, masterTextbooks: TextbookOption[], unitData: any[], onUpdate: (hw: HomeworkItem) => void, commitPageChange: (start: string, end: string, note?: string) => void, onReset?: () => void, onDelete?: () => void, onDuplicate?: () => void, startRef?: any, endRef?: any, onKeyDown?: (key: string, type: 'start' | 'end') => void, pdfLinks?: Record<string, any>, isLight?: boolean, onOpenPdf?: (url: string) => void
+  hw: HomeworkItem;
+  idx: number;
+  masterTextbooks: TextbookOption[];
+  unitData: any[];
+  onUpdate: (hw: HomeworkItem) => void;
+  commitPageChange: (start: string, end: string, note?: string) => void;
+  onReset?: () => void;
+  onDelete?: () => void;
+  startRef?: any;
+  endRef?: any;
+  onKeyDown?: (key: string, type: 'start' | 'end') => void;
+  isLight?: boolean;
+  isActive?: boolean;
+  canDelete?: boolean;
+  onFocusItem?: () => void;
 }) {
   const [startPage, setStartPage] = useState('');
   const [endPage, setEndPage] = useState('');
@@ -315,18 +300,16 @@ function HomeworkRow({
     }
   };
 
-  const bookLinks = pdfLinks[hw.book_name];
-  const pdfUrl = typeof bookLinks === 'string' ? bookLinks : bookLinks?.pdfUrl;
-  const answerUrl = typeof bookLinks === 'object' ? bookLinks?.answerUrl : undefined;
-  const explanationUrl = typeof bookLinks === 'object' ? bookLinks?.explanationUrl : undefined;
-
   return (
     <div className="space-y-2">
-      <div className={`flex items-center gap-1.5 p-1.5 border rounded-[2px] transition-all group ${
-        isLight
-          ? 'bg-gray-50/50 hover:bg-gray-100/50 border-gray-250'
-          : 'bg-white/[0.02] hover:bg-white/[0.05] border border-white/5'
-      }`}>
+      <div 
+        onClick={() => onFocusItem?.()}
+        className={`flex items-center gap-2 p-1.5 border rounded-[2px] transition-all group ${
+          isActive
+            ? (isLight ? 'bg-blue-50/60 border-blue-400 ring-1 ring-blue-400/30' : 'bg-blue-500/10 border-blue-500/50 ring-1 ring-blue-500/30')
+            : (isLight ? 'bg-gray-50/50 hover:bg-gray-100/50 border-gray-250' : 'bg-white/[0.02] hover:bg-white/[0.05] border border-white/5')
+        }`}
+      >
         <div className="flex-1 max-w-[220px] min-w-0 flex items-center gap-1.5 overflow-hidden">
           <BookOpen size={11} className="text-blue-500/40 shrink-0" />
           {hw.type === 'custom' ? (
@@ -335,6 +318,7 @@ function HomeworkRow({
               value={hw.book_name}
               placeholder="기타 과제"
               onChange={(e) => onUpdate({ ...hw, book_name: e.target.value })}
+              onFocus={() => { isFocused.current = true; onFocusItem?.(); }}
               className={`bg-transparent border-b text-[12px] font-bold outline-none w-full placeholder:text-gray-400 ${
                 isLight
                   ? 'border-gray-300 text-blue-600 focus:border-blue-500'
@@ -360,7 +344,7 @@ function HomeworkRow({
             type="text"
             value={startPage}
             onChange={(e) => setStartPage(e.target.value)}
-            onFocus={() => { isFocused.current = true; }}
+            onFocus={() => { isFocused.current = true; onFocusItem?.(); }}
             onKeyDown={(e) => handleInputKeyDown(e, 'start')}
             onBlur={() => { isFocused.current = false; handleFinalize(); }}
             placeholder={hw.type === 'custom' ? "상세 내용" : "시작"}
@@ -376,7 +360,7 @@ function HomeworkRow({
             type="text"
             value={endPage}
             onChange={(e) => setEndPage(e.target.value)}
-            onFocus={() => { isFocused.current = true; }}
+            onFocus={() => { isFocused.current = true; onFocusItem?.(); }}
             onKeyDown={(e) => handleInputKeyDown(e, 'end')}
             onBlur={() => { isFocused.current = false; handleFinalize(); }}
             placeholder="끝"
@@ -400,58 +384,9 @@ function HomeworkRow({
         )}
 
         <div className="flex items-center gap-1 ml-auto shrink-0">
-          {/* 1. 📖 교재 본문 PDF */}
-          {hw.type === 'book' && pdfUrl && (
-            <button
-              type="button"
-              onClick={() => onOpenPdf?.(pdfUrl)}
-              className={`px-1.5 h-6 shrink-0 rounded-[3px] text-[10px] font-bold transition-all flex items-center gap-1 border ${
-                isLight
-                  ? 'text-indigo-600 hover:bg-indigo-50 border-indigo-200 hover:border-indigo-400'
-                  : 'text-indigo-400 hover:text-indigo-300 hover:bg-indigo-500/20 border-indigo-500/30'
-              }`}
-              title="교재 본문 PDF 보기"
-            >
-              <FileText size={11} />
-              <span>본문</span>
-            </button>
-          )}
-
-          {/* 2. ⚡ 빠른 답 PDF */}
-          {hw.type === 'book' && answerUrl && (
-            <button
-              type="button"
-              onClick={() => onOpenPdf?.(answerUrl)}
-              className={`px-1.5 h-6 shrink-0 rounded-[3px] text-[10px] font-bold transition-all flex items-center gap-1 border ${
-                isLight
-                  ? 'text-amber-600 hover:bg-amber-50 border-amber-200 hover:border-amber-400'
-                  : 'text-amber-400 hover:text-amber-300 hover:bg-amber-500/20 border-amber-500/30'
-              }`}
-              title="빠른 답 PDF 보기"
-            >
-              <Zap size={11} />
-              <span>빠른답</span>
-            </button>
-          )}
-
-          {/* 3. 📝 정답 및 해설 PDF */}
-          {hw.type === 'book' && explanationUrl && (
-            <button
-              type="button"
-              onClick={() => onOpenPdf?.(explanationUrl)}
-              className={`px-1.5 h-6 shrink-0 rounded-[3px] text-[10px] font-bold transition-all flex items-center gap-1 border ${
-                isLight
-                  ? 'text-emerald-600 hover:bg-emerald-50 border-emerald-200 hover:border-emerald-400'
-                  : 'text-emerald-400 hover:text-emerald-300 hover:bg-emerald-500/20 border-emerald-500/30'
-              }`}
-              title="정답 및 해설 PDF 보기"
-            >
-              <HelpCircle size={11} />
-              <span>해설</span>
-            </button>
-          )}
-
+          {/* 💡 [유지] 이 교재의 페이지/단원 입력 내용 초기화 버튼 */}
           <button
+            type="button"
             onClick={onReset}
             className={`w-6 h-6 shrink-0 rounded-lg transition-all flex items-center justify-center border ${
               isLight
@@ -463,14 +398,17 @@ function HomeworkRow({
             <RefreshCcw size={14} />
           </button>
 
-          {hw.type === 'custom' && (
+          {/* 💡 동일 교재의 중복 범위 행이거나 커스텀 항목일 때 행 삭제 버튼 제공 */}
+          {canDelete && (
             <button
+              type="button"
               onClick={onDelete}
               className={`w-6 h-6 shrink-0 rounded-lg transition-all flex items-center justify-center border ${
                 isLight
                   ? 'text-red-500 hover:bg-red-50 border-red-200'
                   : 'text-red-400 hover:text-red-300 hover:bg-red-500/20 bg-white/5 border-transparent hover:border-red-500/30'
               }`}
+              title="이 범위 항목 삭제"
             >
               <Trash2 size={14} />
             </button>

@@ -16,8 +16,8 @@ import { useModalEsc } from '@/hooks/useModalEsc';
 export interface TodaySheetRowProps {
   student: Student;
   masterTextbooks: TextbookOption[];
-  onSave: (id: string, data: any) => Promise<boolean>;
-  onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
+  onSave: (studentId: string, data: any) => Promise<boolean>;
+  onUpdateStudentInfo?: (id: string, fieldOrUpdates: any, value?: any) => Promise<any>;
   onViewProgress: (id: string) => void;
   onSelectStudent?: (id: string) => void;
   colWidths: Record<string, number>;
@@ -36,6 +36,7 @@ export interface TodaySheetRowProps {
   selectedRange?: any;
   isCellInRange?: (studentId: string, colId: string) => boolean;
   onCellMouseDown?: (e: React.MouseEvent, studentId: string, colId: string) => void;
+  registerFlushDraft?: (fn: (() => void) | null) => void;
   onCellMouseEnter?: (studentId: string, colId: string) => void;
   rowIndex?: number;
   isFirstInTimeSection?: boolean;
@@ -71,7 +72,7 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     student, masterTextbooks, onViewProgress, onSelectStudent, colWidths, activeColumns,
     selectedDate, isHistoryExpanded, onToggleHistory, activeCell, editingCell,
     onActiveCellChange, onEditingCellChange, isSelected, onSelectOne,
-    selectedRange, isCellInRange, onCellMouseDown, onCellMouseEnter,
+    selectedRange, isCellInRange, onCellMouseDown, registerFlushDraft, onCellMouseEnter,
     rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel, isOtherClassSection,
     cooperatingCells, onSave, onUpdateStudentInfo, onRemoveFromToday,
     toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false, onNavigateTab, onSnapshotModalClick
@@ -269,6 +270,7 @@ useEffect(() => {
               handleCellInteraction={(e, cid, type) => { if (type === 'click') onActiveCellChange?.(student.id, cid); else onEditingCellChange?.(student.id, cid); }}
               handleKeyDown={(e, cid) => { if (e.key === 'Escape') { onEditingCellChange?.(student.id, null); refs.tdRefs.current[cid]?.focus(); } }}
               onCellMouseDown={onCellMouseDown || (() => {})}
+              registerFlushDraft={registerFlushDraft}
               onCellMouseEnter={onCellMouseEnter || (() => {})}
               onAttendanceClick={handleAttendanceToggle}
               onTimePickerClick={() => setIsSupplementTimePickerOpen(true)}

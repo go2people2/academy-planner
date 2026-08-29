@@ -21,8 +21,6 @@ export interface DashboardState {
   setSelectedHour: React.Dispatch<React.SetStateAction<string>>;
   isAndFilter: boolean;
   setIsAndFilter: React.Dispatch<React.SetStateAction<boolean>>;
-  filterTarget: 'all' | 'today' | 'rest';
-  setFilterTarget: React.Dispatch<React.SetStateAction<'all' | 'today' | 'rest'>>;
   searchQuery: string;
   setSearchQuery: React.Dispatch<React.SetStateAction<string>>;
   studentEditSearchQuery: string;
@@ -126,7 +124,6 @@ export function useDashboardState(currentUser: any, isWarpMode: boolean) {
   }, [viewMode, isMounted]);
 
   const [isAndFilter, setIsAndFilter] = useState(false);
-  const [filterTarget, setFilterTarget] = useState<'all' | 'today' | 'rest'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentEditSearchQuery, setStudentEditSearchQuery] = useState('');
 
@@ -253,8 +250,6 @@ export function useDashboardState(currentUser: any, isWarpMode: boolean) {
     setSelectedHour,
     isAndFilter,
     setIsAndFilter,
-    filterTarget,
-    setFilterTarget,
     searchQuery,
     setSearchQuery,
     studentEditSearchQuery,

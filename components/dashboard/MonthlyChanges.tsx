@@ -224,6 +224,7 @@ export default function MonthlyChanges({ students, onSelectStudent }: MonthlyCha
             >
               {Array.from({ length: 12 }).map((_, i) => {
                 const d = new Date();
+                d.setDate(1);
                 d.setMonth(d.getMonth() - i);
                 const y = d.getFullYear();
                 const m = d.getMonth();

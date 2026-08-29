@@ -11,7 +11,7 @@ interface UndoRedoUpdate {
 interface UseTodaySheetUndoRedoParams {
   setStudents: React.Dispatch<React.SetStateAction<any[]>>;
   onSave: (studentId: string, payload: any) => Promise<any> | void;
-  onUpdateStudentInfo?: (studentId: string, field: string, value: any) => Promise<any> | void;
+  onUpdateStudentInfo?: (studentId: string, fieldOrUpdates: any, value?: any) => Promise<any> | void;
 }
 
 export function useTodaySheetUndoRedo({

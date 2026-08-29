@@ -142,8 +142,10 @@ export function useTodaySheetRows({
             return h;
           })();
 
-          // 과거 행의 요일 표시 정보 (스냅샷이 있으면 스냅샷의 scheduledDays 사용, 없으면 빈 배열)
-          const pastScheduledDays = snapshot?.scheduledDays || [];
+          // 과거 행의 요일 표시 정보 (스냅샷의 scheduledDays가 존재하고 비어있지 않으면 사용, 비어있으면 학생의 class_days fallback)
+          const pastScheduledDays = (snapshot?.scheduledDays && Array.isArray(snapshot.scheduledDays) && snapshot.scheduledDays.length > 0)
+            ? snapshot.scheduledDays
+            : (Array.isArray(s.class_days) && s.class_days.length > 0 ? s.class_days : []);
 
           const pastLogsBeforeTarget = (s.allLogs || [])
             .filter((l: any) => (l.date || l.session_date) < selectedDate && (isValidHistoryLog(l) || (l.homework_text && l.homework_text.trim() !== '')))
@@ -338,7 +340,10 @@ export function useTodaySheetRows({
           } catch (e) {}
         }
 
-        const isRegularClassDay = (s.class_days || []).includes(dayKey);
+        const hasScheduleToday = (Array.isArray(s.day_schedules?.[dayKey]) && s.day_schedules[dayKey].length > 0) ||
+                                 (Array.isArray(s.day_schedules?.[`${dayKey}요일`]) && s.day_schedules[`${dayKey}요일`].length > 0);
+        const isRegularClassDay = (s.class_days || []).some((d: string) => d.trim() === dayKey || d.trim() === `${dayKey}요일`) || hasScheduleToday;
+        const hasActiveMovedSession = !!movedRegularLog;
         const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
         const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);
 
@@ -360,8 +365,8 @@ export function useTodaySheetRows({
           ? [normalizedMovedHour]
           : regularHours;
 
-        if (isRegularClassDay) {
-          // 1. 원래 오늘 정규 수업일인 경우에만 정규 행 배치
+        if (isRegularClassDay || hasActiveMovedSession) {
+          // 1. 원래 오늘 정규 수업일이거나 당일 정규 이동 세션이 있는 경우 정규 행 배치
           shouldShowRegular = true;
         }
 

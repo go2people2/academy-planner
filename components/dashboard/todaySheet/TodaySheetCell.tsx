@@ -80,6 +80,7 @@ export interface TodaySheetCellProps {
   handleCellInteraction: (e: React.MouseEvent, colId: string, type: 'click' | 'dblclick') => void;
   handleKeyDown: (e: React.KeyboardEvent, colId: string) => void;
   onCellMouseDown: (e: React.MouseEvent, studentId: string, colId: string) => void;
+  registerFlushDraft?: (fn: (() => void) | null) => void;
   onCellMouseEnter: (studentId: string, colId: string) => void;
 
   // Field Specific Handlers
@@ -106,7 +107,7 @@ export interface TodaySheetCellProps {
   onInputChange?: (field: string, value: string) => void;
   rowIndex?: number;
   onApplyTestPreset?: (preset: any, colId: 'test_id' | 'next_quiz') => void;
-  onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
+  onUpdateStudentInfo?: (id: string, fieldOrUpdates: any, value?: any) => Promise<any>;
   masterTextbooks?: any[];
   cooperatingCells?: Record<string, { colId: string, clientId: string, timestamp: number, lockVersion?: number }>; // 📝 [추가] 실시간 협업 편집 중인 셀 맵
   myClientId?: string;
@@ -134,7 +135,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   isCompleted, saveStatus, isSaving, isHistoryExpanded, displayDateShort, statusMap,
   testRef, cwRef, ccwRef, hwRef, nqRef, missionRef, notesRef, managementNotesRef, tdRef, scoreInputRef,
   onSelectOne, onToggleHistory, onViewProgress, onViewDetail, handleCellInteraction, handleKeyDown,
-  onCellMouseDown, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle,
+  onCellMouseDown, registerFlushDraft, onCellMouseEnter, onAttendanceClick, onTestScoreTypeToggle,
   onFeedbackToggle, isFeedbackOpen, onSelectFeedback, onCloseFeedback,
   onOpenCwEditor, onOpenCcwEditor, onOpenHwEditor, onOpenNqEditor, onOpenTestEditor, onOpenTestModal,
   onOpenPdf, onExecuteTest, onSetNextQuizCut, onSetTodayTestCut, onSetNextQuizTrial, onSave,
@@ -676,17 +677,64 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     alert("아직 승인되지 않은 학생 제출본이 있습니다. 우측 알림창이나 툴박스에서 승인 버튼을 누르시면 학생이 쓴 내용이 일지에 자동으로 입력되며, 입력이 완료된 후에 직접 내용을 확인하고 수정하실 수 있습니다.");
   };
 
-  // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 DOM value 동기화
+  const draftValuesRef = useRef<Record<string, string>>({});
+
+  // 💡 [핵심] onSave의 최신 참조를 ref로 유지 (flush 클로저가 stale closure를 참조하지 않도록)
+  const onSaveRef = useRef(onSave);
+  onSaveRef.current = onSave;
+
+  // 💡 [핵심] 부모(TodaySheet)에 현재 편집 셀의 draft flush 함수를 등록
+  // 다른 셀 mousedown에서 editingCell=null 보다 먼저 호출되어
+  // textarea 언마운트 전에 최신 입력값을 handleSave/pending queue에 전달
+  const flushIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (isEditing && registerFlushDraft) {
+      const flushKey = `${student.id}_${colId}`;
+      flushIdRef.current = flushKey;
+
+      const flushFn = () => {
+        const draftVal = draftValuesRef.current[colId];
+        if (draftVal !== undefined) {
+          delete draftValuesRef.current[colId];
+          // 💡 isBlur 없이 호출 → handleSave 내부에서 skipBlurRef=true 설정
+          // → 뒤따르는 onBlur 중복 저장 방지
+          onSaveRef.current(colId, draftVal);
+        }
+      };
+      registerFlushDraft(flushFn);
+
+      return () => {
+        // 💡 언마운트 시 동일 인스턴스인 경우에만 해제 (다른 셀의 등록을 지우지 않음)
+        if (flushIdRef.current === flushKey) {
+          registerFlushDraft(null);
+          flushIdRef.current = null;
+        }
+      };
+    }
+  }, [isEditing, colId, student.id, registerFlushDraft]);
+
+  // 💡 [편집 모드 진입 1회 포커스] isEditing이 true로 새로 진입할 때만 1회 포커스 부여
+  const prevIsEditingRef = useRef(isEditing);
+  useEffect(() => {
+    if (isEditing && !prevIsEditingRef.current) {
+      const targetRef = colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : null;
+      if (targetRef?.current && document.activeElement !== targetRef.current) {
+        targetRef.current.focus();
+      }
+    }
+    prevIsEditingRef.current = isEditing;
+  }, [isEditing, colId]);
+
+  // 💡 [최적화] 텍스트가 변경되거나 편집 모드 진입 시 즉시 높이 조절 및 DOM value 동기화 (사용자 입력 draft 보호)
   React.useLayoutEffect(() => {
     const targetRef = colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : colId === 'next_quiz' ? nqRef : null;
     if (targetRef?.current) {
       const isFocused = document.activeElement === targetRef.current;
-      if (!isFocused && !isEditing) {
+      if (!isFocused && !isEditing && draftValuesRef.current[colId] === undefined) {
         targetRef.current.value = currentText || '';
       }
       targetRef.current.style.height = 'auto';
       targetRef.current.style.height = `${targetRef.current.scrollHeight}px`;
-      if (isEditing && !isFocused) targetRef.current.focus();
     }
   }, [isEditing, isActive, currentText, colId]);
 
@@ -722,6 +770,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
     field: string
   ) => {
     const { value } = processLocalInput(e.currentTarget);
+    draftValuesRef.current[field] = value;
     onInputChange?.(field, value);
   };
 
@@ -769,17 +818,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           e.preventDefault();
           return;
         }
-        if (wasAlreadyActive.current) {
-          // 💡 이미 선택된 상태였던 셀을 천천히 다시 누른 것이 맞다면 편집 모드로 승격
-          if (isLockActive) {
-            handleLockedCellDoubleClick(e);
-          } else {
-            handleCellInteraction(e, colId, 'dblclick');
-          }
-        } else {
-          handleCellInteraction(e, colId, 'click');
-        }
-        wasAlreadyActive.current = false; // 리셋
+        handleCellInteraction(e, colId, 'click');
       }}
       onDoubleClick={(e) => {
         if (isLockActive) {
@@ -913,6 +952,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   const snapshot = student.todaySession?.session_snapshot;
                   const isPast = selectedDate && selectedDate < getTodayStr();
 
+                  // 💡 순수 보강 세션 여부 정밀 판정 (보강 행은 정규 요일 fallback 절대 금지)
+                  const isPureMakeupRow =
+                    (student as any).isMakeupRow === true ||
+                    (student as any).__courseType === 'makeup' ||
+                    formData?.is_pure_makeup === true ||
+                    student.todaySession?.is_pure_makeup === true ||
+                    snapshot?.sessionType === 'makeup' ||
+                    snapshot?.isPureMakeup === true ||
+                    String(formData?.attendance_status || '').startsWith('보강') ||
+                    String(student.todaySession?.attendance_status || '').startsWith('보강');
+
                   // 💡 요일 정렬 헬퍼
                   const sortDaysStr = (days: any[]) => {
                     if (!Array.isArray(days) || days.length === 0) return '';
@@ -925,17 +975,36 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       .join('');
                   };
 
+                  const getDerivedDays = () => {
+                    const classDays = Array.isArray(student.class_days) && student.class_days.length > 0
+                      ? student.class_days
+                      : [];
+                    if (classDays.length > 0) return classDays;
+
+                    return Object.entries(student.day_schedules || {})
+                      .filter(([, hours]) => Array.isArray(hours) && (hours as any[]).length > 0)
+                      .map(([day]) => day.replace('요일', '').trim())
+                      .filter(Boolean);
+                  };
+
                   if (student.isSpecialClass) {
                     const elective = student.electiveCourse;
                     let daysStr = '';
 
-                    if (isPast && snapshot?.scheduledDays !== undefined) {
-                      daysStr = sortDaysStr(snapshot.scheduledDays);
+                    if (isPast) {
+                      if (snapshot && Array.isArray(snapshot.scheduledDays) && snapshot.scheduledDays.length > 0) {
+                        daysStr = sortDaysStr(snapshot.scheduledDays);
+                      } else {
+                        const daysArr = Array.isArray(elective?.days)
+                          ? elective.days
+                          : (Array.isArray(elective?.class_days) ? elective.class_days : []);
+                        daysStr = sortDaysStr(daysArr) || sortDaysStr(getDerivedDays());
+                      }
                     } else {
                       const daysArr = Array.isArray(elective?.days)
                         ? elective.days
                         : (Array.isArray(elective?.class_days) ? elective.class_days : []);
-                      daysStr = sortDaysStr(daysArr) || sortDaysStr(student.class_days || []);
+                      daysStr = sortDaysStr(daysArr) || sortDaysStr(getDerivedDays());
                     }
 
                     const prefix = getCoursePrefix(student.isSpecialClass, student.electiveCourse);
@@ -947,10 +1016,14 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     );
                   } else {
                     let daysStr = '';
-                    if (isPast && snapshot?.scheduledDays !== undefined) {
-                      daysStr = sortDaysStr(snapshot.scheduledDays);
+                    if (isPast) {
+                      if (snapshot && Array.isArray(snapshot.scheduledDays) && snapshot.scheduledDays.length > 0) {
+                        daysStr = sortDaysStr(snapshot.scheduledDays);
+                      } else {
+                        daysStr = sortDaysStr(getDerivedDays());
+                      }
                     } else {
-                      daysStr = sortDaysStr(student.class_days || []);
+                      daysStr = sortDaysStr(getDerivedDays());
                     }
 
                     return (
@@ -1862,14 +1935,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                               }
 
                               cleanProgress[bookTitle] = finalVal;
-                              await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
 
                               const cleanUpdated = { ...((student as any).book_progress_updated_at || {}) };
                               cleanUpdated[bookTitle] = new Date().toISOString();
                               cleanUpdated[bookKey] = new Date().toISOString();
-                              await onUpdateStudentInfo(student.id, 'book_progress_updated_at', cleanUpdated);
-
-
 
                               // 💡 진도 변경 이력 기록 자동 누적
                               const todayStr = new Date().toISOString().slice(0, 10);
@@ -1881,7 +1950,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                                 progress: finalVal,
                                 createdAt: new Date().toISOString()
                               });
-                              await onUpdateStudentInfo(student.id, 'book_progress_history', existingHist);
+
+                              // 💡 [단일 배치 저장] 3번 나누어 호출하던 것을 1회 객체로 묶어 즉시 저장
+                              await onUpdateStudentInfo(student.id, {
+                                book_progress: cleanProgress,
+                                book_progress_updated_at: cleanUpdated,
+                                book_progress_history: existingHist
+                              });
                             } else {
                               alert(`오늘 및 지난 일지 기록에서 [${bookTitle}] 교재의 페이지나 단원을 찾지 못했습니다.`);
                             }
@@ -1990,32 +2065,21 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             {/* 💡 칩카드 UI가 제거되었습니다. 선생님이 직접 텍스트로 테스트를 기록합니다. */}
 
             {/* 🔒 [추가] 실시간 승인 대기 보호 셀 시각 뱃지 */}
-            {isLockActive && !isEditing && !isActive && (
+            {isLockActive && !isEditing && (
               <div className="absolute right-1 top-1 z-30 flex items-center gap-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1 py-[1px] rounded-[3px] text-[9px] font-medium animate-pulse select-none">
                 <Lock size={8} className="stroke-[2.5]" />
                 승인대기
               </div>
             )}
 
-
-
-            {/* 💡 [수정] isActive일 때도 textarea를 유지하여 줄바꿈 시 내용 가려짐 방지 */}
-            {(isEditing || isActive) && (
+            {/* 💡 [수정] 오직 isEditing 일 때만 textarea 렌더링 (단일 클릭 선택 모드 보존) */}
+            {isEditing && (
                <textarea
                  ref={colId === 'test_id' ? testRef : colId === 'classwork' ? cwRef : colId === 'completed_classwork' ? ccwRef : colId === 'assign' ? hwRef : nqRef}
                  defaultValue={currentText || ''}
                  data-student-id={student.id}
                  data-col-id={colId}
                  readOnly={isLockActive}
-                 onFocus={(e) => {
-                   if (isLockActive) {
-                     e.target.blur();
-                     handleLockedCellDoubleClick(e as any);
-                     return;
-                   }
-                   // 💡 포커스를 얻는 순간 (천천히 클릭하여 입력 모드 진입 포함) 락 브로드캐스트 활성화
-                   handleCellInteraction(e as any, colId, 'dblclick');
-                 }}
                 onKeyDown={(e) => {
                   if (((e.ctrlKey || e.metaKey) && e.key === '/') || (e.altKey && e.key === 'Enter')) {
                     e.preventDefault();
@@ -2025,11 +2089,17 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     return;
                   }
                   if (e.key === 'Enter' && !e.shiftKey) {
-                    onSave(colId, (e.target as HTMLTextAreaElement).value);
+                    const saveVal = draftValuesRef.current[colId] ?? (e.target as HTMLTextAreaElement).value;
+                    delete draftValuesRef.current[colId];
+                    onSave(colId, saveVal);
                   }
                   handleKeyDown(e, colId);
                 }}
-                onBlur={(e) => onSave(colId, e.target.value, { isBlur: true })}
+                onBlur={(e) => {
+                  const saveVal = draftValuesRef.current[colId] ?? e.target.value;
+                  delete draftValuesRef.current[colId];
+                  onSave(colId, saveVal, { isBlur: true });
+                }}
                 placeholder="-"
                 className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`}
                 onInput={(e) => handleLocalInput(e, colId)}
@@ -2037,8 +2107,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             )}
 
             {/* 💡 편집 중이 아닐 때만 뷰 모드 텍스트 노출 (하이라이팅 적용) */}
-            {!isEditing && !isActive && (
-              <div className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start w-full`}>
+            {!isEditing && (
+              <div 
+                className={`${commonTextStyle} whitespace-pre-wrap min-h-[22px] flex flex-col items-start justify-start w-full cursor-default select-none`}
+              >
                 <div className="w-full">
                   {currentText ? <CellTextHighlighter text={currentText} columnId={colId} isLight={isLight} /> : (
                     isLockActive ? (

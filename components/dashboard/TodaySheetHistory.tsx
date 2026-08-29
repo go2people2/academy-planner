@@ -8,6 +8,7 @@ import { AlertTriangle, TrendingUp, X, BookOpen, Plus, Search } from 'lucide-rea
 import { AnimatePresence, motion } from 'framer-motion';
 import { createPortal } from 'react-dom';
 import TextbookSystem from '@/components/student/TextbookSystem';
+import { textbookUnitsCache } from './hooks/useTodaySheetHistory';
 
 interface HistoryRowsProps {
   student: Student;
@@ -18,7 +19,7 @@ interface HistoryRowsProps {
   limit?: number;
   masterTextbooks?: any[];
   isLight?: boolean;
-  onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
+  onUpdateStudentInfo?: (id: string, fieldOrUpdates: any, value?: any) => Promise<any>;
   onSave?: (id: string, data: any) => Promise<boolean>;
   academyInfo?: any;
 }
@@ -122,17 +123,22 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
 
   // 💡 📌 진도파악 수동 페이지 입력 저장 헬퍼 (단일 또는 | 구분 2개 진도 지원)
   const handleSaveManualProgress = async (bookCode: string) => {
-    if (!onUpdateStudentInfo || !startPageInput) return;
+    if (!onUpdateStudentInfo || !startPageInput.trim()) return;
     const bookTitle = translateBook(bookCode);
     const targetMaster = masterTextbooks?.find((m: any) => m.title === bookCode || m.bookcode === bookCode);
     const realCode = targetMaster?.bookcode || bookCode;
 
-    let units: any[] = [];
-    try {
-      const res = await fetch(`/api/textbooks/${realCode}`);
-      if (res.ok) units = (await res.json()) || [];
-    } catch (e) {
-      console.error(e);
+    let units: any[] = textbookUnitsCache.get(realCode) || [];
+    if (units.length === 0) {
+      try {
+        const res = await fetch(`/api/textbooks/${realCode}`);
+        if (res.ok) {
+          units = (await res.json()) || [];
+          textbookUnitsCache.set(realCode, units);
+        }
+      } catch (e) {
+        console.error(e);
+      }
     }
 
     const formatPart = (rawInput: string) => {
@@ -163,12 +169,15 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
     delete cleanProgress[bookCode]; // 영문 북코드 키 제거
     delete cleanProgress[bookCode.toLowerCase()];
     cleanProgress[bookTitle] = resultVal;
-    await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
 
-    // 💡 선택된 날짜 및 업데이트 시간 함께 저장
     const cleanUpdated = { ...((student as any).book_progress_updated_at || {}) };
     cleanUpdated[bookTitle] = new Date().toISOString();
-    await onUpdateStudentInfo(student.id, 'book_progress_updated_at', cleanUpdated);
+
+    // 💡 [단일 배치 저장] 2번 따로 호출하지 않고 1회 객체로 묶어서 즉시 저장
+    await onUpdateStudentInfo(student.id, {
+      book_progress: cleanProgress,
+      book_progress_updated_at: cleanUpdated,
+    });
 
     setPinTargetBook(null);
   };
@@ -187,60 +196,63 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
     const targetMaster = masterTextbooks?.find((m: any) => m.title === bookTitle || m.bookcode === bookCode);
     const realCode = targetMaster?.bookcode || bookCode;
 
+    let units: any[] = textbookUnitsCache.get(realCode) || [];
+    if (units.length === 0) {
+      try {
+        const res = await fetch(`/api/textbooks/${realCode}`);
+        if (res.ok) {
+          units = (await res.json()) || [];
+          textbookUnitsCache.set(realCode, units);
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    let minBookPage = 1;
+    let maxBookPage = 0;
+    units.forEach((u: any) => {
+      const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
+      const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '0', 10);
+      if (uStart > 0 && (minBookPage === 1 || uStart < minBookPage)) minBookPage = uStart;
+      if (uEnd > maxBookPage) maxBookPage = uEnd;
+    });
+    if (maxBookPage === 0) maxBookPage = 500;
+
     let parsedResult = '';
+    for (const text of candidateTexts) {
+      if (!text.trim()) continue;
 
-    try {
-      const res = await fetch(`/api/textbooks/${realCode}`);
-      if (res.ok) {
-        const units = (await res.json()) || [];
+      const pageMatches = Array.from(text.matchAll(/(?:p\.?|페이지\s*|\b)(\d{1,4})\s*(?:p|페이지|\b)/gi));
+      const foundPages = pageMatches
+        .map(m => parseInt(m[1], 10))
+        .filter(p => p >= minBookPage && p <= maxBookPage);
 
-        let minBookPage = 1;
-        let maxBookPage = 0;
-        units.forEach((u: any) => {
+      if (foundPages.length > 0) {
+        const lastP = foundPages[foundPages.length - 1];
+        const foundUnit = units.find((u: any) => {
           const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
-          const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '0', 10);
-          if (uStart > 0 && (minBookPage === 1 || uStart < minBookPage)) minBookPage = uStart;
-          if (uEnd > maxBookPage) maxBookPage = uEnd;
+          const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
+          return lastP >= uStart && lastP <= uEnd;
         });
-        if (maxBookPage === 0) maxBookPage = 500;
 
-        for (const text of candidateTexts) {
-          if (!text.trim()) continue;
-
-          const pageMatches = Array.from(text.matchAll(/(?:p\.?|페이지\s*|\b)(\d{1,4})\s*(?:p|페이지|\b)/gi));
-          const foundPages = pageMatches
-            .map(m => parseInt(m[1], 10))
-            .filter(p => p >= minBookPage && p <= maxBookPage);
-
-          if (foundPages.length > 0) {
-            const lastP = foundPages[foundPages.length - 1];
-            const foundUnit = units.find((u: any) => {
-              const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
-              const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
-              return lastP >= uStart && lastP <= uEnd;
-            });
-
-            if (foundUnit) {
-              const uName = foundUnit.unit || foundUnit.unitName || foundUnit.title;
-              parsedResult = `${uName} (p.${lastP})`;
-            } else {
-              parsedResult = `p.${lastP}`;
-            }
-            break;
-          } else {
-            const matchedUnit = units.slice().reverse().find((u: any) => {
-              const uName = u.unit || u.unitName || u.title;
-              return uName && text.includes(uName);
-            });
-            if (matchedUnit) {
-              parsedResult = matchedUnit.unit || matchedUnit.unitName || matchedUnit.title;
-              break;
-            }
-          }
+        if (foundUnit) {
+          const uName = foundUnit.unit || foundUnit.unitName || foundUnit.title;
+          parsedResult = `${uName} (p.${lastP})`;
+        } else {
+          parsedResult = `p.${lastP}`;
+        }
+        break;
+      } else {
+        const matchedUnit = units.slice().reverse().find((u: any) => {
+          const uName = u.unit || u.unitName || u.title;
+          return uName && text.includes(uName);
+        });
+        if (matchedUnit) {
+          parsedResult = matchedUnit.unit || matchedUnit.unitName || matchedUnit.title;
+          break;
         }
       }
-    } catch (e) {
-      console.error(e);
     }
 
     if (parsedResult) {
@@ -250,7 +262,13 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
       delete cleanProgress[bookTitle];
       cleanProgress[bookTitle] = parsedResult;
 
-      await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
+      const cleanUpdated = { ...((student as any).book_progress_updated_at || {}) };
+      cleanUpdated[bookTitle] = new Date().toISOString();
+
+      await onUpdateStudentInfo(student.id, {
+        book_progress: cleanProgress,
+        book_progress_updated_at: cleanUpdated,
+      });
       setPinTargetBook(null);
     } else {
       alert(`오늘 및 지난 일지 기록에서 [${bookTitle}] 교재의 페이지나 단원을 찾지 못했습니다.`);
@@ -567,31 +585,33 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                     {/* 💡 2번 📌 버튼 클릭 시: 군더더기 없이 페이지 입력 시 해당 단원을 실시간으로 바로 보여주는 깔끔한 팝오버 */}
                     {pinTargetBook && typeof window !== 'undefined' && createPortal(
                       <div className="fixed inset-0 z-[9999] pointer-events-none flex items-center justify-center p-4">
-                        <div className="absolute inset-0 pointer-events-auto" onClick={() => setPinTargetBook(null)} />
+                        <div className="absolute inset-0 pointer-events-auto bg-black/40 backdrop-blur-[2px]" onClick={() => setPinTargetBook(null)} />
                         
-                        <div className={`pointer-events-auto relative z-10 w-72 rounded-2xl shadow-2xl p-3.5 border ${
-                          isLight ? 'bg-white border-amber-300 text-gray-800' : 'bg-[#141414] border-amber-500/40 text-white'
-                        } transition-all animate-in zoom-in-95 duration-150 space-y-2.5`}>
-                          <div className="flex items-center justify-between border-b pb-1.5 border-amber-500/20">
-                            <h4 className="text-[12px] font-black text-amber-500 flex items-center gap-1">
-                              📌 [{translateBook(pinTargetBook)}] 단원 조회
+                        <div className={`pointer-events-auto relative z-10 w-80 rounded-xl shadow-2xl p-3.5 border ${
+                          isLight ? 'bg-white border-amber-300 text-gray-800' : 'bg-[#141414] border-amber-500/30 text-white'
+                        } transition-all animate-in zoom-in-95 duration-150 space-y-3`}>
+                          {/* 1. 간결한 헤더 */}
+                          <div className="flex items-center justify-between border-b pb-2 border-amber-500/20">
+                            <h4 className="text-[13px] font-black text-amber-500 truncate max-w-[220px]">
+                              [{translateBook(pinTargetBook)}]
                             </h4>
-                            <button onClick={() => setPinTargetBook(null)} className="p-0.5 opacity-60 hover:opacity-100"><X size={14} /></button>
+                            <button
+                              type="button"
+                              onClick={() => setPinTargetBook(null)}
+                              className="p-1 rounded-md opacity-60 hover:opacity-100 hover:bg-white/10 transition-colors"
+                            >
+                              <X size={15} />
+                            </button>
                           </div>
 
-                          {/* 💡 실시간 단원 조회 결과 뱃지 */}
-                          <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl text-center">
-                            <span className="text-[9px] font-bold text-amber-400/80 uppercase block mb-0.5">매칭 단원 결과</span>
-                            <p className="text-[13px] font-black text-amber-300 truncate">
-                              {matchedUnitPreview || '페이지를 입력해 주세요'}
-                            </p>
-                          </div>
-
-                          {/* 단 1개의 페이지 번호 입력창 */}
-                          <div>
+                          {/* 2. 입력창 및 하단 단원 매칭 결과 */}
+                          <div className="space-y-1">
+                            <label className="text-[10.5px] font-bold text-gray-400 block">
+                              페이지 / 단원
+                            </label>
                             <input
                               type="text"
-                              placeholder="페이지 입력 (예: 80 또는 25p | 120p)"
+                              placeholder="예: 80, 25~120"
                               value={startPageInput}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -603,42 +623,71 @@ export const HistoryRows = React.memo(function HistoryRows({ student, activeColu
                                   handleSaveManualProgress(pinTargetBook);
                                 }
                               }}
-                              className={`w-full px-3 py-2.5 rounded-xl border text-[13px] font-black outline-none text-center ${
-                                isLight ? 'bg-gray-50 border-gray-300 focus:border-amber-500' : 'bg-white/5 border-white/15 focus:border-amber-400'
+                              className={`w-full px-3 py-2 rounded-lg border text-[13px] font-bold outline-none ${
+                                isLight
+                                  ? 'bg-gray-50 border-gray-300 text-gray-800 focus:border-amber-500 focus:bg-white'
+                                  : 'bg-white/5 border-white/15 text-white focus:border-amber-400 focus:bg-white/10'
                               }`}
                               autoFocus
                             />
+                            {/* 3. 매칭 결과: 입력 시 한 줄로 깔끔하게 표시 */}
+                            {startPageInput.trim() && (
+                              <div className="pt-0.5 min-h-[18px]">
+                                {matchedUnitPreview && matchedUnitPreview !== 'NOT_FOUND' ? (
+                                  <p className="text-[11px] font-bold text-amber-400 truncate flex items-center gap-1">
+                                    <span className="text-amber-500/70">↳</span>
+                                    <span className="truncate">{matchedUnitPreview}</span>
+                                  </p>
+                                ) : (
+                                  <p className="text-[10px] text-gray-500 truncate">
+                                    일치하는 단원을 찾지 못했습니다
+                                  </p>
+                                )}
+                              </div>
+                            )}
                           </div>
 
-                          <div className="flex items-center gap-1.5 pt-1">
-                            <button
-                              onClick={() => handleSaveManualProgress(pinTargetBook)}
-                              className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-lg text-[10.5px] shadow transition-colors"
-                            >
-                              이 단원으로 저장
-                            </button>
-                            <button
-                              onClick={() => handleAutoParseProgress(pinTargetBook)}
-                              className="px-2.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-lg text-[10.5px] shadow transition-colors flex items-center gap-1 shrink-0"
-                              title="오늘/과거 일지에서 페이지/단원 자동 파싱"
-                            >
-                              ⚡ 자동파싱
-                            </button>
+                          {/* 4. 버튼 영역 */}
+                          <div className="space-y-2 pt-1">
+                            <div className="flex items-center gap-2">
+                              <button
+                                type="button"
+                                onClick={() => handleAutoParseProgress(pinTargetBook)}
+                                className={`px-3 py-2 border rounded-lg text-[11px] font-bold transition-all flex items-center gap-1 shrink-0 ${
+                                  isLight
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 hover:bg-emerald-100'
+                                    : 'bg-emerald-500/10 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/20'
+                                }`}
+                                title="오늘/과거 일지에서 페이지/단원 자동 파싱"
+                              >
+                                ⚡ 자동 찾기
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleSaveManualProgress(pinTargetBook)}
+                                className="flex-1 py-2 bg-amber-500 hover:bg-amber-400 text-black font-black rounded-lg text-[11px] shadow transition-colors"
+                              >
+                                저장
+                              </button>
+                            </div>
+
                             {onUpdateStudentInfo && (
                               <button
+                                type="button"
                                 onClick={async () => {
                                   const bookTitle = translateBook(pinTargetBook);
-                                  const cleanProgress = { ...(student.book_progress || {}) };
-                                  delete cleanProgress[pinTargetBook];
-                                  delete cleanProgress[pinTargetBook.toLowerCase()];
-                                  delete cleanProgress[bookTitle];
-                                  await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
-                                  setPinTargetBook(null);
+                                  if (window.confirm(`[${bookTitle}] 교재의 진도 기록을 지우시겠습니까?`)) {
+                                    const cleanProgress = { ...(student.book_progress || {}) };
+                                    delete cleanProgress[pinTargetBook];
+                                    delete cleanProgress[pinTargetBook.toLowerCase()];
+                                    delete cleanProgress[bookTitle];
+                                    await onUpdateStudentInfo(student.id, 'book_progress', cleanProgress);
+                                    setPinTargetBook(null);
+                                  }
                                 }}
-                                title="이 교재의 진도 삭제"
-                                className="px-2.5 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/30 font-bold rounded-lg text-[10.5px] transition-colors shrink-0"
+                                className="w-full text-center text-[10px] text-gray-500 hover:text-red-400 transition-colors py-0.5"
                               >
-                                🗑️ 삭제
+                                진도 지우기
                               </button>
                             )}
                           </div>

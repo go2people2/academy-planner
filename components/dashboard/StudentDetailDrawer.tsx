@@ -143,7 +143,10 @@ export default function StudentDetailDrawer({
     setStartTimes(newStarts);
     setEndTimes(newEnds);
     setLocalSchedules(newSchedules);
-    onUpdateInfo(student.id, 'day_schedules', newSchedules);
+    onUpdateInfo(student.id, {
+      day_schedules: newSchedules,
+      class_days: selectedDays
+    });
   };
 
   // 💡 선택과목 저장 헬퍼

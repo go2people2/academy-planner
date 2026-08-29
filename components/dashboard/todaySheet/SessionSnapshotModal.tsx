@@ -51,9 +51,9 @@ export function SessionSnapshotModal({
     '정규';
 
   const initialDays: string[] =
-    currentSnapshot?.scheduledDays !== undefined
+    (currentSnapshot?.scheduledDays && Array.isArray(currentSnapshot.scheduledDays) && currentSnapshot.scheduledDays.length > 0)
       ? currentSnapshot.scheduledDays
-      : (initialSessionType === 'makeup' ? [] : (student.class_days || []));
+      : (student.class_days && student.class_days.length > 0 ? student.class_days : []);
 
   const initialHours: number[] =
     currentSnapshot?.scheduledHours !== undefined
@@ -91,12 +91,15 @@ export function SessionSnapshotModal({
     setSessionType(type);
     if (type === 'makeup') {
       setIsPureMakeup(true);
-      setScheduledDays([]);
-      setScheduledHours([]);
+      if (scheduledDays.length === 0 && student.class_days?.length) {
+        setScheduledDays(student.class_days);
+      }
     } else if (type === 'regular') {
       setIsPureMakeup(false);
       setCourseName('정규');
-      if (scheduledDays.length === 0) setScheduledDays(student.class_days || []);
+      if (scheduledDays.length === 0 && student.class_days?.length) {
+        setScheduledDays(student.class_days);
+      }
     } else {
       setIsPureMakeup(false);
       if (courseName === '정규') setCourseName('특강');
@@ -147,8 +150,8 @@ export function SessionSnapshotModal({
         sessionType: sessionType,
         courseName: courseName.trim(),
         courseId: finalCourseId,
-        scheduledDays: sessionType === 'makeup' ? [] : scheduledDays,
-        scheduledHours: sessionType === 'makeup' ? [] : scheduledHours,
+        scheduledDays: scheduledDays,
+        scheduledHours: scheduledHours,
         isPureMakeup: sessionType === 'makeup' ? true : isPureMakeup,
         source: finalSource,
         capturedAt: finalCapturedAt
@@ -256,33 +259,31 @@ export function SessionSnapshotModal({
             />
           </div>
 
-          {/* 3. 당시 예정 요일 (보강은 숨김) */}
-          {sessionType !== 'makeup' && (
-            <div className="space-y-1.5">
-              <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-                <Calendar size={13} /> 3. 당시 예정 요일 (Scheduled Days)
-              </label>
-              <div className="flex gap-1.5">
-                {ALL_DAYS.map(d => {
-                  const active = scheduledDays.includes(d);
-                  return (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => toggleDay(d)}
-                      className={`flex-1 py-1.5 rounded-md text-[11px] font-bold border transition-all ${
-                        active
-                          ? (isLight ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm' : 'bg-emerald-500 border-emerald-500 text-white shadow-sm')
-                          : (isLight ? 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10')
-                      }`}
-                    >
-                      {d}
-                    </button>
-                  );
-                })}
-              </div>
+          {/* 3. 당시 정규 시간표 요일 (당시 학생 식별용) */}
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
+              <Calendar size={13} /> 3. 정규 시간표 요일 (당시 학생 식별용)
+            </label>
+            <div className="flex gap-1.5">
+              {ALL_DAYS.map(d => {
+                const active = scheduledDays.includes(d);
+                return (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleDay(d)}
+                    className={`flex-1 py-1.5 rounded-md text-[11px] font-bold border transition-all ${
+                      active
+                        ? (isLight ? 'bg-emerald-600 border-emerald-600 text-white shadow-sm' : 'bg-emerald-500 border-emerald-500 text-white shadow-sm')
+                        : (isLight ? 'bg-gray-100 border-gray-200 text-gray-600 hover:bg-gray-200' : 'bg-white/5 border-white/10 text-gray-400 hover:bg-white/10')
+                    }`}
+                  >
+                    {d}
+                  </button>
+                );
+              })}
             </div>
-          )}
+          </div>
 
           {/* 4. 당시 예정 시간 (보강은 숨김) */}
           {sessionType !== 'makeup' && (

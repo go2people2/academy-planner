@@ -23,8 +23,6 @@ interface SidebarProps {
   setSelectedDays: (days: string[]) => void; 
   isAndFilter: boolean; 
   setIsAndFilter: (val: boolean) => void; 
-  filterTarget: 'all' | 'today' | 'rest';
-  setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
   academyInfo: any; 
   onUpdateAcademyInfo?: (updates: any) => Promise<void>;
   teachers: Teacher[];
@@ -55,7 +53,6 @@ export default function Sidebar({
   currentUser,
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
   selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, 
-  filterTarget, setFilterTarget,
   academyInfo, onUpdateAcademyInfo,
   teachers, selectedTeacherId, setSelectedTeacherId,
   isClassroomModeOpen, onStartClass,
@@ -239,13 +236,6 @@ export default function Sidebar({
         <nav className="space-y-1">
           <div className="flex items-center justify-between mb-2 px-2">
             <h3 className="text-[9px] font-bold text-[#37352f]/45 uppercase tracking-widest">Filter</h3>
-            <div className="flex bg-[#edece9]/50 rounded-[2px] p-0.5 border border-[#edece9]">
-              {(['all', 'today', 'rest'] as const).map((t) => (
-                <button key={t} onClick={() => setFilterTarget(t)} className={`text-[7px] px-1.5 py-0.5 rounded-[1px] font-black uppercase transition-all ${filterTarget === t ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>
-                  {t === 'all' ? 'All' : t === 'today' ? 'Top' : 'Btm'}
-                </button>
-              ))}
-            </div>
           </div>
  
           <div className="px-1 space-y-3">
@@ -353,25 +343,28 @@ export default function Sidebar({
               </AnimatePresence>
             </div>
  
-            <div className="space-y-2">
-              <div className="flex gap-[3px] w-full">
-                {DAYS_SHORT.map((day) => {
-                  const isActive = selectedDays.includes(day);
-                  return (
-                    <button key={day} onClick={() => toggleDay(day)} className={`flex-1 h-[22px] rounded-[2px] text-[9px] font-black transition-all border ${isActive ? 'bg-[#0c73e8] border-[#0c73e8] text-white shadow-sm' : 'bg-white border-[#edece9] text-[#37352f] hover:bg-[#edece9]/45'}`}>{day}</button>
-                  );
-                })}
-              </div>
-              {selectedDays.length > 0 && (
-                <div className="flex items-center justify-between px-0.5">
-                  <div className="flex items-center gap-0.5 bg-[#edece9]/50 p-0.5 rounded-[2px] border border-[#edece9]">
-                    <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>AND</button>
-                    <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>OR</button>
-                  </div>
-                  <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-600 hover:text-blue-500 lowercase font-bold tracking-normal text-[8px] px-1">reset</button>
+            {/* 💡 요일 필터: 전교생을 조회하는 '학생정보수정(studentEdit)' 메뉴에서만 노출 */}
+            {viewMode === 'studentEdit' && (
+              <div className="space-y-2">
+                <div className="flex gap-[3px] w-full">
+                  {DAYS_SHORT.map((day) => {
+                    const isActive = selectedDays.includes(day);
+                    return (
+                      <button key={day} onClick={() => toggleDay(day)} className={`flex-1 h-[22px] rounded-[2px] text-[9px] font-black transition-all border ${isActive ? 'bg-[#0c73e8] border-[#0c73e8] text-white shadow-sm' : 'bg-white border-[#edece9] text-[#37352f] hover:bg-[#edece9]/45'}`}>{day}</button>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+                {selectedDays.length > 0 && (
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center gap-0.5 bg-[#edece9]/50 p-0.5 rounded-[2px] border border-[#edece9]">
+                      <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>AND</button>
+                      <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-[#0c73e8] text-white shadow-sm' : 'text-[#37352f]/60 hover:text-[#37352f]'}`}>OR</button>
+                    </div>
+                    <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-600 hover:text-blue-500 lowercase font-bold tracking-normal text-[8px] px-1">reset</button>
+                  </div>
+                )}
+              </div>
+            )}
  
             {isAdmin && (
               <div className="pt-1">

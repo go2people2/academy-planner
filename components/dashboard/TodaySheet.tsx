@@ -262,6 +262,13 @@ export default function TodaySheet({
   const [activeCell, setActiveCell] = useState<{ studentId: string, columnId: string } | null>(null);
   const [editingCell, setEditingCell] = useState<{ studentId: string, columnId: string } | null>(null);
 
+  // 💡 [핵심] 현재 편집 셀의 draft flush 함수를 등록하는 ref
+  // 다른 셀 클릭 시 updateEditingCell(null) 전에 호출하여 textarea 언마운트 전에 최신값 저장
+  const flushEditingDraftRef = useRef<(() => void) | null>(null);
+  const registerFlushDraft = useCallback((fn: (() => void) | null) => {
+    flushEditingDraftRef.current = fn;
+  }, []);
+
   // 💡 [추가] 다른 조교 기기로부터 저장 이벤트 수신 시, 로컬 상태 및 DOM을 즉시 갱신하는 핸들러
   const handleRemoteCellSave = useCallback((studentId: string, colId: string, value: string) => {
     const isEditingThis = editingCell?.studentId === studentId && editingCell?.columnId === colId;
@@ -1257,39 +1264,110 @@ export default function TodaySheet({
 
 
 
+  // 💡 [드래그 vs 재클릭 구분] 마우스 다운 위치 및 이동 감지 Ref
+  const dragStartPosRef = useRef<{
+    x: number;
+    y: number;
+    studentId: string;
+    colId: string;
+    wasActive: boolean;
+    isMoved: boolean;
+  } | null>(null);
+
+  // 💡 마우스 이동 거리가 5px 이상이면 드래그로 판정
+  useEffect(() => {
+    const handleWindowMouseMove = (e: MouseEvent) => {
+      if (dragStartPosRef.current && !dragStartPosRef.current.isMoved) {
+        const dx = e.clientX - dragStartPosRef.current.x;
+        const dy = e.clientY - dragStartPosRef.current.y;
+        if (Math.hypot(dx, dy) >= 5) {
+          dragStartPosRef.current.isMoved = true;
+        }
+      }
+    };
+    window.addEventListener('mousemove', handleWindowMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleWindowMouseMove);
+    };
+  }, []);
+
   const onCellMouseDown = useCallback((e: React.MouseEvent, studentId: string, colId: string) => {
     if (['select', 'action'].includes(colId)) return;
     const isShift = e.shiftKey;
+
+    // 💡 [핵심] editingCell을 해제하기 전에, 현재 편집 셀의 draft를 먼저 flush
+    flushEditingDraftRef.current?.();
+
+    // 💡 mousedown 시점에 이미 활성화되어 있던 셀인지 기록
+    const wasActive = activeCell?.studentId === studentId && activeCell?.columnId === colId;
+    dragStartPosRef.current = {
+      x: e.clientX,
+      y: e.clientY,
+      studentId,
+      colId,
+      wasActive,
+      isMoved: false,
+    };
+
     setSelectedRange({ startStudentId: studentId, startColId: colId, endStudentId: studentId, endColId: colId });
     setIsDragging(true);
-    requestAnimationFrame(() => {
-      if (!isShift) { setActiveCell({ studentId, columnId: colId }); }
-      updateEditingCell(null);
-    });
-  }, [updateEditingCell]);
+    if (!isShift) { setActiveCell({ studentId, columnId: colId }); }
+    updateEditingCell(null);
+  }, [activeCell, updateEditingCell]);
 
   const onCellMouseEnter = useCallback((studentId: string, colId: string) => {
     if (!isDragging || !selectedRange) return;
+    if (dragStartPosRef.current && (dragStartPosRef.current.studentId !== studentId || dragStartPosRef.current.colId !== colId)) {
+      dragStartPosRef.current.isMoved = true;
+    }
     setSelectedRange(prev => prev ? { ...prev, endStudentId: studentId, endColId: colId } : null);
   }, [isDragging, selectedRange]);
 
   const handleActiveCellChange = useCallback((studentId: string, colId: string) => {
-    requestAnimationFrame(() => {
+    // 💡 [핵심] 클릭 이벤트에서도 flush 보장 (mousedown과 이중 안전망)
+    flushEditingDraftRef.current?.();
+
+    const dragInfo = dragStartPosRef.current;
+    const isSameCell = dragInfo?.studentId === studentId && dragInfo?.colId === colId;
+    const wasActive = isSameCell && dragInfo.wasActive;
+    const isMoved = dragInfo?.isMoved ?? false;
+
+    // 클릭 판정 후 드래그 정보 초기화
+    dragStartPosRef.current = null;
+
+    const readOnlyCols = ['select', 'name', 'action', 'attendance', 'review', 'date'];
+    const isReadOnly = readOnlyCols.includes(colId);
+
+    // 💡 [확정 UX] 마우스 드래그 없이 이미 선택된 셀을 다시 한 번 클릭한 경우 -> 내용 입력 모드 진입
+    if (!isMoved && wasActive && !isReadOnly) {
+      setActiveCell({ studentId, columnId: colId });
+      updateEditingCell({ studentId, columnId: colId });
+    } else {
+      // 💡 [확정 UX] 선택되지 않은 셀의 첫 클릭이거나 드래그 후 클릭 -> 셀 선택 모드만 유지
       setActiveCell({ studentId, columnId: colId });
       updateEditingCell(null);
-    });
+    }
   }, [updateEditingCell]);
+
   const handleEditingCellChange = useCallback((studentId: string, colId: string | null) => {
-    requestAnimationFrame(() => {
-      updateEditingCell(colId ? { studentId, columnId: colId } : null);
-    });
+    const readOnlyCols = ['select', 'name', 'action', 'attendance', 'review', 'date'];
+    if (colId && readOnlyCols.includes(colId)) return;
+    updateEditingCell(colId ? { studentId, columnId: colId } : null);
   }, [updateEditingCell]);
   const toggleHistory = useCallback((studentId: string) => { setExpandedHistory(prev => ({ ...prev, [studentId]: prev[studentId] ? 0 : 3 })); }, []);
 
+  const isAnyModalOpen = isPrintPreviewOpen || isCardPrintOpen || isHokmaPrintOpen || isTagBatchMode || snapshotModalState.isOpen || isExportOpen;
+
   const handleSetSwitch = useCallback((setId: string) => {
+    // 💡 [핵심] 현재 편집 중인 셀이 있다면 draft flush를 먼저 실행하여 formData와 DB에 안전하게 반영
+    if (flushEditingDraftRef.current) {
+      flushEditingDraftRef.current();
+    }
+    // 💡 편집 모드 종료 (새 SET에서는 선택 모드 유지)
+    updateEditingCell(null);
     setActiveSet(setId);
     localStorage.setItem(`todaySheetActiveSet_${currentUser?.id || 'default'}`, setId);
-  }, [currentUser?.id]);
+  }, [currentUser?.id, updateEditingCell]);
 
   const toggleColumn = useCallback((colId: string) => {
     const newCols = visibleColumns.includes(colId) ? visibleColumns.filter(c => c !== colId) : [...visibleColumns, colId];
@@ -1316,6 +1394,7 @@ export default function TodaySheet({
     toggleHistory,
     handleUndo,
     handleRedo,
+    isModalOpen: isAnyModalOpen,
     toggleShowAllTools: () => {
       setShowAllTools(prev => {
         const next = !prev;
@@ -1658,40 +1737,6 @@ export default function TodaySheet({
                       </button>
                     ))}
                   </div>
-
-                  <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
-
-                  {/* 요일 필터 (라벨 제거) */}
-                  <div className="flex items-center gap-1.5">
-                    <div className="flex gap-[3px]">
-                      {['월', '화', '수', '목', '금', '토', '일'].map((day) => {
-                        const isActive = selectedDays.includes(day);
-                        return (
-                          <button
-                            key={day}
-                            onClick={() => {
-                              if (selectedDays.includes(day)) {
-                                setSelectedDays(selectedDays.filter((d: string) => d !== day));
-                              } else {
-                                setSelectedDays([...selectedDays, day]);
-                              }
-                            }}
-                            className={`w-6 h-6 rounded-[3px] text-[8px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-md' : (isLight ? 'bg-white border-[#e3e2e0] text-gray-700 hover:bg-gray-100' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white')}`}
-                          >
-                            {day}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    {selectedDays.length > 0 && (
-                      <button
-                        onClick={() => setIsAndFilter(!isAndFilter)}
-                        className={`px-1.5 py-0.5 rounded-[3px] text-[8px] font-black uppercase border transition-all ${isAndFilter ? 'bg-indigo-650/20 border-indigo-500/40 text-indigo-405 shadow-sm' : (isLight ? 'bg-white border-[#e3e2e0] text-gray-700 hover:bg-gray-100' : 'bg-zinc-900 border-zinc-800 text-zinc-400 hover:bg-zinc-800 hover:text-white')}`}
-                      >
-                        {isAndFilter ? 'AND' : 'OR'}
-                      </button>
-                    )}
-                  </div>
                 </>
               )}
             </div>
@@ -1950,6 +1995,7 @@ export default function TodaySheet({
                       selectedRange={selectedRange}
                       isCellInRange={isCellInRange}
                       onCellMouseDown={onCellMouseDown}
+                      registerFlushDraft={registerFlushDraft}
                       onCellMouseEnter={onCellMouseEnter}
                       isFirstInTimeSection={isNewSection}
                       timeSectionLabel={timeSectionLabel}

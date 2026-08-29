@@ -15,6 +15,9 @@ export const isValidHistoryLog = (l: any) => {
   return hasStatus || hasAttendance || hasContent || hasTest;
 };
 
+// 💡 [단원 캐시] 동일 교재에 대해 반복적인 네트워크 fetch(/api/textbooks/...) 방지
+export const textbookUnitsCache = new Map<string, any[]>();
+
 export function useTodaySheetHistory({
   student,
   selectedDate,
@@ -28,7 +31,7 @@ export function useTodaySheetHistory({
   limit?: number;
   masterTextbooks?: any[];
   onSave?: (id: string, data: any) => Promise<boolean>;
-  onUpdateStudentInfo?: (id: string, field: string, value: any) => Promise<void>;
+  onUpdateStudentInfo?: (id: string, fieldOrUpdates: any, value?: any) => Promise<any>;
 }) {
   const [showAddBookModal, setShowAddBookModal] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('전체');
@@ -62,30 +65,52 @@ export function useTodaySheetHistory({
   }, [incomingHw]);
 
   const checkLiveUnitMatch = useCallback(async (bookCode: string, pageStr: string, _dummy = '') => {
-    if (!pageStr) {
+    const trimmed = (pageStr || '').trim();
+    if (!trimmed) {
       setMatchedUnitPreview('');
       return;
     }
-    const pageNum = parseInt(pageStr, 10);
     const targetMaster = masterTextbooks?.find((m: any) => m.title === bookCode || m.bookcode === bookCode);
     const realCode = targetMaster?.bookcode || bookCode;
 
     try {
-      const res = await fetch(`/api/textbooks/${realCode}`);
-      if (res.ok) {
-        const units = await res.json();
-        const found = (units || []).find((u: any) => {
-          const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
-          const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
-          return pageNum >= uStart && pageNum <= uEnd;
-        });
-
-        if (found) {
-          const uName = found.unit || found.unitName || found.title;
-          setMatchedUnitPreview(`${uName} (p.${pageStr})`);
-        } else {
-          setMatchedUnitPreview(`해당 페이지(p.${pageStr})의 단원을 찾을 수 없습니다`);
+      let units: any[] = textbookUnitsCache.get(realCode) || [];
+      if (units.length === 0) {
+        const res = await fetch(`/api/textbooks/${realCode}`);
+        if (res.ok) {
+          units = (await res.json()) || [];
+          textbookUnitsCache.set(realCode, units);
         }
+      }
+      if (units && units.length > 0) {
+        const numbers = trimmed.match(/\d+/g);
+        if (numbers && numbers.length > 0) {
+          const pageNum = parseInt(numbers[0], 10);
+          const found = (units || []).find((u: any) => {
+            const uStart = parseInt(u.start_page ?? u.sPage ?? u.startPage ?? '0', 10);
+            const uEnd = parseInt(u.end_page ?? u.ePage ?? u.endPage ?? '9999', 10);
+            return pageNum >= uStart && pageNum <= uEnd;
+          });
+
+          if (found) {
+            const uName = found.unit || found.unitName || found.title;
+            setMatchedUnitPreview(uName);
+          } else {
+            setMatchedUnitPreview('NOT_FOUND');
+          }
+        } else {
+          const found = (units || []).find((u: any) => {
+            const uName = u.unit || u.unitName || u.title;
+            return uName && uName.toLowerCase().includes(trimmed.toLowerCase());
+          });
+          if (found) {
+            setMatchedUnitPreview(found.unit || found.unitName || found.title);
+          } else {
+            setMatchedUnitPreview('NOT_FOUND');
+          }
+        }
+      } else {
+        setMatchedUnitPreview('NOT_FOUND');
       }
     } catch (e) {
       console.error(e);

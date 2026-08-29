@@ -25,9 +25,11 @@ interface UseTodaySheetShortcutsProps {
   onSave: (studentId: string, data: any) => Promise<any>;
   toggleSecondRow?: () => void;
   toggleHistory?: (studentId: string) => void; // 💡 히스토리 토글 함수 추가
+  toggleUndo?: () => void;
   handleUndo?: () => void;
   handleRedo?: () => void;
   toggleShowAllTools?: () => void; // 💡 툴박스 접기/펼치기 토글 함수 추가
+  isModalOpen?: boolean; // 💡 모달 열림 상태 (단축키 차단용)
 }
 
 /**
@@ -40,7 +42,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
     handleBatchSave, handleSetSwitch, setIsDragging, selectedIds,
     toggleSecondRow, toggleHistory, handleUndo, handleRedo,
-    toggleShowAllTools
+    toggleShowAllTools, isModalOpen
   } = props;
 
   // 1. 클립보드 로직 분리 (handleCopy, handlePaste, handleCut)
@@ -309,12 +311,31 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
         }
       }
 
-      // Alt + Q, W, E, R (Set Switch)
-      if (e.altKey && ['q','w','e','r','Q','W','E','R'].includes(e.key)) {
-        e.preventDefault();
-        const map: Record<string, string> = { q:'1', w:'2', e:'3', r:'4', Q:'1', W:'2', E:'3', R:'4' };
-        handleSetSwitch(map[e.key]);
-        return;
+      // 💡 Alt + Q, W, E, R (Set 1, 2, 3, 4 Switch)
+      // OS/언어/한글 입력 상태에 영향받지 않도록 물리적 키 위치(event.code) 기준으로 판정
+      const setShortcutMap: Record<string, string> = {
+        KeyQ: '1',
+        KeyW: '2',
+        KeyE: '3',
+        KeyR: '4',
+      };
+
+      if (e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !e.repeat) {
+        const targetSet = setShortcutMap[e.code];
+        if (targetSet) {
+          // 💡 모달이 열려 있는 상태라면 SET 전환 단축키 차단
+          const isModalActive = isModalOpen || 
+            !!document.getElementById('homework-editor-portal') ||
+            !!target?.closest('[role="dialog"], #homework-editor-portal, .modal-portal, [data-modal="true"]');
+          if (isModalActive) return;
+
+          e.preventDefault();
+          e.stopPropagation();
+
+          // 💡 handleSetSwitch 내부에서 flushEditingDraftRef.current() 실행 후 updateEditingCell(null) 및 setActiveSet 진행
+          handleSetSwitch(targetSet);
+          return;
+        }
       }
 
       // Alt + T (Option + T) - 툴박스 접기/펼치기 토글
@@ -517,7 +538,15 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
       // Enter / Tab 네비게이션
       if ((e.key === 'Enter' && !e.shiftKey && !e.altKey) || e.key === 'Tab') {
-        if (e.key === 'Enter' && !isInput) return;
+        if (e.key === 'Enter' && !isInput) {
+          const readOnlyCols = ['select', 'name', 'action', 'attendance', 'review', 'date'];
+          if (activeCell && !readOnlyCols.includes(activeCell.columnId)) {
+            e.preventDefault();
+            setEditingCell(activeCell);
+            return;
+          }
+          return;
+        }
 
         // 💡 [수정] 점수 개수 모드(분수)에서 분자 -> 분모로 Tab 키 내부 이동을 할 때는 전역 탭 이동 차단
         if (e.key === 'Tab' && !e.shiftKey && activeCell?.columnId === 'test_score') {
@@ -644,6 +673,6 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     activeCell, setActiveCell, editingCell, setEditingCell, filteredStudents, activeColumns, 
     selectedRange, setSelectedRange, handleBatchSave, handleSetSwitch, 
     handleCopy, handlePaste, handleCut, setIsDragging, selectedIds, handleFillDown, toggleSecondRow,
-    handleUndo, handleRedo, toggleHistory, toggleShowAllTools
+    handleUndo, handleRedo, toggleHistory, toggleShowAllTools, isModalOpen
   ]);
 }

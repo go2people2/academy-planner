@@ -23,8 +23,6 @@ interface SidebarProps {
   setSelectedDays: (days: string[]) => void; 
   isAndFilter: boolean; 
   setIsAndFilter: (val: boolean) => void; 
-  filterTarget: 'all' | 'today' | 'rest';
-  setFilterTarget: (target: 'all' | 'today' | 'rest') => void;
   academyInfo: any; 
   onUpdateAcademyInfo?: (updates: any) => Promise<void>;
   teachers: Teacher[];
@@ -55,7 +53,6 @@ export default function Sidebar({
   currentUser,
   viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
   selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, 
-  filterTarget, setFilterTarget,
   academyInfo, onUpdateAcademyInfo,
   teachers, selectedTeacherId, setSelectedTeacherId,
   isClassroomModeOpen, onStartClass,
@@ -239,13 +236,6 @@ export default function Sidebar({
         <nav className="space-y-1">
           <div className="flex items-center justify-between mb-2 px-2">
             <h3 className="text-[9px] font-bold text-gray-300 uppercase tracking-widest">Filter</h3>
-            <div className="flex bg-white/10 rounded-[2px] p-0.5 border border-white/10">
-              {(['all', 'today', 'rest'] as const).map((t) => (
-                <button key={t} onClick={() => setFilterTarget(t)} className={`text-[7px] px-1.5 py-0.5 rounded-[1px] font-black uppercase transition-all ${filterTarget === t ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>
-                  {t === 'all' ? 'All' : t === 'today' ? 'Top' : 'Btm'}
-                </button>
-              ))}
-            </div>
           </div>
 
           <div className="px-1 space-y-3">
@@ -353,25 +343,28 @@ export default function Sidebar({
               </AnimatePresence>
             </div>
 
-            <div className="space-y-2">
-              <div className="flex gap-[3px] w-full">
-                {DAYS_SHORT.map((day) => {
-                  const isActive = selectedDays.includes(day);
-                  return (
-                    <button key={day} onClick={() => toggleDay(day)} className={`flex-1 h-[22px] rounded-[2px] text-[9px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/10 border-white/10 text-gray-300 hover:bg-white/20 hover:text-white'}`}>{day}</button>
-                  );
-                })}
-              </div>
-              {selectedDays.length > 0 && (
-                <div className="flex items-center justify-between px-0.5">
-                  <div className="flex items-center gap-0.5 bg-white/5 p-0.5 rounded-[2px] border border-white/5">
-                    <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>AND</button>
-                    <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>OR</button>
-                  </div>
-                  <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal text-[8px] px-1">reset</button>
+            {/* 💡 요일 필터: 전교생을 조회하는 '학생정보수정(studentEdit)' 메뉴에서만 노출 */}
+            {viewMode === 'studentEdit' && (
+              <div className="space-y-2">
+                <div className="flex gap-[3px] w-full">
+                  {DAYS_SHORT.map((day) => {
+                    const isActive = selectedDays.includes(day);
+                    return (
+                      <button key={day} onClick={() => toggleDay(day)} className={`flex-1 h-[22px] rounded-[2px] text-[9px] font-black transition-all border ${isActive ? 'bg-blue-600 border-blue-500 text-white shadow-lg shadow-blue-600/20' : 'bg-white/10 border-white/10 text-gray-300 hover:bg-white/20 hover:text-white'}`}>{day}</button>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+                {selectedDays.length > 0 && (
+                  <div className="flex items-center justify-between px-0.5">
+                    <div className="flex items-center gap-0.5 bg-white/5 p-0.5 rounded-[2px] border border-white/5">
+                      <button onClick={() => { setIsAndFilter(true); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>AND</button>
+                      <button onClick={() => { setIsAndFilter(false); setIsMultiMode(true); }} className={`px-1.5 py-0.5 rounded-[1px] text-[7px] font-black transition-all ${isMultiMode && !isAndFilter ? 'bg-blue-600 text-white shadow-sm' : 'text-gray-300 hover:text-white'}`}>OR</button>
+                    </div>
+                    <button onClick={() => { setSelectedDays([]); setIsAndFilter(false); setIsMultiMode(false); }} className="text-blue-500 hover:text-blue-400 lowercase font-bold tracking-normal text-[8px] px-1">reset</button>
+                  </div>
+                )}
+              </div>
+            )}
 
             {isAdmin && (
               <div className="pt-1">

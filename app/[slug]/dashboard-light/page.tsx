@@ -263,7 +263,6 @@ export default function DashboardPage() {
   }, [viewMode, isMounted]);
 
   const [isAndFilter, setIsAndFilter] = useState(false);
-  const [filterTarget, setFilterTarget] = useState<'all' | 'today' | 'rest'>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [studentEditSearchQuery, setStudentEditSearchQuery] = useState(''); // 💡 학생 정보 수정용 검색 상태 분리
 
@@ -803,6 +802,71 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         filteredData.attendance_reason = targetSession?.attendance_reason || '보강 수업';
       }
 
+      // 💡 [불변 스냅샷 보존] 오늘 및 미래 세션 생성 시 최초 1회만 당시 수업 맥락 스냅샷 생성 (과거 날짜는 자동 생성 금지, 기존 스냅샷 덮어쓰기 금지)
+      let sessionSnapshotToSave = targetSession?.session_snapshot;
+      if (!sessionSnapshotToSave && targetSaveDate >= getTodayStr()) {
+        const dayKey = getDayOfWeek(targetSaveDate || selectedDate);
+        const isMakeup = finalIsPureMakeup;
+        const isSpecial = !isMakeup && targetCourseName !== '정규';
+        let courseId: string | null = null;
+        let scheduledDays: string[] = [];
+        let scheduledHours: number[] = [];
+        const classDays = Array.isArray(student.class_days) && student.class_days.length > 0
+          ? student.class_days
+          : [];
+        const scheduleDays = Object.entries(student.day_schedules || {})
+          .filter(([, hours]) => Array.isArray(hours) && (hours as any[]).length > 0)
+          .map(([day]) => day.replace('요일', '').trim())
+          .filter(Boolean);
+        const regularClassDays = classDays.length > 0 ? classDays : scheduleDays;
+
+        if (isMakeup) {
+          // 💡 [보강 수업 스냅샷] 보강 여부와 무관하게 당시 학생의 정규 시간표 등록 요일을 식별 정보로 보존
+          scheduledDays = regularClassDays;
+          scheduledHours = targetMovedHour !== null ? [targetMovedHour] : [];
+        } else if (isSpecial) {
+          const rawElective = student.book_courses?.['__elective_courses'];
+          if (rawElective) {
+            try {
+              const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+              if (Array.isArray(courses)) {
+                const matchC = courses.find((c: any) => c && (c.subject?.trim() === targetCourseName || c.course_name?.trim() === targetCourseName));
+                if (matchC) {
+                  courseId = matchC.id || null;
+                  scheduledDays = Array.isArray(matchC.days) ? matchC.days : (typeof matchC.days === 'string' ? [matchC.days] : []);
+                  const schedH = matchC.schedules?.[dayKey] || matchC.hours || [];
+                  scheduledHours = Array.isArray(schedH) ? schedH.map((h: any) => {
+                    const num = parseInt(String(h), 10);
+                    if (isNaN(num)) return 16;
+                    return num >= 100 ? Math.floor(num / 100) : num;
+                  }) : [];
+                }
+              }
+            } catch (e) {}
+          }
+        } else {
+          // 정규 수업
+          scheduledDays = regularClassDays;
+          scheduledHours = (student.day_schedules?.[dayKey] || []).map((h: any) => {
+            const num = parseInt(String(h), 10);
+            if (isNaN(num)) return 16;
+            return num >= 100 ? Math.floor(num / 100) : num;
+          });
+        }
+
+        sessionSnapshotToSave = {
+          version: 1,
+          sessionType: isMakeup ? 'makeup' : (isSpecial ? 'elective' : 'regular'),
+          courseName: targetCourseName,
+          courseId: courseId,
+          scheduledDays: scheduledDays,
+          scheduledHours: scheduledHours,
+          isPureMakeup: isMakeup,
+          source: 'today_sheet',
+          capturedAt: new Date().toISOString()
+        };
+      }
+
       const payload: any = {
         student_id: realStudentId,
         student_name: student.name,
@@ -812,6 +876,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         moved_to_hour: targetMovedHour,
         ...filteredData,
         is_pure_makeup: finalIsPureMakeup,
+        ...(sessionSnapshotToSave ? { session_snapshot: sessionSnapshotToSave } : {})
       };
       let targetId = (sessionId && sessionId !== 'temp' && !String(sessionId).startsWith('temp:')) ? sessionId : undefined;
       if (!targetId) {
@@ -1758,8 +1823,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
             notes: updateData.management_notes
           }]);
         }
+        // 💡 [성능 최적화] 이미 로컬 상태(setStudents)가 0ms로 즉시 갱신된 가벼운 진도/태그/노트 수정은
+        // 학원 전체 데이터를 다시 다운로드하는 무거운 fetchAllData를 건너뛰어 지연(Lag)을 방지
+        const isLightweightUpdate = Object.keys(updateData).every(k =>
+          ['book_progress', 'book_progress_updated_at', 'level_tag', 'management_notes', 'book_progress_history'].includes(k)
+        );
+
+        if (!isLightweightUpdate) {
+          await fetchAllData(false);
+        }
       }
-      await fetchAllData(false);
     } catch (e: any) {
       console.error(e);
       alert('학생 정보 수정 처리 중 오류가 발생했습니다.');
@@ -1948,10 +2021,11 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   }, [students, selectedDayKey, selectedDate, academy]);
 
   // 1. 오늘의 학생 리스트 (필터링 + 가상 분할 팽창 + 정렬 - Overview는 항상 이름순)
+  // 💡 [격리] TodaySheet/Overview는 오늘 날짜 기준이므로 selectedDays 요일 교집합 필터를 적용하지 않음 (selectedDays: [])
   const todayStudents = useMemo(() => {
     const list = filterStudentList({
       students, selectedDayKey, selectedDate, academy, searchQuery,
-      selectedTeacherId, selectedFilter, selectedDays, isAndFilter, filterTarget: 'today',
+      selectedTeacherId, selectedFilter, selectedDays: [], isAndFilter: false, filterTarget: 'today',
       selectedHour
     });
 
@@ -2037,7 +2111,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
     return Array.from(mergedByStudent.values())
       .sort((a, b) => a.name.localeCompare(b.name, 'ko'));
-  }, [students, selectedDayKey, selectedFilter, selectedDays, isAndFilter, searchQuery, selectedTeacherId, sortMode, academy, selectedDate, selectedHour]);
+  }, [students, selectedDayKey, selectedFilter, searchQuery, selectedTeacherId, sortMode, academy, selectedDate, selectedHour]);
 
   // 💡 [추가] 오늘 수업 예정이었으나 제외(취소)된 학생 목록
   const excludedStudents = useMemo(() => {
@@ -2105,7 +2179,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   return (
     <div className="min-h-screen bg-[#fbfbfa] text-[#37352f] flex font-sans selection:bg-blue-500/10 overflow-hidden text-xs">
       {!(viewMode === 'todayTable' && isFullScreen) && (
-        <Sidebar currentUser={currentUser} viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} filterTarget={filterTarget} setFilterTarget={setFilterTarget} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} isClassroomModeOpen={isClassroomModeOpen} onStartClass={() => setIsClassroomModeOpen(true)} selectedHour={selectedHour} setSelectedHour={setSelectedHour} availableHours={availableHours} />
+        <Sidebar currentUser={currentUser} viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} isClassroomModeOpen={isClassroomModeOpen} onStartClass={() => setIsClassroomModeOpen(true)} selectedHour={selectedHour} setSelectedHour={setSelectedHour} availableHours={availableHours} />
       )}
       <main className="flex-1 h-screen overflow-y-auto bg-[#fbfbfa] relative">
         {(() => {
