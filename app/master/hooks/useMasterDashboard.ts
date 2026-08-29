@@ -1,6 +1,9 @@
+'use client';
+
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
+import { getAcademyFeatures, AcademyFeatureFlags, DEFAULT_ACADEMY_FEATURES } from '@/lib/featureFlags';
 
 export function useMasterDashboard() {
   const [mounted, setMounted] = useState(false);
@@ -14,6 +17,8 @@ export function useMasterDashboard() {
   const [editIsSuspended, setEditIsSuspended] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
   const [editAiSettings, setEditAiSettings] = useState<{ active_models: string[]; default_model: string }>({ active_models: ['openai'], default_model: 'openai' });
+  const [editFeatures, setEditFeatures] = useState<AcademyFeatureFlags>(DEFAULT_ACADEMY_FEATURES);
+  const [initialEditSnapshot, setInitialEditSnapshot] = useState<any>(null);
   
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
@@ -167,9 +172,24 @@ export function useMasterDashboard() {
     }
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        setStatusMsg({
+          type: 'error',
+          text: '인증 세션이 만료되었습니다. 다시 로그인해 주세요.'
+        });
+        setIsSubmitting(false);
+        return;
+      }
+
       const res = await fetch('/api/master/create-academy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ academyName, slug, username, password })
       });
       const data = await res.json();
@@ -214,16 +234,29 @@ export function useMasterDashboard() {
     
     setIsUpdating(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        alert('인증 세션이 만료되었습니다. 다시 로그인해 주세요.');
+        setIsUpdating(false);
+        return;
+      }
+
       const res = await fetch('/api/master/update-academy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ 
           academyId: targetId, 
           academyName: cleanName, 
           slug: cleanSlug, 
           oldSlug, 
           isSuspended: editIsSuspended,
-          aiSettings: editAiSettings 
+          aiSettings: editAiSettings,
+          features: editFeatures
         })
       });
       const data = await res.json();
@@ -231,6 +264,9 @@ export function useMasterDashboard() {
       if (data.success) {
         alert('학원 정보가 정상적으로 변경되었습니다.');
         setEditingAcademy(null);
+        setShowDeleteSection(false);
+        setDeleteConfirmInput('');
+        setInitialEditSnapshot(null);
         fetchAcademies();
       } else {
         alert(data.error || '학원 정보 수정에 실패했습니다.');
@@ -256,9 +292,21 @@ export function useMasterDashboard() {
 
     setIsDeleting(true);
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        alert('인증 세션이 만료되었습니다. 다시 로그인해 주세요.');
+        setIsDeleting(false);
+        return;
+      }
+
       const res = await fetch('/api/master/delete-academy', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
         body: JSON.stringify({ 
           academyId: editingAcademy.id, 
           slug: editingAcademy.slug 
@@ -271,6 +319,7 @@ export function useMasterDashboard() {
         setEditingAcademy(null);
         setShowDeleteSection(false);
         setDeleteConfirmInput('');
+        setInitialEditSnapshot(null);
         fetchAcademies();
       } else {
         alert(data.error || '학원 삭제에 실패했습니다.');
@@ -294,21 +343,68 @@ export function useMasterDashboard() {
       };
       localStorage.setItem('ams_user', JSON.stringify(warpedUser));
       localStorage.setItem('ams_is_warp', 'true');
-      router.push(`/${targetSlug}/dashboard`);
+      if (typeof window !== 'undefined') {
+        window.location.assign(`/${encodeURIComponent(targetSlug)}/dashboard`);
+      }
     } catch (e) {
       console.error('Warp error:', e);
     }
   };
 
   const openEditModal = (a: any) => {
+    if (!a) return;
+    const initialSuspended = !!a.operation_settings?.is_suspended;
+    const initialAi = a.operation_settings?.ai_settings
+      ? { 
+          active_models: Array.isArray(a.operation_settings.ai_settings.active_models) 
+            ? [...a.operation_settings.ai_settings.active_models] 
+            : ['openai'], 
+          default_model: a.operation_settings.ai_settings.default_model || 'openai' 
+        }
+      : { active_models: ['openai'], default_model: 'openai' };
+    const initialFeat = { ...getAcademyFeatures(a) };
+
     setEditingAcademy(a);
     setEditAcademyName(a.academy_name);
     setEditSlug(a.slug);
-    setEditIsSuspended(!!a.operation_settings?.is_suspended);
-    setEditAiSettings(a.operation_settings?.ai_settings || { active_models: ['openai'], default_model: 'openai' });
+    setEditIsSuspended(initialSuspended);
+    setEditAiSettings(initialAi);
+    setEditFeatures(initialFeat);
     setShowDeleteSection(false);
     setDeleteConfirmInput('');
+
+    // 변경사항 감지를 위한 원본 스냅샷 저장
+    setInitialEditSnapshot({
+      academyName: a.academy_name,
+      slug: a.slug,
+      isSuspended: initialSuspended,
+      aiSettings: initialAi,
+      features: initialFeat,
+    });
   };
+
+  const isModalDirty = useCallback(() => {
+    if (!initialEditSnapshot) return false;
+    if (editAcademyName !== initialEditSnapshot.academyName) return true;
+    if (editSlug !== initialEditSnapshot.slug) return true;
+    if (editIsSuspended !== initialEditSnapshot.isSuspended) return true;
+    if (JSON.stringify(editAiSettings) !== JSON.stringify(initialEditSnapshot.aiSettings)) return true;
+    if (JSON.stringify(editFeatures) !== JSON.stringify(initialEditSnapshot.features)) return true;
+    return false;
+  }, [initialEditSnapshot, editAcademyName, editSlug, editIsSuspended, editAiSettings, editFeatures]);
+
+  const handleCloseEditModal = useCallback((force = false) => {
+    if (isUpdating) return; // 저장 중에는 닫기 차단
+    if (!force && isModalDirty()) {
+      if (!confirm('저장하지 않은 변경사항이 있습니다.\n그래도 닫을까요?')) {
+        return;
+      }
+    }
+    setEditingAcademy(null);
+    setShowDeleteSection(false);
+    setDeleteConfirmInput('');
+    setInitialEditSnapshot(null);
+  }, [isUpdating, isModalDirty]);
 
   return {
     mounted,
@@ -326,6 +422,8 @@ export function useMasterDashboard() {
     isUpdating,
     editAiSettings,
     setEditAiSettings,
+    editFeatures,
+    setEditFeatures,
     isDeleting,
     deleteConfirmInput,
     setDeleteConfirmInput,
@@ -353,5 +451,6 @@ export function useMasterDashboard() {
     handleDeleteAcademy,
     handleWarpToAcademy,
     openEditModal,
+    handleCloseEditModal,
   };
 }

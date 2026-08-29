@@ -15,6 +15,48 @@ const supabaseAdmin = createClient(
 
 export async function POST(req: NextRequest) {
   try {
+    // 💡 1. [보안] Bearer 토큰 파싱 및 인증 사용자 검증
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      return NextResponse.json(
+        { success: false, error: '인증 토큰이 누락되었거나 형식이 올바르지 않습니다.' },
+        { status: 401 }
+      );
+    }
+
+    const token = authHeader.substring(7);
+    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
+
+    if (authError || !user) {
+      return NextResponse.json(
+        { success: false, error: '인증되지 않았거나 만료된 세션입니다.' },
+        { status: 401 }
+      );
+    }
+
+    // 💡 2. [보안] Master Role 서버 검증 (ams_teachers 및 app_metadata)
+    const { data: teacher, error: teacherErr } = await supabaseAdmin
+      .from('ams_teachers')
+      .select('role')
+      .eq('user_id', user.id)
+      .maybeSingle();
+
+    if (teacherErr) {
+      return NextResponse.json(
+        { success: false, error: '권한 조회 중 오류가 발생했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    const isMaster = user.app_metadata?.role === 'master' || teacher?.role === 'master';
+    if (!isMaster) {
+      return NextResponse.json(
+        { success: false, error: '권한이 없습니다. (Master 권한 필요)' },
+        { status: 403 }
+      );
+    }
+
+    // 💡 3. Body 파싱 및 파라미터 유효성 검증
     const body = await req.json();
     const { academyName, slug, username, password } = body;
 
@@ -45,16 +87,16 @@ export async function POST(req: NextRequest) {
 
     // 3. Supabase Auth 유저 생성 (이메일 기반 매핑 포맷)
     const email = `${cleanUsername}@hokma-academy.com`;
-    const { data: authData, error: authError } = await supabaseAdmin.auth.admin.createUser({
+    const { data: authData, error: createAuthError } = await supabaseAdmin.auth.admin.createUser({
       email: email,
       password: password,
       email_confirm: true,
     });
 
-    if (authError) {
-      console.error('Auth User Creation Error:', authError);
+    if (createAuthError) {
+      console.error('Auth User Creation Error:', createAuthError);
       return NextResponse.json(
-        { success: false, error: `인증 서버 유저 생성 실패: ${authError.message}` },
+        { success: false, error: `인증 서버 유저 생성 실패: ${createAuthError.message}` },
         { status: 400 }
       );
     }
@@ -156,7 +198,7 @@ export async function POST(req: NextRequest) {
   } catch (err: any) {
     console.error('Create Academy Fatal Error:', err);
     return NextResponse.json(
-      { success: false, error: `서버 오류가 발생했습니다: ${err.message}` },
+      { success: false, error: '서버 내부 오류가 발생했습니다.' },
       { status: 500 }
     );
   }

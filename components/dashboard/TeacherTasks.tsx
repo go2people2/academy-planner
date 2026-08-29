@@ -26,6 +26,7 @@ export interface TeacherTasksProps {
   isLight?: boolean;
   absenceLinkPreset?: AbsenceLinkContext | null;
   onClearAbsenceLinkPreset?: () => void;
+  onlyMakeupsMode?: boolean;
 }
 
 export default function TeacherTasks({
@@ -36,7 +37,8 @@ export default function TeacherTasks({
   onRefreshStudents,
   isLight = false,
   absenceLinkPreset,
-  onClearAbsenceLinkPreset
+  onClearAbsenceLinkPreset,
+  onlyMakeupsMode = false
 }: TeacherTasksProps) {
   const {
     activeTab,
@@ -123,7 +125,8 @@ export default function TeacherTasks({
     currentUser,
     onRefreshStudents,
     absenceLinkPreset,
-    onClearAbsenceLinkPreset
+    onClearAbsenceLinkPreset,
+    onlyMakeupsMode
   });
 
   // 💡 [Esc 닫기 공통 적용]
@@ -397,77 +400,69 @@ export default function TeacherTasks({
   return (
     <div className={`h-full flex flex-col overflow-hidden p-6 space-y-6 ${isLight ? 'bg-[#f7f7f5] text-[#37352f]' : 'bg-[#050505] text-white'}`}>
 
-      {/* 1. Header & Tab Switches */}
-      <div className={`flex items-center justify-between shrink-0 p-5 rounded-2xl border ${
-        isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-black/40 border-white/10 backdrop-blur-2xl'
-      }`}>
-        <div className="flex items-center gap-3">
-          <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
-            isLight ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
-          }`}>
-            <ClipboardList size={20} />
-          </div>
-          <div>
-            <h2 className={`text-sm font-bold uppercase tracking-wider ${isLight ? 'text-[#37352f]' : 'text-white'}`}>업무 및 보강 관리</h2>
-            <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Teacher Workboard & Makeup Scheduler</p>
-          </div>
-        </div>
-
-        <div className={`flex p-1 rounded-xl flex-wrap gap-1 border ${
-          isLight ? 'bg-[#f0f0ed] border-[#e3e2e0]' : 'bg-white/5 border-white/10'
+      {/* 1. Header & Tab Switches (일반 업무 뷰에서만 노출, onlyMakeupsMode일 때는 상단 탭 숨김) */}
+      {!onlyMakeupsMode && (
+        <div className={`flex items-center justify-between shrink-0 p-5 rounded-2xl border ${
+          isLight ? 'bg-white border-[#e3e2e0] shadow-sm' : 'bg-black/40 border-white/10 backdrop-blur-2xl'
         }`}>
-          <button
-            onClick={() => setActiveTab('makeups')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'makeups'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
-            }`}
-          >
-            <CalendarRange size={14} /> 보강 관리
-          </button>
-          <button
-            onClick={() => setActiveTab('tasks')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'tasks'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
-            }`}
-          >
-            <Sparkles size={14} /> 업무 목록
-          </button>
-          <button
-            onClick={() => setActiveTab('suggestions')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'suggestions'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
-            }`}
-          >
-            <MessageSquare size={14} /> 학생 건의
-          </button>
-          <button
-            onClick={() => setActiveTab('surveys')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'surveys'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
-            }`}
-          >
-            <Users size={14} /> 설문/수요조사
-          </button>
-          <button
-            onClick={() => setActiveTab('links')}
-            className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
-              activeTab === 'links'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
-            }`}
-          >
-            <ExternalLink size={14} /> 유용한 링크
-          </button>
+          <div className="flex items-center gap-3">
+            <div className={`w-10 h-10 rounded-full flex items-center justify-center border ${
+              isLight ? 'bg-blue-50 text-blue-600 border-blue-200' : 'bg-blue-500/10 text-blue-500 border-blue-500/20'
+            }`}>
+              <ClipboardList size={20} />
+            </div>
+            <div>
+              <h2 className={`text-sm font-bold uppercase tracking-wider ${isLight ? 'text-[#37352f]' : 'text-white'}`}>교사 업무 및 설문</h2>
+              <p className="text-[10px] text-gray-400 font-bold uppercase mt-1">Teacher Workboard & Surveys</p>
+            </div>
+          </div>
+
+          <div className={`flex p-1 rounded-xl flex-wrap gap-1 border ${
+            isLight ? 'bg-[#f0f0ed] border-[#e3e2e0]' : 'bg-white/5 border-white/10'
+          }`}>
+            <button
+              onClick={() => setActiveTab('tasks')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                activeTab === 'tasks'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+              }`}
+            >
+              <Sparkles size={14} /> 업무 목록
+            </button>
+            <button
+              onClick={() => setActiveTab('suggestions')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                activeTab === 'suggestions'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+              }`}
+            >
+              <MessageSquare size={14} /> 학생 건의
+            </button>
+            <button
+              onClick={() => setActiveTab('surveys')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                activeTab === 'surveys'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+              }`}
+            >
+              <Users size={14} /> 설문/수요조사
+            </button>
+            <button
+              onClick={() => setActiveTab('links')}
+              className={`flex items-center gap-1.5 px-3.5 py-2 text-xs font-bold uppercase tracking-wider rounded-lg transition-all ${
+                activeTab === 'links'
+                  ? 'bg-blue-600 text-white shadow-sm'
+                  : (isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white')
+              }`}
+            >
+              <ExternalLink size={14} /> 유용한 링크
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* 2. Main Work Area */}
       <div className="flex-1 overflow-hidden relative">
@@ -614,8 +609,8 @@ export default function TeacherTasks({
             </motion.div>
           )}
 
-          {/* TAB 2: Makeup Sessions Scheduler */}
-          {activeTab === 'makeups' && (
+          {/* TAB 2: Makeup Sessions Scheduler (학생 지원 전용 onlyMakeupsMode에서만 렌더링) */}
+          {activeTab === 'makeups' && onlyMakeupsMode && (
             <motion.div
               key="makeups-tab"
               initial={{ opacity: 0, y: 15 }}

@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X, Sparkles } from 'lucide-react';
@@ -24,6 +25,8 @@ export default function MasterDashboard() {
     isUpdating,
     editAiSettings,
     setEditAiSettings,
+    editFeatures,
+    setEditFeatures,
     isDeleting,
     deleteConfirmInput,
     setDeleteConfirmInput,
@@ -51,7 +54,22 @@ export default function MasterDashboard() {
     handleDeleteAcademy,
     handleWarpToAcademy,
     openEditModal,
+    handleCloseEditModal,
   } = useMasterDashboard();
+
+  // 💡 [접근성] ESC 키 입력 시 모달 닫기 (저장 전 변경사항 보호 적용)
+  useEffect(() => {
+    if (!editingAcademy) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' || e.key === 'Esc') {
+        e.preventDefault();
+        handleCloseEditModal();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [editingAcademy, handleCloseEditModal]);
+
   const handleLogout = () => {
     localStorage.removeItem('ams_user');
     window.location.reload();
@@ -445,27 +463,14 @@ export default function MasterDashboard() {
                           <td className="py-3.5 px-2 text-right">
                             <div className="flex justify-end gap-1.5">
                               <button
-                                onClick={() => {
-                                  setEditingAcademy(ac);
-                                  setEditAcademyName(ac.academy_name);
-                                  setEditSlug(ac.slug);
-                                  setEditIsSuspended(isAcSuspended);
-                                  
-                                  const aiSettings = ac.operation_settings?.ai_settings || { active_models: ['openai'], default_model: 'openai' };
-                                  setEditAiSettings({
-                                    active_models: Array.isArray(aiSettings.active_models) ? aiSettings.active_models : ['openai'],
-                                    default_model: aiSettings.default_model || 'openai'
-                                  });
-                                  
-                                  // 💡 삭제 상태 리셋
-                                  setDeleteConfirmInput('');
-                                  setShowDeleteSection(false);
-                                }}
+                                type="button"
+                                onClick={() => openEditModal(ac)}
                                 className="px-2.5 py-1 bg-white/5 hover:bg-white/10 text-gray-300 hover:text-white text-[9px] font-black uppercase tracking-wider rounded-[2px] border border-white/10 transition-all"
                               >
                                 수정
                               </button>
                               <button
+                                type="button"
                                 onClick={() => handleWarpToAcademy(ac.id, ac.slug)}
                                 className="px-2.5 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-500 hover:to-indigo-500 text-[9px] font-black uppercase tracking-wider rounded-[2px] transition-all shadow-md shadow-purple-900/10"
                               >
@@ -488,27 +493,39 @@ export default function MasterDashboard() {
       {/* 💡 [추가] 지점 정보 수정 모달 */}
       <AnimatePresence>
         {editingAcademy && (
-          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6 bg-black/70 backdrop-blur-sm">
+          <div 
+            className="fixed inset-0 z-[100] flex items-center justify-center p-3 sm:p-6 bg-black/80 backdrop-blur-sm"
+            onClick={() => handleCloseEditModal()}
+          >
             <motion.div 
               initial={{ opacity: 0, scale: 0.95, y: 10 }} 
               animate={{ opacity: 1, scale: 1, y: 0 }} 
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
-              className="bg-[#121212] border border-white/10 rounded-sm p-6 max-w-sm w-full shadow-2xl space-y-5"
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="edit-academy-title"
+              onClick={(e) => e.stopPropagation()}
+              className="bg-[#121212] border border-white/10 rounded-sm max-w-lg w-full max-h-[90vh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden"
             >
-              <div className="flex items-center justify-between border-b border-white/5 pb-3">
+              {/* Sticky Header */}
+              <div className="sticky top-0 z-10 shrink-0 bg-[#121212] flex items-center justify-between border-b border-white/10 px-5 py-4">
                 <div className="flex items-center gap-2 text-blue-400">
                   <School size={16} />
-                  <h3 className="text-xs font-black uppercase tracking-widest text-white/95">지점 정보 수정</h3>
+                  <h3 id="edit-academy-title" className="text-xs font-black uppercase tracking-widest text-white/95">지점 정보 및 기능 설정</h3>
                 </div>
                 <button 
-                  onClick={() => setEditingAcademy(null)}
-                  className="text-gray-500 hover:text-white transition-colors"
+                  type="button"
+                  aria-label="닫기"
+                  onClick={() => handleCloseEditModal()}
+                  className="text-gray-400 hover:text-white p-1 rounded hover:bg-white/5 transition-colors"
                 >
-                  <X size={16} />
+                  <X size={18} />
                 </button>
               </div>
 
-              <form onSubmit={handleUpdateAcademy} className="space-y-4">
+              {/* Form with scrollable body */}
+              <form onSubmit={handleUpdateAcademy} className="flex-1 flex flex-col min-h-0 overflow-hidden">
+                <div className="flex-1 overflow-y-auto custom-scrollbar-v p-5 space-y-4">
                 <div className="space-y-1">
                   <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block ml-0.5">학원 이름 (한글)</label>
                   <input
@@ -612,6 +629,95 @@ export default function MasterDashboard() {
                   </div>
                 </div>
 
+                {/* 💡 기능 사용 설정 (Feature Flags) */}
+                <div className="space-y-2 border-t border-white/5 pt-3">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest block ml-0.5">🎛️ 기능 사용 설정</label>
+                    <span className="text-[9px] text-gray-500 font-bold">학원별 Add-on 제어</span>
+                  </div>
+
+                  <div className="bg-black/40 border border-white/5 rounded-sm p-3 space-y-3">
+                    {/* 기본 제공 기능 (Always-ON 읽기 전용) */}
+                    <div className="space-y-1.5 pb-2.5 border-b border-white/5">
+                      <span className="text-[9px] text-gray-400 font-bold block mb-1">기본 제공 기능 (항상 사용)</span>
+                      <div className="grid grid-cols-2 gap-1.5 text-[10px] text-gray-400">
+                        <div className="flex items-center gap-1.5 bg-white/[0.02] px-2 py-1 rounded-[2px] border border-white/5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          <span>TodaySheet</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-white/[0.02] px-2 py-1 rounded-[2px] border border-white/5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          <span>Overview</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-white/[0.02] px-2 py-1 rounded-[2px] border border-white/5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          <span>학생 지원</span>
+                        </div>
+                        <div className="flex items-center gap-1.5 bg-white/[0.02] px-2 py-1 rounded-[2px] border border-white/5">
+                          <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                          <span>Settings</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* 선택 기능 토글 (운영 관리, 학습 자료, 평가 관리) */}
+                    <div className="space-y-2">
+                      <span className="text-[9px] text-gray-400 font-bold block">선택 기능 (ON / OFF)</span>
+                      
+                      {/* 운영 관리 */}
+                      <label className="flex items-start justify-between gap-2 p-2 rounded-[2px] bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 cursor-pointer transition-colors">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${editFeatures.operations_tools ? 'bg-blue-400' : 'bg-gray-600'}`} />
+                            <span className="text-xs font-bold text-white/90">운영 관리</span>
+                          </div>
+                          <p className="text-[9px] text-gray-500 leading-tight">교재별진도, 교사 업무, 학생 건의, 설문/수요조사, 유용한 링크</p>
+                        </div>
+                        <input 
+                          type="checkbox"
+                          checked={editFeatures.operations_tools}
+                          onChange={(e) => setEditFeatures(prev => ({ ...prev, operations_tools: e.target.checked }))}
+                          className="accent-blue-500 rounded border-white/10 mt-1 cursor-pointer"
+                        />
+                      </label>
+
+                      {/* 학습 자료 */}
+                      <label className="flex items-start justify-between gap-2 p-2 rounded-[2px] bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 cursor-pointer transition-colors">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${editFeatures.learning_resources ? 'bg-blue-400' : 'bg-gray-600'}`} />
+                            <span className="text-xs font-bold text-white/90">학습 자료</span>
+                          </div>
+                          <p className="text-[9px] text-gray-500 leading-tight">교재 PDF 자료실, 디지털 수학 서재</p>
+                        </div>
+                        <input 
+                          type="checkbox"
+                          checked={editFeatures.learning_resources}
+                          onChange={(e) => setEditFeatures(prev => ({ ...prev, learning_resources: e.target.checked }))}
+                          className="accent-blue-500 rounded border-white/10 mt-1 cursor-pointer"
+                        />
+                      </label>
+
+                      {/* 평가 관리 */}
+                      <label className="flex items-start justify-between gap-2 p-2 rounded-[2px] bg-white/[0.02] hover:bg-white/[0.04] border border-white/5 cursor-pointer transition-colors">
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-1.5">
+                            <span className={`w-1.5 h-1.5 rounded-full ${editFeatures.assessment_tools ? 'bg-blue-400' : 'bg-gray-600'}`} />
+                            <span className="text-xs font-bold text-white/90">평가 관리</span>
+                          </div>
+                          <p className="text-[9px] text-gray-500 leading-tight">기출문제 관리, 오답노트 관리, 교재 오류 관리</p>
+                        </div>
+                        <input 
+                          type="checkbox"
+                          checked={editFeatures.assessment_tools}
+                          onChange={(e) => setEditFeatures(prev => ({ ...prev, assessment_tools: e.target.checked }))}
+                          className="accent-blue-500 rounded border-white/10 mt-1 cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                  </div>
+                </div>
+
                 {/* 💡 [추가] 위험 지대: 학원 영구 삭제 UI */}
                 <div className="border-t border-red-950/30 pt-4 mt-2">
                   {!showDeleteSection ? (
@@ -654,22 +760,26 @@ export default function MasterDashboard() {
                   ⚠️ 주의: 주소 식별자(slug) 변경 시 해당 지점의 접속 URL이 완전히 변경되며, 오답노트 지점의 슬러그도 동시에 갱신됩니다.
                 </div>
 
-                <div className="flex gap-2.5 pt-2">
+                </div>
+
+                {/* Sticky Footer */}
+                <div className="sticky bottom-0 z-10 shrink-0 bg-[#121212] border-t border-white/10 p-4 flex gap-2.5">
                   <button
                     type="button"
-                    onClick={() => setEditingAcademy(null)}
-                    className="flex-1 bg-white/5 hover:bg-white/10 text-gray-300 py-3 text-[10px] font-black uppercase tracking-wider rounded-sm transition-all border border-white/5"
+                    onClick={() => handleCloseEditModal()}
+                    disabled={isUpdating}
+                    className="flex-1 bg-white/5 hover:bg-white/10 disabled:opacity-50 text-gray-300 py-2.5 text-xs font-black uppercase tracking-wider rounded-sm transition-all border border-white/10"
                   >
                     취소
                   </button>
                   <button
                     type="submit"
                     disabled={isUpdating}
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-3 text-[10px] font-black uppercase tracking-wider rounded-sm transition-all flex items-center justify-center gap-1.5"
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-white py-2.5 text-xs font-black uppercase tracking-wider rounded-sm transition-all flex items-center justify-center gap-1.5 shadow-md shadow-blue-900/20"
                   >
                     {isUpdating ? (
                       <>
-                        <Loader2 size={12} className="animate-spin" />
+                        <Loader2 size={13} className="animate-spin" />
                         <span>저장 중...</span>
                       </>
                     ) : (

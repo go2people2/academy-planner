@@ -3,13 +3,14 @@
 import { useState, useEffect, useMemo } from 'react';
 import { 
   LayoutDashboard, Table as TableIcon, Activity, Settings, LogOut, GraduationCap, UserX, UserCog, ArrowLeftRight, UserCircle,
-  ChevronLeft, ChevronRight, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck, Zap, AlertTriangle,
+  ChevronLeft, ChevronRight, ChevronDown, Bell, Edit2, Save, X, MessageSquare, Calendar, TrendingUp, Sun, Moon, ClipboardCheck, Zap, AlertTriangle,
   BookOpen, FileText, GripVertical, Library, Film
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { useRouter, useParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Student, Teacher } from '@/types/dashboard';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 
 interface SidebarProps {
   currentUser?: any; // 💡 추가
@@ -67,9 +68,6 @@ export default function Sidebar({
   const [isMultiMode, setIsMultiMode] = useState(false);
   const [tempNotices, setTempNotices] = useState<any>({});
   const [menuOrder, setMenuOrder] = useState<string[]>(DEFAULT_MENU_ORDER);
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragOverId, setDragOverId] = useState<string | null>(null);
-
   const isAdmin = user?.role === 'admin' || user?.role === 'master';
   const announcements = academyInfo?.announcements || {};
 
@@ -94,46 +92,6 @@ export default function Sidebar({
       document.documentElement.classList.remove('dark');
     }
   }, []);
-
-  useEffect(() => {
-    if (!currentUser?.id) return;
-    const saved = localStorage.getItem(`ams_sidebar_order_${currentUser.id}`);
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved) as string[];
-        const merged = [
-          ...parsed.filter(id => DEFAULT_MENU_ORDER.includes(id)),
-          ...DEFAULT_MENU_ORDER.filter(id => !parsed.includes(id))
-        ];
-        setMenuOrder(merged);
-      } catch {}
-    }
-  }, [currentUser?.id]);
-
-  const handleDragStart = (id: string) => setDraggedId(id);
-
-  const handleDragOver = (e: React.DragEvent, id: string) => {
-    e.preventDefault();
-    if (!draggedId || draggedId === id) return;
-    setDragOverId(id);
-    setMenuOrder(prev => {
-      const next = [...prev];
-      const from = next.indexOf(draggedId);
-      const to = next.indexOf(id);
-      if (from === -1 || to === -1) return prev;
-      next.splice(from, 1);
-      next.splice(to, 0, draggedId);
-      return next;
-    });
-  };
-
-  const handleDragEnd = () => {
-    if (currentUser?.id) {
-      localStorage.setItem(`ams_sidebar_order_${currentUser.id}`, JSON.stringify(menuOrder));
-    }
-    setDraggedId(null);
-    setDragOverId(null);
-  };
 
   const toggleTheme = () => {
     localStorage.setItem('theme', 'light');
@@ -213,24 +171,76 @@ export default function Sidebar({
 
       <div className="space-y-6 flex-1 overflow-y-auto custom-scrollbar-v">
         <nav className="space-y-1">
-          <h3 className="text-[9px] font-bold text-gray-300 uppercase tracking-widest mb-2 px-2">Menu</h3>
-          {menuOrder.map(id => {
-            const menuMap: Record<string, any> = {
-              live: <SidebarLink key="live" id="live" icon={<Zap size={14} className={isClassroomModeOpen ? "text-amber-500 fill-current animate-pulse" : "text-amber-400"} />} label="수업 시작 (LIVE)" active={isClassroomModeOpen} onClick={() => onStartClass()} variant="blue" isDragging={draggedId === 'live'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              board: <SidebarLink key="board" id="board" icon={<LayoutDashboard size={14} className="text-purple-400" />} label="Overview" active={viewMode === 'board' && selectedFilter !== 'Discharged'} onClick={() => { setViewMode('board'); setSelectedFilter('All'); }} isDragging={draggedId === 'board'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              todayTable: <SidebarLink key="todayTable" id="todayTable" icon={<TableIcon size={14} className="text-sky-400" />} label="TodaySheet" active={viewMode === 'todayTable'} onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }} badge={todayCount > 0 ? String(todayCount) : undefined} isDragging={draggedId === 'todayTable'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              pdfLibrary: <SidebarLink key="pdfLibrary" id="pdfLibrary" icon={<Library size={14} className="text-indigo-400" />} label="교재 PDF 자료실" active={viewMode === 'pdfLibrary'} onClick={() => { setViewMode('pdfLibrary'); setSelectedFilter('All'); }} isDragging={draggedId === 'pdfLibrary'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              digitalLibrary: <SidebarLink key="digitalLibrary" id="digitalLibrary" icon={<BookOpen size={14} className="text-emerald-400" />} label="디지털 수학 서재" active={viewMode === 'digitalLibrary'} onClick={() => { setViewMode('digitalLibrary'); setSelectedFilter('All'); }} isDragging={draggedId === 'digitalLibrary'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              teacherTask: <SidebarLink key="teacherTask" id="teacherTask" icon={<ClipboardCheck size={14} className="text-pink-400" />} label="업무/보강/설문" active={viewMode === 'teacherTask'} onClick={() => { setViewMode('teacherTask'); setSelectedFilter('All'); }} isDragging={draggedId === 'teacherTask'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              problemErrors: <SidebarLink key="problemErrors" id="problemErrors" icon={<AlertTriangle size={14} className="text-orange-400" />} label="교재 오류 관리" active={viewMode === 'problemErrors'} onClick={() => { setViewMode('problemErrors'); setSelectedFilter('All'); }} isDragging={draggedId === 'problemErrors'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              progress: <SidebarLink key="progress" id="progress" icon={<Activity size={14} className="text-teal-400" />} label="교재별진도" active={viewMode === 'progress'} onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }} isDragging={draggedId === 'progress'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              exams: <SidebarLink key="exams" id="exams" icon={<FileText size={14} className="text-blue-400" />} label="기출문제 관리" active={viewMode === 'exams'} onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }} isDragging={draggedId === 'exams'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              wrongAnswersAdmin: <SidebarLink key="wrongAnswersAdmin" id="wrongAnswersAdmin" icon={<BookOpen size={14} className="text-emerald-400" />} label="오답노트 관리" active={viewMode === 'wrongAnswersAdmin'} onClick={() => { setViewMode('wrongAnswersAdmin'); setSelectedFilter('All'); }} isDragging={draggedId === 'wrongAnswersAdmin'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              studentEdit: <SidebarLink key="studentEdit" id="studentEdit" icon={<UserCog size={14} className="text-amber-400" />} label="학생정보수정" active={viewMode === 'studentEdit'} onClick={() => { setViewMode('studentEdit'); setSelectedFilter('All'); setSelectedDays([]); }} isDragging={draggedId === 'studentEdit'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-              monthlyChanges: <SidebarLink key="monthlyChanges" id="monthlyChanges" icon={<ArrowLeftRight size={14} className="text-indigo-400" />} label="이번 달 변동 사항" active={viewMode === 'monthlyChanges'} onClick={() => { setViewMode('monthlyChanges'); setSelectedFilter('All'); }} isDragging={draggedId === 'monthlyChanges'} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} />,
-            };
-            return menuMap[id] ?? null;
-          })}
+          {/* 상단 독립 퀵 액션: 수업 시작 (LIVE) */}
+          <div className="mb-2.5">
+            <SidebarLink
+              key="live"
+              id="live"
+              icon={<Zap size={14} className={isClassroomModeOpen ? "text-amber-500 fill-current animate-pulse" : "text-amber-400"} />}
+              label="수업 시작 (LIVE)"
+              active={isClassroomModeOpen}
+              onClick={() => onStartClass()}
+              variant="blue"
+            />
+          </div>
+
+          {/* 주요 운영 메뉴 */}
+          <SidebarLink
+            key="todayTable"
+            id="todayTable"
+            icon={<TableIcon size={14} className="text-sky-400" />}
+            label="TodaySheet"
+            active={viewMode === 'todayTable'}
+            onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }}
+            badge={todayCount > 0 ? String(todayCount) : undefined}
+          />
+          <SidebarLink
+            key="board"
+            id="board"
+            icon={<LayoutDashboard size={14} className="text-purple-400" />}
+            label="Overview"
+            active={viewMode === 'board' && selectedFilter !== 'Discharged'}
+            onClick={() => { setViewMode('board'); setSelectedFilter('All'); }}
+          />
+          <SidebarLink
+            key="studentSupport"
+            id="studentSupport"
+            icon={<UserCog size={14} className="text-amber-400" />}
+            label="학생 지원"
+            active={['studentSupport', 'studentEdit'].includes(viewMode)}
+            onClick={() => { setViewMode('studentSupport'); setSelectedFilter('All'); setSelectedDays([]); }}
+          />
+
+          {isFeatureEnabled(academyInfo, 'learning_resources') && (
+            <SidebarLink
+              key="materialsPackage"
+              id="materialsPackage"
+              icon={<Library size={14} className="text-indigo-400" />}
+              label="학습 자료"
+              active={['pdfLibrary', 'digitalLibrary'].includes(viewMode)}
+              onClick={() => { setViewMode('pdfLibrary'); setSelectedFilter('All'); }}
+            />
+          )}
+          {isFeatureEnabled(academyInfo, 'assessment_tools') && (
+            <SidebarLink
+              key="assessmentPackage"
+              id="assessmentPackage"
+              icon={<FileText size={14} className="text-blue-400" />}
+              label="평가 관리"
+              active={['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)}
+              onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }}
+            />
+          )}
+          {isFeatureEnabled(academyInfo, 'operations_tools') && (
+            <SidebarLink
+              key="operationsPackage"
+              id="operationsPackage"
+              icon={<Activity size={14} className="text-teal-400" />}
+              label="운영 관리"
+              active={['progress', 'teacherTask'].includes(viewMode)}
+              onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }}
+            />
+          )}
         </nav>
 
         <nav className="space-y-1">
@@ -343,8 +353,8 @@ export default function Sidebar({
               </AnimatePresence>
             </div>
 
-            {/* 💡 요일 필터: 전교생을 조회하는 '학생정보수정(studentEdit)' 메뉴에서만 노출 */}
-            {viewMode === 'studentEdit' && (
+            {/* 💡 요일 필터: 전교생을 조회하는 '학생 지원(studentSupport)' 메뉴에서만 노출 */}
+            {['studentSupport', 'studentEdit'].includes(viewMode) && (
               <div className="space-y-2">
                 <div className="flex gap-[3px] w-full">
                   {DAYS_SHORT.map((day) => {
@@ -413,28 +423,20 @@ export default function Sidebar({
   );
 }
 
+
 function SidebarLink({ id, icon, label, active = false, onClick, badge, variant, isDragging, onDragStart, onDragOver, onDragEnd }: any) {
   const isBlueVariant = variant === 'blue';
   return (
     <div
-      draggable
-      onDragStart={(e) => { e.stopPropagation(); onDragStart?.(id); }}
-      onDragOver={(e) => { e.preventDefault(); onDragOver?.(e, id); }}
-      onDragEnd={onDragEnd}
       onClick={onClick}
       className={`relative flex items-center gap-2 px-3 py-2 rounded-[2px] cursor-pointer transition-all group ${
-        isDragging
-          ? 'opacity-40 scale-95 border border-dashed border-white/20'
-          : active
-            ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
-            : isBlueVariant
-              ? 'bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white shadow-inner'
-              : 'text-gray-200 hover:bg-white/10 hover:text-white'
+        active
+          ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20'
+          : isBlueVariant
+            ? 'bg-blue-600/10 border border-blue-500/20 text-blue-400 hover:bg-blue-600 hover:text-white shadow-inner'
+            : 'text-gray-200 hover:bg-white/10 hover:text-white'
       }`}
     >
-      <span className="opacity-0 group-hover:opacity-40 transition-opacity cursor-grab active:cursor-grabbing text-gray-400 shrink-0 -ml-1">
-        <GripVertical size={12} />
-      </span>
       <span className={(active || isBlueVariant) ? 'text-white' : 'group-hover:text-blue-500 transition-colors'}>{icon}</span>
       <span className="font-bold text-[11px] tracking-tight">{label}</span>
       {badge && <span className="ml-auto bg-red-600 text-white text-[8px] font-black px-1.5 py-0.5 rounded ring-2 ring-[#0a0a0a]">{badge}</span>}

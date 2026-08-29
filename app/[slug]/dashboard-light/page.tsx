@@ -22,6 +22,9 @@ import ExamPaperManager from '@/components/dashboard/exam/light/ExamPaperManager
 import TimetableSettings from '@/components/dashboard/settings/TimetableSettings';
 import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
 import DigitalMathLibraryView from '@/components/dashboard/DigitalMathLibraryView';
+import PackageSubNav from '@/components/dashboard/PackageSubNav';
+import StudentSupportView from '@/components/dashboard/StudentSupportView';
+import { isFeatureEnabled } from '@/lib/featureFlags';
 import VideoPlayerModal from '@/components/common/VideoPlayerModal';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
@@ -317,15 +320,15 @@ export default function DashboardPage() {
   // 💡 [결석 연동 보강 프리셋 상태]
   const [absenceLinkPreset, setAbsenceLinkPreset] = useState<AbsenceLinkContext | null>(null);
 
-  // 💡 결석 연동 보강 전용 진입 핸들러
+  // 💡 결석 연동 보강 전용 진입 핸들러 (학생 지원 > 보강 관리 탭으로 진입)
   const handleNavigateToLinkedMakeup = useCallback((mode: string | AbsenceLinkContext) => {
     if (typeof mode === 'object' && mode !== null && mode.source === 'absence-popup') {
       setAbsenceLinkPreset(mode);
     }
-    setViewMode('teacherTask');
+    setViewMode('studentSupport');
     setSelectedStudentId(null);
     if (typeof window !== 'undefined') {
-      window.history.pushState({ viewMode: 'teacherTask' }, '');
+      window.history.pushState({ viewMode: 'studentSupport' }, '');
     }
   }, []);
 
@@ -2219,10 +2222,102 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         {isLoading ? (<div className="flex flex-col items-center justify-center h-full text-gray-500"><Loader2 className="animate-spin mb-4" size={32} /><p className="text-[10px] font-black uppercase tracking-[0.4em]">Syncing Academy Data...</p></div>) : (
           <div className="h-full">
              {viewMode === 'board' && <Overview todayStudents={todayStudents} excludedStudents={excludedStudents} filteredAllStudents={filteredAllStudents} allTodayIds={allTodayIds} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={isBatchMode} setIsBatchMode={setIsBatchMode} onBatchAdd={batchAddStudents} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onRestoreStudent={addStudentToToday} masterTextbooks={availableTextbooks} teachers={teachers} consultationCycle={academy?.consultation_cycle || 21} onStartClass={() => setIsClassroomModeOpen(true)} academyInfo={academy} currentUser={currentUser} isLight={true} />}
-             {viewMode === 'studentEdit' && <Overview todayStudents={[]} filteredAllStudents={pureFilteredStudents} allTodayIds={[]} selectedStudentId={selectedStudentId} onSelectStudent={handleSelectStudent} selectedDate={selectedDate} onDateChange={setSelectedDate} onViewProgress={handleViewProgress} todayKey={selectedDayKey} selectedFilter={selectedFilter} isBatchMode={false} setIsBatchMode={() => {}} onBatchAdd={async () => {}} onRemoveFromToday={removeStudentFromToday} onAddNewStudent={handleAddNewStudent} onBatchAddStudents={handleBatchAddStudents} masterTextbooks={availableTextbooks} teachers={teachers} title="전체 학생 정보 관리" showAddButton={true} hideTodaySection={true} consultationCycle={academy?.consultation_cycle || 21} academyInfo={academy} searchQuery={studentEditSearchQuery} onSearchChange={setStudentEditSearchQuery} currentUser={currentUser} isLight={true} />}
-             {viewMode === 'pdfLibrary' && <PdfLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} isLight={true} />}
-             {viewMode === 'digitalLibrary' && <DigitalMathLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} currentUser={currentUser} isLight={true} />}
-             {viewMode === 'todayTable' && (
+             {/* [학생 지원 Core 허브: 학생정보 / 보강관리 / 퇴원생 / 변동이력] */}
+             {['studentSupport', 'studentEdit', 'monthlyChanges'].includes(viewMode) && (
+               <StudentSupportView
+                 academyInfo={academy}
+                 students={students}
+                 teachers={teachers}
+                 availableTextbooks={availableTextbooks}
+                 currentUser={currentUser}
+                 selectedDate={selectedDate}
+                 onDateChange={setSelectedDate}
+                 onViewProgress={handleViewProgress}
+                 selectedStudentId={selectedStudentId}
+                 onSelectStudent={handleSelectStudent}
+                 onAddNewStudent={handleAddNewStudent}
+                 onBatchAddStudents={handleBatchAddStudents}
+                 onRemoveFromToday={removeStudentFromToday}
+                 onRestoreStudent={addStudentToToday}
+                 onRefreshData={fetchAllData}
+                 isLight={true}
+                 filteredAllStudents={pureFilteredStudents}
+                 searchQuery={studentEditSearchQuery}
+                 onSearchChange={setStudentEditSearchQuery}
+                 selectedTeacherId={selectedTeacherId}
+                 selectedFilter={selectedFilter}
+                 selectedDays={selectedDays}
+                 isAndFilter={isAndFilter}
+                 initialTab={viewMode === 'monthlyChanges' ? 'history' : (absenceLinkPreset ? 'makeups' : 'info')}
+                 absenceLinkPreset={absenceLinkPreset}
+                 onClearAbsenceLinkPreset={() => setAbsenceLinkPreset(null)}
+               />
+             )}
+             {/* [학습 자료 팩] */}
+             {isFeatureEnabled(academy, 'learning_resources') && ['pdfLibrary', 'digitalLibrary'].includes(viewMode) && (
+               <div className="flex flex-col h-full">
+                 <PackageSubNav
+                   packageType="materials"
+                   currentViewMode={viewMode}
+                   onSelectViewMode={(mode) => navigateTo(mode)}
+                   isLight={true}
+                 />
+                 <div className="flex-1 overflow-hidden">
+                   {viewMode === 'pdfLibrary' && <PdfLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} isLight={true} />}
+                   {viewMode === 'digitalLibrary' && <DigitalMathLibraryView masterTextbooks={availableTextbooks} academyInfo={academy} currentUser={currentUser} isLight={true} />}
+                 </div>
+               </div>
+             )}
+
+             {/* [평가 관리 팩] */}
+             {isFeatureEnabled(academy, 'assessment_tools') && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode) && (
+               <div className="flex flex-col h-full">
+                 <PackageSubNav
+                   packageType="assessment"
+                   currentViewMode={viewMode}
+                   onSelectViewMode={(mode) => navigateTo(mode)}
+                   isLight={true}
+                 />
+                 <div className="flex-1 overflow-hidden">
+                   {viewMode === 'exams' && <ExamPaperManager academyId={academy?.id || ''} />}
+                   {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy?.id || ''} currentUser={currentUser} />}
+                   {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}
+                 </div>
+               </div>
+             )}
+
+             {/* [운영 관리 팩] */}
+             {isFeatureEnabled(academy, 'operations_tools') && ['progress', 'teacherTask'].includes(viewMode) && (
+               <div className="flex flex-col h-full">
+                 <PackageSubNav
+                   packageType="operations"
+                   currentViewMode={viewMode}
+                   onSelectViewMode={(mode) => navigateTo(mode)}
+                   isLight={true}
+                 />
+                 <div className="flex-1 overflow-hidden">
+                   {viewMode === 'progress' && <ProgressSequencer students={progressFilteredStudents.filter(s => !s.is_deleted)} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
+                   {viewMode === 'teacherTask' && (
+                     <TeacherTasks
+                       academyInfo={academy}
+                       students={students}
+                       teachers={teachers}
+                       currentUser={currentUser}
+                       onRefreshStudents={fetchAllData}
+                       isLight={true}
+                       absenceLinkPreset={absenceLinkPreset}
+                       onClearAbsenceLinkPreset={() => setAbsenceLinkPreset(null)}
+                     />
+                   )}
+                 </div>
+               </div>
+             )}
+
+             {(viewMode === 'todayTable' || (
+               (!isFeatureEnabled(academy, 'learning_resources') && ['pdfLibrary', 'digitalLibrary'].includes(viewMode)) ||
+               (!isFeatureEnabled(academy, 'assessment_tools') && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)) ||
+               (!isFeatureEnabled(academy, 'operations_tools') && ['progress', 'teacherTask'].includes(viewMode))
+             )) && (
               <TodaySheet
                 students={todayStudents}
                 allStudents={students}
@@ -2261,24 +2356,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                />
              )}
 
-             {viewMode === 'progress' && <ProgressSequencer students={progressFilteredStudents.filter(s => !s.is_deleted)} masterTextbooks={availableTextbooks} initialStudentId={activeProgressStudentId} onSaveLegacy={handleSaveLegacyProgress} />}
-             {viewMode === 'monthlyChanges' && <MonthlyChanges students={students} onSelectStudent={handleSelectStudent} />}
             {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} masterTextbooks={availableTextbooks} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} noticeDrafts={noticeDrafts} onNoticeDraftChange={handleNoticeDraftChange} />}
-            {viewMode === 'teacherTask' && (
-              <TeacherTasks
-                academyInfo={academy}
-                students={students}
-                teachers={teachers}
-                currentUser={currentUser}
-                onRefreshStudents={fetchAllData}
-                isLight={true}
-                absenceLinkPreset={absenceLinkPreset}
-                onClearAbsenceLinkPreset={() => setAbsenceLinkPreset(null)}
-              />
-            )}
-            {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}
-            {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy?.id || ''} currentUser={currentUser} />}
-             {viewMode === 'exams' && <ExamPaperManager academyId={academy?.id || ''} />}
           </div>
         )}
       </main>
@@ -2296,7 +2374,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           />
         )}
         {selectedStudentId && selectedStudent && !isBatchMode && (
-          (viewMode === 'studentEdit' || selectedStudent.is_deleted) ? (
+          (['studentSupport', 'studentEdit'].includes(viewMode) || selectedStudent.is_deleted) ? (
             <StudentDetailDrawer
               student={selectedStudent}
               availableTextbooks={availableTextbooks}
@@ -2313,7 +2391,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
               student={selectedStudent}
               availableTextbooks={availableTextbooks}
               onClose={() => setSelectedStudentId(null)}
-              onEditMode={() => navigateTo('studentEdit')}
+              onEditMode={() => navigateTo('studentSupport')}
               onRefreshStudents={fetchAllData}
               isLight={true}
             />

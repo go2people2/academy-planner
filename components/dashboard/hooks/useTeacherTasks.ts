@@ -63,6 +63,7 @@ export interface UseTeacherTasksProps {
   onRefreshStudents?: (showLoader?: boolean) => Promise<void>;
   absenceLinkPreset?: AbsenceLinkContext | null;
   onClearAbsenceLinkPreset?: () => void;
+  onlyMakeupsMode?: boolean;
 }
 
 export function useTeacherTasks({
@@ -73,8 +74,19 @@ export function useTeacherTasks({
   onRefreshStudents,
   absenceLinkPreset,
   onClearAbsenceLinkPreset,
+  onlyMakeupsMode = false,
 }: UseTeacherTasksProps) {
-  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>('makeups');
+  const [activeTab, setActiveTab] = useState<'tasks' | 'makeups' | 'suggestions' | 'surveys' | 'links'>(
+    onlyMakeupsMode ? 'makeups' : 'tasks'
+  );
+
+  useEffect(() => {
+    if (onlyMakeupsMode) {
+      setActiveTab('makeups');
+    } else if (activeTab === 'makeups' && !absenceLinkPreset) {
+      setActiveTab('tasks');
+    }
+  }, [onlyMakeupsMode]);
   const [tasks, setTasks] = useState<TeacherTaskItem[]>([]);
   const [makeups, setMakeups] = useState<any[]>([]);
   const [isTaskLoading, setIsTaskLoading] = useState(false);
