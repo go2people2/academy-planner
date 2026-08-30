@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import { X, Calendar, Clock, BookOpen, Layers, Save, AlertCircle } from 'lucide-react';
 import { SessionSnapshot, SessionLog, Student } from '@/types/dashboard';
 import { useModalEsc } from '@/hooks/useModalEsc';
+import { timeInputToScheduleValue, scheduleValueToTimeInput } from '@/lib/scheduleTime';
 
 interface SessionSnapshotModalProps {
   isOpen: boolean;
@@ -77,7 +78,7 @@ export function SessionSnapshotModal({
   const [courseName, setCourseName] = useState<string>(initialCourseName);
   const [scheduledDays, setScheduledDays] = useState<string[]>(initialDays);
   const [scheduledHours, setScheduledHours] = useState<number[]>(initialHours);
-  const [movedToHour, setMovedToHour] = useState<number | null>(initialMovedHour);
+  const [movedToHourTimeInput, setMovedToHourTimeInput] = useState<string>(scheduleValueToTimeInput(initialMovedHour));
   const [isPureMakeup, setIsPureMakeup] = useState<boolean>(
     currentSnapshot?.isPureMakeup !== undefined
       ? currentSnapshot.isPureMakeup
@@ -157,9 +158,11 @@ export function SessionSnapshotModal({
         capturedAt: finalCapturedAt
       };
 
+      const finalMovedHour = movedToHourTimeInput ? timeInputToScheduleValue(movedToHourTimeInput) : null;
+
       const success = await onSaveSnapshot(targetId, {
         course_name: courseName.trim(),
-        moved_to_hour: movedToHour,
+        moved_to_hour: finalMovedHour,
         is_pure_makeup: finalSnapshot.isPureMakeup,
         session_snapshot: finalSnapshot
       });
@@ -315,26 +318,41 @@ export function SessionSnapshotModal({
 
           {/* 5. 실제 진행/이동 시간 (moved_to_hour) */}
           <div className="space-y-1.5">
-            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1">
-              <Clock size={13} /> 5. 실제 진행 시각 (Moved To Hour)
+            <label className="text-[11px] font-bold text-gray-400 uppercase tracking-wider flex items-center justify-between">
+              <span className="flex items-center gap-1"><Clock size={13} /> 5. 실제 진행 시각 (Moved To Hour)</span>
+              {movedToHourTimeInput && (
+                <button
+                  type="button"
+                  onClick={() => setMovedToHourTimeInput('')}
+                  className="text-[10px] text-amber-400 hover:underline"
+                >
+                  시간 이동 해제 (예정 시각 유지)
+                </button>
+              )}
             </label>
-            <select
-              value={movedToHour ?? ''}
-              onChange={(e) => {
-                const val = e.target.value;
-                setMovedToHour(val === '' ? null : parseInt(val, 10));
-              }}
-              className={`w-full px-3 py-2 rounded-lg border font-medium outline-none transition-all ${
-                isLight ? 'bg-white border-gray-300 text-gray-900 focus:border-blue-500' : 'bg-black/30 border-white/15 text-white focus:border-blue-500'
-              }`}
-            >
-              <option value="">예정 시간 그대로 (시간 이동 없음)</option>
-              {ALL_HOURS.map(h => (
-                <option key={h} value={h}>
-                  {h > 12 ? `오후 ${h - 12}시 (${h}시)` : `오전 ${h}시 (${h}시)`}
-                </option>
-              ))}
-            </select>
+            <div className="flex gap-2">
+              <input
+                type="time"
+                step="600"
+                value={movedToHourTimeInput}
+                onChange={(e) => setMovedToHourTimeInput(e.target.value)}
+                placeholder="예정 시간 그대로"
+                className={`flex-1 px-3 py-2 rounded-lg border font-medium outline-none transition-all text-center ${
+                  isLight ? 'bg-white border-gray-300 text-gray-900 focus:border-blue-500' : 'bg-black/30 border-white/15 text-white focus:border-blue-500'
+                }`}
+              />
+              <button
+                type="button"
+                onClick={() => setMovedToHourTimeInput('')}
+                className={`px-3 py-2 rounded-lg border text-xs font-bold transition-all ${
+                  !movedToHourTimeInput
+                    ? (isLight ? 'bg-blue-50 border-blue-500 text-blue-900' : 'bg-blue-500/20 border-blue-500 text-blue-200')
+                    : (isLight ? 'bg-gray-100 border-gray-200 text-gray-500' : 'bg-white/5 border-white/10 text-gray-400')
+                }`}
+              >
+                시간 이동 없음
+              </button>
+            </div>
           </div>
 
           {/* 알림 안내 */}

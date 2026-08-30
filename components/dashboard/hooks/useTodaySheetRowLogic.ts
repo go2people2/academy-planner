@@ -1,9 +1,8 @@
-'use client';
-
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { HomeworkItem, StudentStatus, Student, TextbookOption, SessionLog } from '@/types/dashboard';
 import { getDayOfWeek, parseBookCourseValue } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
+import { scheduleValueToMinutes, scheduleValueToTimeInput } from '@/lib/scheduleTime';
 
 interface UseTodaySheetRowLogicProps {
   student: Student;
@@ -461,25 +460,53 @@ export function useTodaySheetRowLogic({
     handleSave(extraUpdate);
   };
 
-  const handleSupplementTimeSelect = async (hour: number) => {
+  const handleSupplementTimeSelect = async (timeVal: number | null) => {
     const day = getDayOfWeek(rowDate);
     const isMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || String(student.id || '').includes('_makeup_') || formData.is_pure_makeup === true;
 
-    // 💡 [시간 정규화] 시간 포맷(16, 1600, '16:00' 등) 통일
-    const normalizeH = (val: any): number | null => {
-      if (val === null || val === undefined || val === '') return null;
-      const num = parseInt(String(val), 10);
-      if (isNaN(num)) return null;
-      let h = num >= 100 ? Math.floor(num / 100) : num;
-      if (h > 0 && h < 10) h += 12;
-      return h;
-    };
+    // 💡 [과목명 보존] 선택과목 행이면 student.courseName 또는 electiveCourse.subject를 무조건 최우선 사용
+    const courseName = student.isSpecialClass
+      ? (student.courseName || (student as any).electiveCourse?.subject || (student as any).__courseSubject || '특강')
+      : (student.todaySession?.course_name || student.courseName || '정규');
 
-    const clickH = normalizeH(hour);
+    const previousMovedToHour = student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null
+      ? student.todaySession.moved_to_hour
+      : (formData.moved_to_hour !== undefined && formData.moved_to_hour !== null ? formData.moved_to_hour : null);
+
+    // timeVal이 null이면 명시적 원래 시간 복귀 요청
+    if (timeVal === null) {
+      const currentStatus = formData.attendance_status || '';
+      const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:'))
+        ? ATTENDANCE_STATUS.BEFORE
+        : currentStatus;
+
+      const payload: any = {
+        course_name: courseName,
+        moved_to_hour: null,
+        from_moved_to_hour: previousMovedToHour,
+        attendance_status: finalStatus,
+        attendance_reason: null,
+        is_pure_makeup: false,
+      };
+      if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
+
+      setFormData((prev: any) => ({
+        ...prev,
+        moved_to_hour: null,
+        attendance_status: finalStatus,
+        attendance_reason: null,
+        is_pure_makeup: false,
+      }));
+      await onSave(student.id, payload);
+      setIsSupplementTimePickerOpen(false);
+      return;
+    }
+
+    const clickMinutes = scheduleValueToMinutes(timeVal);
 
     // 💡 [원래 시간표 수업 판별] 정규 다중 시간 및 선택과목(특강) 시간표 완벽 일치 판정
     const isOriginalScheduledHour = !isMakeup && (() => {
-      if (clickH === null) return false;
+      if (clickMinutes === null) return false;
 
       // 1. 선택과목인 경우: __elective_courses에서 과목, 요일, 시간 일치 검사
       if (student.isSpecialClass || (student as any).__courseType === 'elective') {
@@ -502,37 +529,27 @@ export function useTodaySheetRowLogic({
             if (!matchesDay) return false;
 
             const electiveHours = (c.schedules && Array.isArray(c.schedules[day]) && c.schedules[day].length > 0)
-              ? [normalizeH(c.schedules[day][0])]
-              : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
+              ? c.schedules[day].map((h: any) => scheduleValueToMinutes(h))
+              : (Array.isArray(c.hours) && c.hours.length > 0 ? c.hours.map((h: any) => scheduleValueToMinutes(h)) : (c.time ? [scheduleValueToMinutes(c.time)] : []));
 
-            if (electiveHours.length > 0) {
-              return electiveHours.includes(clickH);
-            }
-            return false;
+            return electiveHours.some((em: number | null) => em !== null && em === clickMinutes);
           });
         } catch (e) {
           return false;
         }
       }
 
-      // 2. 정규 수업인 경우: day_schedules[day]의 시작 시간(첫 번째 시간)과 일치 검사
+      // 2. 정규 수업인 경우: day_schedules[day]의 시작 시간과 일치 검사
       const regSched = student.day_schedules?.[day];
-      const regularStartHour = (Array.isArray(regSched) && regSched.length > 0) ? normalizeH(regSched[0]) : null;
-      return regularStartHour !== null && regularStartHour === clickH;
+      const regularStartMin = (Array.isArray(regSched) && regSched.length > 0) ? scheduleValueToMinutes(regSched[0]) : null;
+      return regularStartMin !== null && regularStartMin === clickMinutes;
     })();
-
-    // 💡 [과목명 보존] 선택과목 행이면 student.courseName 또는 electiveCourse.subject를 무조건 최우선 사용
-    const courseName = student.isSpecialClass
-      ? (student.courseName || (student as any).electiveCourse?.subject || (student as any).__courseSubject || '특강')
-      : (student.todaySession?.course_name || student.courseName || '정규');
-
-    const previousMovedToHour = student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null
-      ? student.todaySession.moved_to_hour
-      : (formData.moved_to_hour !== undefined && formData.moved_to_hour !== null ? formData.moved_to_hour : null);
 
     if (isOriginalScheduledHour) {
       const currentStatus = formData.attendance_status || '';
-      const finalStatus = currentStatus || ATTENDANCE_STATUS.BEFORE;
+      const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:'))
+        ? ATTENDANCE_STATUS.BEFORE
+        : currentStatus;
 
       const payload: any = {
         course_name: courseName,
@@ -553,17 +570,14 @@ export function useTodaySheetRowLogic({
       }));
       await onSave(student.id, payload);
     } else {
-      const formatHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
-
+      const timeStr = scheduleValueToTimeInput(timeVal) || '17:00';
       const newAttStatus = isMakeup
-        ? `보강:${formatHour}`
+        ? `보강:${timeStr}`
         : (formData.attendance_status || ATTENDANCE_STATUS.BEFORE);
-
-      const hhmmHour = hour >= 100 ? hour : hour;
 
       const payload: any = {
         course_name: courseName,
-        moved_to_hour: hhmmHour,
+        moved_to_hour: timeVal,
         from_moved_to_hour: previousMovedToHour,
         attendance_status: newAttStatus,
         attendance_reason: '시간 변경',

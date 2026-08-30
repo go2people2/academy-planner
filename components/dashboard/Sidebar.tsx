@@ -125,6 +125,9 @@ export default function Sidebar({
     }
   };
 
+  const isAcademyHeaderReady = Boolean(academyInfo?.id && academyInfo?.academy_name);
+  const isUserHeaderReady = Boolean(user?.id && user?.name && user?.role);
+
   return (
     <aside className="w-52 border-r border-white/5 bg-[#0a0a0a]/90 backdrop-blur-2xl flex flex-col p-3 sticky top-0 h-screen z-30">
       {/* 내비게이션 제어 */}
@@ -139,33 +142,51 @@ export default function Sidebar({
 
       <div className="mb-6 px-1 space-y-4">
         {/* 1. 학원 브랜딩 */}
-        <div className="flex items-center gap-2 cursor-pointer" onClick={() => setViewMode('board')}>
+        <div className="flex items-center gap-2 cursor-pointer min-h-[32px]" onClick={() => setViewMode('board')}>
           <div className="w-8 h-8 bg-blue-600 rounded-[2px] flex items-center justify-center shadow-lg shrink-0">
             <GraduationCap className="text-white" size={18} />
           </div>
-          <div className="min-w-0">
-            <h1 className="text-xs font-black tracking-tight text-white leading-tight uppercase truncate">
-              {academyInfo?.academy_name || 'Academy'}
-            </h1>
-            <p className="text-[7px] font-bold text-blue-500 tracking-[0.2em] uppercase mt-0.5">Management</p>
+          <div className="min-w-0 flex-1">
+            {isAcademyHeaderReady ? (
+              <>
+                <h1 className="text-xs font-black tracking-tight text-white leading-tight uppercase truncate">
+                  {academyInfo.academy_name}
+                </h1>
+                <p className="text-[7px] font-bold text-blue-500 tracking-[0.2em] uppercase mt-0.5 truncate">
+                  {academyInfo.slug ? `${academyInfo.slug}` : 'Management'}
+                </p>
+              </>
+            ) : (
+              <div className="animate-pulse space-y-1 py-0.5">
+                <div className="h-2.5 bg-white/15 rounded w-20" />
+                <div className="h-2 bg-blue-500/20 rounded w-12" />
+              </div>
+            )}
           </div>
         </div>
 
         {/* 2 & 3. 날짜 및 사용자 정보 */}
-        <div className="flex items-stretch gap-1">
+        <div className="flex items-stretch gap-1 min-h-[32px]">
           <div className="flex-[1.2] px-1.5 py-1 bg-white/[0.05] rounded-[2px] border border-white/10 flex items-center justify-center gap-1 min-w-0">
             <span className="text-[15px] font-black text-gray-100 tabular-nums leading-none">{new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
             <span className="text-[13px] font-bold text-blue-400 leading-none">({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})</span>
           </div>
-          {user && (
-            <div className="flex-1 p-1.5 bg-white/5 rounded-[2px] border border-white/5 flex items-center gap-1.5 min-w-0">
-              <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0"><UserCircle size={10} /></div>
-              <div className="flex-1 min-w-0">
-                <p className="text-[12px] font-black text-white truncate leading-none">{user.name}</p>
-                <p className="text-[9px] font-bold text-gray-300 uppercase tracking-tighter mt-0.5">{user.role}</p>
-              </div>
+          <div className="flex-1 p-1.5 bg-white/5 rounded-[2px] border border-white/5 flex items-center gap-1.5 min-w-0">
+            <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0"><UserCircle size={10} /></div>
+            <div className="flex-1 min-w-0">
+              {isUserHeaderReady ? (
+                <>
+                  <p className="text-[12px] font-black text-white truncate leading-none">{user.name}</p>
+                  <p className="text-[9px] font-bold text-gray-300 uppercase tracking-tighter mt-0.5">{user.role}</p>
+                </>
+              ) : (
+                <div className="animate-pulse space-y-1 py-0.5">
+                  <div className="h-2 bg-white/15 rounded w-10" />
+                  <div className="h-1.5 bg-white/10 rounded w-8" />
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </div>
 

@@ -28,6 +28,7 @@ import VideoPlayerModal from '@/components/common/VideoPlayerModal';
 import { supabase } from '@/lib/supabase';
 import { getTodayStr, getDayOfWeek, getInitial } from '@/lib/utils';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
+import { scheduleValueToMinutes } from '@/lib/scheduleTime';
 import { Student, SessionLog, StudentStatus, TextbookOption, AbsenceLinkContext } from '@/types/dashboard';
 import { getEnrichedStudentData, evaluateTodayStatus, buildSessionLog } from '@/lib/studentDataEnricher';
 import { Loader2, AlertTriangle, X } from 'lucide-react';
@@ -656,8 +657,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       (l.course_name === targetCourseName || (targetCourseName === '정규' && !l.course_name)) &&
       (
         fromMovedHour !== null
-          ? ((l.moved_to_hour ?? null) === fromMovedHour)
-          : ((l.moved_to_hour ?? null) === targetMovedHour)
+          ? (scheduleValueToMinutes(l.moved_to_hour) === scheduleValueToMinutes(fromMovedHour))
+          : (scheduleValueToMinutes(l.moved_to_hour) === scheduleValueToMinutes(targetMovedHour))
       ) &&
       (targetIsPureMakeup !== undefined ? ((l.is_pure_makeup ?? false) === targetIsPureMakeup) : true)
     )
@@ -768,8 +769,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           (l.course_name === targetCourseName || (targetCourseName === '정규' && (!l.course_name || l.course_name === '정규'))) &&
           (
             fromMovedHour !== null
-              ? ((l.moved_to_hour ?? null) === fromMovedHour)
-              : ((l.moved_to_hour ?? null) === targetMovedHour)
+              ? (scheduleValueToMinutes(l.moved_to_hour) === scheduleValueToMinutes(fromMovedHour))
+              : (scheduleValueToMinutes(l.moved_to_hour) === scheduleValueToMinutes(targetMovedHour))
           ) &&
           ((l.is_pure_makeup ?? false) === (finalIsPureMakeup ?? false))
         )
@@ -1029,8 +1030,8 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
               (l.course_name === savedCourseName || (savedCourseName === '정규' && !l.course_name)) &&
               (
                 fromMovedHour !== null
-                  ? ((l.moved_to_hour ?? null) === fromMovedHour)
-                  : ((l.moved_to_hour ?? null) === (savedLog.moved_to_hour ?? null))
+                  ? (scheduleValueToMinutes(l.moved_to_hour) === scheduleValueToMinutes(fromMovedHour))
+                  : (scheduleValueToMinutes(l.moved_to_hour) === scheduleValueToMinutes(savedLog.moved_to_hour))
               ) &&
               ((l.is_pure_makeup ?? false) === (finalIsPureMakeup ?? false))
             );

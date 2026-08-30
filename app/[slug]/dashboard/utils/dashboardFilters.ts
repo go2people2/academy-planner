@@ -1,5 +1,6 @@
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
 import { Student } from '@/types/dashboard';
+import { scheduleValueToMinutes } from '@/lib/scheduleTime';
 
 /**
  * 학생의 특정 요일 시작 교시/시간(hour)을 계산하는 유틸리티
@@ -7,10 +8,8 @@ import { Student } from '@/types/dashboard';
 export const getStudentStartTime = (student: any, day: string): number => {
   // 1. 시간이동(moved_to_hour)이 존재할 경우 무조건 최우선 적용!
   if (student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null) {
-    const mVal = student.todaySession.moved_to_hour;
-    let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
-    if (h > 0 && h < 10) h += 12;
-    return h;
+    const m = scheduleValueToMinutes(student.todaySession.moved_to_hour);
+    if (m !== null) return Math.floor(m / 60);
   }
 
   // 2. 기본 요일별 시간표 교시 적용
@@ -18,10 +17,8 @@ export const getStudentStartTime = (student: any, day: string): number => {
   const isRegularClassDay = (student.class_days || []).includes(day);
 
   if (isRegularClassDay && regularHours.length > 0) {
-    const firstVal = regularHours[0];
-    let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-    if (h > 0 && h < 10) h += 12;
-    return h;
+    const m = scheduleValueToMinutes(regularHours[0]);
+    if (m !== null) return Math.floor(m / 60);
   }
 
   // 2. [호환성] attendance_status에 인코딩된 시간 정보 파싱
@@ -45,10 +42,8 @@ export const getStudentStartTime = (student: any, day: string): number => {
           if (c.days?.includes(day) && c.schedules?.[day]) {
             const sched = c.schedules[day];
             if (Array.isArray(sched) && sched.length > 0) {
-              const firstVal = sched[0];
-              let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-              if (h < 10) h += 12;
-              return h;
+              const m = scheduleValueToMinutes(sched[0]);
+              if (m !== null) return Math.floor(m / 60);
             }
           }
         }
@@ -59,12 +54,10 @@ export const getStudentStartTime = (student: any, day: string): number => {
   }
 
   // 4. 기본 정규 스케줄 사용
-  const hours = student.day_schedules?.[day] || [];
-  if (hours.length === 0) return 999; 
-  const parsedHours = hours.map((h: number) => {
-    let hourVal = h >= 100 ? Math.floor(h / 100) : h;
-    if (hourVal < 10) hourVal += 12;
-    return hourVal;
+  if (regularHours.length === 0) return 999; 
+  const parsedHours = regularHours.map((h: number) => {
+    const m = scheduleValueToMinutes(h);
+    return m !== null ? Math.floor(m / 60) : 999;
   });
   return Math.min(...parsedHours);
 };
@@ -154,13 +147,13 @@ export const filterStudentList = (params: {
 
     // 💡 [이중 가드] 정규 또는 특강 시간 중 단 하나라도 선택한 시간대와 맞물리면 통과시킵니다.
     if (filterTarget === 'today' && selectedHour !== 'All') {
-      const matchHour = parseInt(selectedHour, 10);
+      let matchHour = parseInt(selectedHour, 10);
+      if (matchHour > 0 && matchHour < 10) matchHour += 12;
       
       const regHours = s.day_schedules?.[selectedDayKey] || [];
       const hasRegMatch = regHours.some((hVal: number) => {
-        let hourVal = hVal >= 100 ? Math.floor(hVal / 100) : hVal;
-        if (hourVal > 0 && hourVal <= 12) hourVal += 12;
-        return hourVal === matchHour;
+        const m = scheduleValueToMinutes(hVal);
+        return m !== null && Math.floor(m / 60) === matchHour;
       });
 
       let hasElectiveMatch = false;
@@ -174,9 +167,8 @@ export const filterStudentList = (params: {
                 const sched = c.schedules[selectedDayKey];
                 if (Array.isArray(sched)) {
                   hasElectiveMatch = sched.some((hVal: number) => {
-                    let hourVal = hVal >= 100 ? Math.floor(hVal / 100) : hVal;
-                    if (hourVal > 0 && hourVal <= 12) hourVal += 12;
-                    return hourVal === matchHour;
+                    const m = scheduleValueToMinutes(hVal);
+                    return m !== null && Math.floor(m / 60) === matchHour;
                   });
                   if (hasElectiveMatch) break;
                 }
@@ -197,10 +189,8 @@ export const filterStudentList = (params: {
           if (match) mVal = parseInt(match[1], 10);
         }
         if (mVal !== undefined && mVal !== null && mVal > 0) {
-          let hourVal = typeof mVal === 'number' ? mVal : parseInt(String(mVal), 10);
-          if (hourVal >= 100) hourVal = Math.floor(hourVal / 100);
-          if (hourVal > 0 && hourVal <= 12) hourVal += 12;
-          if (hourVal === matchHour) {
+          const m = scheduleValueToMinutes(mVal);
+          if (m !== null && Math.floor(m / 60) === matchHour) {
             hasMovedMatch = true;
             break;
           }
@@ -247,11 +237,9 @@ export const getStudentActiveHours = (student: any, dayKey: string, selectedDate
   const hoursSet = new Set<number>();
 
   const normalize = (val: any): number | null => {
-    if (val === undefined || val === null) return null;
-    let h = typeof val === 'number' ? val : parseInt(String(val), 10);
-    if (isNaN(h)) return null;
-    if (h >= 100) h = Math.floor(h / 100);
-    if (h > 0 && h < 10) h += 12;
+    const m = scheduleValueToMinutes(val);
+    if (m === null) return null;
+    const h = Math.floor(m / 60);
     return (h >= 0 && h <= 24) ? h : null;
   };
 

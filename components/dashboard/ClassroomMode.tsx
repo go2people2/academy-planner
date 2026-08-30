@@ -11,6 +11,7 @@ import {
 import { Student } from '@/types/dashboard';
 import { getTodayStr, getDayOfWeek } from '@/lib/utils';
 import { ATTENDANCE_STATUS } from '@/lib/sessionFieldMap';
+import { scheduleValueToMinutes, scheduleValueToTimeInput, timeInputToScheduleValue } from '@/lib/scheduleTime';
 import { useClassroomTimers } from './useClassroomTimers';
 
 export interface ClassroomModeProps {
@@ -380,25 +381,37 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
     setIsTimeShiftOpen(false);
   };
 
-  const handleTimeShift = async (student: any, hour: number) => {
+  const handleTimeShift = async (student: any, timeVal: number | null) => {
     const day = getDayOfWeek(selectedDate);
     const isMakeup = student.__courseType === 'makeup' || student.todaySession?.is_pure_makeup === true || String(student.id || '').includes('_makeup_');
 
-    // 💡 [시간 정규화] 시간 포맷(16, 1600, '16:00' 등) 통일
-    const normalizeH = (val: any): number | null => {
-      if (val === null || val === undefined || val === '') return null;
-      const num = parseInt(String(val), 10);
-      if (isNaN(num)) return null;
-      let h = num >= 100 ? Math.floor(num / 100) : num;
-      if (h > 0 && h < 10) h += 12;
-      return h;
-    };
+    const isElective = student.__courseType === 'elective' || student.isSpecialClass;
+    const courseName = isElective
+      ? (student.courseName || student.electiveCourse?.subject || student.__courseSubject || '선택과목')
+      : (student.courseName || student.todaySession?.course_name || '정규');
 
-    const clickH = normalizeH(hour);
+    if (timeVal === null) {
+      const currentStatus = student.todaySession?.attendance_status || '';
+      const finalStatus = (currentStatus === '보강' || currentStatus.startsWith('보강:')) 
+        ? ATTENDANCE_STATUS.BEFORE 
+        : currentStatus;
+      await localSave(student, { 
+        course_name: courseName,
+        moved_to_hour: null, 
+        attendance_status: finalStatus,
+        attendance_reason: null,
+        is_pure_makeup: false
+      });
+      setActiveStudent(null);
+      setIsTimeShiftOpen(false);
+      return;
+    }
+
+    const clickMinutes = scheduleValueToMinutes(timeVal);
 
     // 💡 [원래 시간표 수업 판별] 정규 다중 시간 및 선택과목(특강) 시간표 완벽 일치 판정
     const isOriginalScheduledHour = !isMakeup && (() => {
-      if (clickH === null) return false;
+      if (clickMinutes === null) return false;
 
       // 1. 선택과목인 경우: __elective_courses에서 과목, 요일, 시간 일치 검사
       if (student.__courseType === 'elective' || student.isSpecialClass) {
@@ -421,13 +434,10 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
             if (!matchesDay) return false;
 
             const electiveHours = (c.schedules && Array.isArray(c.schedules[day]) && c.schedules[day].length > 0)
-              ? [normalizeH(c.schedules[day][0])]
-              : (Array.isArray(c.hours) && c.hours.length > 0 ? [normalizeH(c.hours[0])] : (c.time ? [normalizeH(c.time)] : []));
+              ? c.schedules[day].map((h: any) => scheduleValueToMinutes(h))
+              : (Array.isArray(c.hours) && c.hours.length > 0 ? c.hours.map((h: any) => scheduleValueToMinutes(h)) : (c.time ? [scheduleValueToMinutes(c.time)] : []));
 
-            if (electiveHours.length > 0) {
-              return electiveHours.includes(clickH);
-            }
-            return false;
+            return electiveHours.some((em: number | null) => em !== null && em === clickMinutes);
           });
         } catch (e) {
           return false;
@@ -436,14 +446,9 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
       // 2. 정규 수업인 경우: day_schedules[day]의 시작 시간(첫 번째 시간)과 일치 검사
       const regSched = student.day_schedules?.[day];
-      const regularStartHour = (Array.isArray(regSched) && regSched.length > 0) ? normalizeH(regSched[0]) : null;
-      return regularStartHour !== null && regularStartHour === clickH;
+      const regularStartMin = (Array.isArray(regSched) && regSched.length > 0) ? scheduleValueToMinutes(regSched[0]) : null;
+      return regularStartMin !== null && regularStartMin === clickMinutes;
     })();
-
-    const isElective = student.__courseType === 'elective' || student.isSpecialClass;
-    const courseName = isElective
-      ? (student.courseName || student.electiveCourse?.subject || student.__courseSubject || '선택과목')
-      : (student.courseName || student.todaySession?.course_name || '정규');
 
     if (isOriginalScheduledHour) {
       const currentStatus = student.todaySession?.attendance_status || '';
@@ -459,15 +464,15 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       });
     } else {
       const isPureMakeupDay = student.__courseType === 'makeup' || (!student.isScheduledToday && student.todaySession?.attendance_status?.startsWith('보강'));
-      const formatHour = hour < 10 ? `0${hour}:00` : `${hour}:00`;
+      const timeStr = scheduleValueToTimeInput(timeVal) || '17:00';
       
       const newAttStatus = isPureMakeupDay 
-        ? `보강:${formatHour}` 
+        ? `보강:${timeStr}` 
         : (student.todaySession?.attendance_status && !student.todaySession.attendance_status.startsWith('보강') ? student.todaySession.attendance_status : ATTENDANCE_STATUS.BEFORE);
 
       await localSave(student, { 
         course_name: courseName,
-        moved_to_hour: hour, 
+        moved_to_hour: timeVal, 
         attendance_status: newAttStatus, 
         attendance_reason: '시간 변경',
         is_pure_makeup: isMakeup ? true : false
@@ -1060,36 +1065,65 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                                 </div>
                               </div>
                             ) : (
-                              <div className="flex flex-col w-full h-full p-1">
+                              <div className="flex flex-col w-full h-full p-1 text-[8px]">
                                 <div className="flex items-center justify-between mb-1">
                                   <button 
                                     onClick={() => setIsTimeShiftOpen(false)} 
-                                    className={`flex items-center gap-1 text-[7.5px] font-bold uppercase ${
+                                    className={`flex items-center gap-0.5 text-[7.5px] font-bold uppercase ${
                                       isLight ? 'text-gray-600 hover:text-black' : 'text-gray-400 hover:text-white'
                                     }`}
                                   >
                                     <ArrowLeft size={8} /> 뒤로
                                   </button>
-                                  <button 
-                                    onClick={() => setIsPm(prev => !prev)}
-                                    className={`px-1.5 py-0.5 rounded text-[7.5px] font-black border transition-all flex items-center gap-0.5 ${
-                                      isPm 
-                                        ? 'bg-amber-500/15 text-amber-700 border-amber-500/30' 
-                                        : 'bg-sky-500/15 text-sky-700 border-sky-500/30'
+                                  <button
+                                    type="button"
+                                    onClick={(e) => { e.stopPropagation(); handleTimeShift(s, null); }}
+                                    className={`px-1 py-0.5 rounded text-[7px] font-bold border transition-all ${
+                                      isLight ? 'bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100' : 'bg-amber-500/20 text-amber-300 border-amber-500/40 hover:bg-amber-500/30'
                                     }`}
                                   >
-                                    <span>{isPm ? '오후' : '오전'}</span>
-                                    <span className="text-[6px] opacity-60">🔄</span>
+                                    원래 복귀
                                   </button>
                                 </div>
+
+                                {/* 분 단위 직접 입력 */}
+                                <div className="flex gap-1 mb-1" onClick={(e) => e.stopPropagation()}>
+                                  <input
+                                    type="time"
+                                    step="600"
+                                    defaultValue={scheduleValueToTimeInput(s.todaySession?.moved_to_hour) || '17:00'}
+                                    id={`live_time_${s.id}`}
+                                    className={`flex-1 px-1 py-0.5 rounded border text-[8px] font-bold text-center outline-none ${
+                                      isLight ? 'bg-white border-gray-300 text-gray-900' : 'bg-black/60 border-white/20 text-white'
+                                    }`}
+                                  />
+                                  <button
+                                    type="button"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      const inputEl = document.getElementById(`live_time_${s.id}`) as HTMLInputElement;
+                                      const val = timeInputToScheduleValue(inputEl?.value);
+                                      if (val !== null) {
+                                        handleTimeShift(s, val);
+                                      } else {
+                                        alert('유효한 시각을 입력해 주세요.');
+                                      }
+                                    }}
+                                    className="px-1.5 py-0.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-[7.5px] rounded shadow-xs"
+                                  >
+                                    이동
+                                  </button>
+                                </div>
+
                                 <div className="grid grid-cols-4 gap-0.5 flex-1">
                                   {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => {
                                     const targetHour = isPm ? (num === 12 ? 12 : num + 12) : (num === 12 ? 0 : num);
+                                    const targetHHMM = targetHour * 100;
                                     return (
                                       <button 
                                         key={num} 
-                                        onClick={(e) => { e.stopPropagation(); handleTimeShift(s, targetHour); }} 
-                                        className={`py-0.5 rounded text-[8px] font-bold transition-all border ${
+                                        onClick={(e) => { e.stopPropagation(); handleTimeShift(s, targetHHMM); }} 
+                                        className={`py-0.5 rounded text-[7.5px] font-bold transition-all border ${
                                           isLight 
                                             ? 'bg-blue-50 text-blue-950 border-blue-200 hover:bg-blue-600 hover:text-white' 
                                             : 'bg-white/10 text-white border-white/20 hover:bg-blue-600'

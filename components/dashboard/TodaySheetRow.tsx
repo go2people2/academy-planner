@@ -12,6 +12,7 @@ import { HistoryRows } from './TodaySheetHistory';
 import { TodaySheetCell } from './todaySheet/TodaySheetCell';
 import { useTodaySheetRowLogic } from './hooks/useTodaySheetRowLogic';
 import { useModalEsc } from '@/hooks/useModalEsc';
+import { timeInputToScheduleValue, scheduleValueToTimeInput } from '@/lib/scheduleTime';
 
 export interface TodaySheetRowProps {
   student: Student;
@@ -129,6 +130,16 @@ useEffect(() => {
   } = handlers;
 
   const [isPm, setIsPm] = useState(true);
+  const [customTimeInput, setCustomTimeInput] = useState<string>('17:00');
+
+  useEffect(() => {
+    if (isSupplementTimePickerOpen) {
+      const initVal = scheduleValueToTimeInput(student.todaySession?.moved_to_hour) || '17:00';
+      setCustomTimeInput(initVal);
+      const [h] = initVal.split(':').map(Number);
+      setIsPm(h >= 12);
+    }
+  }, [isSupplementTimePickerOpen, student.todaySession?.moved_to_hour]);
 
   // 💡 action 컬럼을 제외한 실질적인 마지막 데이터 컬럼 판별
   const lastDataColumnId = React.useMemo(() => {
@@ -388,36 +399,77 @@ useEffect(() => {
                     {student.name} 수업 이동
                   </h3>
                   <p className={`text-[10px] font-semibold mt-1 ${isLight ? 'text-gray-500' : 'text-gray-400'}`}>
-                    이동할 시각을 선택하세요
+                    이동할 시각을 직접 입력하거나 선택하세요
                   </p>
                 </div>
               </div>
-              {/* 💡 오전 / 오후 순환 토글 버튼 */}
               <button
                 type="button"
-                onClick={() => setIsPm(prev => !prev)}
-                className={`px-3 py-1.5 rounded-xl border text-[11px] font-extrabold transition-all flex items-center gap-1.5 shadow-xs ${
-                  isPm
-                    ? 'bg-amber-500/15 text-amber-600 border-amber-500/30 hover:bg-amber-500 hover:text-black'
-                    : 'bg-sky-500/15 text-sky-600 border-sky-500/30 hover:bg-sky-500 hover:text-white'
-                }`}
+                onClick={() => setIsSupplementTimePickerOpen(false)}
+                className="p-1 text-gray-400 hover:text-white rounded"
               >
-                <span>{isPm ? '🌙 오후' : '☀️ 오전'}</span>
-                <span className="text-[9px] opacity-60">🔄</span>
+                <X size={16} />
               </button>
             </div>
 
-            <div className="grid grid-cols-4 gap-2">
+            {/* 분 단위 직접 입력 필드 */}
+            <div className="mb-4 p-3 rounded-xl bg-white/5 border border-white/10 space-y-2">
+              <label className="text-[10px] font-bold text-gray-400 block text-left">직접 시각 지정 (분 단위)</label>
+              <div className="flex gap-2">
+                <input
+                  type="time"
+                  step="600"
+                  value={customTimeInput}
+                  onChange={(e) => setCustomTimeInput(e.target.value)}
+                  className={`flex-1 px-3 py-1.5 rounded-lg border text-sm font-bold outline-none text-center ${
+                    isLight ? 'bg-white border-gray-300 text-gray-900' : 'bg-black/40 border-white/20 text-white'
+                  }`}
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    const val = timeInputToScheduleValue(customTimeInput);
+                    if (val !== null) {
+                      handleSupplementTimeSelect(val);
+                    } else {
+                      alert('유효한 시각을 입력해 주세요. (예: 17:30)');
+                    }
+                  }}
+                  className="px-4 py-1.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs rounded-lg shadow-sm transition-all"
+                >
+                  이동
+                </button>
+              </div>
+            </div>
+
+            {/* 빠른 정각/오후 선택 */}
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-bold text-gray-400">빠른 정각 선택</span>
+              <button
+                type="button"
+                onClick={() => setIsPm(prev => !prev)}
+                className={`px-2 py-0.5 rounded text-[10px] font-extrabold transition-all border ${
+                  isPm
+                    ? 'bg-amber-500/15 text-amber-600 border-amber-500/30'
+                    : 'bg-sky-500/15 text-sky-600 border-sky-500/30'
+                }`}
+              >
+                <span>{isPm ? '🌙 오후' : '☀️ 오전'}</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-4 gap-1.5 mb-4">
               {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(num => {
                 const targetHour = isPm ? (num === 12 ? 12 : num + 12) : (num === 12 ? 0 : num);
+                const targetHHMM = targetHour * 100;
                 return (
                   <button
                     key={num}
-                    onClick={() => handleSupplementTimeSelect(targetHour)}
-                    className={`py-2.5 rounded-xl border text-sm font-black transition-all shadow-xs active:scale-95 ${
+                    onClick={() => handleSupplementTimeSelect(targetHHMM)}
+                    className={`py-1.5 rounded-lg border text-xs font-bold transition-all ${
                       isLight
-                        ? 'bg-blue-50 text-blue-950 border-blue-200/90 hover:bg-blue-600 hover:text-white hover:border-blue-600'
-                        : 'bg-white/5 border-white/10 text-white hover:bg-blue-600 hover:border-blue-400'
+                        ? 'bg-blue-50 text-blue-950 border-blue-200/90 hover:bg-blue-600 hover:text-white'
+                        : 'bg-white/5 border-white/10 text-white hover:bg-blue-600'
                     }`}
                   >
                     {num}시
@@ -425,16 +477,32 @@ useEffect(() => {
                 );
               })}
             </div>
-            <button
-              onClick={() => setIsSupplementTimePickerOpen(false)}
-              className={`mt-5 w-full py-2 rounded-xl border text-[11px] font-bold tracking-wider transition-all flex items-center justify-center gap-2 ${
-                isLight
-                  ? 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200 hover:text-black'
-                  : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10 hover:text-white'
-              }`}
-            >
-              닫기
-            </button>
+
+            {/* 원래 시간표로 복귀 버튼 */}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => handleSupplementTimeSelect(null)}
+                className={`flex-1 py-2 rounded-xl border text-[11px] font-bold tracking-wider transition-all ${
+                  isLight
+                    ? 'bg-amber-50 text-amber-700 border-amber-200 hover:bg-amber-100'
+                    : 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                }`}
+              >
+                원래 시간표로 복귀
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsSupplementTimePickerOpen(false)}
+                className={`flex-1 py-2 rounded-xl border text-[11px] font-bold tracking-wider transition-all ${
+                  isLight
+                    ? 'bg-gray-100 text-gray-700 border-gray-300 hover:bg-gray-200'
+                    : 'bg-white/5 text-gray-400 border-white/10 hover:bg-white/10'
+                }`}
+              >
+                닫기
+              </button>
+            </div>
           </motion.div>
         </div>,
         document.body

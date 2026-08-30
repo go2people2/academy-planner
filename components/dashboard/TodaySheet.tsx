@@ -21,6 +21,7 @@ import StudentReportCardPrintModal from './todaySheet/StudentReportCardPrintModa
 import { TagBatchInputModal } from './todaySheet/TagBatchInputModal';
 import HokmaJournalPrintModal from './todaySheet/HokmaJournalPrintModal';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
+import { scheduleValueToMinutes, minutesToGroupLabel } from '@/lib/scheduleTime';
 import { calculateAggregatedHw, selectBaseSession, determineTodaySession } from '@/lib/studentDataEnricher';
 import { ChecklistTab } from './todaySheet/ChecklistTab';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus, mapColumnToProp } from '@/lib/sessionFieldMap';
@@ -781,7 +782,7 @@ export default function TodaySheet({
         if (l.id === 'temp' || !l.id) {
           const isDateMatch = (l.date || l.session_date) === selectedDate;
           const isCourseMatch = l.course_name === courseName || (courseName === '정규' && (!l.course_name || l.course_name === '정규'));
-          const isHourMatch = (l.moved_to_hour ?? null) === fromTargetMovedHour;
+          const isHourMatch = scheduleValueToMinutes(l.moved_to_hour) === scheduleValueToMinutes(fromTargetMovedHour);
           const isMakeupMatch = (l.is_pure_makeup ?? false) === isPureMakeupTarget;
           return isDateMatch && isCourseMatch && isHourMatch && isMakeupMatch;
         }
@@ -1915,50 +1916,45 @@ export default function TodaySheet({
           <tbody className={isLight ? "divide-y divide-[#e3e2e0]" : "divide-y divide-white/10"}>
             {(() => {
               const dayKey = getDayOfWeek(selectedDate);
-              const [_, configM] = (academyInfo?.operation_settings?.first_period_time || "00:00").split(':').map(Number);
-              const displayMinute = configM.toString().padStart(2, '0');
 
               return filteredStudents.map((s: any, idx: number) => {
-                const getStartTime = (st: any) => {
-                  const normalizeHour = (val: number | string) => {
-                    if (!val) return 99;
-                    let num = typeof val === 'number' ? val : parseInt(String(val), 10);
-                    if (isNaN(num) || num <= 0) return 99;
-                    let h = num >= 100 ? Math.floor(num / 100) : num;
-                    if (h > 0 && h < 10) h += 12;
-                    return h;
-                  };
-
-                  if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-                    return normalizeHour(st.todaySession.moved_to_hour);
+                const getStartTime = (st: any): number => {
+                  const movedHour = st.todaySession?.moved_to_hour;
+                  if (movedHour !== undefined && movedHour !== null && movedHour > 0) {
+                    const m = scheduleValueToMinutes(movedHour);
+                    if (m !== null) return m;
+                  }
+                  const attStatus = st.todaySession?.attendance_status || '';
+                  if (attStatus.startsWith('보강:')) {
+                    const match = attStatus.match(/(\d{1,2}):(\d{2})/);
+                    if (match) {
+                      const hh = parseInt(match[1], 10);
+                      const mm = parseInt(match[2], 10);
+                      let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+                      return h24 * 60 + mm;
+                    }
+                    const matchH = attStatus.match(/(\d{1,2}):/);
+                    if (matchH) {
+                      const hh = parseInt(matchH[1], 10);
+                      let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+                      return h24 * 60;
+                    }
                   }
 
                   const hours = st.day_schedules?.[dayKey] || [];
-
-                  if (st.isSpecialClass) {
-                    if (hours.length > 0) return normalizeHour(hours[0]);
-                    return 999;
-                  }
-
                   if (hours.length > 0) {
-                    return normalizeHour(hours[0]);
+                    const m = scheduleValueToMinutes(hours[0]);
+                    if (m !== null) return m;
                   }
-                  return 999;
+                  return 999 * 60;
                 };
+
                 const currentStartTime = getStartTime(s);
                 const prevStartTime = idx > 0 ? getStartTime(filteredStudents[idx - 1]) : null;
                 const isNewSection = sortMode === 'time' && currentStartTime !== prevStartTime && !focusColumn;
 
-                const currentHour = currentStartTime;
-                const formattedMin = displayMinute;
-
                 const timeSectionLabel = isNewSection
-                  ? (currentHour === 999
-                      ? '기타 수업'
-                      : (currentHour >= 12
-                          ? (currentHour === 12 ? `오후 12:${formattedMin}` : `오후 ${currentHour-12}:${formattedMin}`)
-                          : `오전 ${currentHour}:${formattedMin}`) + ' 수업'
-                    )
+                  ? minutesToGroupLabel(currentStartTime < 999 * 60 ? currentStartTime : null)
                   : undefined;
 
                 return (
@@ -1999,7 +1995,7 @@ export default function TodaySheet({
                       onCellMouseEnter={onCellMouseEnter}
                       isFirstInTimeSection={isNewSection}
                       timeSectionLabel={timeSectionLabel}
-                      isOtherClassSection={currentHour === 999}
+                      isOtherClassSection={currentStartTime >= 999 * 60}
                       historyLimit={historyLimit}
                       isScrolled={isScrolled}
                       showAllTools={showAllTools}

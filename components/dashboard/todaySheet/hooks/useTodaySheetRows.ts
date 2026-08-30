@@ -5,6 +5,7 @@ import { Student } from '@/types/dashboard';
 import { getDayOfWeek, getTodayStr } from '@/lib/utils';
 import { calculateAggregatedHw, selectBaseSession, determineTodaySession, isValidHomeworkText, isValidHistoryLog } from '@/lib/studentDataEnricher';
 import { ATTENDANCE_STATUS, normalizeAttendanceStatus } from '@/lib/sessionFieldMap';
+import { scheduleValueToMinutes } from '@/lib/scheduleTime';
 
 interface UseTodaySheetRowsParams {
   students: Student[];
@@ -467,43 +468,40 @@ export function useTodaySheetRows({
       result = result.filter((s: any) => s.todaySession?.test_id || s.todaySession?.test_status);
     }
 
-    // 💡 4. 시간대 계산 헬퍼 (1~12시는 오후 13~24시로 일관성 있게 통일)
-    const normalizeHour = (val: number | string) => {
-      if (!val) return 99;
-      let num = typeof val === 'number' ? val : parseInt(String(val), 10);
-      if (isNaN(num) || num <= 0) return 99;
-      let h = num >= 100 ? Math.floor(num / 100) : num;
-      if (h > 0 && h < 10) h += 12;
-      return h;
-    };
-
-    const getStartTime = (st: any) => {
+    // 💡 4. 자정 기준 분(Minutes) 단위 시작 시간 계산 헬퍼
+    const getStartTime = (st: any): number => {
       // 💡 1. 명시적 시간이동 정보(moved_to_hour) 또는 attendance_status ("보강:19:00~21:00") 파싱 시각 최우선 적용!!
       const movedHour = st.todaySession?.moved_to_hour;
       if (movedHour !== undefined && movedHour !== null && movedHour > 0) {
-        return normalizeHour(movedHour);
+        const m = scheduleValueToMinutes(movedHour);
+        if (m !== null) return m;
       }
       const attStatus = st.todaySession?.attendance_status || '';
       if (attStatus.startsWith('보강:')) {
-        const m = attStatus.match(/(\d{1,2}):/);
-        if (m) {
-          return normalizeHour(parseInt(m[1], 10));
+        const match = attStatus.match(/(\d{1,2}):(\d{2})/);
+        if (match) {
+          const hh = parseInt(match[1], 10);
+          const mm = parseInt(match[2], 10);
+          let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+          return h24 * 60 + mm;
+        }
+        const matchH = attStatus.match(/(\d{1,2}):/);
+        if (matchH) {
+          const hh = parseInt(matchH[1], 10);
+          let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+          return h24 * 60;
         }
       }
 
       const hours = st.day_schedules?.[dayKey] || [];
 
-      // 💡 2. 특강/선택과목 행인 경우: 자신의 특강 교시 적용
-      if (st.isSpecialClass) {
-        if (hours.length > 0) return normalizeHour(hours[0]);
-        return 99;
+      // 💡 2. 특강/선택과목 또는 정규 수업 시간표
+      if (hours.length > 0) {
+        const m = scheduleValueToMinutes(hours[0]);
+        if (m !== null) return m;
       }
 
-      // 💡 3. 정규 수업 행인 경우 원래 정규 수업 교시 적용
-      if (hours.length > 0) {
-        return normalizeHour(hours[0]);
-      }
-      return 99;
+      return 999 * 60;
     };
 
     // 💡 5. 정렬 (시간순/학년순/이름순)
@@ -532,16 +530,24 @@ export function useTodaySheetRows({
       }
     });
 
-    // 💡 6. 시작 시간대 필터 ('15:00', '16:00' 등) - 정규시간 또는 보강시간 어느 하나라도 일치하면 표시
+    // 💡 6. 시작 시간대 필터 ('15', '16', '15:00' 등) - 16시 선택 시 16:00과 16:20 모두 포함
     if (selectedHour && selectedHour !== 'All') {
-      const targetH = parseInt(selectedHour, 10);
-      if (!isNaN(targetH)) {
+      let targetHour = parseInt(selectedHour, 10);
+      if (targetHour > 0 && targetHour < 10) targetHour += 12;
+
+      if (!isNaN(targetHour)) {
         result = result.filter(st => {
-          const regH = getStartTime(st);
-          if (regH === targetH) return true;
+          const startMin = getStartTime(st);
+          if (startMin < 999 * 60) {
+            const h = Math.floor(startMin / 60);
+            if (h === targetHour) return true;
+          }
           if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-            const h = normalizeHour(st.todaySession.moved_to_hour);
-            if (h === targetH) return true;
+            const movedMin = scheduleValueToMinutes(st.todaySession.moved_to_hour);
+            if (movedMin !== null) {
+              const h = Math.floor(movedMin / 60);
+              if (h === targetHour) return true;
+            }
           }
           return false;
         });
