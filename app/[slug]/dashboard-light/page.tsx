@@ -46,6 +46,7 @@ export default function DashboardPage() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [viewMode, setViewMode] = useState<string>('board');
+  const [isViewModeReady, setIsViewModeReady] = useState(false); // 💡 viewMode 복구 완료 여부 플래그 (Active Flash 방지)
   const [isMounted, setIsMounted] = useState(false); // 💡 하이드레이션 mismatch 방지용 플래그
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
@@ -81,13 +82,16 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    // 💡 [안정화] 마운트 완료 후 클라이언트 환경에서만 이전 보던 탭 화면을 복구하여 Hydration Mismatch를 방지합니다.
+    // 💡 [안정화] 마운트 완료 후 클라이언트 환경에서만 이전 보던 탭 화면을 복구하여 Hydration Mismatch 및 Flash 방지
     setIsMounted(true);
+    const validModes = ['board', 'todayTable', 'studentSupport', 'studentEdit', 'monthlyChanges', 'pdfLibrary', 'digitalLibrary', 'exams', 'wrongAnswersAdmin', 'problemErrors', 'progress', 'teacherTask', 'settings'];
     const savedTab = localStorage.getItem('ams_viewMode');
-    const recoveredUserJson = localStorage.getItem('ams_user');
-    if (recoveredUserJson && savedTab) {
+    if (savedTab && validModes.includes(savedTab)) {
       setViewMode(savedTab);
+    } else {
+      setViewMode('board');
     }
+    setIsViewModeReady(true);
 
     if (!slug) return;
     const userJson = localStorage.getItem('ams_user');
@@ -188,13 +192,9 @@ export default function DashboardPage() {
       window.removeEventListener('ams-open-video-modal', handleGlobalVideoOpen as any);
     };
   }, []);
-  const [selectedTeacherId, setSelectedTeacherId] = useState<string>(() => {
-    if (typeof window !== 'undefined') {
-      return localStorage.getItem('ams_selectedTeacherId') || 'All';
-    }
-    return 'All';
-  });
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>('All');
   const [selectedHour, setSelectedHour] = useState<string>('All');
+  const [isFilterReady, setIsFilterReady] = useState(false); // 💡 교사/시간 필터 복구 완료 여부 플래그
   const isFirstRender = useRef(true);
   const prevDateRef = useRef(selectedDate);
 
@@ -210,53 +210,30 @@ export default function DashboardPage() {
     }
   }, [selectedDate]);
 
-  // 💡 [보안/편의 개선] 로그인한 사용자 권한 및 활성 교사 목록에 따른 선생님 필터 초기화/복원/저장
+  // 💡 [보안/편의 개선] 로그인한 사용자 권한 및 활성 교사 목록에 따른 선생님/시간 필터 초기화/복원/저장
   const normalizedSlugStr = (Array.isArray(slug) ? slug[0] : slug || '').toLowerCase();
   const teacherStorageKey = currentUser?.id && normalizedSlugStr
     ? `ams_selectedTeacherId_${normalizedSlugStr}_${currentUser.id}`
     : null;
 
+  // slug 변경 시 filter ready 리셋
   useEffect(() => {
-    if (!currentUser) return;
+    setIsFilterReady(false);
+  }, [normalizedSlugStr]);
 
-    if (currentUser.role === 'teacher') {
-      // 일반 교사는 본인 전용 데이터이므로 필터를 항상 'All'로 유지 (본인 학생만 서버/쿼리 레벨에서 로드됨)
-      setSelectedTeacherId('All');
-      if (teacherStorageKey) localStorage.removeItem(teacherStorageKey);
-    } else {
-      // 관리자(admin/master)는 신규 키 -> 레거시 키 순으로 복원
-      let targetTeacherId = 'All';
-      if (teacherStorageKey) {
-        const savedNew = localStorage.getItem(teacherStorageKey);
-        if (savedNew) {
-          targetTeacherId = savedNew;
-        } else {
-          const legacySaved = localStorage.getItem('ams_selectedTeacherId');
-          if (legacySaved) {
-            targetTeacherId = legacySaved;
-          }
-        }
-      }
-      setSelectedTeacherId(targetTeacherId);
-    }
-  }, [currentUser?.id, currentUser?.role, teacherStorageKey]);
-
-  // 💡 선택한 선생님 필터 상태 로컬스토리지 연동
+  // 💡 선택한 선생님 필터 상태 로컬스토리지 연동 (ready 이후에만 저장)
   useEffect(() => {
-    if (teacherStorageKey && selectedTeacherId) {
+    if (isFilterReady && teacherStorageKey && selectedTeacherId) {
       localStorage.setItem(teacherStorageKey, selectedTeacherId);
     }
-  }, [selectedTeacherId, teacherStorageKey]);
+  }, [selectedTeacherId, teacherStorageKey, isFilterReady]);
 
-  // 💡 선택한 시간대 필터 상태 로컬스토리지 연동
+  // 💡 선택한 시간대 필터 상태 로컬스토리지 연동 (ready 이후에만 저장)
   useEffect(() => {
-    const saved = localStorage.getItem('ams_selectedHour');
-    if (saved) setSelectedHour(saved);
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem('ams_selectedHour', selectedHour);
-  }, [selectedHour]);
+    if (isFilterReady) {
+      localStorage.setItem('ams_selectedHour', selectedHour);
+    }
+  }, [selectedHour, isFilterReady]);
 
   // 💡 viewMode 변경 시 로컬스토리지에 저장하여 새로고침 시 복구 가능하도록 지원
   useEffect(() => {
@@ -2042,6 +2019,48 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     return Array.from(hoursSet).sort((a, b) => a - b);
   }, [students, selectedDayKey, selectedDate, academy]);
 
+  // 💡 [필터 복구 및 유효성 검증] 교사 및 시간 필터 복구 완료 후 isFilterReady를 true로 전환
+  useEffect(() => {
+    if (!currentUser) return;
+
+    // 1. 교사 필터 복구
+    let targetTeacherId = 'All';
+    if (currentUser.role === 'teacher') {
+      targetTeacherId = 'All';
+      if (teacherStorageKey) localStorage.removeItem(teacherStorageKey);
+    } else if (teacherStorageKey) {
+      const savedNew = localStorage.getItem(teacherStorageKey);
+      const legacySaved = localStorage.getItem('ams_selectedTeacherId');
+      const candidate = savedNew || legacySaved;
+      if (candidate && candidate !== 'All') {
+        if (teachers && teachers.length > 0) {
+          const isValid = teachers.some((t: any) => t.id === candidate);
+          targetTeacherId = isValid ? candidate : 'All';
+        } else {
+          targetTeacherId = candidate;
+        }
+      }
+    }
+    setSelectedTeacherId(targetTeacherId);
+
+    // 2. 시간 필터 복구
+    let targetHour = 'All';
+    const savedHour = localStorage.getItem('ams_selectedHour');
+    if (savedHour && savedHour !== 'All') {
+      if (availableHours && availableHours.length > 0) {
+        const parsedH = parseInt(savedHour, 10);
+        const isValid = availableHours.includes(parsedH);
+        targetHour = isValid ? savedHour : 'All';
+      } else {
+        targetHour = savedHour;
+      }
+    }
+    setSelectedHour(targetHour);
+
+    // 3. 복구 완료 플래그 활성화
+    setIsFilterReady(true);
+  }, [currentUser?.id, currentUser?.role, teacherStorageKey, teachers, availableHours]);
+
   // 1. 오늘의 학생 리스트 (필터링 + 가상 분할 팽창 + 정렬 - Overview는 항상 이름순)
   // 💡 [격리] TodaySheet/Overview는 오늘 날짜 기준이므로 selectedDays 요일 교집합 필터를 적용하지 않음 (selectedDays: [])
   const todayStudents = useMemo(() => {
@@ -2201,7 +2220,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   return (
     <div className="min-h-screen bg-[#fbfbfa] text-[#37352f] flex font-sans selection:bg-blue-500/10 overflow-hidden text-xs">
       {!(viewMode === 'todayTable' && isFullScreen) && (
-        <Sidebar currentUser={currentUser} viewMode={viewMode} setViewMode={navigateTo} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} isClassroomModeOpen={isClassroomModeOpen} onStartClass={() => setIsClassroomModeOpen(true)} selectedHour={selectedHour} setSelectedHour={setSelectedHour} availableHours={availableHours} />
+        <Sidebar currentUser={currentUser} viewMode={viewMode} setViewMode={navigateTo} isViewModeReady={isViewModeReady} isFilterReady={isFilterReady} todayCount={todayStudents.length} students={students} selectedFilter={selectedFilter} setSelectedFilter={setSelectedFilter} selectedDays={selectedDays} setSelectedDays={setSelectedDays} isAndFilter={isAndFilter} setIsAndFilter={setIsAndFilter} academyInfo={academy} onUpdateAcademyInfo={handleUpdateAcademyInfo} teachers={teachers} selectedTeacherId={selectedTeacherId} setSelectedTeacherId={setSelectedTeacherId} isClassroomModeOpen={isClassroomModeOpen} onStartClass={() => setIsClassroomModeOpen(true)} selectedHour={selectedHour} setSelectedHour={setSelectedHour} availableHours={availableHours} />
       )}
       <main className="flex-1 h-screen overflow-y-auto bg-[#fbfbfa] relative">
         {(() => {
@@ -2350,6 +2369,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                  isFullScreen={isFullScreen}
                  onToggleFullScreen={() => setIsFullScreen(!isFullScreen)}
                  selectedHour={selectedHour}
+                 isFilterReady={isFilterReady}
                  onNavigateTab={handleNavigateToLinkedMakeup}
                  onRefreshAbsenceSession={refreshAbsenceSession}
                  onRefreshData={fetchAllData}

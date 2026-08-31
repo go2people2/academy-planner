@@ -11,7 +11,7 @@ interface UseTodaySheetRowsParams {
   students: Student[];
   selectedDate: string;
   academyInfo?: any;
-  sortMode?: 'time' | 'grade' | 'name';
+  sortMode?: 'time' | 'grade' | 'name' | 'school';
   sortDirection?: 'asc' | 'desc';
   selectedHour?: string;
   hideAbsent?: 'all' | 'absent' | 'attend';
@@ -524,6 +524,29 @@ export function useTodaySheetRows({
         const tB = getStartTime(b);
         if (tA !== tB) return tA - tB;
         return a.name.localeCompare(b.name);
+      } else if (sortMode === 'school') {
+        const schoolA = (a.school || '').trim();
+        const schoolB = (b.school || '').trim();
+
+        // 학교 미입력 학생은 정렬 방향과 무관하게 항상 맨 아래
+        if (!schoolA && schoolB) return 1;
+        if (schoolA && !schoolB) return -1;
+
+        // 같은 학교 미입력인 경우에도 이름순으로 안정 정렬
+        if (!schoolA && !schoolB) {
+          return a.name.localeCompare(b.name, 'ko');
+        }
+
+        // 1차: 학교명
+        const schoolCompare = schoolA.localeCompare(schoolB, 'ko');
+        if (schoolCompare !== 0) {
+          return sortDirection === 'asc'
+            ? schoolCompare
+            : -schoolCompare;
+        }
+
+        // 2차: 동일 학교 내 이름순
+        return a.name.localeCompare(b.name, 'ko');
       } else {
         const comp = a.name.localeCompare(b.name);
         return sortDirection === 'asc' ? comp : -comp;

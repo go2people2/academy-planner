@@ -268,14 +268,15 @@ export function useTodaySheetRowLogic({
       prevSessionRef.current?.attendance_status !== student.todaySession?.attendance_status;
 
     if (isSessionPropsChanged) {
-      prevSessionRef.current = student.todaySession;
       const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
-      const isPendingSave = Object.keys(pendingUpdatesRef.current).length > 0 || isSavingRef.current || recentlySavedRef.current;
+      const hasLocalPending = Object.keys(pendingUpdatesRef.current).length > 0 || isSavingRef.current;
 
-      // 💡 [DAILY_SHEET_AUTOFILL_RULES.md] 입력 중이거나 저장/대기 중인 경우 formData 덮어쓰기 방지
-      if (!isUserTyping && !isPendingSave) {
+      // 💡 [DAILY_SHEET_AUTOFILL_RULES.md] 사용자가 직접 입력 중이거나 로컬 저장 진행 중인 경우 덮어쓰기 방지
+      // 외부에서 내려온 확정 업데이트(Delete, Paste 등)는 비편집 셀에 즉시 반영
+      if (!isUserTyping && !hasLocalPending) {
         const newData = getInitialFormData(selectedDate);
         setFormData(newData);
+        prevSessionRef.current = student.todaySession;
       }
     }
   }, [selectedDate, student.todaySession, student.id, isSaving, editingCell?.studentId, getInitialFormData, rowDate]);
@@ -420,6 +421,14 @@ export function useTodaySheetRowLogic({
 
     setTimeout(() => {
       recentlySavedRef.current = false;
+      if (prevSessionRef.current !== student.todaySession) {
+        const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
+        if (!isUserTyping && Object.keys(pendingUpdatesRef.current).length === 0 && !isSavingRef.current) {
+          const newData = getInitialFormData(rowDate);
+          setFormData(newData);
+          prevSessionRef.current = student.todaySession;
+        }
+      }
     }, 1500);
     setSaveStatus(success ? 'success' : 'error');
     setTimeout(() => setSaveStatus('idle'), 2000);

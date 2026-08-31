@@ -16,6 +16,8 @@ interface SidebarProps {
   currentUser?: any; // 💡 추가
   viewMode: string;
   setViewMode: (mode: any) => void;
+  isViewModeReady?: boolean; // 💡 viewMode 복구 완료 여부
+  isFilterReady?: boolean; // 💡 교사/시간 필터 복구 완료 여부
   todayCount: number;
   students: Student[];
   selectedFilter: string;
@@ -52,7 +54,7 @@ const formatHour = (hour: number) => {
 
 export default function Sidebar({ 
   currentUser,
-  viewMode, setViewMode, todayCount, students, selectedFilter, setSelectedFilter,
+  viewMode, setViewMode, isViewModeReady = false, isFilterReady = false, todayCount, students, selectedFilter, setSelectedFilter,
   selectedDays, setSelectedDays, isAndFilter, setIsAndFilter, 
   academyInfo, onUpdateAcademyInfo,
   teachers, selectedTeacherId, setSelectedTeacherId,
@@ -211,7 +213,7 @@ export default function Sidebar({
             id="todayTable"
             icon={<TableIcon size={14} className="text-sky-400" />}
             label="TodaySheet"
-            active={viewMode === 'todayTable'}
+            active={isViewModeReady && viewMode === 'todayTable'}
             onClick={() => { setViewMode('todayTable'); setSelectedFilter('All'); }}
             badge={todayCount > 0 ? String(todayCount) : undefined}
           />
@@ -220,7 +222,7 @@ export default function Sidebar({
             id="board"
             icon={<LayoutDashboard size={14} className="text-purple-400" />}
             label="Overview"
-            active={viewMode === 'board' && selectedFilter !== 'Discharged'}
+            active={isViewModeReady && viewMode === 'board' && selectedFilter !== 'Discharged'}
             onClick={() => { setViewMode('board'); setSelectedFilter('All'); }}
           />
           <SidebarLink
@@ -228,7 +230,7 @@ export default function Sidebar({
             id="studentSupport"
             icon={<UserCog size={14} className="text-amber-400" />}
             label="학생 지원"
-            active={['studentSupport', 'studentEdit'].includes(viewMode)}
+            active={isViewModeReady && ['studentSupport', 'studentEdit'].includes(viewMode)}
             onClick={() => { setViewMode('studentSupport'); setSelectedFilter('All'); setSelectedDays([]); }}
           />
 
@@ -238,7 +240,7 @@ export default function Sidebar({
               id="materialsPackage"
               icon={<Library size={14} className="text-indigo-400" />}
               label="학습 자료"
-              active={['pdfLibrary', 'digitalLibrary'].includes(viewMode)}
+              active={isViewModeReady && ['pdfLibrary', 'digitalLibrary'].includes(viewMode)}
               onClick={() => { setViewMode('pdfLibrary'); setSelectedFilter('All'); }}
             />
           )}
@@ -248,7 +250,7 @@ export default function Sidebar({
               id="assessmentPackage"
               icon={<FileText size={14} className="text-blue-400" />}
               label="평가 관리"
-              active={['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)}
+              active={isViewModeReady && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)}
               onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }}
             />
           )}
@@ -258,7 +260,7 @@ export default function Sidebar({
               id="operationsPackage"
               icon={<Activity size={14} className="text-teal-400" />}
               label="운영 관리"
-              active={['progress', 'teacherTask'].includes(viewMode)}
+              active={isViewModeReady && ['progress', 'teacherTask'].includes(viewMode)}
               onClick={() => { setViewMode('progress'); setSelectedFilter('All'); }}
             />
           )}
@@ -400,10 +402,20 @@ export default function Sidebar({
             {isAdmin && (
               <div className="pt-1">
                 <div className="relative group">
-                  <select value={selectedTeacherId} onChange={(e) => setSelectedTeacherId(e.target.value)} className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-200 outline-none appearance-none cursor-pointer hover:bg-white/20 hover:text-white hover:border-white/30 transition-all">
-                    <option value="All" className="bg-[#121212]">All Teachers (전체 교사)</option>
-                    {activeTeachers.map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
-                  </select>
+                  {!isFilterReady ? (
+                    <div className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 h-[30px] flex items-center">
+                      <div className="h-2.5 w-24 bg-white/10 rounded animate-pulse" />
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedTeacherId}
+                      onChange={(e) => setSelectedTeacherId(e.target.value)}
+                      className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-200 outline-none appearance-none cursor-pointer hover:bg-white/20 hover:text-white hover:border-white/30 transition-all"
+                    >
+                      <option value="All" className="bg-[#121212]">All Teachers (전체 교사)</option>
+                      {activeTeachers.map((t, idx) => <option key={t.id || idx} value={t.id} className="bg-[#121212]">{t.name} 선생님</option>)}
+                    </select>
+                  )}
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors"><UserCircle size={12} /></div>
                 </div>
               </div>
@@ -412,10 +424,20 @@ export default function Sidebar({
             {/* 💡 시작 시간대 필터 추가 */}
             <div className="pt-1">
               <div className="relative group">
-                <select value={selectedHour} onChange={(e) => setSelectedHour(e.target.value)} className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-200 outline-none appearance-none cursor-pointer hover:bg-white/20 hover:text-white hover:border-white/30 transition-all">
-                  <option value="All" className="bg-[#121212]">All Times (전체 시간)</option>
-                  {availableHours.map((h, idx) => <option key={h || idx} value={String(h)} className="bg-[#121212]">{formatHour(h)}</option>)}
-                </select>
+                {!isFilterReady ? (
+                  <div className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 h-[30px] flex items-center">
+                    <div className="h-2.5 w-20 bg-white/10 rounded animate-pulse" />
+                  </div>
+                ) : (
+                  <select
+                    value={selectedHour}
+                    onChange={(e) => setSelectedHour(e.target.value)}
+                    className="w-full bg-white/10 border border-white/15 rounded-[2px] py-2 px-3 text-[10px] font-black text-gray-200 outline-none appearance-none cursor-pointer hover:bg-white/20 hover:text-white hover:border-white/30 transition-all"
+                  >
+                    <option value="All" className="bg-[#121212]">All Times (전체 시간)</option>
+                    {availableHours.map((h, idx) => <option key={h || idx} value={String(h)} className="bg-[#121212]">{formatHour(h)}</option>)}
+                  </select>
+                )}
                 <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-gray-600 group-hover:text-blue-500 transition-colors">
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -434,7 +456,7 @@ export default function Sidebar({
           <span className="text-[11px]">Dark Mode</span>
         </button>
 
-        <SidebarLink icon={<Settings size={14} />} label="Settings" active={viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />
+        <SidebarLink icon={<Settings size={14} />} label="Settings" active={isViewModeReady && viewMode === 'settings'} onClick={() => { setViewMode('settings'); setSelectedFilter('All'); }} />
         <button onClick={handleLogout} className="w-full flex items-center gap-2 px-3 py-2 rounded-[2px] text-gray-300 hover:bg-red-600/20 hover:text-red-400 transition-all group font-bold">
           <LogOut size={14} />
           <span className="text-[11px]">Log Out</span>

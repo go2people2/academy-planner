@@ -1984,6 +1984,12 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                  data-student-id={student.id}
                  data-col-id={colId}
                  readOnly={isLockActive}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                }}
                 onKeyDown={(e) => {
                   if (((e.ctrlKey || e.metaKey) && e.key === '/') || (e.altKey && e.key === 'Enter')) {
                     e.preventDefault();

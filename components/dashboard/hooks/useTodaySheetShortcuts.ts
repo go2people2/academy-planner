@@ -645,7 +645,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             setEditingCell(null);
           }
         }
-      } else if (e.key === 'Enter' || e.key === 'Tab') {
+      } else if ((e.key === 'Enter' && !e.shiftKey) || e.key === 'Tab') {
         setEditingCell(null);
       }
 

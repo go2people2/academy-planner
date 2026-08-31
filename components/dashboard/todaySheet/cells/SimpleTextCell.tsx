@@ -53,6 +53,12 @@ export const SimpleTextCell = React.forwardRef<HTMLTextAreaElement, SimpleTextCe
           defaultValue={currentText || ''} 
           data-student-id={student.id}
           data-col-id={colId}
+          onMouseDown={(e) => {
+            e.stopPropagation();
+          }}
+          onClick={(e) => {
+            e.stopPropagation();
+          }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
               const saveVal = draftRef.current ?? (e.target as HTMLTextAreaElement).value;

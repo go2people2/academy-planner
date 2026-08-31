@@ -75,6 +75,7 @@ export interface TodaySheetProps {
   isFullScreen?: boolean;
   onToggleFullScreen?: any;
   selectedHour?: string;
+  isFilterReady?: boolean;
   isLight?: boolean;
   onNavigateTab?: (mode: string | AbsenceLinkContext) => void;
   onRefreshAbsenceSession?: (context: {
@@ -101,6 +102,7 @@ export default function TodaySheet({
   isFullScreen = false,
   onToggleFullScreen,
   selectedHour = 'All',
+  isFilterReady = true,
   isLight = false,
   onNavigateTab,
   onRefreshAbsenceSession,
@@ -1711,16 +1713,22 @@ export default function TodaySheet({
                   <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
 
                   {/* 담당 선생님 필터 (라벨 제거) */}
-                  <select
-                    value={selectedTeacherId}
-                    onChange={(e) => setSelectedTeacherId(e.target.value)}
-                    className={`border rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-blue-500 ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-black border-white/10 text-white [color-scheme:dark]'}`}
-                  >
-                    <option value="All">전체 선생님</option>
-                    {teachers.map((t: any) => (
-                      <option key={t.id} value={t.id}>{t.name} ({t.initials || '?'})</option>
-                    ))}
-                  </select>
+                  {!isFilterReady ? (
+                    <div className={`border rounded-[4px] px-2.5 py-1.5 h-[28px] flex items-center ${isLight ? 'bg-white border-[#e3e2e0]' : 'bg-black border-white/10'}`}>
+                      <div className={`h-2.5 w-16 rounded animate-pulse ${isLight ? 'bg-gray-200' : 'bg-white/10'}`} />
+                    </div>
+                  ) : (
+                    <select
+                      value={selectedTeacherId}
+                      onChange={(e) => setSelectedTeacherId(e.target.value)}
+                      className={`border rounded-[4px] px-2.5 py-1.5 text-[10px] font-bold outline-none focus:border-blue-500 ${isLight ? 'bg-white border-[#e3e2e0] text-[#37352f]' : 'bg-black border-white/10 text-white [color-scheme:dark]'}`}
+                    >
+                      <option value="All">전체 선생님</option>
+                      {teachers.map((t: any) => (
+                        <option key={t.id} value={t.id}>{t.name} ({t.initials || '?'})</option>
+                      ))}
+                    </select>
+                  )}
 
                   <div className={`h-4 w-px ${isLight ? 'bg-gray-300' : 'bg-white/10'}`} />
 
@@ -1914,7 +1922,19 @@ export default function TodaySheet({
         <table style={{ width: totalWidth, minWidth: '100%' }} className={`border-collapse table-fixed text-xs text-left ${isDragging ? 'select-none' : ''}`}>
           <thead><TodaySheetHeader colWidths={focusColWidths} activeColumns={activeColumns} onMouseDown={onMouseDown} onDoubleClick={handleDoubleClickResize} onSelectAll={handleSelectAll} onCycleSelectAll={handleCycleSelectAll} selectCycleMode={selectCycleMode} isAllSelected={filteredStudents.length > 0 && selectedIds.length === filteredStudents.length} onFocusColumn={setFocusColumn} focusColumn={focusColumn} onColumnReorder={handleColumnReorder} showAllTools={showAllTools} setShowAllTools={setShowAllTools} isToolsEditMode={isToolsEditMode} setIsToolsEditMode={setIsToolsEditMode} onAutofillManagementNotes={handleAutofillManagementNotes} onAutofillMission={handleAutofillMission} isLight={isLight} /></thead>
           <tbody className={isLight ? "divide-y divide-[#e3e2e0]" : "divide-y divide-white/10"}>
-            {(() => {
+            {!isFilterReady ? (
+              Array.from({ length: 4 }).map((_, idx) => (
+                <tr key={`loading-row-${idx}`} className="h-11 animate-pulse">
+                  <td colSpan={activeColumns.length} className={`px-4 py-3 text-center text-[10px] font-bold ${isLight ? 'text-gray-400 bg-gray-50/50' : 'text-zinc-600 bg-zinc-950/40'}`}>
+                    <div className="flex items-center justify-center gap-3">
+                      <div className={`h-2.5 rounded w-20 ${isLight ? 'bg-gray-200' : 'bg-white/10'}`} />
+                      <div className={`h-2.5 rounded w-48 ${isLight ? 'bg-gray-100' : 'bg-white/5'}`} />
+                      <div className={`h-2.5 rounded w-32 ${isLight ? 'bg-gray-200' : 'bg-white/10'}`} />
+                    </div>
+                  </td>
+                </tr>
+              ))
+            ) : (() => {
               const dayKey = getDayOfWeek(selectedDate);
 
               return filteredStudents.map((s: any, idx: number) => {

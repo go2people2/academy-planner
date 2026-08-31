@@ -145,16 +145,19 @@ export const filterStudentList = (params: {
     // 담당 선생님 필터
     if (selectedTeacherId !== 'All' && s.teacher_id !== selectedTeacherId) return false;
 
-    // 💡 [이중 가드] 정규 또는 특강 시간 중 단 하나라도 선택한 시간대와 맞물리면 통과시킵니다.
+    // 💡 [이중 가드] 정규 또는 특강 시작 시간 중 선택한 시간대와 맞물리면 통과시킵니다.
     if (filterTarget === 'today' && selectedHour !== 'All') {
       let matchHour = parseInt(selectedHour, 10);
       if (matchHour > 0 && matchHour < 10) matchHour += 12;
       
       const regHours = s.day_schedules?.[selectedDayKey] || [];
-      const hasRegMatch = regHours.some((hVal: number) => {
-        const m = scheduleValueToMinutes(hVal);
-        return m !== null && Math.floor(m / 60) === matchHour;
-      });
+      let hasRegMatch = false;
+      if (Array.isArray(regHours) && regHours.length > 0) {
+        const m = scheduleValueToMinutes(regHours[0]);
+        if (m !== null && Math.floor(m / 60) === matchHour) {
+          hasRegMatch = true;
+        }
+      }
 
       let hasElectiveMatch = false;
       const rawElective = s.book_courses?.['__elective_courses'];
@@ -165,12 +168,12 @@ export const filterStudentList = (params: {
             for (const c of courses) {
               if (c.days?.includes(selectedDayKey) && c.schedules?.[selectedDayKey]) {
                 const sched = c.schedules[selectedDayKey];
-                if (Array.isArray(sched)) {
-                  hasElectiveMatch = sched.some((hVal: number) => {
-                    const m = scheduleValueToMinutes(hVal);
-                    return m !== null && Math.floor(m / 60) === matchHour;
-                  });
-                  if (hasElectiveMatch) break;
+                if (Array.isArray(sched) && sched.length > 0) {
+                  const m = scheduleValueToMinutes(sched[0]);
+                  if (m !== null && Math.floor(m / 60) === matchHour) {
+                    hasElectiveMatch = true;
+                    break;
+                  }
                 }
               }
             }
@@ -231,7 +234,7 @@ export const filterStudentList = (params: {
 
 /**
  * TodaySheet 시간 필터(availableHours) 드롭다운 생성 전용 헬퍼
- * 기존 getStudentStartTime()을 전혀 건드리지 않고, 학생의 모든 활성 수업 시각(정규/선택과목/보강)을 배열로 추출합니다.
+ * 기존 getStudentStartTime()을 전혀 건드리지 않고, 학생의 모든 활성 수업 시작 시각(정규/선택과목/보강)을 배열로 추출합니다.
  */
 export const getStudentActiveHours = (student: any, dayKey: string, selectedDate?: string): number[] => {
   const hoursSet = new Set<number>();
@@ -243,17 +246,15 @@ export const getStudentActiveHours = (student: any, dayKey: string, selectedDate
     return (h >= 0 && h <= 24) ? h : null;
   };
 
-  // 1. 정규 수업 시간표 (당일 수업일인 경우)
+  // 1. 정규 수업 시간표 (당일 수업일인 경우, 시작 시각 [0]만 추가)
   const isRegularClassDay = (student.class_days || []).includes(dayKey);
   const regularHours = student.day_schedules?.[dayKey] || [];
-  if (isRegularClassDay && Array.isArray(regularHours)) {
-    regularHours.forEach((hVal: any) => {
-      const h = normalize(hVal);
-      if (h !== null) hoursSet.add(h);
-    });
+  if (isRegularClassDay && Array.isArray(regularHours) && regularHours.length > 0) {
+    const h = normalize(regularHours[0]);
+    if (h !== null) hoursSet.add(h);
   }
 
-  // 2. 선택과목(방학특강) 시간표 (기간 및 요일 활성 조건 검사)
+  // 2. 선택과목(방학특강) 시간표 (기간 및 요일 활성 조건 검사, 시작 시각 [0]만 추가)
   const rawElective = student.book_courses?.['__elective_courses'];
   if (rawElective) {
     try {
@@ -274,11 +275,9 @@ export const getStudentActiveHours = (student: any, dayKey: string, selectedDate
 
           if (hasDay && !isBefore && !isAfter) {
             const sched = c.schedules?.[dayKey];
-            if (Array.isArray(sched)) {
-              sched.forEach((hVal: any) => {
-                const h = normalize(hVal);
-                if (h !== null) hoursSet.add(h);
-              });
+            if (Array.isArray(sched) && sched.length > 0) {
+              const h = normalize(sched[0]);
+              if (h !== null) hoursSet.add(h);
             }
           }
         });
