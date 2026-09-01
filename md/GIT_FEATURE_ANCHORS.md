@@ -13,11 +13,25 @@
 | :--- | :--- | :---: | :---: | :--- |
 | **순환 출결 저장 & 롤백 차단** | '수업전' ➔ '출석' 클릭 후 1~2초 뒤 '수업전'으로 되돌아가지 않고 유지 | `00f7054` | 2026-09-01 | `page.tsx`, `useTodaySheetRowLogic.ts` |
 | **결석 사유 저장 & 팝오버 안정화** | 결석 팝오버에서 사유 입력 ➔ 저장 즉시 반영 및 재오픈/새로고침 후 보존 | `00f7054` | 2026-09-01 | `page.tsx`, `TodaySheetCell.tsx`, `useTodaySheetRowLogic.ts` |
+| **텍스트 셀 동기화 & 클립보드 잘라내기** | `Cmd+X` 즉시 비우기, 글자 삭제 후 Blur 시 내용 부활 방지, 편집 중 BS 보호 | `9c1e6ff` | 2026-09-01 | `SimpleTextCell.tsx`, `TodaySheetCell.tsx`, `useTodaySheetClipboard.ts` |
 | **순수 계약 & 세션 식별 (Phase 1)** | `SessionIdentity` 및 `SessionPatch` 타입/유틸 순수 추출 (동작 영향 0건) | `9a432ab` | 2026-09-01 | `types/sessionContract.ts`, `lib/sessionIdentity.ts` |
 
 ---
 
 ## 📝 커밋별 상세 앵커 로그 (Detail Anchor Log)
+
+### 🔹 [Commit: `9c1e6ff`] 텍스트 셀 동기화 및 클립보드 잘라내기(Cmd+X) 안정화
+* **등록 일자**: 2026-09-01
+* **해결 및 검증된 문제**:
+  1. **Cmd+X (잘라내기) 즉시 비우기**: 단일 셀(`activeCell`) 및 멀티셀(`selectedRange`)에서 `Cmd+X` 시 즉시 클립보드 복사 + 화면 셀 내용 `''` 클리어 + DB 배치 저장 완벽 작동.
+  2. **글자 삭제 후 Blur 시 부활 방지**: 텍스트 셀 내용을 백스페이스로 지우고 다른 셀 클릭(Blur) 시 이전 내용이 다시 나타나던 버그 해결 (`(e.currentTarget as HTMLTextAreaElement).value` 최우선 반영 및 draft 리셋).
+  3. **편집 중 Backspace 보호**: textarea 내부 편집 중에는 전역 단축키 간섭 없이 브라우저 네이티브 글자 단위 삭제 100% 보장.
+* **관련 파일**:
+  - `components/dashboard/hooks/useTodaySheetClipboard.ts`
+  - `components/dashboard/todaySheet/cells/SimpleTextCell.tsx`
+  - `components/dashboard/todaySheet/TodaySheetCell.tsx`
+  - `components/dashboard/hooks/useTodaySheetShortcuts.ts`
+  - `lib/todaySheetDomSync.ts`
 
 ### 🔹 [Commit: `00f7054`] 순환 출결 저장 분기 및 결석 사유/팝오버 안정화
 * **등록 일자**: 2026-09-01
