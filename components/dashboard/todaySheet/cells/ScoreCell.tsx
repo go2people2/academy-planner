@@ -11,7 +11,7 @@ interface ScoreCellProps {
   isActive: boolean;
   scoreInputRef?: (el: HTMLInputElement | null) => void;
   // 💡 단일 계약 고정: (updates, options?)
-  onSave: (updates: Record<string, any>, options?: { isBlur?: boolean }) => void; 
+  onSave: (updates: Record<string, any>, options?: { isBlur?: boolean; skipNextBlur?: boolean }) => void; 
   handleKeyDown: (e: React.KeyboardEvent, colId: string) => void;
   handleLocalInput: (e: React.FormEvent<HTMLInputElement>, field: string) => void;
   handleCellInteraction: (e: React.MouseEvent, colId: string, type: 'click' | 'dblclick') => void;
@@ -125,7 +125,7 @@ export const ScoreCell = React.memo(function ScoreCell({
                 const scoreVal = scoreDraftRef.current ?? (e.target as HTMLInputElement).value;
                 scoreDraftRef.current = undefined;
                 const totalVal = isCountMode ? (totalInputRef.current?.value || formData.test_total_count) : undefined;
-                onSave({ test_score: scoreVal, test_total_count: totalVal });
+                onSave({ test_score: scoreVal, test_total_count: totalVal }, { skipNextBlur: true });
               }
               handleKeyDown(e, colId);
             }} 

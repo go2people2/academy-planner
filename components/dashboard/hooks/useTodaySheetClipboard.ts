@@ -224,22 +224,30 @@ export function useTodaySheetClipboard({
     } catch (err) { console.error('Paste error:', err); }
   }, [activeCell, editingCell, activeColumns, selectedIds, filteredStudents, handleBatchSave, setStudents, setEditingCell]);
 
-  // 3. 잘라내기 핸들러 (선택 범위 복사 → 셀 비우기)
+  // 3. 잘라내기 핸들러 (선택 범위 또는 활성 셀 복사 → 셀 비우기)
   const handleCut = useCallback((e: ClipboardEvent) => {
     const target = e.target as HTMLElement;
     const isInput = ['INPUT', 'TEXTAREA'].includes(target.tagName);
+    // INPUT/TEXTAREA 내부에서 텍스트 일부가 마우스 드래그로 선택된 경우에만 브라우저 기본 잘라내기에 위임
     const hasSelection = isInput
       ? (target as HTMLInputElement | HTMLTextAreaElement).selectionStart !== (target as HTMLInputElement | HTMLTextAreaElement).selectionEnd
-      : !!(window.getSelection()?.toString().length);
+      : false;
 
-    if (hasSelection || !selectedRange) return;
+    const targetRange = selectedRange || (activeCell ? {
+      startStudentId: activeCell.studentId,
+      endStudentId: activeCell.studentId,
+      startColId: activeCell.columnId,
+      endColId: activeCell.columnId
+    } : null);
+
+    if (hasSelection || !targetRange) return;
 
     e.preventDefault();
 
-    const sIdx = filteredStudents.findIndex(s => s.id === selectedRange.startStudentId);
-    const eIdx = filteredStudents.findIndex(s => s.id === selectedRange.endStudentId);
-    const sColIdx = activeColumns.findIndex(c => c.id === selectedRange.startColId);
-    const eColIdx = activeColumns.findIndex(c => c.id === selectedRange.endColId);
+    const sIdx = filteredStudents.findIndex(s => s.id === targetRange.startStudentId);
+    const eIdx = filteredStudents.findIndex(s => s.id === targetRange.endStudentId);
+    const sColIdx = activeColumns.findIndex(c => c.id === targetRange.startColId);
+    const eColIdx = activeColumns.findIndex(c => c.id === targetRange.endColId);
 
     if (sIdx === -1 || eIdx === -1 || sColIdx === -1 || eColIdx === -1) return;
 
@@ -321,6 +329,20 @@ export function useTodaySheetClipboard({
         const update = updates.find(u => matchRowIdentity(s, u.studentId));
         return update ? { ...s, todaySession: { ...(s.todaySession || {}), ...update.newData } } : s;
       }));
+
+      // 💡 [즉시 화면 비우기] 현재 포커스된 엘리먼트가 대상 범위에 포함되어 있을 경우 동기적으로 value 클리어
+      if (document.activeElement && (document.activeElement.tagName === 'TEXTAREA' || document.activeElement.tagName === 'INPUT')) {
+        const activeEl = document.activeElement as HTMLTextAreaElement | HTMLInputElement;
+        const studentId = activeEl.getAttribute('data-student-id');
+        const colId = activeEl.getAttribute('data-col-id');
+        if (studentId && colId && updates.some(u => matchRowIdentity({ id: studentId }, u.studentId)) && targetColIds.includes(colId)) {
+          activeEl.value = '';
+          try {
+            activeEl.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (e) {}
+        }
+      }
+
       syncTodaySheetDom(updates, targetColIds, true);
       handleBatchSave(updates).finally(() => {
         setTimeout(() => {
@@ -330,7 +352,7 @@ export function useTodaySheetClipboard({
         }, 150);
       });
     }
-  }, [selectedRange, filteredStudents, activeColumns, setStudents, handleBatchSave]);
+  }, [activeCell, selectedRange, filteredStudents, activeColumns, setStudents, handleBatchSave]);
 
   return { handleCopy, handlePaste, handleCut };
 }

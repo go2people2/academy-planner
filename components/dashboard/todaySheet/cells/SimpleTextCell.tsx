@@ -61,22 +61,28 @@ export const SimpleTextCell = React.forwardRef<HTMLTextAreaElement, SimpleTextCe
           }}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
-              const saveVal = draftRef.current ?? (e.target as HTMLTextAreaElement).value;
+              if ((e.nativeEvent as any)?.isComposing) return;
+              const currentVal = (e.currentTarget as HTMLTextAreaElement).value;
+              const saveVal = currentVal !== undefined ? currentVal : (draftRef.current ?? '');
               draftRef.current = undefined;
-              onSave(colId, saveVal);
+              onSave(colId, saveVal, { skipNextBlur: true });
             }
             handleKeyDown(e, colId);
           }} 
           onBlur={(e) => {
-            const saveVal = draftRef.current ?? e.target.value;
+            const currentVal = (e.currentTarget as HTMLTextAreaElement).value;
+            const saveVal = currentVal !== undefined ? currentVal : (draftRef.current ?? '');
             draftRef.current = undefined;
             onSave(colId, saveVal, { isBlur: true });
           }} 
           placeholder="-" 
           className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`} 
           onInput={(e) => {
-            draftRef.current = (e.target as HTMLTextAreaElement).value;
+            draftRef.current = (e.currentTarget as HTMLTextAreaElement).value;
             handleLocalInput(e, colId);
+          }}
+          onChange={(e) => {
+            draftRef.current = (e.currentTarget as HTMLTextAreaElement).value;
           }} 
         />
       )}

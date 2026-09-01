@@ -35,7 +35,7 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
       animate={{ x: 0 }} 
       exit={{ x: '100%' }} 
       transition={{ type: 'spring', damping: 30, stiffness: 200 }} 
-      className={`fixed inset-y-0 right-0 w-[550px] backdrop-blur-3xl border-l shadow-2xl z-50 flex flex-col overflow-hidden transition-all ${
+      className={`fixed inset-y-0 right-0 w-[550px] backdrop-blur-3xl border-l shadow-2xl z-[90] flex flex-col overflow-hidden transition-all ${
         isLight 
           ? 'bg-white border-gray-250 shadow-gray-400/20 text-[#37352f]' 
           : 'bg-[#080808]/98 border-white/10 shadow-blue-900/10 text-white'
@@ -151,6 +151,46 @@ function TabButton({ active, onClick, icon, label, isLight = false }: any) {
   );
 }
 
+// 💡 결석 및 지각 사유 추출 헬퍼
+// special_notes(숙제 평가/칭찬)는 사유에서 완전히 제외
+// 1순위: log.attendance_reason (DB 결석 사유)
+// 2순위: log.completed_classwork_text 또는 log.classwork_text 내 출결 키워드가 포함된 메모
+// 3순위: '사유 미기재'
+const extractAttendanceReason = (log: any): string => {
+  if (!log) return '사유 미기재';
+
+  // 1순위: DB 전용 결석/지각 사유
+  const directReason = (log.attendance_reason || '').replace(/\[보강완료\]/g, '').trim();
+  if (directReason) return directReason;
+
+  // 2순위: 수행진도 / 진도 텍스트에서 출결 맥락이 있는 메모 탐색
+  const candidates = [
+    log.completed_classwork_text,
+    log.classwork_text
+  ];
+
+  const keywords = [
+    '결석', '지각', '조퇴', '병원', '진료', '학교 행사', '가족 행사', '개인 사정',
+    '감기', '몸살', '아픔', '외출', '휴가', '코로나', '독감', '사정'
+  ];
+
+  for (const text of candidates) {
+    if (!text || typeof text !== 'string') continue;
+    const cleanText = text.replace(/\[보강완료\]/g, '').trim();
+    if (!cleanText) continue;
+
+    const lines = cleanText.split('\n').map(l => l.trim()).filter(Boolean);
+    for (const line of lines) {
+      if (keywords.some(kw => line.includes(kw))) {
+        return line;
+      }
+    }
+  }
+
+  // 3순위: 사유 미기재 (일반 진도, 숙제 평가, 특이사항은 결석 사유로 사용 금지)
+  return '사유 미기재';
+};
+
 function SummaryTab({ student, stats, availableTextbooks, isLight }: any) {
   // 💡 [원장님 기획] 학생의 전체 로그 중 '결석' 상태인 로그들만 추출하여 최신 날짜 순으로 정렬합니다.
   const absenceLogs = useMemo(() => {
@@ -202,7 +242,7 @@ function SummaryTab({ student, stats, availableTextbooks, isLight }: any) {
             <div className="max-h-[180px] overflow-y-auto custom-scrollbar-v pr-1 space-y-2">
               {absenceLogs.map((log: any, idx: number) => {
                 const displayDate = log.date || log.session_date || '';
-                const reason = log.attendance_reason || log.special_notes || '사유 미기재';
+                const reason = extractAttendanceReason(log);
                 return (
                   <div 
                     key={`absence-${displayDate}-${idx}`} 
@@ -531,13 +571,6 @@ function StatsTab({ student, onRefreshStudents, isLight = false }: { student: St
     }
   };
 
-  // 3. 보강완료 텍스트 제거하고 순수 사유만 추출하는 헬퍼
-  const getPureReason = (notes: string) => {
-    if (!notes) return '사유 미기재';
-    const clean = notes.replace('[보강완료]', '').trim();
-    return clean || '사유 미기재';
-  };
-
   return (
     <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-10">
       {/* 테스트 점수 추이 */}
@@ -578,8 +611,8 @@ function StatsTab({ student, onRefreshStudents, isLight = false }: { student: St
             }`}>
               {attendanceLogs.map((log: any) => {
                 const isAbsent = log.attendance_status === '결석';
-                const isMakeupCompleted = log.special_notes?.includes('[보강완료]');
-                const pureReason = getPureReason(log.special_notes || '');
+                const isMakeupCompleted = log.special_notes?.includes('[보강완료]') || log.attendance_reason?.includes('[보강완료]');
+                const pureReason = extractAttendanceReason(log);
                 const isUpdating = updatingLogId === log.id;
 
                 return (

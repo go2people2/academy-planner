@@ -1999,20 +1999,26 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     return;
                   }
                   if (e.key === 'Enter' && !e.shiftKey) {
-                    const saveVal = draftValuesRef.current[colId] ?? (e.target as HTMLTextAreaElement).value;
+                    if ((e.nativeEvent as any)?.isComposing) return;
+                    const currentVal = (e.currentTarget as HTMLTextAreaElement).value;
+                    const saveVal = currentVal !== undefined ? currentVal : (draftValuesRef.current[colId] ?? '');
                     delete draftValuesRef.current[colId];
-                    onSave(colId, saveVal);
+                    onSave(colId, saveVal, { skipNextBlur: true });
                   }
                   handleKeyDown(e, colId);
                 }}
                 onBlur={(e) => {
-                  const saveVal = draftValuesRef.current[colId] ?? e.target.value;
+                  const currentVal = (e.currentTarget as HTMLTextAreaElement).value;
+                  const saveVal = currentVal !== undefined ? currentVal : (draftValuesRef.current[colId] ?? '');
                   delete draftValuesRef.current[colId];
                   onSave(colId, saveVal, { isBlur: true });
                 }}
                 placeholder="-"
                 className={`${commonTextStyle} bg-transparent resize-none overflow-y-hidden block relative z-20`}
                 onInput={(e) => handleLocalInput(e, colId)}
+                onChange={(e) => {
+                  draftValuesRef.current[colId] = (e.currentTarget as HTMLTextAreaElement).value;
+                }}
               />
             )}
 

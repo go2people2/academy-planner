@@ -276,8 +276,8 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
     const handleGlobalKeyDown = (e: KeyboardEvent) => {
       if (e.isComposing || e.keyCode === 229) return;
-      const target = document.activeElement as HTMLElement;
-      const isInput = ['INPUT', 'TEXTAREA'].includes(target.tagName);
+      const target = (e.target || document.activeElement) as HTMLElement;
+      const isInput = ['INPUT', 'TEXTAREA'].includes(target?.tagName || '') || Boolean(target?.isContentEditable);
       
       // Undo / Redo 단축키 감지 (Cmd+Z, Cmd+Y, Cmd+Shift+Z)
       const isCmdOrCtrl = e.metaKey || e.ctrlKey;
@@ -382,9 +382,15 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       }
 
       // Backspace / Delete (단일 및 다중 셀 삭제)
+      const isDeleteKey = e.key === 'Backspace' || e.key === 'Delete';
+
+      // 💡 [입력창 편집 모드 완전 보호] INPUT/TEXTAREA/contentEditable 내부 편집 중일 때는 전역 단축키 개입 금지 (e.preventDefault 절대 호출 금지)
+      if (isDeleteKey && isInput) {
+        return;
+      }
+
       const currentRange = selectedRangeRef.current || selectedRange;
-      const isMultiCell = !!currentRange && (String(currentRange.startStudentId) !== String(currentRange.endStudentId) || String(currentRange.startColId) !== String(currentRange.endColId));
-      const shouldDelete = (e.key === 'Backspace' || e.key === 'Delete') && (isMultiCell || (!isInput && (currentRange || activeCell)));
+      const shouldDelete = isDeleteKey && !isInput && (currentRange || activeCell);
       if (shouldDelete) {
         e.preventDefault();
         const targetRange = currentRange || (activeCell ? {
@@ -429,12 +435,17 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
 
           const updates: any[] = [];
 
-          // 💡 [수정] 삭제 대상 컬럼 ID들 미리 추출
+          // 💡 [수정] 삭제 대상 컬럼 ID들 추출 (읽기 전용 및 보호 컬럼 제외 - 출석 attendance 보호)
+          const readOnlyCols = ['select', 'name', 'action', 'attendance', 'review', 'date', 'tools'];
           const targetColIds: string[] = [];
           for (let c = cMin; c <= cMax; c++) {
             const colId = activeColumns[c].id;
-            if (COLUMN_TO_FIELD_MAP[colId]) targetColIds.push(colId);
+            if (!readOnlyCols.includes(colId) && COLUMN_TO_FIELD_MAP[colId]) {
+              targetColIds.push(colId);
+            }
           }
+
+          if (targetColIds.length === 0) return;
 
           for (let r = rMin; r <= rMax; r++) {
             const st = filteredStudents[r];

@@ -34,6 +34,9 @@ export const syncTodaySheetDom = (
             el.style.height = 'auto';
             el.style.height = `${el.scrollHeight}px`;
           }
+          try {
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+          } catch (e) {}
         }
       });
     });
