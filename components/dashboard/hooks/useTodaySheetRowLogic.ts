@@ -218,6 +218,7 @@ export function useTodaySheetRowLogic({
 
     return {
       attendance_status: normalizeAttendanceStatus(session?.attendance_status),
+      attendance_reason: session?.attendance_reason || '',
       status: session?.status || 'none',
       special_notes: translateBookCodes(session?.special_notes || ''),
       classwork_text: translateBookCodes(session?.classwork_text || ''),
@@ -275,7 +276,12 @@ export function useTodaySheetRowLogic({
       // 외부에서 내려온 확정 업데이트(Delete, Paste 등)는 비편집 셀에 즉시 반영
       if (!isUserTyping && !hasLocalPending) {
         const newData = getInitialFormData(selectedDate);
+        // 💡 [출결 메아리 방지] 출결 저장이 진행 중인 동안은 부모의 중간 상태로 attendance_status를 덮어쓰지 않음
+        if (isAttendanceSavingRef.current || recentlySavedRef.current) {
+          newData.attendance_status = formDataRef.current?.attendance_status ?? formData.attendance_status;
+        }
         setFormData(newData);
+        formDataRef.current = newData;
         prevSessionRef.current = student.todaySession;
       }
     }
@@ -285,18 +291,25 @@ export function useTodaySheetRowLogic({
   const skipBlurRef = useRef(false);
   const recentlySavedRef = useRef(false);
   const isSavingRef = useRef(false);
+  const isAttendanceSavingRef = useRef(false);
+  const isAttendanceSaveRunRef = useRef(false);
   const pendingUpdatesRef = useRef<Record<string, any>>({});
+  const formDataRef = useRef<any>(formData);
+
+  useEffect(() => {
+    formDataRef.current = formData;
+  }, [formData]);
 
   // 5. Handlers
   // 💡 [하이브리드 계약] handleSave(updatesOrField, valueOrOptions?, maybeOptions?)
   const handleSave = useCallback(async (updatesOrField: Record<string, any> | string, valueOrOptions?: any, maybeOptions?: any): Promise<boolean> => {
     // 0. 계약 분석 및 데이터 정규화
     let finalUpdates: Record<string, any> = {};
-    let options: { isBlur?: boolean } = {};
+    let options: { isBlur?: boolean; skipNextBlur?: boolean } = {};
 
     if (typeof updatesOrField === 'string') {
       // ✅ [공용 계약 유지] onSave(colId, value, options?)
-      const fieldMap: any = { attendance: 'attendance_status', attendance_status: 'attendance_status', test_id: 'test_id', classwork: 'classwork_text', completed_classwork: 'completed_classwork_text', assign: 'homework_text', next_quiz: 'next_quiz_text', mission: 'mission', notes: 'special_notes', management_notes: 'management_notes', test_score: 'test_score', test_total_count: 'test_total_count' };
+      const fieldMap: any = { attendance: 'attendance_status', attendance_status: 'attendance_status', test_id: 'test_id', classwork: 'classwork_text', completed_classwork: 'completed_classwork_text', assign: 'homework_text', next_quiz: 'next_quiz_text', mission: 'mission', notes: 'special_notes', management_notes: 'management_notes', test_score: 'test_score', test_total_count: 'test_total_count', attendance_reason: 'attendance_reason' };
       const dbKey = fieldMap[updatesOrField] || updatesOrField;
       finalUpdates = { [dbKey]: valueOrOptions };
       options = maybeOptions || {};
@@ -317,14 +330,18 @@ export function useTodaySheetRowLogic({
     // 💡 [대기열 큐 보호] 이전 저장이 진행 중일 때 들어온 새 blur/입력값은 버리지 않고 누적 대기
     if (isSavingRef.current) {
       pendingUpdatesRef.current = { ...pendingUpdatesRef.current, ...finalUpdates };
+      formDataRef.current = { ...formDataRef.current, ...finalUpdates };
       setFormData((prev: any) => ({ ...prev, ...finalUpdates }));
       return true;
     }
 
+    // 2. 저장 루프 시작 (Stale Closure 방지: 단일 비동기 실행 루프 안에서 큐 소비)
+    isSavingRef.current = true;
     recentlySavedRef.current = true;
-
-    // 2. DOM 병합 배제 (Refs 수집을 걷어내고 오직 전달된 업데이트 정보만 단독 저장)
-    const mergedUpdates = { ...finalUpdates };
+    setIsSaving(true);
+    if (options?.skipNextBlur === true) {
+      skipBlurRef.current = true; // 명시적인 키보드 Enter/Tab 저장 시에만 blur 스킵 활성화
+    }
 
     // 💡 [정교화] 범위(range)나 유닛(units)이 비어있는 가짜/빈 교재 항목 필터링 제거
     const sanitizeBookJson = (jsonArr: any[] | undefined) => {
@@ -337,108 +354,138 @@ export function useTodaySheetRowLogic({
       });
     };
 
-    if ('classwork_json' in mergedUpdates) mergedUpdates.classwork_json = sanitizeBookJson(mergedUpdates.classwork_json);
-    if ('completed_classwork_json' in mergedUpdates) mergedUpdates.completed_classwork_json = sanitizeBookJson(mergedUpdates.completed_classwork_json);
-    if ('homework_json' in mergedUpdates) mergedUpdates.homework_json = sanitizeBookJson(mergedUpdates.homework_json);
-    if ('next_quiz_json' in mergedUpdates) mergedUpdates.next_quiz_json = sanitizeBookJson(mergedUpdates.next_quiz_json);
+    let currentUpdates: Record<string, any> | null = { ...finalUpdates };
+    let overallSuccess = true;
 
-    const finalData = { ...formData, ...mergedUpdates };
-    const initial = getInitialFormData(rowDate);
-
-    // 💡 [개선] 출결 상태는 오직 출결 관련 액션에서만 저장되도록 보호
-    // 명시적으로 mergedUpdates에 attendance_status가 포함된 경우에만 payload에 포함
-    const isAttendanceUpdate = 'attendance_status' in mergedUpdates;
-    const isExplicitMovedHourUpdate = 'moved_to_hour' in mergedUpdates;
-
-    const savePayload: any = { ...mergedUpdates };
-
-    // 일반 필드 저장 시 attendance_status가 payload에 포함되지 않도록 제거
-    if (!isAttendanceUpdate) {
-      delete savePayload.attendance_status;
-    }
-
-    const hasChange = isExplicitMovedHourUpdate || Object.keys(mergedUpdates).some(key => {
-      const fVal = (finalData as any)[key];
-      const iVal = (initial as any)[key];
-      if (typeof fVal === 'boolean' || typeof iVal === 'boolean') return fVal !== iVal;
-      return String(fVal || '') !== String(iVal || '');
-    });
-    if (!hasChange) return false;
-
-    // 3. 저장 실행 및 플래그 설정
-    isSavingRef.current = true;
-    setIsSaving(true);
-    if (!isBlurCall) skipBlurRef.current = true; // 키보드 저장 시 플래그 활성화
-
-    setFormData(finalData);
-
-    // 💡 [원장님 특별 피드백 반영 - 실시간 DOM 밸류 수동 동기화]
-    if ('completed_classwork_text' in mergedUpdates && ccwRef.current) {
-      ccwRef.current.value = mergedUpdates.completed_classwork_text || '';
-    }
-    if ('special_notes' in mergedUpdates && notesRef.current) {
-      notesRef.current.value = mergedUpdates.special_notes || '';
-    }
-    if ('classwork_text' in mergedUpdates && cwRef.current) {
-      cwRef.current.value = mergedUpdates.classwork_text || '';
-    }
-    if ('homework_text' in mergedUpdates && hwRef.current) {
-      hwRef.current.value = mergedUpdates.homework_text || '';
-    }
-    if ('next_quiz_text' in mergedUpdates && nqRef.current) {
-      nqRef.current.value = mergedUpdates.next_quiz_text || '';
-    }
-    if ('test_id' in mergedUpdates && testRef.current) {
-      testRef.current.value = mergedUpdates.test_id || '';
-    }
-    if ('mission' in mergedUpdates && missionRef.current) {
-      missionRef.current.value = mergedUpdates.mission || '';
-    }
-    if ('management_notes' in mergedUpdates && managementNotesRef.current) {
-      managementNotesRef.current.value = mergedUpdates.management_notes || '';
-    }
-
-    const payloadKeys = Object.keys(savePayload);
-    const saveType = isAttendanceUpdate ? 'ATTENDANCE' : 'GENERAL_INFO';
-    console.debug(`[SAVE][${saveType}] student: ${student.name}, fields:`, payloadKeys);
-
-    let success = false;
     try {
-      success = await onSave(student.id, savePayload);
+      while (currentUpdates && Object.keys(currentUpdates).length > 0) {
+        const mergedUpdates = { ...currentUpdates };
+        currentUpdates = null;
+
+        if ('classwork_json' in mergedUpdates) mergedUpdates.classwork_json = sanitizeBookJson(mergedUpdates.classwork_json);
+        if ('completed_classwork_json' in mergedUpdates) mergedUpdates.completed_classwork_json = sanitizeBookJson(mergedUpdates.completed_classwork_json);
+        if ('homework_json' in mergedUpdates) mergedUpdates.homework_json = sanitizeBookJson(mergedUpdates.homework_json);
+        if ('next_quiz_json' in mergedUpdates) mergedUpdates.next_quiz_json = sanitizeBookJson(mergedUpdates.next_quiz_json);
+
+        const latestData = { ...formDataRef.current, ...mergedUpdates };
+        formDataRef.current = latestData;
+        setFormData(latestData);
+
+        const initial = getInitialFormData(rowDate);
+
+        const isAttendanceUpdate = 'attendance_status' in mergedUpdates;
+        const isExplicitMovedHourUpdate = 'moved_to_hour' in mergedUpdates;
+
+        const savePayload: any = { ...mergedUpdates };
+
+        if (!isAttendanceUpdate) {
+          delete savePayload.attendance_status;
+        }
+
+        const normVal = (v: any) => (v === null || v === undefined ? '' : String(v).trim());
+        const hasChange = isExplicitMovedHourUpdate || Object.keys(mergedUpdates).some(key => {
+          const fVal = (latestData as any)[key];
+          const iVal = (initial as any)[key];
+          if (typeof fVal === 'boolean' || typeof iVal === 'boolean') return Boolean(fVal) !== Boolean(iVal);
+          if (Array.isArray(fVal) || Array.isArray(iVal)) return JSON.stringify(fVal || []) !== JSON.stringify(iVal || []);
+          if (typeof fVal === 'object' || typeof iVal === 'object') return JSON.stringify(fVal || {}) !== JSON.stringify(iVal || {});
+          return normVal(fVal) !== normVal(iVal);
+        });
+
+        if (hasChange) {
+          // 💡 [실시간 DOM 밸류 수동 동기화]
+          if ('completed_classwork_text' in mergedUpdates && ccwRef.current) {
+            ccwRef.current.value = mergedUpdates.completed_classwork_text || '';
+          }
+          if ('special_notes' in mergedUpdates && notesRef.current) {
+            notesRef.current.value = mergedUpdates.special_notes || '';
+          }
+          if ('classwork_text' in mergedUpdates && cwRef.current) {
+            cwRef.current.value = mergedUpdates.classwork_text || '';
+          }
+          if ('homework_text' in mergedUpdates && hwRef.current) {
+            hwRef.current.value = mergedUpdates.homework_text || '';
+          }
+          if ('next_quiz_text' in mergedUpdates && nqRef.current) {
+            nqRef.current.value = mergedUpdates.next_quiz_text || '';
+          }
+          if ('test_id' in mergedUpdates && testRef.current) {
+            testRef.current.value = mergedUpdates.test_id || '';
+          }
+          if ('mission' in mergedUpdates && missionRef.current) {
+            missionRef.current.value = mergedUpdates.mission || '';
+          }
+          if ('management_notes' in mergedUpdates && managementNotesRef.current) {
+            managementNotesRef.current.value = mergedUpdates.management_notes || '';
+          }
+
+          const payloadKeys = Object.keys(savePayload);
+          const saveType = isAttendanceUpdate ? 'ATTENDANCE' : 'GENERAL_INFO';
+          console.debug(`[SAVE][${saveType}] student: ${student.name}, fields:`, payloadKeys);
+
+          const saveSuccess = await onSave(student.id, savePayload);
+          if (!saveSuccess) {
+            overallSuccess = false;
+          }
+        }
+
+        // 저장 수행 도중 들어온 새 pendingUpdates가 있다면 루프 다음 턴으로 소비
+        if (Object.keys(pendingUpdatesRef.current).length > 0) {
+          currentUpdates = { ...pendingUpdatesRef.current };
+          pendingUpdatesRef.current = {};
+        }
+      }
     } catch (err) {
       console.error('Failed to save student data:', err);
+      overallSuccess = false;
     } finally {
       isSavingRef.current = false;
       setIsSaving(false);
 
-      // 💡 [대기열 후속 처리] 저장 중 누적된 변경사항이 있다면 즉시 후속 저장 실행
+      // 💡 [출결 잠금 해제] 출석 저장 루프 전체(pending queue 포함)가 완전히 끝난 시점에만 출석 잠금 해제
+      if (isAttendanceSaveRunRef.current) {
+        isAttendanceSaveRunRef.current = false;
+        isAttendanceSavingRef.current = false;
+      }
+
+      // 💡 [finally 경계 레이스 방지] 루프 종료 직후 finally 해제 시점에 쌓인 대기열이 있다면 즉시 후속 루프 트리거
       if (Object.keys(pendingUpdatesRef.current).length > 0) {
-        const queuedUpdates = { ...pendingUpdatesRef.current };
+        const remainingUpdates = { ...pendingUpdatesRef.current };
         pendingUpdatesRef.current = {};
-        handleSave(queuedUpdates);
+        handleSave(remainingUpdates);
       }
     }
 
+    if (!overallSuccess) {
+      // 💡 [저장 실패 복구] 저장 실패 시 서버의 최신 확정 데이터로 폼 롤백
+      const rollbackData = getInitialFormData(rowDate);
+      formDataRef.current = rollbackData;
+      setFormData(rollbackData);
+      isAttendanceSaveRunRef.current = false;
+      isAttendanceSavingRef.current = false;
+    }
+
+    setSaveStatus(overallSuccess ? 'success' : 'error');
     setTimeout(() => {
+      setSaveStatus('idle');
       recentlySavedRef.current = false;
-      if (prevSessionRef.current !== student.todaySession) {
-        const isUserTyping = editingCell?.studentId === student.id || (student.originalId && editingCell?.studentId === student.originalId);
-        if (!isUserTyping && Object.keys(pendingUpdatesRef.current).length === 0 && !isSavingRef.current) {
-          const newData = getInitialFormData(rowDate);
-          setFormData(newData);
-          prevSessionRef.current = student.todaySession;
-        }
-      }
-    }, 1500);
-    setSaveStatus(success ? 'success' : 'error');
-    setTimeout(() => setSaveStatus('idle'), 2000);
-    return success;
-  }, [formData, rowDate, student.id, onSave, onUpdateStudentInfo, getInitialFormData]);
+    }, 2000);
+
+    return overallSuccess;
+  }, [rowDate, student.id, student.name, onSave, onUpdateStudentInfo, getInitialFormData]);
 
   const handleAttendanceToggle = (e: React.MouseEvent) => {
     e.stopPropagation();
 
-    const currentStatus = formData.attendance_status;
+    // 💡 [출결 저장 잠금] 이전 출결 저장이 완료될 때까지 연속 클릭 완벽 차단 (UI 깜빡임 없는 순수 ref 가드)
+    if (isAttendanceSavingRef.current) return;
+
+    isAttendanceSavingRef.current = true;
+    isAttendanceSaveRunRef.current = true;
+
+    // 💡 [빠른 연타 보호] 렌더 클로저의 formData 대신 항상 최신 formDataRef.current를 기준으로 다음 상태 순환
+    const currentLatest = formDataRef.current || formData;
+    const currentStatus = currentLatest.attendance_status;
     let nextStatus: string;
 
     let timeSuffix = '';
@@ -458,13 +505,15 @@ export function useTodaySheetRowLogic({
       nextStatus = ATTENDANCE_STATUS.PRESENT + timeSuffix; // 보강, 수업전, 기타 빈 상태 ➡️ 출석으로 첫 순환 개시
     }
 
-    const isMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || String(student.id || '').includes('_makeup_') || formData.is_pure_makeup === true;
+    const isMakeup = student.isMakeupRow || (student as any).__courseType === 'makeup' || String(student.id || '').includes('_makeup_') || currentLatest.is_pure_makeup === true;
 
     const extraUpdate: any = {
       attendance_status: nextStatus,
       is_pure_makeup: isMakeup ? true : false,
     };
 
+    // 💡 클릭 즉시 formDataRef와 React state를 0ms 지연으로 최신화
+    formDataRef.current = { ...currentLatest, ...extraUpdate };
     setFormData((prev: any) => ({ ...prev, ...extraUpdate }));
     handleSave(extraUpdate);
   };

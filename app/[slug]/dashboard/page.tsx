@@ -942,15 +942,37 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         }
       }
 
-      // 💡 [개선] PKEY 충돌 방지 및 안전한 upsert 갱신
-      const conflictKeys = payload.id ? 'id' : 'student_id,session_date,course_name,moved_to_hour';
-      const { data: savedLog, error } = await supabase
-        .from('ams_session_logs')
-        .upsert([payload], { onConflict: conflictKeys })
-        .select()
-        .maybeSingle();
+      let savedLog: any = null;
+      if (targetId) {
+        payload.id = targetId;
+        const { data, error } = await supabase
+          .from('ams_session_logs')
+          .update(payload)
+          .eq('id', targetId)
+          .select()
+          .maybeSingle();
 
-      if (error) throw error;
+        if (error) {
+          console.error('[saveTodaySession] update error:', error);
+          throw error;
+        }
+        savedLog = data;
+      } else {
+        if (!('attendance_status' in filteredData)) {
+          payload.attendance_status = null;
+        }
+        const { data, error } = await supabase
+          .from('ams_session_logs')
+          .insert([payload])
+          .select()
+          .maybeSingle();
+
+        if (error) {
+          console.error('[saveTodaySession] insert error:', error);
+          throw error;
+        }
+        savedLog = data;
+      }
 
       if (savedLog) {
         setStudents(prev => prev.map(s => {
@@ -2483,7 +2505,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           )
         )}
       </AnimatePresence>
-      <AnimatePresence>{selectedStudentId && !isBatchMode && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedStudentId(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-40" />)}</AnimatePresence>
+      <AnimatePresence>{selectedStudentId && !isBatchMode && (<motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} onClick={() => setSelectedStudentId(null)} className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[80]" />)}</AnimatePresence>
       {isApprovalModalOpen && (
         <ApprovalModal
           pendingStudents={pendingSubmissions}
