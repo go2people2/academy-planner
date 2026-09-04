@@ -573,7 +573,7 @@ export default function MasterDashboard() {
                       <span className="text-[9px] text-gray-400 font-bold block mb-1">사용 가능한 AI 엔진</span>
                       {[
                         { id: 'openai', label: 'OpenAI (GPT-4o)' },
-                        { id: 'gemini', label: 'Google (Gemini 1.5 Pro)' }
+                        { id: 'gemini', label: 'Google (Gemini 3.5 Flash)' }
                       ].map((model) => {
                         const isChecked = editAiSettings.active_models.includes(model.id);
                         return (
@@ -622,7 +622,7 @@ export default function MasterDashboard() {
                           <option value="openai" className="bg-[#121212]">OpenAI (GPT-4o)</option>
                         )}
                         {editAiSettings.active_models.includes('gemini') && (
-                          <option value="gemini" className="bg-[#121212]">Google (Gemini 1.5 Pro)</option>
+                          <option value="gemini" className="bg-[#121212]">Google (Gemini 3.5 Flash)</option>
                         )}
                       </select>
                     </div>

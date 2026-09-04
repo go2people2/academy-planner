@@ -108,10 +108,16 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    const currentAiSettings = currentAc?.operation_settings?.ai_settings || {};
+    const nextAiSettings = body.aiSettings ? {
+      ...currentAiSettings,
+      ...(typeof body.aiSettings === 'object' ? body.aiSettings : {})
+    } : currentAiSettings;
+
     const nextSettings = {
       ...(currentAc?.operation_settings || {}),
       is_suspended: body.isSuspended === true,
-      ai_settings: body.aiSettings || null,
+      ai_settings: nextAiSettings,
       features: nextFeatures
     };
 

@@ -232,8 +232,9 @@ ${formattedExams || '기록된 정기 고사 성적이 없습니다.'}
         return NextResponse.json({ error: 'Google Gemini API 키가 설정되지 않았습니다. .env.local 파일을 확인해 주세요.' }, { status: 500 });
       }
 
-      // Gemini 1.5 Pro API direct fetch 호출
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`;
+      // Google Gemini API direct fetch 호출 (gemini-3.5-flash-lite)
+      const targetGeminiModel = 'gemini-3.5-flash-lite';
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetGeminiModel}:generateContent?key=${apiKey}`;
       const geminiRes = await fetch(geminiUrl, {
         method: 'POST',
         headers: {
@@ -256,7 +257,8 @@ ${formattedExams || '기록된 정기 고사 성적이 없습니다.'}
 
       if (!geminiRes.ok) {
         const errorData = await geminiRes.json().catch(() => ({}));
-        throw new Error(errorData.error?.message || `Gemini API 호출 에러: ${geminiRes.status}`);
+        console.error('Gemini API Error details:', { status: geminiRes.status, model: targetGeminiModel, message: errorData.error?.message });
+        throw new Error(`Gemini 브리핑 연결에 실패했습니다. (상태 코드: ${geminiRes.status})`);
       }
 
       const geminiData = await geminiRes.json();
@@ -272,7 +274,7 @@ ${formattedExams || '기록된 정기 고사 성적이 없습니다.'}
     });
 
   } catch (error: any) {
-    console.error('❌ [Briefing API Error]:', error);
+    console.error('❌ [Briefing API Error]:', error.message || error);
     return NextResponse.json({
       error: error.message || '상담 브리핑 생성 중 알 수 없는 오류가 발생했습니다.'
     }, { status: 500 });
