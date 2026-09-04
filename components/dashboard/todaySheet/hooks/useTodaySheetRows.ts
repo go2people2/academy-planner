@@ -341,9 +341,12 @@ export function useTodaySheetRows({
           } catch (e) {}
         }
 
-        const hasScheduleToday = (Array.isArray(s.day_schedules?.[dayKey]) && s.day_schedules[dayKey].length > 0) ||
-                                 (Array.isArray(s.day_schedules?.[`${dayKey}요일`]) && s.day_schedules[`${dayKey}요일`].length > 0);
-        const isRegularClassDay = (s.class_days || []).some((d: string) => d.trim() === dayKey || d.trim() === `${dayKey}요일`) || hasScheduleToday;
+        // 💡 [정규 등원 판정 단일 원칙] 오직 class_days에 등록된 요일만 정규 수업일로 판정 (day_schedules의 잔여 키로 인한 오작동 방지)
+        const isRegularClassDay = (s.class_days || []).some((d: string) => d.trim() === dayKey || d.trim() === `${dayKey}요일`);
+        const hasScheduleToday = isRegularClassDay && (
+          (Array.isArray(s.day_schedules?.[dayKey]) && s.day_schedules[dayKey].length > 0) ||
+          (Array.isArray(s.day_schedules?.[`${dayKey}요일`]) && s.day_schedules[`${dayKey}요일`].length > 0)
+        );
         const hasActiveMovedSession = !!movedRegularLog;
         const regularBaseSession = selectBaseSession(s.allLogs || [], selectedDate, academyInfo?.operation_settings?.holidays, '정규');
         const regularTodaySession = determineTodaySession(s, regularLog, regularBaseSession, isRegularClassDay, selectedDate, academyInfo);

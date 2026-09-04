@@ -213,7 +213,7 @@ export function useDashboardData(params: {
 
   const getFilteredBaseFields = (sessionData: any) => {
     const ALLOWED_COLUMNS = [
-      'status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 
+      'attendance_status', 'special_notes', 'classwork_text', 'classwork_json', 
       'completed_classwork_text', 'completed_classwork_json',
       'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 'approval_status', 
       'session_date', 'academy_id', 'student_id', 'homework_to', 'timer_started_at', 'timer_duration',
@@ -224,7 +224,7 @@ export function useDashboardData(params: {
       let dbKey = key === 'date' ? 'session_date' : key;
       if (dbKey === 'test_id') dbKey = 'test_status';
       
-      if (['next_quiz_text', 'next_quiz_cut', 'next_quiz_trial', 'next_quiz_json', 'test_result', 'homework_to', 'test_completed', 'test_cut', 'mission', 'todo_achievement', 'test_score_type', 'test_total_count', 'hw_checked_today', 'hw_passed_today'].includes(dbKey)) return;
+      if (['status', 'next_quiz_text', 'next_quiz_cut', 'next_quiz_trial', 'next_quiz_json', 'test_result', 'homework_to', 'test_completed', 'test_cut', 'mission', 'todo_achievement', 'test_score_type', 'test_total_count', 'hw_checked_today', 'hw_passed_today'].includes(dbKey)) return;
       
       if (ALLOWED_COLUMNS.includes(dbKey)) {
         let val = (sessionData as any)[key];
@@ -235,7 +235,6 @@ export function useDashboardData(params: {
           const parsed = parseInt(String(val), 10);
           val = (val === '' || val === undefined || val === null || isNaN(parsed)) ? null : parsed;
         }
-        if (dbKey === 'status' && val === 'none') val = null;
         if (dbKey === 'attendance_status' && (val === '' || val === ATTENDANCE_STATUS.BEFORE)) val = null;
         filtered[dbKey] = val;
       }

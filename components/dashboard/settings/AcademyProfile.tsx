@@ -458,7 +458,7 @@ export default function AcademyProfile({
               </div>
               
               <textarea
-                value={opSettings.ai_settings?.custom_prompt || ""}
+                value={opSettings.ai_settings?.custom_prompt ?? ""}
                 placeholder={`[기본 분석 지침 예시]\n당신은 수학 학원의 원장님과 담당 강사를 돕는 전문적인 인공지능 학습 컨설턴트 및 상담 전략 분석가입니다. 학부모 상담 전화를 대비한 내부 전략 리포트를 작성해 주세요...\n\n(비워두시면 시스템 수학 전문 내부 가이드용 프롬프트가 기본 적용됩니다.)`}
                 onChange={(e) => {
                   const currentAi = opSettings.ai_settings || { active_models: ['openai'], default_model: 'openai' };

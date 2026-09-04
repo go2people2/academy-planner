@@ -127,9 +127,9 @@ export default function StudentDetailDrawer({
       return;
     }
 
-    const newStarts = { ...startTimes };
-    const newEnds = { ...endTimes };
-    const newSchedules = { ...localSchedules };
+    const newStarts: Record<string, string> = {};
+    const newEnds: Record<string, string> = {};
+    const newSchedules: Record<string, number[]> = {};
 
     selectedDays.forEach(day => {
       newStarts[day] = baseStart;

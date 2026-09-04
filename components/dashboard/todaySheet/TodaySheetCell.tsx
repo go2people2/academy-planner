@@ -1066,7 +1066,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
             <div
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
-                if (isOtherClassSection || e.shiftKey) {
+                if (e.shiftKey) {
                   onTimePickerClick?.(e);
                 } else {
                   onAttendanceClick(e);

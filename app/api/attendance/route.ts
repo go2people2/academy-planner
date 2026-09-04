@@ -155,7 +155,9 @@ export async function POST(request: NextRequest) {
       }
 
       if (isMakeup) {
-        query = query.or('attendance_status.ilike.보강%,attendance_reason.ilike.%보강%');
+        query = query.or('is_pure_makeup.eq.true,attendance_status.ilike.보강%,attendance_reason.ilike.%보강%');
+      } else {
+        query = query.eq('is_pure_makeup', false).not('attendance_status', 'ilike', '보강%');
       }
     }
 

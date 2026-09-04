@@ -34,7 +34,7 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
   const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual' | 'textbooks' | 'timetables'>('teachers');
 
   // 학원 운영 설정 로컬 상태
-  const [opSettings, setOpSettings] = useState({
+  const [opSettings, setOpSettings] = useState<any>({
     first_period_time: "",
     late_threshold: 0,
     alert_threshold: 0,
@@ -47,7 +47,12 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
     textbook_categories: [] as string[],
     location: "",
     default_score_cut: 80, // 💡 100점 만점 합격 기준점 추가
-    default_count_cut: 2 // 💡 오답 개수형 통과 기준 추가
+    default_count_cut: 2, // 💡 오답 개수형 통과 기준 추가
+    ai_settings: {
+      active_models: ['openai'],
+      default_model: 'openai',
+      custom_prompt: ''
+    }
   });
 
   const [isDataInitialized, setIsDataInitialized] = useState(false);
@@ -60,6 +65,7 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
       const dbSettings = academyInfo.operation_settings;
       if (dbSettings) {
         setOpSettings({
+          ...dbSettings,
           first_period_time: dbSettings.first_period_time || "",
           late_threshold: dbSettings.late_threshold ?? 10,
           alert_threshold: dbSettings.alert_threshold ?? 15,
@@ -72,7 +78,12 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
           textbook_categories: dbSettings.textbook_categories || DEFAULT_CATEGORIES,
           location: dbSettings.location || "",
           default_score_cut: dbSettings.default_score_cut ?? 80, // 💡 DB에서 불러오기
-          default_count_cut: dbSettings.default_count_cut ?? 2 // 💡 DB에서 불러오기
+          default_count_cut: dbSettings.default_count_cut ?? 2, // 💡 DB에서 불러오기
+          ai_settings: {
+            active_models: dbSettings.ai_settings?.active_models || ['openai'],
+            default_model: dbSettings.ai_settings?.default_model || 'openai',
+            custom_prompt: dbSettings.ai_settings?.custom_prompt || ''
+          }
         });
       }
     }
@@ -81,7 +92,8 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
 
   const updateOpSetting = async (key: string, value: any) => {
     if (!onUpdateAcademyInfo || !academyInfo) return;
-    const nextSettings = { ...opSettings, [key]: value };
+    const currentDbSettings = academyInfo.operation_settings || {};
+    const nextSettings = { ...currentDbSettings, ...opSettings, [key]: value };
     setOpSettings(nextSettings);
     await onUpdateAcademyInfo({ operation_settings: nextSettings });
   };

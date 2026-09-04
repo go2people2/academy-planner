@@ -152,16 +152,23 @@ export function useStudentDetailDrawer({
     );
   }, [availableTextbooks, bookSearch]);
 
+  // 💡 [정규화 헬퍼] day_schedules의 키 집합이 항상 class_days의 부분집합이 되도록 보장
+  const sanitizeSchedules = (schedules: Record<string, number[]>, days: string[]) => {
+    const cleaned: Record<string, number[]> = {};
+    days.forEach(d => {
+      if (schedules[d]) cleaned[d] = schedules[d];
+    });
+    return cleaned;
+  };
+
   const handleTimeChange = (day: string, startTimeStr: string, endTimeStr: string) => {
     setStartTimes(prev => ({ ...prev, [day]: startTimeStr }));
     setEndTimes(prev => ({ ...prev, [day]: endTimeStr }));
 
     if (startTimeStr === '' && endTimeStr === '') {
-      const newSchedules = { ...localSchedules };
-      delete newSchedules[day];
-      setLocalSchedules(newSchedules);
-      
       const newDays = localDays.filter(d => d !== day);
+      const newSchedules = sanitizeSchedules(localSchedules, newDays);
+      setLocalSchedules(newSchedules);
       setLocalDays(newDays);
 
       onUpdateInfo(student.id, {
@@ -183,23 +190,16 @@ export function useStudentDetailDrawer({
       : (localSchedules[day]?.[1] || 1900);
 
     if (!isNaN(finalStartVal) && !isNaN(finalEndVal)) {
-      const newSchedules = { ...localSchedules, [day]: [finalStartVal, finalEndVal] };
+      const newDays = localDays.includes(day) ? localDays : [...localDays, day];
+      const merged = { ...localSchedules, [day]: [finalStartVal, finalEndVal] };
+      const newSchedules = sanitizeSchedules(merged, newDays);
       setLocalSchedules(newSchedules);
-      
-      const updates: any = {};
-      if (isStartValid || isEndValid) {
-        updates.day_schedules = newSchedules;
-      }
+      setLocalDays(newDays);
 
-      if (!localDays.includes(day)) {
-        const newDays = [...localDays, day];
-        setLocalDays(newDays);
-        updates.class_days = newDays;
-      }
-
-      if (Object.keys(updates).length > 0) {
-        onUpdateInfo(student.id, updates);
-      }
+      onUpdateInfo(student.id, {
+        day_schedules: newSchedules,
+        class_days: newDays
+      });
     }
   };
 
@@ -208,18 +208,18 @@ export function useStudentDetailDrawer({
     const newDays = isSelected ? localDays.filter(d => d !== day) : [...localDays, day];
     setLocalDays(newDays);
     
-    let newSchedules = { ...localSchedules };
+    let merged = { ...localSchedules };
     if (isSelected) {
-      delete newSchedules[day];
-      setLocalSchedules(newSchedules);
+      delete merged[day];
       setStartTimes(prev => ({ ...prev, [day]: '' }));
       setEndTimes(prev => ({ ...prev, [day]: '' }));
     } else {
-      newSchedules = { ...localSchedules, [day]: [1600, 1900] };
-      setLocalSchedules(newSchedules);
+      merged[day] = [1600, 1900];
       setStartTimes(prev => ({ ...prev, [day]: '16:00' }));
       setEndTimes(prev => ({ ...prev, [day]: '19:00' }));
     }
+    const newSchedules = sanitizeSchedules(merged, newDays);
+    setLocalSchedules(newSchedules);
 
     onUpdateInfo(student.id, {
       class_days: newDays,

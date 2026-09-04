@@ -546,7 +546,10 @@ export function useTodaySheetRowLogic({
         attendance_reason: null,
         is_pure_makeup: false,
       };
-      if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
+      const realSessionId = (student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:'))
+        ? student.todaySession.id
+        : (formData.id && formData.id !== 'temp' && !String(formData.id).startsWith('temp:') ? formData.id : undefined);
+      if (realSessionId) payload.id = realSessionId;
 
       setFormData((prev: any) => ({
         ...prev,
@@ -641,7 +644,10 @@ export function useTodaySheetRowLogic({
         attendance_reason: '시간 변경',
         is_pure_makeup: isMakeup ? true : false,
       };
-      if (student.todaySession?.id && student.todaySession.id !== 'temp') payload.id = student.todaySession.id;
+      const realSessionId = (student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:'))
+        ? student.todaySession.id
+        : (formData.id && formData.id !== 'temp' && !String(formData.id).startsWith('temp:') ? formData.id : undefined);
+      if (realSessionId) payload.id = realSessionId;
 
       setFormData((prev: any) => ({ ...prev, ...payload }));
       await onSave(student.id, payload);

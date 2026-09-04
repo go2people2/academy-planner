@@ -556,7 +556,7 @@ export default function DashboardPage() {
 // 1. ALLOWED_COLUMNS 기준 필터링 및 데이터 정제
 const getFilteredBaseFields = (sessionData: any) => {
   const ALLOWED_COLUMNS = [
-    'status', 'attendance_status', 'special_notes', 'classwork_text', 'classwork_json',
+    'attendance_status', 'special_notes', 'classwork_text', 'classwork_json',
     'completed_classwork_text', 'completed_classwork_json',
     'homework_text', 'homework_json', 'test_status', 'test_score', 'test_result', 'approval_status',
     'session_date', 'academy_id', 'student_id', 'homework_to', 'timer_started_at', 'timer_duration',
@@ -568,7 +568,7 @@ const getFilteredBaseFields = (sessionData: any) => {
     if (dbKey === 'test_id') dbKey = 'test_status';
 
     // JSON 필드 및 파생 필드 제외 (메인에서 별도 처리)
-    if (['next_quiz_text', 'next_quiz_cut', 'next_quiz_trial', 'next_quiz_json', 'test_result', 'homework_to', 'test_completed', 'test_cut', 'mission', 'todo_achievement', 'test_score_type', 'test_total_count', 'hw_checked_today', 'hw_passed_today'].includes(dbKey)) return;
+    if (['status', 'next_quiz_text', 'next_quiz_cut', 'next_quiz_trial', 'next_quiz_json', 'test_result', 'homework_to', 'test_completed', 'test_cut', 'mission', 'todo_achievement', 'test_score_type', 'test_total_count', 'hw_checked_today', 'hw_passed_today'].includes(dbKey)) return;
 
     if (ALLOWED_COLUMNS.includes(dbKey)) {
       let val = (sessionData as any)[key];
@@ -580,7 +580,6 @@ const getFilteredBaseFields = (sessionData: any) => {
         const parsed = parseInt(String(val), 10);
         val = (val === '' || val === undefined || val === null || isNaN(parsed)) ? null : parsed;
       }
-      if (dbKey === 'status' && val === 'none') val = null;
       if (dbKey === 'attendance_status' && (val === '' || val === ATTENDANCE_STATUS.BEFORE)) val = null;
       filtered[dbKey] = val;
     }
@@ -900,6 +899,9 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           payload.attendance_status = null;
         }
       }
+
+      // 💡 [DB 제약조건 완전 방어] status 컬럼은 DB 제약조건 충돌 방지를 위해 UPDATE/INSERT 페이로드에서 완전 제외
+      delete payload.status;
 
       let savedLog: any = null;
       if (targetId) {
@@ -1998,7 +2000,13 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   };
 
   const selectedDayKey = getDayOfWeek(selectedDate);
-  const selectedStudent = useMemo(() => students.find(s => s.id === selectedStudentId), [students, selectedStudentId]);
+  const selectedStudent = useMemo(() => {
+    if (!selectedStudentId) return undefined;
+    const exact = students.find(s => s.id === selectedStudentId);
+    if (exact) return exact;
+    const baseId = selectedStudentId.split('_makeup_')[0].split('_special_')[0];
+    return students.find(s => s.id === baseId);
+  }, [students, selectedStudentId]);
 
   // 💡 [추가] 오늘 제출(submitted)한 모든 활성 원생의 일지(정규/특강 모두 포함)를 수집
   const pendingSubmissions = useMemo(() => {

@@ -57,7 +57,7 @@ export default function SettingsView({ teachers, students, masterTextbooks, onAd
   // 💡 테스트 관리 상태 및 로직은 TestManagement.tsx로 이동됨
 
   // 학원 운영 설정 로컬 상태 (제어 컴포넌트용)
-  const [opSettings, setOpSettings] = useState({
+  const [opSettings, setOpSettings] = useState<any>({
     first_period_time: "",
     late_threshold: 0,
     alert_threshold: 0,
@@ -70,7 +70,12 @@ export default function SettingsView({ teachers, students, masterTextbooks, onAd
     textbook_categories: [] as string[], // 💡 교재 카테고리 대분류 추가
     location: "", // 💡 학원 위치(지역) 추가
     default_score_cut: 80, // 💡 100점 만점 합격 기준점 추가
-    default_count_cut: 2 // 💡 오답 개수형 통과 기준 추가
+    default_count_cut: 2, // 💡 오답 개수형 통과 기준 추가
+    ai_settings: {
+      active_models: ['openai'],
+      default_model: 'openai',
+      custom_prompt: ''
+    }
   });
 
   // 데이터 로드 여부 추적
@@ -87,6 +92,7 @@ export default function SettingsView({ teachers, students, masterTextbooks, onAd
       const dbSettings = academyInfo.operation_settings;
       if (dbSettings) {
         setOpSettings({
+          ...dbSettings,
           first_period_time: dbSettings.first_period_time || "",
           late_threshold: dbSettings.late_threshold ?? 10,
           alert_threshold: dbSettings.alert_threshold ?? 15,
@@ -99,7 +105,12 @@ export default function SettingsView({ teachers, students, masterTextbooks, onAd
           textbook_categories: dbSettings.textbook_categories || DEFAULT_CATEGORIES,
           location: dbSettings.location || "", // 💡 학원 위치 동기화
           default_score_cut: dbSettings.default_score_cut ?? 80, // 💡 DB에서 불러오기
-          default_count_cut: dbSettings.default_count_cut ?? 2 // 💡 DB에서 불러오기
+          default_count_cut: dbSettings.default_count_cut ?? 2, // 💡 DB에서 불러오기
+          ai_settings: {
+            active_models: dbSettings.ai_settings?.active_models || ['openai'],
+            default_model: dbSettings.ai_settings?.default_model || 'openai',
+            custom_prompt: dbSettings.ai_settings?.custom_prompt || ''
+          }
         });
       }
     }
@@ -111,7 +122,8 @@ export default function SettingsView({ teachers, students, masterTextbooks, onAd
     if (!onUpdateAcademyInfo || !academyInfo) return;
 
     // 💡 동기식으로 즉시 계산하여 React 배치 처리 및 비동기 스케줄링 시 데이터 유실(Race Condition) 방지
-    const nextSettings = { ...opSettings, [key]: value };
+    const currentDbSettings = academyInfo.operation_settings || {};
+    const nextSettings = { ...currentDbSettings, ...opSettings, [key]: value };
     setOpSettings(nextSettings);
 
     // 💡 즉시 계산된 nextSettings를 서버에 저장
