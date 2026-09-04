@@ -944,6 +944,54 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       // 💡 [DB 제약조건 완전 방어] status 컬럼은 DB 제약조건 충돌 방지를 위해 UPDATE/INSERT 페이로드에서 완전 제외
       delete payload.status;
 
+      // 🔒 [승인 보호 방어] 승인된 학생 제출 내용이 다른 오래된 창의 빈값("")으로 덮어써지는 것 차단 (fail-closed)
+      if (targetId && academy?.id) {
+        const isTryingToClearCcw = 'completed_classwork_text' in payload && (payload.completed_classwork_text === '' || payload.completed_classwork_text === null);
+        const isTryingToClearHw = 'homework_text' in payload && (payload.homework_text === '' || payload.homework_text === null);
+
+        if (isTryingToClearCcw || isTryingToClearHw) {
+          const { data: latestDbLog, error: latestDbLogError } = await supabase
+            .from('ams_session_logs')
+            .select('id, academy_id, approval_status, completed_classwork_text, homework_text')
+            .eq('id', targetId)
+            .eq('academy_id', academy.id)
+            .maybeSingle();
+
+          if (latestDbLogError || !latestDbLog) {
+            console.error('[saveTodaySession] pre-check failed (fail-closed):', latestDbLogError ? latestDbLogError.code || 'fetch_error' : 'log_not_found');
+            alert('최신 승인 기록을 확인할 수 없습니다.\n내용이 사라지는 것을 막기 위해 저장하지 않았습니다.\n새로고침 후 내용을 확인하고 다시 시도해 주세요.');
+            return false;
+          }
+
+          if (latestDbLog.approval_status === 'approved') {
+            const hasExistingCcw = (latestDbLog.completed_classwork_text || '').trim().length > 0;
+            const hasExistingHw = (latestDbLog.homework_text || '').trim().length > 0;
+
+            const isCcwBlocked = isTryingToClearCcw && hasExistingCcw;
+            const isHwBlocked = isTryingToClearHw && hasExistingHw;
+
+            if (isCcwBlocked || isHwBlocked) {
+              alert('다른 선생님이 방금 승인한 학생 제출 내용이 있습니다.\n새로고침 후 내용을 확인하고 다시 저장해 주세요.');
+              setStudents(prev => prev.map(s => {
+                const sRealId = s.originalId || s.id;
+                if (sRealId !== realStudentId) return s;
+                if (!s.todaySession) return s;
+                return {
+                  ...s,
+                  todaySession: {
+                    ...s.todaySession,
+                    approval_status: 'approved',
+                    ...(hasExistingCcw ? { completed_classwork_text: latestDbLog.completed_classwork_text } : {}),
+                    ...(hasExistingHw ? { homework_text: latestDbLog.homework_text } : {})
+                  }
+                };
+              }));
+              return false;
+            }
+          }
+        }
+      }
+
       let savedLog: any = null;
       if (targetId) {
         payload.id = targetId;
@@ -951,6 +999,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
           .from('ams_session_logs')
           .update(payload)
           .eq('id', targetId)
+          .eq('academy_id', academy.id)
           .select()
           .maybeSingle();
 
