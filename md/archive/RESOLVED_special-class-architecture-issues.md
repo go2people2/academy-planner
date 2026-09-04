@@ -1,7 +1,18 @@
-# 선택과목(방학특강/선택수업) 데이터 구조 문제점 및 해결 과제 (SPECIAL_CLASS_ARCHITECTURE_ISSUES.md)
+# 선택과목(방학특강/선택수업) 데이터 구조 문제점 및 해결 과제 (Archived)
 
-## 📌 문서 개요
-본 문서는 한 학생이 **[정규 수업]**과 **[선택과목/방학특강(확통, 기하, 미적분 등)]**을 동시에 수강함에 따라 Daily Sheet 및 프로젝트 전반에 발생할 수 있는 **구조적 문제점 3가지**와 **향후 해결해야 할 과제**를 정리한 리팩토링 로드맵 문서입니다.
+> **상태**: Archived / 해결 완료된 과거 아키텍처 이슈
+>
+> **해결 상태 (2026-08 완료)**:
+> - `isSameStudentRow` 식별자 매칭: 해결 완료
+> - `course_name` 분리/보존: 해결 완료
+> - `determineTodaySession` 정규·보강·특강 격리: 해결 완료
+>
+> **현재 기준 문서**:
+> - [`md/PROJECT_CONTEXT.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/PROJECT_CONTEXT.md)
+> - [`md/PROJECT_LOG.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/PROJECT_LOG.md) 관련 해결 기록
+> - [`md/GIT_FEATURE_ANCHORS.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/GIT_FEATURE_ANCHORS.md)
+>
+> ⚠️ 이 문서 안의 미완료 체크박스나 과거 계획은 현재 작업 백로그가 아닙니다.
 
 ---
 

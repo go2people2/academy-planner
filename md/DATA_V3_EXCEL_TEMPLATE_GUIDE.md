@@ -117,4 +117,57 @@
 - [ ] **11. 테넌트 보안**: 엑셀 시트에 `academy_id` 를 적지 않았는가? (서버가 로그인 세션 기준으로 강제 부여함)
 
 ---
-*Data v3 교재 엑셀 템플릿 가이드 매뉴얼*
+
+## 부록: AI·openpyxl 기반 Data V3 엑셀 자동 생성 참고
+
+스캔본 교재 PDF와 빈 엑셀 템플릿을 기반으로 AI 또는 파이썬 스크립트가 `[bookcode]_info.xlsx`를 초기 생성할 때 활용할 수 있는 자동화 팁 및 예제 코드입니다.
+
+### 1. 초기 엑셀 생성 시 실무 주의사항
+1. **`unit_page` 작성**: PDF 목차(차례) 페이지를 분석하여 `unit_order`, `unit_code`(`u01`, `u02`), `unit_name`, `start_page`, `end_page`를 빈틈없이 연속으로 채웁니다.
+2. **`problems` 초기 생성**: 
+   - 1번부터 마지막 문제 번호까지 순차 행을 생성합니다.
+   - `problem_code`는 공식 규격인 `[bookcode]_p[3자리페이지]_q[4자리문항]` 포맷(예: `m11-gnssen_p008_q0001`)을 준수해야 합니다.
+   - 동영상 강의 연결 전 초기 생성 단계에서는 `media_code`, `start_time`, `end_time` 컬럼을 비워둘 수 있습니다(`None`).
+   - `cue_title`은 `1번`, `2번` 형태, `cue_type`은 `solution`, `is_primary`는 `TRUE`로 기본 설정합니다.
+3. **엄격한 규칙 보존**:
+   - `problem_code`의 3자리 페이지 규칙(`p008`), `media`/`media_sources` 다중 소스 규칙, 기간(`duration`) 포맷, 11대 서버 업로드 Validator 규칙은 자동 생성 시에도 100% 동일하게 준수해야 합니다.
+
+### 2. openpyxl 자동화 파이썬 예제
+```python
+import openpyxl
+
+file_path = "m11-gnssen_info.xlsx"
+wb = openpyxl.load_workbook(file_path)
+
+# 1. unit_page 업데이트 예시
+ws_unit = wb['unit_page']
+ws_unit.delete_rows(2, ws_unit.max_row + 1)
+unit_data = [
+    [1, 'u01', '01 소인수분해', 8, 25],
+    [2, 'u02', '02 정수와 유리수', 26, 45],
+]
+for r_idx, row in enumerate(unit_data, start=2):
+    for c_idx, val in enumerate(row, start=1):
+        ws_unit.cell(row=r_idx, column=c_idx, value=val)
+
+# 2. problems 초기 문항 행 생성 예시
+ws_prob = wb['problems']
+ws_prob.delete_rows(2, ws_prob.max_row + 1)
+bookcode = 'm11-gnssen'
+total_questions = 450
+
+for q_num in range(1, total_questions + 1):
+    # 페이지 번호 매핑 (예: 8페이지)
+    page_num = 8
+    prob_code = f'{bookcode}_p{page_num:03d}_q{q_num:04d}'
+    cue_title = f'{q_num}번'
+    row = [prob_code, None, None, None, cue_title, 'solution', True]
+    for c_idx, val in enumerate(row, start=1):
+        ws_prob.cell(row=q_num + 1, column=c_idx, value=val)
+
+wb.save(file_path)
+```
+
+---
+*Data v3 교재 엑셀 템플릿 공식 가이드 매뉴얼*
+

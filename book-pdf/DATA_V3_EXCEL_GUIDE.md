@@ -1,4 +1,14 @@
-# data_v3 교재 메타데이터(Excel) 자동 생성 가이드라인
+# data_v3 교재 메타데이터(Excel) 자동 생성 가이드라인 (Deprecated)
+
+> **상태**: Deprecated / 참고용
+>
+> **최신 공식 가이드**:
+> 👉 [`md/DATA_V3_EXCEL_TEMPLATE_GUIDE.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/DATA_V3_EXCEL_TEMPLATE_GUIDE.md)
+>
+> ⚠️ 이 문서의 openpyxl 예제 및 작성 팁은 공식 가이드의 부록으로 통합되었습니다.
+> 모든 신규 작업 및 유효성 검증은 위 공식 가이드를 기준으로 진행하세요.
+
+---
 
 이 문서는 **AGY (Antigravity AI Agent)**가 스캔본 교재 PDF와 기본 엑셀 템플릿을 받아 `data_v3` 오답노트 시스템 표준 메타데이터 엑셀 파일(`[bookcode]_info.xlsx`)을 완벽하게 채우기 위한 작업 지침서입니다.
 

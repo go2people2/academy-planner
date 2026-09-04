@@ -1,6 +1,13 @@
-# 📌 AMS - Current System Status & Recent Changes
+# 📌 AMS - Current System Status & Recent Changes (Archived)
 
-> 이 문서는 이 프로젝트의 **현재 작업 현황, 최근 해결된 핵심 이슈, 시스템의 최신 안정성 상태**를 정리하여 AI 보조 도구 간 작업 맥락을 명확히 전달하기 위해 작성되었습니다.
+> **상태**: Archived / 2026년 8월 시점의 과거 작업 현황 참고용
+>
+> **현재 기준 문서**:
+> - [`md/PROJECT_CONTEXT.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/PROJECT_CONTEXT.md)
+> - [`md/PROJECT_LOG.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/PROJECT_LOG.md)
+> - [`md/GIT_FEATURE_ANCHORS.md`](file:///Users/joonsik_air/documents/makecode/academy-planner/md/GIT_FEATURE_ANCHORS.md)
+>
+> ⚠️ 이 문서는 현재 구현 상태나 작업 지시의 기준으로 사용하지 않습니다.
 
 ---
 
