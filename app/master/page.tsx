@@ -1,12 +1,15 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X, Sparkles } from 'lucide-react';
+import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X, Sparkles, Layers } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useMasterDashboard } from './hooks/useMasterDashboard';
+import { useMasterModules } from './hooks/useMasterModules';
+import { ModuleOverviewTab } from './components/ModuleOverviewTab';
+import { ModuleManageModal } from './components/ModuleManageModal';
 
 export default function MasterDashboard() {
   const {
@@ -56,6 +59,42 @@ export default function MasterDashboard() {
     openEditModal,
     handleCloseEditModal,
   } = useMasterDashboard();
+
+  const [masterTab, setMasterTab] = useState<'modules' | 'academies'>('modules');
+  const {
+    moduleOverviews,
+    isLoadingModules,
+    moduleError,
+    fetchModuleOverviews,
+    filterModule,
+    setFilterModule,
+    filterStatus,
+    setFilterStatus,
+    selectedAcademy: selectedModuleAcademy,
+    isModalOpen: isModuleModalOpen,
+    openModuleModal,
+    closeModuleModal,
+    editAmsStatus,
+    setEditAmsStatus,
+    editHokmaStatus,
+    setEditHokmaStatus,
+    editHokmaMaxDevices,
+    setEditHokmaMaxDevices,
+    isSavingStatus,
+    handleSaveModuleStatus,
+    issuedCodeInfo,
+    isIssuingCode,
+    handleIssueActivationCode,
+    isRevokingDevice,
+    handleRevokeDevice,
+    summaryStats,
+  } = useMasterModules(isAuthorized);
+
+  useEffect(() => {
+    if (isAuthorized) {
+      fetchModuleOverviews();
+    }
+  }, [isAuthorized, fetchModuleOverviews]);
 
   // 💡 [접근성] ESC 키 입력 시 모달 닫기 (저장 전 변경사항 보호 적용)
   useEffect(() => {
@@ -204,11 +243,57 @@ export default function MasterDashboard() {
         </div>
       </header>
 
+      {/* Tab Navigation */}
+      <div className="border-b border-white/5 bg-[#0d0d0d]">
+        <div className="max-w-7xl mx-auto px-6 flex items-center gap-2">
+          <button
+            onClick={() => setMasterTab('modules')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all ${
+              masterTab === 'modules'
+                ? 'border-blue-500 text-blue-400 bg-white/[0.02]'
+                : 'border-transparent text-gray-400 hover:text-white hover:bg-white/[0.01]'
+            }`}
+          >
+            <Layers size={14} />
+            <span>Hokma 통합 모듈 현황</span>
+            <span className="ml-1 px-1.5 py-0.2 rounded-full bg-blue-500/20 text-blue-300 text-[10px]">
+              {moduleOverviews.filter((a) => a.slug !== 'hplan').length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setMasterTab('academies')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all ${
+              masterTab === 'academies'
+                ? 'border-blue-500 text-blue-400 bg-white/[0.02]'
+                : 'border-transparent text-gray-400 hover:text-white hover:bg-white/[0.01]'
+            }`}
+          >
+            <School size={14} />
+            <span>학원 인스턴스 개설 및 설정</span>
+          </button>
+        </div>
+      </div>
+
       {/* Main Container */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-10 grid grid-cols-1 lg:grid-cols-12 gap-8">
-        
-        {/* Left: Create Academy Form */}
-        <section className="lg:col-span-5 space-y-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-6 py-8">
+        {masterTab === 'modules' ? (
+          <ModuleOverviewTab
+            moduleOverviews={moduleOverviews}
+            isLoading={isLoadingModules}
+            error={moduleError}
+            onRefresh={fetchModuleOverviews}
+            filterModule={filterModule}
+            onFilterModuleChange={setFilterModule}
+            filterStatus={filterStatus}
+            onFilterStatusChange={setFilterStatus}
+            summaryStats={summaryStats}
+            onOpenManageModal={openModuleModal}
+          />
+        ) : (
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            {/* Left: Create Academy Form */}
+            <section className="lg:col-span-5 space-y-6">
           <div className="bg-[#111111]/80 border border-white/5 rounded-sm p-6 space-y-6 shadow-2xl relative overflow-hidden">
             <div className="absolute top-0 left-0 right-0 h-[2px] bg-gradient-to-r from-blue-500 via-indigo-500 to-purple-500" />
             
@@ -487,8 +572,9 @@ export default function MasterDashboard() {
             )}
           </div>
         </section>
-
-      </main>
+      </div>
+    )}
+  </main>
 
       {/* 💡 [추가] 지점 정보 수정 모달 */}
       <AnimatePresence>
@@ -792,6 +878,26 @@ export default function MasterDashboard() {
           </div>
         )}
       </AnimatePresence>
+
+      {/* 💡 HokmaNote 모듈 및 기기 관리 모달 */}
+      <ModuleManageModal
+        academy={selectedModuleAcademy}
+        isOpen={isModuleModalOpen}
+        onClose={closeModuleModal}
+        editAmsStatus={editAmsStatus}
+        onEditAmsStatusChange={setEditAmsStatus}
+        editHokmaStatus={editHokmaStatus}
+        onEditHokmaStatusChange={setEditHokmaStatus}
+        editHokmaMaxDevices={editHokmaMaxDevices}
+        onEditHokmaMaxDevicesChange={setEditHokmaMaxDevices}
+        isSavingStatus={isSavingStatus}
+        onSaveStatus={handleSaveModuleStatus}
+        issuedCodeInfo={issuedCodeInfo}
+        isIssuingCode={isIssuingCode}
+        onIssueCode={handleIssueActivationCode}
+        isRevokingDevice={isRevokingDevice}
+        onRevokeDevice={handleRevokeDevice}
+      />
     </div>
   );
 }
