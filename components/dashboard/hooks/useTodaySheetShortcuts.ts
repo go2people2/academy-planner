@@ -5,6 +5,7 @@ import { mapColumnToProp, COLUMN_TO_FIELD_MAP } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { useTodaySheetClipboard } from './useTodaySheetClipboard';
 import { matchRowIdentity } from '@/lib/rowIdentity';
+import { isSessionApprovedAndLocked } from '@/lib/sessionLockService';
 
 interface UseTodaySheetShortcutsProps {
   activeCell: { studentId: string; columnId: string } | null;
@@ -30,6 +31,7 @@ interface UseTodaySheetShortcutsProps {
   handleRedo?: () => void;
   toggleShowAllTools?: () => void; // 💡 툴박스 접기/펼치기 토글 함수 추가
   isModalOpen?: boolean; // 💡 모달 열림 상태 (단축키 차단용)
+  currentAuthUid?: string | null;
 }
 
 /**
@@ -42,7 +44,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     filteredStudents, activeColumns, selectedRange, setSelectedRange,
     handleBatchSave, handleSetSwitch, setIsDragging, selectedIds,
     toggleSecondRow, toggleHistory, handleUndo, handleRedo,
-    toggleShowAllTools, isModalOpen
+    toggleShowAllTools, isModalOpen, currentAuthUid
   } = props;
 
   // 1. 클립보드 로직 분리 (handleCopy, handlePaste, handleCut)
@@ -90,7 +92,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     
     if (targetColIds.length === 0) return;
     
-    // 🔒 [추가] 채워질 범위 중 승인 대기 중이고 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 작업 차단 및 알럿 노출
+    // 🔒 [추가] 채워질 범위 중 승인 대기 또는 승인 잠금 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 작업 차단 및 알럿 노출
     let hasLockedCell = false;
     for (let r = targetStartRowIdx; r <= targetEndRowIdx; r++) {
       const targetStudent = filteredStudents[r];
@@ -98,8 +100,9 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       for (let c = cMin; c <= cMax; c++) {
         const colId = activeColumns[c].id;
         const isSubmitted = ['pending', 'submitted'].includes(targetStudent.todaySession?.approval_status || '');
+        const isApprovedLocked = isSessionApprovedAndLocked(targetStudent.todaySession, currentAuthUid);
         const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
-        if (isSubmitted && isProtectedCol) {
+        if ((isSubmitted || isApprovedLocked) && isProtectedCol) {
           hasLockedCell = true;
           break;
         }
@@ -108,7 +111,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
     }
 
     if (hasLockedCell) {
-      alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+      alert("승인 완료되었거나 학생이 제출한 내용이 포함되어 있어 채우기를 진행할 수 없습니다.\n수정을 원하시면 먼저 [잠금 해제 후 수정]을 진행해 주세요.");
       return;
     }
 
@@ -411,7 +414,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
           const rMin = Math.min(sI, eI), rMax = Math.max(sI, eI);
           const cMin = Math.min(sC, eC), cMax = Math.max(sC, eC);
 
-          // 🔒 [추가] 삭제 대상 범위 내에 승인 대기 중이고 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 삭제를 차단하고 알럿 노출
+          // 🔒 [추가] 삭제 대상 범위 내에 승인 대기 또는 승인 잠금 보호 대상 컬럼이 하나라도 포함되어 있다면 전체 삭제를 차단하고 알럿 노출
           let hasLockedCell = false;
           for (let r = rMin; r <= rMax; r++) {
             const st = filteredStudents[r];
@@ -419,8 +422,9 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
             for (let c = cMin; c <= cMax; c++) {
               const colId = activeColumns[c].id;
               const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
+              const isApprovedLocked = isSessionApprovedAndLocked(st.todaySession, currentAuthUid);
               const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
-              if (isSubmitted && isProtectedCol) {
+              if ((isSubmitted || isApprovedLocked) && isProtectedCol) {
                 hasLockedCell = true;
                 break;
               }
@@ -429,7 +433,7 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
           }
 
           if (hasLockedCell) {
-            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+            alert("승인 완료되었거나 학생이 제출한 내용이 포함되어 있어 삭제할 수 없습니다.\n수정을 원하시면 먼저 [잠금 해제 후 수정]을 진행해 주세요.");
             return;
           }
 
@@ -608,13 +612,14 @@ export function useTodaySheetShortcuts(props: UseTodaySheetShortcutsProps) {
       if (!isInput && isCharacterKey && activeCell && !editingCell) {
         const readOnlyCols = ['select', 'name', 'action', 'attendance', 'review', 'date'];
         if (!readOnlyCols.includes(activeCell.columnId)) {
-          // 🔒 [추가] 승인 대기 중이고 보호 대상 컬럼이면 즉시 타이핑 덮어쓰기 방지
+          // 🔒 [추가] 승인 대기 또는 승인 잠금 보호 대상 컬럼이면 즉시 타이핑 덮어쓰기 방지
           const activeStudent = filteredStudents.find(s => s.id === activeCell.studentId);
           const isSubmitted = ['pending', 'submitted'].includes(activeStudent?.todaySession?.approval_status || '');
+          const isApprovedLocked = isSessionApprovedAndLocked(activeStudent?.todaySession, currentAuthUid);
           const isProtectedCol = ['completed_classwork', 'assign'].includes(activeCell.columnId);
-          if (isSubmitted && isProtectedCol) {
+          if ((isSubmitted || isApprovedLocked) && isProtectedCol) {
             e.preventDefault();
-            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+            alert("승인 완료되었거나 학생이 제출한 내용이 포함되어 있어 수정할 수 없습니다.\n수정을 원하시면 먼저 [잠금 해제 후 수정]을 진행해 주세요.");
             return;
           }
 

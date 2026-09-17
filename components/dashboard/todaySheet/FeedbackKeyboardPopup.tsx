@@ -6,7 +6,7 @@ import { X, AlertCircle } from 'lucide-react';
 
 interface FeedbackKeyboardPopupProps {
   isOpen: boolean;
-  statusMap: Record<string, { label: string; color: string }>;
+  statusMap: Record<string, { label: string; color: string; desc?: string }>;
   onSelectFeedback: (level: 'gradeA' | 'gradeB' | 'gradeC' | 'gradeD' | 'gradeE' | 'gradeF' | 'none') => void;
   onCloseFeedback: () => void;
   isLight?: boolean;
@@ -76,7 +76,6 @@ export function FeedbackKeyboardPopup({
         onCloseFeedback();
       } else {
         // 💡 올바르지 않은 키 입력 시 좌우 쉐이크 애니메이션 & 경고 문구 표시
-        // Shift, Control, Alt, Meta, Process 단독 입력은 무시
         if (['shift', 'control', 'alt', 'meta', 'tab', 'process'].includes(key)) return;
 
         e.preventDefault();
@@ -96,6 +95,8 @@ export function FeedbackKeyboardPopup({
   }, [isOpen, onSelectFeedback, onCloseFeedback]);
 
   if (!isOpen) return null;
+
+  const gradeKeys = ['gradeA', 'gradeB', 'gradeC', 'gradeD', 'gradeE', 'gradeF'] as const;
 
   return (
     <AnimatePresence>
@@ -117,29 +118,32 @@ export function FeedbackKeyboardPopup({
               : 'bg-[#1a1a1a] border-white/10 shadow-black/80'
           }`}
         >
-          {(['gradeA', 'gradeB', 'gradeC', 'gradeD', 'gradeE', 'gradeF'] as const).map((k, idx) => (
-            <button
-              key={k}
-              onClick={(e) => {
-                e.stopPropagation();
-                onSelectFeedback(k);
-              }}
-              title={`${statusMap[k].label} (키보드 ${statusMap[k].label} 또는 ${idx + 1})`}
-              className={`w-7 h-7 rounded-[2px] flex flex-col items-center justify-center text-[10px] font-black transition-all hover:scale-110 ${statusMap[k].color} shadow-md relative group`}
-            >
-              <span>{statusMap[k].label}</span>
-              <span className="text-[7px] opacity-60 font-mono -mt-1">{idx + 1}</span>
-            </button>
-          ))}
+          {gradeKeys.map((k, idx) => {
+            const item = statusMap[k] || { label: k, color: 'bg-gray-600 text-white' };
+            return (
+              <button
+                key={k}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onSelectFeedback(k);
+                }}
+                title={`${item.label} ${item.desc ? `(${item.desc})` : ''} (단축키: ${item.label} 또는 ${idx + 1})`}
+                className={`w-7 h-7 rounded-[2px] flex flex-col items-center justify-center text-[10px] font-black transition-all hover:scale-110 ${item.color} shadow-md relative group shrink-0`}
+              >
+                <span>{item.label}</span>
+                <span className="text-[7px] opacity-70 font-mono -mt-0.5">{idx + 1}</span>
+              </button>
+            );
+          })}
           <button
             onClick={(e) => {
               e.stopPropagation();
               onCloseFeedback();
             }}
-            className="w-7 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors ml-0.5"
+            className="w-6 h-7 flex items-center justify-center text-gray-400 hover:text-red-500 transition-colors ml-0.5"
             title="닫기 (Esc)"
           >
-            <X size={14} />
+            <X size={13} />
           </button>
         </div>
 

@@ -294,6 +294,35 @@ AI와 협업하여 앱을 장기적으로 안정하게 운영하기 위한 원�
    - **요구사항**: 학생이 가진 활성 교재 목록(예: 3개 교재)별로 가장 최근에 수행된 단원 및 페이지 위치를 **[진도파악]** 컬럼에 매일 자동으로 역추적/요약하여 갱신해 주는 기능.
    - **구현 방안**: 추가 DB 컬럼을 무분별하게 생성하지 않고, 기존 일지 데이터(`allLogs` 및 `completed_classwork_json`)를 기반으로 각 교재의 최신 단원을 실시간으로 역추적하여 표시하는 자동화 엔진 형태로 구축 예정.
 
+2. **[학습리포트] '당일 목표(Reference) vs 실제 달성도' 비교 기반 객관적 안심 리포트 (기획)**
+   - **배경 및 기획 철학**:
+     - 단순 진도/과제 나열형 리포트는 학부모 입장에서 "빠른지, 느린지, 적절한지"를 해석할 수 없어 만족도가 낮음.
+     - 반면 AI/앱이 현장을 보지 않고 무분별한 칭찬이나 가치평가를 지어내면(할루시네이션) 실제 수업과 괴리가 발생하여 학원 신뢰도에 치명적인 가짜 정보가 됨.
+     - 따라서 **"당일 설정된 목표 기준선(Target Reference)"**과 **"실제 수행 결과(Actual Execution)"**를 시스템 레퍼런스로 잡고 객관적으로 비교·해석하는 신뢰 기반 리포트 생성 엔진을 목표로 함.
+   - **데이터 레퍼런스 및 비교 구조**:
+     1. **당일 목표 기준선 (Plan / Target)**:
+        - 계획된 수업 진도 및 미션 (`classwork_text`, `mission`, 목표 단원/페이지)
+        - 당일 테스트 통과 목표 기준 (`next_quiz_cut`, 통과 목표 점수)
+        - 직전 숙제 이행 목표
+     2. **실제 수행 데이터 (Actual / Result)**:
+        - 실제 완료된 수업 진도 (`completed_classwork_text`, `completed_classwork_json`)
+        - 실제 테스트 점수 및 오답 수 (`test_score`, `test_total_count`)
+        - 선생님의 숙제/수업 성취도 피드백 (`gradeA` ~ `gradeF`)
+     3. **객관적 비교 기반 안심 멘트 생성**:
+        - 지어낸 칭찬이 아닌 목표 대비 달성률과 완성도를 팩트 기반으로 예쁘게 렌더링.
+        - *예시 (100% 달성)*: "오늘 목표했던 [이차방정식 판별식 8쪽]을 100% 소화하고, 일일 테스트 목표(오답 1개 이하)까지 완벽히 통과하여 수업을 마무리했습니다."
+        - *예시 (고난도 단원 미달 시 안심 안내)*: "오늘 목표 중 킬러 유형 오답 교정에 집중하여, 잔여 2쪽은 무리하게 진도를 빼지 않고 다음 과제로 연결하여 완벽히 다지기로 했습니다."
+   - **기대 효과**: 선생님의 추가 작성 부담 없이 TodaySheet의 기존 입력 데이터만으로 학부모가 100% 납득하고 신뢰하는 고품질 해석형 리포트 자동화.
+
+3. **[교재 데이터] AMS 레거시 Google Sheets 교재 연동 ➡️ Data V3 표준 통합 마이그레이션 (기획)**
+   - **배경 및 현황**:
+     - 현재 AMS는 구글 시트(Google Sheets / CSV) 기반의 레거시 `bookcode` 및 교재 리스트를 가져와서 사용 중임.
+     - `Fascan`이 생성하고 `Hokmanote`가 사용하는 표준 포맷은 5탭 구조의 **`Data V3 DB`**(`master`, `unit_page`, `problems`, `media`, `media_sources`)임.
+   - **향후 통합 계획**:
+     - AMS의 교재 관리 시스템도 구글 시트 의존성에서 벗어나 **`Data V3 표준 포맷`으로 일원화 통합**.
+     - Fascan ➡️ Hokmanote ➡️ AMS 간 동일한 교재 코드, 단원명, 페이지/문항 범위를 공유하여 불일치(Mismatch)를 원천 차단.
+     - TodaySheet 교재 자동완성, 진도 역추적 및 학생별 교재 배정이 Data V3 DB와 100% 네이티브로 직결되도록 점진적 전환 예정.
+
 ## 18. 최근 작업 기록 (2026-08-16)
 - [x] **Data v3 교재별 Excel 표준 확정**:
     - `master`, `unit_page`, `problems`, `media`, `media_sources` 5탭 구조로 최적화 및 문서 정비 완료 (`DATA_V3_MINIMUM_SPEC.md`, `DATA_V3_EXCEL_TEMPLATE_GUIDE.md`).
@@ -376,5 +405,55 @@ AI와 협업하여 앱을 장기적으로 안정하게 운영하기 위한 원�
 - **Core Always-ON 확정**: TodaySheet, Overview, 학생정보수정, 기본 Settings 및 **보강 추가/시간이동(`moved_to_hour`)/수업제외·취소/당일 수업 대상 자동 계산**을 절대 비활성화할 수 없는 Core 필수 운영 체계로 규정.
 - **Add-on 6대 패키지 Key 체계화**: `digital_library`, `live_classroom`, `assessment_tools`, `analytics_operations`, `student_parent_portal`, `labs`.
 - **기존 학원 무중단 보장**: 플래그 미설정 시 `DEFAULT_ACADEMY_FEATURE_FLAGS` (전체 ON) 기본값 정책 및 Phase 0 ~ Phase 6 단계별 점진적 실행 로드맵 확립.
+
+---
+
+## 22. AMS SaaS AI 상담 브리핑 비용 및 쿼터 관리 아키텍처 설계 (2026-09-05)
+
+- **상태**: **향후 설계 기록 / 미구현 / 운영 DB·코드 변경 없음**
+- **관련 파일**: `app/api/briefing/route.ts`, `ams_academies`, `ams_ai_usage_logs`, `/master`, `AIConsultationBriefing.tsx`
+
+### ① 배경 및 문제 정의
+현재 Vercel 환경변수(`OPENAI_API_KEY`, `GEMINI_API_KEY`)를 모든 학원이 공유하여 사용하는 구조에서는, SaaS 가입 학원 및 학생 수가 증가할수록 모든 LLM 토큰 비용이 운영자 1인에게 전액 청구됩니다. 학원별 사용량을 제어하고 공정한 과금/한도 체계를 갖추기 위한 향후 아키텍처 설계입니다.
+
+### ② 현재 상태와 미래 계획 구분
+- **현재 상태**:
+  - 운영자 공용 OpenAI/Gemini 서버 API 키 사용
+  - 학원별 AI 사용량 제한/차감/과금 기능은 아직 미구현
+  - 학원별 자체 API 키(BYOK)는 아직 미구현
+  - 서버 인가 및 `academy_id` 검증은 실제 코드·RLS 상태를 별도 보안 점검해야 함
+- **향후 계획**:
+  - 학원별 월간 쿼터/크레딧 한도 관리
+  - PostgreSQL RPC 기반 동시성 안전 원자적 크레딧 예약 및 차감
+  - 별도 비식별 사용량 원장 테이블(`ams_ai_usage_logs`) 운영
+  - Master 대시보드 내 학원별 쿼터 설정 및 실시간 모니터링
+  - BYOK 전용 암호화 보안 저장소 도입
+
+### ③ 초기 권장안: 공용 서버 키 + 학원별 월간 크레딧/한도 통제
+1. **공용 키 유지 + 쿼터 제어**: 서버 환경변수의 공용 API 키를 활용하되, 학원별로 월간 제공량(예: 기본 50회/월)을 설정하여 초과 시 서버에서 사전 차단.
+2. **원자적 크레딧 예약(Reservation) 및 확정**:
+   - 다수 교사의 동시 브리핑 생성 시 한도 초과를 방지하기 위해, PostgreSQL RPC `reserve_ai_credit`를 통해 1차 예약(`status = 'reserved'`).
+   - AI 호출 성공(HTTP 200) 시에만 `status = 'completed'`로 실제 차감 확정.
+   - AI 호출 실패(5xx/타임아웃) 시 `status = 'failed'`로 예약 취소 및 크레딧 환원.
+   - 5분 이상 방치된 예약은 만료 처리하여 사용자 불이익 방지.
+3. **모델 가중치 유연성**:
+   - 모델별 차감 가중치는 실제 API에서 지원되는 최신 모델·가격·컨텍스트 길이·생성량을 기준으로 관리자가 동적으로 조정하며, 특정 모델명을 영구 고정값으로 간주하지 않음.
+
+### ④ 데이터베이스 스키마 및 보안 설계 (향후 계획)
+- **학원 설정 (`ams_academies.operation_settings`)**:
+  - `ai_settings`: `{ enabled: true, monthly_quota: 50, active_models: [...], default_model: "..." }` (설정만 보관, 실시간 카운터 저장 금지)
+- **사용량 원장 테이블 (`ams_ai_usage_logs`)**:
+  - 컬럼: `id (PK)`, `academy_id (FK)`, `year_month`, `student_id`, `teacher_id`, `model`, `credits_used`, `status`, `error_reason`, `created_at`, `settled_at`
+- **보안 및 RLS 원칙**:
+  - `/api/briefing` 호출 시 클라이언트 JWT의 `academy_id`와 대상 학생의 `academy_id` 일치 여부를 서버에서 엄격히 검증.
+  - `ams_ai_usage_logs`에는 학생명, 성적 본문, AI 생성 결과 전문을 일체 저장하지 않고 비식별 메타데이터만 보관.
+  - API 키는 서버 환경변수에서만 사용하며, 향후 BYOK 도입 시에도 `operation_settings` 평문 저장을 금지하고 전용 암호화 테이블(AES-GCM / pgcrypto)에 보관.
+
+### ⑤ 단계별 구현 로드맵 (향후 승인 후 진행)
+1. **1단계**: `/api/briefing` 서버 인가 및 학원 ID 일치 검증 강화
+2. **2단계**: `ams_ai_usage_logs` 테이블 및 원자적 예약 RPC 함수 생성
+3. **3단계**: `/api/briefing` 2단계 예약/확정 트랜잭션 연동
+4. **4단계**: Master UI(학원별 한도 설정) 및 대시보드 UI(잔여 크레딧 표시) 연동
+
 
 

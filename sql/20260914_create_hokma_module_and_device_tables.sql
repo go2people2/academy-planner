@@ -1,13 +1,13 @@
 -- ============================================================================
--- 1. updated_at 자동 갱신 공통 함수
+-- 1. Hokma 전용 updated_at 자동 갱신 함수 (기존 함수명 충돌 방지)
 -- ============================================================================
-CREATE OR REPLACE FUNCTION update_updated_at_column()
+CREATE OR REPLACE FUNCTION hokma_update_academy_modules_updated_at()
 RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = timezone('utc'::text, now());
     RETURN NEW;
 END;
-$$ language 'plpgsql';
+$$ LANGUAGE plpgsql;
 
 -- ============================================================================
 -- 2. academy_modules (학원별 모듈 계약 및 사용 권한 상태 마스터)
@@ -29,7 +29,7 @@ CREATE TABLE IF NOT EXISTS academy_modules (
 
 CREATE TRIGGER trg_academy_modules_updated_at
 BEFORE UPDATE ON academy_modules
-FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+FOR EACH ROW EXECUTE FUNCTION hokma_update_academy_modules_updated_at();
 
 CREATE INDEX IF NOT EXISTS idx_academy_modules_lookup 
 ON academy_modules (academy_id, module_code, status);
@@ -117,7 +117,11 @@ RETURNS TABLE (
     academy_name TEXT,
     slug TEXT,
     device_id UUID
-) AS $$
+) 
+LANGUAGE plpgsql 
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
 DECLARE
     v_code RECORD;
     v_mod RECORD;
@@ -209,10 +213,19 @@ BEGIN
 
     RETURN QUERY SELECT true, NULL::TEXT, v_code.academy_id, v_academy.academy_name, v_academy.slug, v_device_id;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$;
+
+-- 💡 SECURITY DEFINER 함수 권한 제한 (PUBLIC/anon/authenticated 호출 차단, 오직 service_role만 허용)
+REVOKE ALL ON FUNCTION rpc_activate_device_with_code(
+    TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, JSONB
+) FROM PUBLIC;
+
+GRANT EXECUTE ON FUNCTION rpc_activate_device_with_code(
+    TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, JSONB
+) TO service_role;
 
 -- ============================================================================
--- 7. RLS 보안 정책 (일반 클라이언트 직접 접근 전면 차단)
+-- 7. RLS 보안 정책 (일반 클라이언트 직접 접근 전면 차단 - USING & WITH CHECK)
 -- ============================================================================
 ALTER TABLE academy_modules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE activation_codes ENABLE ROW LEVEL SECURITY;
@@ -220,16 +233,20 @@ ALTER TABLE academy_devices ENABLE ROW LEVEL SECURITY;
 ALTER TABLE device_sessions ENABLE ROW LEVEL SECURITY;
 
 CREATE POLICY "Deny direct client access to academy_modules" 
-ON academy_modules FOR ALL TO public USING (false);
+ON academy_modules FOR ALL TO public 
+USING (false) WITH CHECK (false);
 
 CREATE POLICY "Deny direct client access to activation_codes" 
-ON activation_codes FOR ALL TO public USING (false);
+ON activation_codes FOR ALL TO public 
+USING (false) WITH CHECK (false);
 
 CREATE POLICY "Deny direct client access to academy_devices" 
-ON academy_devices FOR ALL TO public USING (false);
+ON academy_devices FOR ALL TO public 
+USING (false) WITH CHECK (false);
 
 CREATE POLICY "Deny direct client access to device_sessions" 
-ON device_sessions FOR ALL TO public USING (false);
+ON device_sessions FOR ALL TO public 
+USING (false) WITH CHECK (false);
 
 -- ============================================================================
 -- 8. 확정 초기 Seed 데이터 (5개 학원 상태 정밀 매핑)
@@ -260,3 +277,15 @@ ON CONFLICT (academy_id, module_code) DO UPDATE SET status = 'inactive';
 INSERT INTO academy_modules (academy_id, module_code, status, max_devices)
 SELECT id, 'hokmanote', 'inactive', 1 FROM ams_academies WHERE slug = 'hplan'
 ON CONFLICT (academy_id, module_code) DO UPDATE SET status = 'inactive';
+
+-- ============================================================================
+-- [참고] 롤백 전용 SQL (필요 시 아래 쿼리 실행)
+-- ============================================================================
+/*
+DROP FUNCTION IF EXISTS rpc_activate_device_with_code(TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TEXT, TIMESTAMPTZ, JSONB) CASCADE;
+DROP TABLE IF EXISTS device_sessions CASCADE;
+DROP TABLE IF EXISTS academy_devices CASCADE;
+DROP TABLE IF EXISTS activation_codes CASCADE;
+DROP TABLE IF EXISTS academy_modules CASCADE;
+DROP FUNCTION IF EXISTS hokma_update_academy_modules_updated_at CASCADE;
+*/

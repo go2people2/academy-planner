@@ -9,8 +9,8 @@ interface LearningDashboardProps {
   lastSession: any;
   todaySession: any;
   selectedDate: string;
-  currentSelfEval: number | null;
-  handleSelfEval: (level: number) => void;
+  currentSelfEval?: number | null;
+  handleSelfEval?: (level: number) => void;
   handleTodoAchievement: (percentage: number) => void;
   onTodoToggle?: (index: number, totalCount: number) => void;
   todayPlan: string;
@@ -133,23 +133,6 @@ export default function LearningDashboard({
       onSyncTasks(checked, unchecked);
     }
   };
-
-  const getScoreTheme = (score: number | null) => {
-    return {
-      bg: 'bg-blue-600', border: 'border-blue-400', text: 'text-blue-500',
-      textLight: 'text-blue-200', textQuote: 'text-blue-400', borderL: 'border-l-blue-500',
-      lightBg: 'bg-blue-600/5', shadow: 'shadow-blue-900/10', hoverBorder: 'hover:border-blue-500/50'
-    };
-  };
-
-  const getButtonTheme = (score: number | null) => {
-    if (score === null || score >= 8) return { bg: 'bg-blue-600', border: 'border-blue-400', hoverBorder: 'hover:border-blue-500/50' };
-    if (score <= 3) return { bg: 'bg-rose-600', border: 'border-rose-400', hoverBorder: 'hover:border-rose-500/50' };
-    if (score <= 5) return { bg: 'bg-orange-500', border: 'border-orange-400', hoverBorder: 'hover:border-orange-500/50' };
-    return { bg: 'bg-emerald-500', border: 'border-emerald-400', hoverBorder: 'hover:border-emerald-500/50' };
-  };
-
-  const scoreTheme = getScoreTheme(currentSelfEval);
 
   return (
     <div className="space-y-2 md:space-y-3">
@@ -317,74 +300,107 @@ export default function LearningDashboard({
           </motion.div>
         )}
 
-        {/* 3. 과제 확인 */}
-        {lastSession && (
-          <motion.div 
-            layout
-            className={isSlim 
-              ? `bg-[#0a0a0a] border ${scoreTheme.border}/20 rounded-md p-1.5 flex items-center gap-3 overflow-hidden shadow-lg ${scoreTheme.shadow}`
-              : `${scoreTheme.lightBg} border ${scoreTheme.border}/20 rounded-lg shadow-xl text-left border-l-4 ${scoreTheme.borderL} flex flex-col overflow-hidden`
+        {/* 3. 과제 확인 (선생님 평가 결과 실시간 반영) */}
+        {lastSession && (() => {
+          const session = todaySession;
+          const status = session?.status;
+          let testResultObj: any = {};
+          if (session?.test_result && typeof session.test_result === 'string' && session.test_result.startsWith('{')) {
+            try { testResultObj = JSON.parse(session.test_result); } catch (e) {}
+          }
+          const hwEval = testResultObj.hw_eval;
+          const hwGrade = testResultObj.hw_grade || status;
+
+          const hwGradeInfo = (() => {
+            if (hwGrade === 'gradeA' || hwEval === 10 || status === 'gradeA' || status === 'perfect') {
+              return { label: 'A (10점)', desc: '완벽', bg: 'bg-emerald-600', border: 'border-emerald-400', text: 'text-emerald-400', badgeBg: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40' };
             }
-          >
-            {isSlim ? (
-              <div className="flex items-center gap-3 w-full">
-                <div className={`w-6 h-6 ${scoreTheme.bg} rounded-full flex items-center justify-center shrink-0 border ${scoreTheme.border}/50`}>
-                  <ClipboardCheck className="text-white" size={10} />
-                </div>
-                <div className="text-left flex-1 min-w-0 overflow-x-auto no-scrollbar">
-                  <p className={`text-[13px] font-bold ${scoreTheme.textLight} whitespace-nowrap`}>{lastSession.homework_text || '기록된 숙제가 없습니다.'}</p>
-                </div>
-                {currentSelfEval !== null && (
-                  <div className={`${scoreTheme.bg} px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg shrink-0`}>
-                    Lvl {currentSelfEval}
+            if (hwGrade === 'gradeB' || hwEval === 8 || hwEval === 7 || status === 'gradeB' || status === 'good') {
+              return { label: 'B (8점)', desc: '우수', bg: 'bg-blue-600', border: 'border-blue-400', text: 'text-blue-400', badgeBg: 'bg-blue-500/20 text-blue-300 border-blue-500/40' };
+            }
+            if (hwGrade === 'gradeC' || hwEval === 5 || status === 'gradeC' || status === 'neutral') {
+              return { label: 'C (5점)', desc: '보통', bg: 'bg-amber-600', border: 'border-amber-400', text: 'text-amber-400', badgeBg: 'bg-amber-500/20 text-amber-300 border-amber-500/40' };
+            }
+            if (hwGrade === 'gradeD' || hwEval === 3 || status === 'gradeD' || status === 'poor') {
+              return { label: 'D (3점)', desc: '미흡', bg: 'bg-orange-600', border: 'border-orange-400', text: 'text-orange-400', badgeBg: 'bg-orange-500/20 text-orange-300 border-orange-500/40' };
+            }
+            if (hwGrade === 'gradeE' || (hwEval === 0 && hwGrade !== 'gradeF') || status === 'gradeE' || status === 'bad') {
+              return { label: 'E (0점)', desc: '부진', bg: 'bg-rose-600', border: 'border-rose-400', text: 'text-rose-400', badgeBg: 'bg-rose-500/20 text-rose-300 border-rose-500/40' };
+            }
+            if (hwGrade === 'gradeF' || (hwEval === 0 && testResultObj.hw_grade_label?.includes('평가보류'))) {
+              return { label: 'F (0점 / 평가보류)', desc: '평가보류', bg: 'bg-purple-600', border: 'border-purple-400', text: 'text-purple-400', badgeBg: 'bg-purple-500/20 text-purple-300 border-purple-500/40' };
+            }
+            return null;
+          })();
+
+          return (
+            <motion.div 
+              layout
+              className={isSlim 
+                ? `bg-[#0a0a0a] border ${hwGradeInfo ? hwGradeInfo.border : 'border-blue-500'}/20 rounded-md p-1.5 flex items-center gap-3 overflow-hidden shadow-lg shadow-blue-900/10`
+                : `${hwGradeInfo ? 'bg-white/[0.02]' : 'bg-blue-600/5'} border ${hwGradeInfo ? hwGradeInfo.border : 'border-blue-500'}/20 rounded-lg shadow-xl text-left border-l-4 ${hwGradeInfo ? hwGradeInfo.border.replace('border-', 'border-l-') : 'border-l-blue-500'} flex flex-col overflow-hidden`
+              }
+            >
+              {isSlim ? (
+                <div className="flex items-center gap-3 w-full">
+                  <div className={`w-6 h-6 ${hwGradeInfo ? hwGradeInfo.bg : 'bg-blue-600'} rounded-full flex items-center justify-center shrink-0 border ${hwGradeInfo ? hwGradeInfo.border : 'border-blue-400'}/50`}>
+                    <ClipboardCheck className="text-white" size={10} />
                   </div>
-                )}
-              </div>
-            ) : (
-              <>
-                <div className="px-3 md:px-6 py-1 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 md:gap-2">
-                  <div className="flex items-center gap-2 shrink-0">
-                    <div className="flex items-center gap-1.5">
-                      <ClipboardCheck className={scoreTheme.text} size={14} />
-                      <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest">과제확인</h4>
+                  <div className="text-left flex-1 min-w-0 overflow-x-auto no-scrollbar">
+                    <p className="text-[13px] font-bold text-white whitespace-nowrap">{lastSession.homework_text || '기록된 숙제가 없습니다.'}</p>
+                  </div>
+                  {hwGradeInfo ? (
+                    <div className={`${hwGradeInfo.bg} px-2 py-0.5 rounded-[3px] text-white text-[9px] font-black shadow-lg shrink-0`}>
+                      {hwGradeInfo.label}
                     </div>
-                    <div className={`flex items-center gap-1.5 text-[9px] font-black ${scoreTheme.textQuote} tabular-nums`}>
-                      <span>({lastSession.session_date.slice(5).replace('-', '.')})</span>
-                      <ChevronRight size={10} className={`${scoreTheme.textQuote}/50`} />
-                      <span className={`${scoreTheme.bg}/10 px-1.5 py-0.5 rounded ${scoreTheme.textQuote}`}>({selectedDate.slice(5).replace('-', '.')})</span>
+                  ) : (
+                    <div className="bg-white/10 px-2 py-0.5 rounded-[3px] text-gray-400 text-[9px] font-bold shrink-0">
+                      검사 대기
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <>
+                  <div className="px-3 md:px-6 py-1.5 bg-white/[0.03] border-b border-white/5 flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 md:gap-2">
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-1.5">
+                        <ClipboardCheck className={hwGradeInfo ? hwGradeInfo.text : "text-blue-500"} size={14} />
+                        <h4 className="text-[10px] md:text-[11px] font-black text-white uppercase tracking-widest">과제확인</h4>
+                      </div>
+                      <div className="flex items-center gap-1.5 text-[9px] font-black text-blue-400/80 tabular-nums">
+                        <span>({lastSession.session_date.slice(5).replace('-', '.')})</span>
+                        <ChevronRight size={10} className="text-blue-400/50" />
+                        <span className="bg-blue-600/10 px-1.5 py-0.5 rounded text-blue-400">({selectedDate.slice(5).replace('-', '.')})</span>
+                      </div>
+                    </div>
+
+                    {/* 선생님 검사 결과 배지 */}
+                    <div className="flex items-center gap-1">
+                      {hwGradeInfo ? (
+                        <div className={`px-2.5 py-0.5 rounded-[3px] border text-[10.5px] md:text-[11.5px] font-black tracking-tight shadow-md flex items-center gap-1.5 ${hwGradeInfo.badgeBg}`}>
+                          <CheckCircle2 size={12} className={hwGradeInfo.text} />
+                          <span>선생님 평가: <b>{hwGradeInfo.label}</b></span>
+                        </div>
+                      ) : (
+                        <div className="px-2 py-0.5 rounded border border-white/10 bg-white/5 text-gray-400 text-[10px] font-bold flex items-center gap-1">
+                          <Clock size={11} className="text-gray-400" />
+                          <span>선생님 검사 대기 중</span>
+                        </div>
+                      )}
                     </div>
                   </div>
-                  <div className="flex items-center gap-0.5 overflow-x-auto no-scrollbar">
-                    {[0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(num => {
-                      const btnTheme = getButtonTheme(currentSelfEval);
-                      return (
-                      <button 
-                        key={num} 
-                        disabled={approvalStatus !== 'none'}
-                        onClick={() => approvalStatus === 'none' && handleSelfEval(num)} 
-                        className={`w-6 h-6 md:w-7 md:h-7 shrink-0 rounded-[2px] text-[11px] md:text-[13px] font-black transition-all border ${
-                          (currentSelfEval !== null && num <= currentSelfEval) 
-                            ? `${btnTheme.bg} ${btnTheme.border} text-white shadow-lg` 
-                            : `bg-white/10 border-white/20 text-white ${btnTheme.hoverBorder}`
-                        } ${approvalStatus !== 'none' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                      >
-                        {currentSelfEval === null ? num : (num === currentSelfEval ? num : '')}
-                      </button>
-                      );
-                    })}
+                  <div className="py-2.5 px-4 md:py-3.5 md:px-6">
+                    <p className="text-[13px] md:text-[15px] font-bold text-gray-200 leading-tight italic whitespace-pre-wrap">
+                      <span className="text-blue-400 text-[14px] md:text-[17px] font-black mr-1 opacity-80">"</span>
+                      {lastSession.homework_text || '기록된 숙제가 없습니다.'}
+                      <span className="text-blue-400 text-[14px] md:text-[17px] font-black ml-1 opacity-80">"</span>
+                    </p>
                   </div>
-                </div>
-                <div className="py-2.5 px-4 md:py-3.5 md:px-6">
-                  <p className={`text-[13px] md:text-[15px] font-bold ${scoreTheme.textLight} leading-tight italic whitespace-pre-wrap`}>
-                    <span className={`${scoreTheme.textQuote} text-[14px] md:text-[17px] font-black mr-1 opacity-80`}>"</span>
-                    {lastSession.homework_text || '기록된 숙제가 없습니다.'}
-                    <span className={`${scoreTheme.textQuote} text-[14px] md:text-[17px] font-black ml-1 opacity-80`}>"</span>
-                  </p>
-                </div>
-              </>
-            )}
-          </motion.div>
-        )}
+                </>
+              )}
+            </motion.div>
+          );
+        })()}
       </div>
     </div>
   );

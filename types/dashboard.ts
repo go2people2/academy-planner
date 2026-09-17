@@ -70,6 +70,13 @@ export interface SessionLog {
   absence_session_id?: string | number | null; // 💡 결석 연동 보강 원본 세션 ID (bigint)
   absence_date?: string | null; // 💡 결석 연동 보강 원본 결석일
   session_snapshot?: SessionSnapshot | null; // 💡 세션 당시 스냅샷 불변 데이터
+  submission_snapshot?: Record<string, any> | null; // 💡 학생 제출 원본 불변 스냅샷
+  approved_at?: string | null; // 💡 승인 시각
+  approved_by?: string | null; // 💡 승인자 ID (auth.uid)
+  edit_unlocked_by?: string | null; // 💡 임시 잠금 해제 교사 ID (auth.uid)
+  edit_unlocked_at?: string | null; // 💡 임시 잠금 해제 시각
+  version?: number; // 💡 낙관적 잠금 버전 (기본 1)
+  updated_at?: string; // 💡 수정 시각
 }
 
 export interface AbsenceLinkContext {

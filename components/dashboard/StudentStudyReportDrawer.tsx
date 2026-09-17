@@ -12,6 +12,8 @@ import {
 import { Student, SessionLog, TextbookOption } from '@/types/dashboard';
 import { supabase } from '@/lib/supabase';
 import AIConsultationBriefing from './AIConsultationBriefing';
+import PerformanceChart from '@/components/student/PerformanceChart';
+import HomeworkPerformanceChart from '@/components/student/HomeworkPerformanceChart';
 
 interface StudentStudyReportDrawerProps {
   student: Student;
@@ -27,7 +29,7 @@ type TabType = 'summary' | 'history' | 'stats' | 'roadmap' | 'journal' | 'ai-bri
 import { useStudentStudyReport } from './hooks/useStudentStudyReport';
 
 export default function StudentStudyReportDrawer({ student, availableTextbooks, onClose, onEditMode, onRefreshStudents, isLight = false }: StudentStudyReportDrawerProps) {
-  const { activeTab, setActiveTab, stats } = useStudentStudyReport(student);
+  const { activeTab, setActiveTab, stats, allLogs } = useStudentStudyReport(student);
 
   return (
     <motion.div 
@@ -35,7 +37,7 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
       animate={{ x: 0 }} 
       exit={{ x: '100%' }} 
       transition={{ type: 'spring', damping: 30, stiffness: 200 }} 
-      className={`fixed inset-y-0 right-0 w-[550px] backdrop-blur-3xl border-l shadow-2xl z-[90] flex flex-col overflow-hidden transition-all ${
+      className={`fixed inset-y-0 right-0 w-[540px] max-w-[90vw] backdrop-blur-3xl border-l shadow-2xl z-[90] flex flex-col overflow-hidden transition-all ${
         isLight 
           ? 'bg-white border-gray-250 shadow-gray-400/20 text-[#37352f]' 
           : 'bg-[#080808]/98 border-white/10 shadow-blue-900/10 text-white'
@@ -102,9 +104,9 @@ export default function StudentStudyReportDrawer({ student, availableTextbooks, 
       {/* 3. 메인 스크롤 영역 */}
       <div className="flex-1 overflow-y-auto custom-scrollbar-v p-8">
         <AnimatePresence mode="wait">
-          {activeTab === 'summary' && <SummaryTab key="summary" student={student} stats={stats} availableTextbooks={availableTextbooks} isLight={isLight} />}
+          {activeTab === 'summary' && <SummaryTab key="summary" student={student} allLogs={allLogs} stats={stats} availableTextbooks={availableTextbooks} onRefreshStudents={onRefreshStudents} isLight={isLight} />}
           {activeTab === 'history' && <HistoryTab key="history" student={student} availableTextbooks={availableTextbooks} onRefreshStudents={onRefreshStudents} isLight={isLight} />}
-          {activeTab === 'stats' && <StatsTab key="stats" student={student} onRefreshStudents={onRefreshStudents} isLight={isLight} />}
+          {activeTab === 'stats' && <StatsTab key="stats" student={student} allLogs={allLogs} onRefreshStudents={onRefreshStudents} isLight={isLight} />}
           {activeTab === 'roadmap' && <RoadmapTab key="roadmap" student={student} isLight={isLight} />}
           {activeTab === 'journal' && <JournalTab key="journal" student={student} isLight={isLight} />}
           {activeTab === 'ai-briefing' && <AIConsultationBriefing key="ai-briefing" student={student} isLight={isLight} />}
@@ -191,83 +193,119 @@ const extractAttendanceReason = (log: any): string => {
   return '사유 미기재';
 };
 
-function SummaryTab({ student, stats, availableTextbooks, isLight }: any) {
+function SummaryTab({ student, allLogs, stats, availableTextbooks, onRefreshStudents, isLight }: any) {
+  const [updatingLogId, setUpdatingLogId] = useState<string | null>(null);
+
   // 💡 [원장님 기획] 학생의 전체 로그 중 '결석' 상태인 로그들만 추출하여 최신 날짜 순으로 정렬합니다.
   const absenceLogs = useMemo(() => {
-    const logs = student.allLogs || [];
+    const logs = (allLogs && allLogs.length > 0) ? allLogs : (student.allLogs || []);
     return logs
       .filter((l: any) => l.attendance_status === '결석')
       .sort((a: any, b: any) => new Date(b.date || b.session_date || 0).getTime() - new Date(a.date || a.session_date || 0).getTime());
-  }, [student.allLogs]);
+  }, [allLogs, student.allLogs]);
+
+  // 보강 완료 토글 핸들러
+  const handleToggleMakeup = async (log: any) => {
+    if (updatingLogId) return;
+    setUpdatingLogId(log.id);
+
+    try {
+      const currentNotes = log.special_notes || '';
+      let newNotes = '';
+      
+      if (currentNotes.includes('[보강완료]')) {
+        newNotes = currentNotes.replace('[보강완료]', '').trim();
+      } else {
+        newNotes = currentNotes ? `${currentNotes} [보강완료]` : '[보강완료]';
+      }
+
+      const { error } = await supabase
+        .from('ams_session_logs')
+        .update({ special_notes: newNotes })
+        .eq('id', log.id);
+
+      if (error) throw error;
+
+      if (onRefreshStudents) {
+        await onRefreshStudents();
+      }
+    } catch (err) {
+      console.error('Error toggling makeup status:', err);
+      alert('보강 상태 변경에 실패했습니다.');
+    } finally {
+      setUpdatingLogId(null);
+    }
+  };
 
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-8">
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
       {/* 기본 주요 지표 */}
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-3">
         <MetricCard label="평균 출석률" value={`${stats.attendanceRate}%`} sub="최근 20세션" color="text-emerald-500" icon={<CheckCircle2 size={16}/>} isLight={isLight} />
-        <MetricCard label="숙제 이행률" value={`${stats.homeworkRate}%`} sub="최근 4주" color="text-blue-500" icon={<BookOpen size={16}/>} isLight={isLight} />
-        <MetricCard label="테스트 평균" value={`${stats.avgTestScore}점`} sub="최근 5회" color="text-orange-500" icon={<BarChart3 size={16}/>} isLight={isLight} />
+        <MetricCard label="숙제 이행률" value={stats.hwRateText || `${stats.homeworkRate}%`} sub={stats.hwRateSub || "최근 20세션"} color="text-blue-500" icon={<BookOpen size={16}/>} isLight={isLight} />
+        <MetricCard label="테스트 평균" value={stats.testMetricValue} sub={stats.testMetricSub} color="text-orange-500" icon={<BarChart3 size={16}/>} isLight={isLight} />
       </div>
 
-      {/* 당월 출결 및 보강 통계 */}
-      <section className="space-y-3">
-        <SectionTitle title={`${stats.currentMonthName} 출결 및 보강 통계`} isLight={isLight} />
-        <div className="grid grid-cols-2 gap-4">
-          <MetricCard 
-            label="이번 달 결석" 
-            value={`${stats.absencesCount}회`} 
-            sub="당월 누적 결석" 
-            color="text-rose-500" 
-            icon={<AlertCircle size={16} className="text-rose-500" />} 
-            isLight={isLight}
-          />
-          <MetricCard 
-            label="이번 달 보강 진행" 
-            value={`${stats.makeupsCount}회`} 
-            sub="당월 누적 보강" 
-            color="text-blue-500" 
-            icon={<Clock size={16} className="text-blue-500" />} 
-            isLight={isLight}
-          />
-        </div>
-      </section>
-
-      {/* 💡 [원장님 특별 지침] 최근 결석 사유 및 날짜 리스트업 섹션 신설 */}
+      {/* 💡 [슬림화] 출결 통계 인라인 배지 + 최근 결석 및 보강 현황 리스트 통합 */}
       <section className="space-y-3 text-left">
-        <SectionTitle title="최근 결석 및 취소 히스토리" isLight={isLight} />
+        <div className="flex items-center justify-between">
+          <SectionTitle title="최근 결석 및 보강 현황" isLight={isLight} />
+          <div className={`text-[10px] font-bold px-2 py-0.5 rounded border tabular-nums ${
+            isLight ? 'bg-gray-50 border-gray-200 text-gray-600' : 'bg-white/5 border-white/10 text-gray-300'
+          }`}>
+            {stats.currentMonthName}: 결석 <span className="text-rose-500 font-extrabold">{stats.absencesCount}회</span> · 보강 <span className="text-blue-500 font-extrabold">{stats.makeupsCount}회</span>
+          </div>
+        </div>
+
         {absenceLogs.length > 0 ? (
-          <div className={`border rounded-[4px] p-4 ${
+          <div className={`border rounded-[4px] p-3 ${
             isLight ? 'bg-gray-50/50 border-gray-200' : 'bg-white/5 border-white/5'
           }`}>
-            <div className="max-h-[180px] overflow-y-auto custom-scrollbar-v pr-1 space-y-2">
+            <div className="max-h-[220px] overflow-y-auto custom-scrollbar-v pr-1 space-y-1.5">
               {absenceLogs.map((log: any, idx: number) => {
-                const displayDate = log.date || log.session_date || '';
+                const displayDate = (log.date || log.session_date || '').replace(/-/g, '.');
                 const reason = extractAttendanceReason(log);
+                const isMakeupCompleted = log.special_notes?.includes('[보강완료]') || log.attendance_reason?.includes('[보강완료]');
+                const isUpdating = updatingLogId === log.id;
+
                 return (
                   <div 
                     key={`absence-${displayDate}-${idx}`} 
-                    className={`flex items-center justify-between p-2.5 rounded-[2px] border text-[12px] font-medium transition-all ${
+                    className={`flex items-center justify-between p-2.5 rounded-[4px] border text-[12px] font-medium transition-all ${
                       isLight 
-                        ? 'bg-white border-gray-200 hover:border-red-500/20 shadow-sm' 
-                        : 'bg-[#0f0f0f] border-white/5 hover:border-red-500/20'
+                        ? 'bg-white border-gray-200 hover:border-gray-300 shadow-sm' 
+                        : 'bg-[#0f0f0f] border-white/5 hover:border-white/10'
                     }`}
                   >
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 shadow-sm shadow-red-500/30 shrink-0" />
-                      <span className={`font-black shrink-0 ${isLight ? 'text-gray-700' : 'text-gray-300'}`}>
+                    <div className="flex items-center gap-2 min-w-0 flex-1 mr-2">
+                      <div className="w-1.5 h-1.5 rounded-full bg-rose-500 shrink-0" />
+                      <span className={`font-black text-[11px] shrink-0 tabular-nums ${isLight ? 'text-gray-800' : 'text-gray-200'}`}>
                         {displayDate}
                       </span>
+                      <span className={`text-[11px] font-bold truncate ${isLight ? 'text-gray-600' : 'text-gray-400'}`}>
+                        {reason}
+                      </span>
                     </div>
-                    <span className="font-bold italic text-[11px] px-2 py-0.5 rounded bg-red-500/10 text-red-400 border border-red-500/20 max-w-[280px] truncate shrink-0">
-                      {reason}
-                    </span>
+
+                    <button
+                      type="button"
+                      onClick={() => handleToggleMakeup(log)}
+                      disabled={isUpdating}
+                      className={`text-[10px] font-bold px-2 py-0.5 rounded border transition-all shrink-0 ${
+                        isMakeupCompleted
+                          ? 'bg-emerald-500/10 text-emerald-500 border-emerald-500/20 hover:bg-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20'
+                      } ${isUpdating ? 'opacity-40 cursor-wait' : ''}`}
+                    >
+                      {isMakeupCompleted ? '보강 완료' : '보강 미완료'}
+                    </button>
                   </div>
                 );
               })}
             </div>
           </div>
         ) : (
-          <div className={`border rounded-[4px] p-5 text-center text-[11px] font-bold ${
+          <div className={`border rounded-[4px] p-4 text-center text-[11px] font-bold ${
             isLight ? 'bg-gray-50/50 border-gray-250 text-gray-500' : 'bg-white/5 border-white/5 text-gray-500'
           }`}>
             🎉 최근 누적된 결석 기록이 전혀 없는 성실한 학생입니다.
@@ -527,151 +565,12 @@ function HistoryTab({ student, availableTextbooks, onRefreshStudents, isLight }:
   );
 }
 
-function StatsTab({ student, onRefreshStudents, isLight = false }: { student: Student; onRefreshStudents?: () => Promise<void>; isLight?: boolean }) {
-  const testData = useMemo(() => (student.allLogs || []).filter((l: any) => l.test_score !== null).slice(0, 10).reverse(), [student.allLogs]);
-  const [updatingLogId, setUpdatingLogId] = useState<string | null>(null);
-
-  // 1. 결석/지각 내역 필터링 (최신순)
-  const attendanceLogs = useMemo(() => {
-    return (student.allLogs || [])
-      .filter((l: any) => l.attendance_status === '결석' || l.attendance_status === '지각')
-      .sort((a: any, b: any) => b.date.localeCompare(a.date));
-  }, [student.allLogs]);
-
-  // 2. 보강 토글 핸들러
-  const handleToggleMakeup = async (log: any) => {
-    if (updatingLogId) return;
-    setUpdatingLogId(log.id);
-
-    try {
-      const currentNotes = log.special_notes || '';
-      let newNotes = '';
-      
-      if (currentNotes.includes('[보강완료]')) {
-        newNotes = currentNotes.replace('[보강완료]', '').trim();
-      } else {
-        newNotes = currentNotes ? `${currentNotes} [보강완료]` : '[보강완료]';
-      }
-
-      const { error } = await supabase
-        .from('ams_session_logs')
-        .update({ special_notes: newNotes })
-        .eq('id', log.id);
-
-      if (error) throw error;
-
-      if (onRefreshStudents) {
-        await onRefreshStudents();
-      }
-    } catch (err) {
-      console.error('Error toggling makeup status:', err);
-      alert('보강 상태 변경에 실패했습니다.');
-    } finally {
-      setUpdatingLogId(null);
-    }
-  };
-
+function StatsTab({ student, allLogs, isLight = false }: { student: Student; allLogs?: any[]; onRefreshStudents?: () => Promise<void>; isLight?: boolean }) {
+  const logsToUse = allLogs && allLogs.length > 0 ? allLogs : (student.allLogs || []);
   return (
-    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-10">
-      {/* 테스트 점수 추이 */}
-      <section className="space-y-6">
-        <SectionTitle title="최근 테스트 점수 추이" isLight={isLight} />
-        {testData.length > 0 ? (
-          <div className={`border p-8 rounded-[4px] ${
-            isLight ? 'bg-gray-50/50 border-gray-250' : 'bg-white/[0.02] border-white/5'
-          }`}>
-            <div className="flex items-end justify-between gap-2 h-40 mb-4">
-              {testData.map((log: any, i: number) => (
-                <div key={i} className="flex-1 flex flex-col items-center gap-2 group relative">
-                  <div className="absolute -top-8 left-1/2 -translate-x-1/2 bg-blue-600 text-white text-[9px] font-black px-1.5 py-0.5 rounded-[2px] opacity-0 group-hover:opacity-100 transition-all z-20 whitespace-nowrap">{log.test_score}점</div>
-                  <div className={`w-full rounded-t-[2px] relative flex items-end h-32 overflow-hidden border ${
-                    isLight ? 'bg-blue-600/5 border-gray-200' : 'bg-blue-600/10 border-white/5'
-                  }`}>
-                    <motion.div initial={{ height: 0 }} animate={{ height: `${log.test_score}%` }} className={`w-full ${log.test_score >= 80 ? 'bg-blue-500' : log.test_score >= 60 ? 'bg-amber-500' : 'bg-red-500'}`} />
-                  </div>
-                  <span className={`text-[8px] font-black rotate-45 origin-left ml-2 mt-1 ${
-                    isLight ? 'text-gray-500' : 'text-gray-600'
-                  }`}>{log.date.slice(5)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : <p className={`text-[10px] font-bold uppercase text-center py-20 tracking-widest ${isLight ? 'text-gray-400' : 'text-gray-700'}`}>기록된 점수가 없습니다.</p>}
-      </section>
-
-      {/* 출결 현황 및 결석 보강 관리 섹션 */}
-      <section className="space-y-6">
-        <SectionTitle title="결석 및 지각 내역 (보강 관리)" isLight={isLight} />
-        {attendanceLogs.length > 0 ? (
-          <div className={`border rounded-lg overflow-hidden ${
-            isLight ? 'bg-gray-50/50 border-gray-200' : 'bg-white/[0.02] border-white/5'
-          }`}>
-            <div className={`max-h-80 overflow-y-auto pr-0.5 custom-scrollbar-v divide-y ${
-              isLight ? 'divide-gray-150' : 'divide-white/5'
-            }`}>
-              {attendanceLogs.map((log: any) => {
-                const isAbsent = log.attendance_status === '결석';
-                const isMakeupCompleted = log.special_notes?.includes('[보강완료]') || log.attendance_reason?.includes('[보강완료]');
-                const pureReason = extractAttendanceReason(log);
-                const isUpdating = updatingLogId === log.id;
-
-                return (
-                  <div key={log.id} className={`flex items-center justify-between p-4 transition-colors ${
-                    isLight ? 'hover:bg-gray-100/50' : 'hover:bg-white/[0.02]'
-                  }`}>
-                    <div className="space-y-1">
-                      <div className="flex items-center gap-2">
-                        <span className={`text-[10px] font-black tabular-nums ${isLight ? 'text-gray-500' : 'text-gray-600'}`}>{log.date.replace(/-/g, '.')}</span>
-                        <span className={`text-[9px] font-black px-1.5 py-0.5 rounded ${
-                          isAbsent ? 'bg-red-500/10 text-red-500 border border-red-500/20' : 'bg-amber-500/10 text-amber-500 border border-amber-500/20'
-                        }`}>
-                          {log.attendance_status}
-                        </span>
-                      </div>
-                      <p className={`text-[11px] font-medium ${isLight ? 'text-gray-600' : 'text-gray-400'}`}>
-                        사유: <span className={pureReason === '사유 미기재' ? 'text-gray-400 italic' : isLight ? 'text-gray-800 font-extrabold' : 'text-gray-300 font-bold'}>{pureReason}</span>
-                      </p>
-                    </div>
-
-                    {/* 결석일 경우에만 보강 상태 관리 UI 제공 */}
-                    {isAbsent && (
-                      <button
-                        type="button"
-                        onClick={() => handleToggleMakeup(log)}
-                        disabled={isUpdating}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] font-black border transition-all ${
-                          isMakeupCompleted
-                            ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400 hover:bg-emerald-500/20'
-                            : 'bg-rose-500/10 border-rose-500/20 text-rose-400 hover:bg-rose-500/20'
-                        } ${isUpdating ? 'opacity-40 cursor-wait' : ''}`}
-                      >
-                        {isMakeupCompleted ? (
-                          <>
-                            <CheckSquare size={12} className="text-emerald-400" />
-                            <span>보강 완료 (⭕)</span>
-                          </>
-                        ) : (
-                          <>
-                            <Square size={12} className="text-rose-400" />
-                            <span>보강 미완료 (❌)</span>
-                          </>
-                        )}
-                      </button>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        ) : (
-          <div className={`border border-dashed rounded-lg py-12 flex flex-col items-center justify-center gap-1.5 ${
-            isLight ? 'bg-gray-50/30 border-gray-250 text-gray-400' : 'bg-white/[0.01] border-white/10 text-gray-500'
-          }`}>
-            <CheckCircle2 size={24} className="text-emerald-500" />
-            <span className={`text-[10px] font-black uppercase tracking-wider ${isLight ? 'text-gray-500' : 'text-gray-600'}`}>출결 상태가 매우 안정적입니다.</span>
-          </div>
-        )}
-      </section>
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <PerformanceChart logs={logsToUse} isLight={isLight} />
+      <HomeworkPerformanceChart logs={logsToUse} isLight={isLight} />
     </motion.div>
   );
 }
@@ -1066,7 +965,7 @@ function MetricCard({ label, value, sub, color, icon, isLight = false }: any) {
         {icon}
         <span className="text-[9px] font-black uppercase tracking-widest">{label}</span>
       </div>
-      <div className={`text-xl font-black tabular-nums ${color}`}>{value}</div>
+      <div className={`text-[16px] sm:text-[19px] font-black tabular-nums leading-tight truncate ${color}`}>{value}</div>
       <div className={`text-[8px] font-bold uppercase tracking-tighter ${isLight ? 'text-gray-400' : 'text-gray-650'}`}>{sub}</div>
     </div>
   );

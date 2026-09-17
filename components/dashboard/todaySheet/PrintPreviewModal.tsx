@@ -204,9 +204,8 @@ export default function PrintPreviewModal({
   // Sort groups by class time
   groups.sort((a, b) => a.time - b.time);
 
-  // 2. Distribute groups into pages using smart logic (MAX_ROWS_PER_PAGE = 20)
-  const MAX_ROWS_PER_PAGE = 20;
-  const MIN_STUDENTS_FOR_NEW_PAGE = 3;
+  // 2. Distribute groups into pages using natural continuous filling logic (A4 가로 안전 기준 MAX_ROWS_PER_PAGE = 15)
+  const MAX_ROWS_PER_PAGE = 15;
   const pages: any[][] = [];
   let currentPage: any[] = [];
   let globalIndex = 1;
@@ -218,26 +217,35 @@ export default function PrintPreviewModal({
       groupRows.push({ type: 'student', data: s, printIndex: globalIndex++ });
     });
 
-    const isSmallGroup = group.students.length < MIN_STUDENTS_FOR_NEW_PAGE;
-    const currentLength = currentPage.length;
-    const willExceedLimit = currentLength + groupRows.length > MAX_ROWS_PER_PAGE;
-
-    if (currentLength > 0 && (!isSmallGroup || willExceedLimit)) {
-      pages.push(currentPage);
-      currentPage = [];
-    }
-
     let remainingRows = groupRows;
     while (remainingRows.length > 0) {
-      const spaceLeft = MAX_ROWS_PER_PAGE - currentPage.length;
+      let spaceLeft = MAX_ROWS_PER_PAGE - currentPage.length;
+
+      // 💡 [단독 제목 방지] 타임 그룹 divider로 시작하는데 현재 페이지 남은 여백이 1줄뿐인 경우,
+      // 제목만 맨 아래에 홀로 남지 않도록 새 페이지에서 시작 (제목 + 최소 1명 학생 동시 배치 보장)
+      if (spaceLeft < 2 && remainingRows[0].type === 'divider') {
+        if (currentPage.length > 0) {
+          pages.push(currentPage);
+          currentPage = [];
+          spaceLeft = MAX_ROWS_PER_PAGE;
+        }
+      } else if (spaceLeft <= 0) {
+        pages.push(currentPage);
+        currentPage = [];
+        spaceLeft = MAX_ROWS_PER_PAGE;
+      }
+
       if (remainingRows.length <= spaceLeft) {
         currentPage.push(...remainingRows);
         remainingRows = [];
       } else {
-        currentPage.push(...remainingRows.slice(0, spaceLeft));
+        const sliceCount = spaceLeft;
+        currentPage.push(...remainingRows.slice(0, sliceCount));
         pages.push(currentPage);
         currentPage = [];
-        remainingRows = remainingRows.slice(spaceLeft);
+        remainingRows = remainingRows.slice(sliceCount);
+
+        // 다음 페이지로 분할되어 넘어갈 때 학생 행이 이어지면 '(이어서)' 헤더 추가
         if (remainingRows.length > 0 && remainingRows[0].type === 'student') {
           remainingRows.unshift({ type: 'divider', label: `${group.label} (이어서)` });
         }
@@ -314,7 +322,7 @@ export default function PrintPreviewModal({
               <div>
                 {/* Paper Header */}
                 <div
-                  className="flex justify-between items-end pb-2 mb-3 text-left"
+                  className="flex justify-between items-end pb-1.5 mb-2 text-left"
                   style={{ borderBottom: `2px solid ${theme.headerBorderColor}` }}
                 >
                   <div>
@@ -358,7 +366,7 @@ export default function PrintPreviewModal({
                     {pageRows.map((row, rIdx) => {
                       if (row.type === 'divider') {
                         return (
-                          <tr key={`div-${rIdx}`} className="border-y border-gray-300">
+                          <tr key={`div-${rIdx}`} className="print-divider-row border-y border-gray-300">
                             <td
                               colSpan={displayCols.length}
                               className="px-2 py-0.8 text-[8.5px] font-black tracking-wider border border-gray-300"
@@ -488,7 +496,7 @@ export default function PrintPreviewModal({
 
               {/* Paper Footer */}
               <div
-                className="mt-3.5 pt-1.5 flex items-center justify-between text-[8px] text-gray-400 font-bold uppercase tracking-widest shrink-0"
+                className="mt-2 pt-1 flex items-center justify-between text-[8px] text-gray-400 font-bold uppercase tracking-widest shrink-0"
                 style={{ borderTop: `1px solid ${theme.footerBorderColor}` }}
               >
                 <span>© {academyInfo?.academy_name || 'Hokma Math'} Management System</span>

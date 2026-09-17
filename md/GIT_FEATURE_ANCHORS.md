@@ -15,10 +15,37 @@
 | **결석 사유 저장 & 팝오버 안정화** | 결석 팝오버에서 사유 입력 ➔ 저장 즉시 반영 및 재오픈/새로고침 후 보존 | `00f7054` | 2026-09-01 | `page.tsx`, `TodaySheetCell.tsx`, `useTodaySheetRowLogic.ts` |
 | **텍스트 셀 동기화 & 클립보드 잘라내기** | `Cmd+X` 즉시 비우기, 글자 삭제 후 Blur 시 내용 부활 방지, 편집 중 BS 보호 | `9c1e6ff` | 2026-09-01 | `SimpleTextCell.tsx`, `TodaySheetCell.tsx`, `useTodaySheetClipboard.ts` |
 | **순수 계약 & 세션 식별 (Phase 1)** | `SessionIdentity` 및 `SessionPatch` 타입/유틸 순수 추출 (동작 영향 0건) | `9a432ab` | 2026-09-01 | `types/sessionContract.ts`, `lib/sessionIdentity.ts` |
+| **학생 일지 동시 편집 보호 & Fail-Closed** | 승인된 학생 제출 내용이 오래 열린 빈 창의 빈값("") 저장으로 덮어써지는 것 차단 및 복원 | `4fdc7bd` | 2026-09-05 | `dashboard/page.tsx`, `dashboard-light/page.tsx` |
+| **Gemini AI 브리핑 연동 & 프롬프트 보존** | 구버전 404 모델 교체 및 마스터 학원 설정 저장 시 `custom_prompt` deep-merge 보존 | `7df67ae` | 2026-09-05 | `api/briefing/route.ts`, `api/master/update-academy/route.ts`, `master/page.tsx` |
 
 ---
 
 ## 📝 커밋별 상세 앵커 로그 (Detail Anchor Log)
+
+### 🔹 [Commit: `7df67ae`] Gemini AI 브리핑 404 모델 교체 및 커스텀 프롬프트 deep-merge 보존
+* **등록 일자**: 2026-09-05
+* **해결 및 검증된 문제**:
+  1. **Gemini 404 오류 해결**: 구버전 `gemini-1.5-pro` 호출 시 발생하던 404 Not Found 에러를 제거하고 실제 지원되는 최신 Gemini 엔드포인트로 교체.
+  2. **마스터 설정 저장 시 AI 프롬프트 보존**: 마스터 페이지에서 학원 설정을 저장할 때 기존 `operation_settings.ai_settings.custom_prompt`가 덮어써져 사라지지 않도록 서버 API에서 `ai_settings` deep-merge 처리.
+  3. **마스터 UI 레이블 동기화**: 마스터 설정 화면의 AI 엔진 표시명을 최신 모델명으로 갱신.
+* **관련 파일**:
+  - `app/api/briefing/route.ts`
+  - `app/api/master/update-academy/route.ts`
+  - `app/master/page.tsx`
+
+---
+
+### 🔹 [Commit: `4fdc7bd`] TodaySheet 승인된 학생 제출 일지 동시 편집 덮어쓰기 방어 (Fail-Closed)
+* **등록 일자**: 2026-09-05
+* **해결 및 검증된 문제**:
+  1. **오래된 창의 빈값 덮어쓰기 원천 차단**: 3~4인 공유 원장 계정 환경에서, 다른 기기/창이 학생 일지를 승인한 직후 오래 열려 있던 빈 TodaySheet 창이 `completed_classwork_text`나 `homework_text`에 빈값(`""`) 저장을 시도할 때 사전 감지하여 저장을 차단(`return false`)하고 DB의 승인된 텍스트로 로컬 상태를 복원.
+  2. **Fail-Closed 안전 정책**: 최신 상태 사전 조회 중 네트워크 장애/DB 에러 또는 세션 불일치 발생 시, 데이터 유실을 방지하기 위해 저장을 안전하게 중단하고 새로고침 안내 모달 표시.
+  3. **교사 정상 업무 무간섭 보장**: 출결, 점수, 특이사항, 비어있지 않은 새 진도 입력은 사전 조회를 거치지 않고 기존대로 즉시 저장.
+* **관련 파일**:
+  - `app/[slug]/dashboard/page.tsx`
+  - `app/[slug]/dashboard-light/page.tsx`
+
+---
 
 ### 🔹 [Commit: `9c1e6ff`] 텍스트 셀 동기화 및 클립보드 잘라내기(Cmd+X) 안정화
 * **등록 일자**: 2026-09-01

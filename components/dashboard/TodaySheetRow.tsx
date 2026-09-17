@@ -73,6 +73,10 @@ export interface TodaySheetRowProps {
     courseName: string;
     movedToHour: number | null;
   }) => Promise<boolean>;
+  currentAuthUid?: string | null;
+  onUnlockSession?: (logId: number | string) => Promise<boolean>;
+  onRelockSession?: (logId: number | string) => Promise<boolean>;
+  onRestoreSubmissionSnapshot?: (logId: number | string) => Promise<boolean>;
 }
 
 /**
@@ -86,7 +90,8 @@ export const TodaySheetRow = React.memo(function TodaySheetRow(props: TodaySheet
     selectedRange, isCellInRange, onCellMouseDown, registerFlushDraft, onCellMouseEnter,
     rowIndex, currentUser, academyInfo, isFirstInTimeSection, timeSectionLabel, isOtherClassSection,
     cooperatingCells, onSave, onUpdateStudentInfo, onRemoveFromToday,
-    toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false, onNavigateTab, onSnapshotModalClick
+    toolsOrder, isToolsEditMode, showAllTools, onReorderTools, isLight = false, onNavigateTab, onSnapshotModalClick,
+    currentAuthUid, onUnlockSession, onRelockSession, onRestoreSubmissionSnapshot
   } = props;
 
   // 💡 단축어 및 트리거 기호 추출
@@ -233,13 +238,17 @@ useEffect(() => {
               isSaving={isSaving}
               isHistoryExpanded={isHistoryExpanded}
               displayDateShort={rowDate.slice(5).replace('-', '.')}
+              currentAuthUid={currentAuthUid}
+              onUnlockSession={onUnlockSession}
+              onRelockSession={onRelockSession}
+              onRestoreSubmissionSnapshot={onRestoreSubmissionSnapshot}
               statusMap={{
-                'gradeA': { label: 'A', color: 'bg-emerald-500 text-white' },
-                'gradeB': { label: 'B', color: 'bg-blue-500 text-white' },
-                'gradeC': { label: 'C', color: 'bg-white/20 text-gray-400 font-bold' },
-                'gradeD': { label: 'D', color: 'bg-amber-500 text-white' },
-                'gradeE': { label: 'E', color: 'bg-red-500 text-white' },
-                'gradeF': { label: 'F', color: 'bg-purple-500 text-white' }
+                'gradeA': { label: 'A', color: 'bg-emerald-500 text-white', desc: '10점 (완벽)' },
+                'gradeB': { label: 'B', color: 'bg-blue-500 text-white', desc: '8점 (우수)' },
+                'gradeC': { label: 'C', color: 'bg-amber-500 text-white', desc: '5점 (보통)' },
+                'gradeD': { label: 'D', color: 'bg-orange-500 text-white', desc: '3점 (미흡)' },
+                'gradeE': { label: 'E', color: 'bg-rose-500 text-white', desc: '0점 (부진)' },
+                'gradeF': { label: 'F', color: 'bg-purple-500 text-white', desc: '0점 (평가보류)' }
               }}
               {...refs}
               tdRef={el => { refs.tdRefs.current[col.id] = el; }}

@@ -138,6 +138,10 @@ export interface TodaySheetCellProps {
     courseName: string;
     movedToHour: number | null;
   }) => Promise<boolean>;
+  currentAuthUid?: string | null;
+  onUnlockSession?: (sessionId: string) => Promise<boolean>;
+  onRelockSession?: (sessionId: string) => Promise<boolean>;
+  onRestoreSubmissionSnapshot?: (sessionId: string) => Promise<boolean>;
 }
 
 export const TodaySheetCell = React.memo(function TodaySheetCell({
@@ -175,7 +179,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   onSnapshotModalClick,
   isLight = false,
   onNavigateTab,
-  onRefreshAbsenceSession
+  onRefreshAbsenceSession,
+  currentAuthUid,
+  onUnlockSession,
+  onRelockSession,
+  onRestoreSubmissionSnapshot
 }: TodaySheetCellProps) {
 
   const wasAlreadyActive = useRef(false);
@@ -190,6 +198,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   const [isAbsencePopupOpen, setIsAbsencePopupOpen] = useState(false);
   const [absenceReasonInput, setAbsenceReasonInput] = useState('');
   const [isSavingAbsenceReason, setIsSavingAbsenceReason] = useState(false);
+  const [absenceSaveError, setAbsenceSaveError] = useState(false);
   const [absenceRefreshError, setAbsenceRefreshError] = useState(false);
 
   // 💡 [공통 Esc 키 닫기]
@@ -401,31 +410,149 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         );
       case 'reset':
         return (() => {
-          const isSubmittedOrApproved = ['pending', 'approved'].includes(student.todaySession?.approval_status || '');
+          const currentTargetSession = resolveTargetSession(student, student.todaySession?.moved_to_hour, student.todaySession?.course_name);
+          const sId = currentTargetSession?.id || (student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:') ? student.todaySession.id : null);
+          const rawApprovalStatus = currentTargetSession?.approval_status || student.todaySession?.approval_status || '';
+          const currentEditUnlockedBy = currentTargetSession?.edit_unlocked_by ?? student.todaySession?.edit_unlocked_by ?? null;
+          const hasSnapshot = Boolean(currentTargetSession?.submission_snapshot || student.todaySession?.submission_snapshot);
+
+          const isCurrentlyApproved = rawApprovalStatus === 'approved';
+          const isCurrentlySubmitted = ['pending', 'submitted'].includes(rawApprovalStatus);
+          const isMyUnlockedSession = isCurrentlyApproved && !!currentEditUnlockedBy && currentEditUnlockedBy === currentAuthUid;
+          const isOtherUnlockedSession = isCurrentlyApproved && !!currentEditUnlockedBy && currentEditUnlockedBy !== currentAuthUid;
+
           const resetItemClass = `w-[21px] h-[21px] rounded-[4px] transition-all shrink-0 flex items-center justify-center cursor-pointer ${
             isToolsEditMode
               ? 'cursor-grab active:cursor-grabbing hover:scale-110'
               : 'opacity-75 hover:opacity-100 hover:scale-110 active:scale-95'
           }`;
+
+          // 1) 승인 완료 세션 - 내가 잠금 해제하여 수정 중인 경우
+          if (isCurrentlyApproved && isMyUnlockedSession) {
+            return (
+              <div
+                key="reset"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!sId) return;
+                  if (hasSnapshot) {
+                    const choice = window.prompt(
+                      `교사 수정 중인 세션입니다. 작업할 번호를 입력하세요:\n\n1: 수정 완료 · 다시 잠금\n2: 승인 당시 원본으로 복원\n\n(취소: 창 닫기 또는 Esc)`
+                    );
+                    if (choice === '1') {
+                      await onRelockSession?.(sId);
+                    } else if (choice === '2') {
+                      if (confirm("승인 당시 제출 원본 내용으로 복원하시겠습니까?\n현재 수정된 내용은 승인 시점의 원본으로 덮어씌워집니다.")) {
+                        await onRestoreSubmissionSnapshot?.(sId);
+                      }
+                    }
+                  } else {
+                    if (confirm("수정을 완료하고 세션을 다시 잠그시겠습니까?")) {
+                      await onRelockSession?.(sId);
+                    }
+                  }
+                }}
+                className={`${resetItemClass} ${
+                  isLight
+                    ? "bg-emerald-50 text-emerald-700 border border-emerald-300 hover:bg-emerald-600 hover:text-white cursor-pointer shadow-sm animate-pulse"
+                    : "bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 hover:bg-emerald-500/40 hover:text-emerald-200 cursor-pointer shadow-sm animate-pulse"
+                }`}
+                title="교사 수정 중 (클릭 시 수정 완료 · 다시 잠금 또는 원본 복원)"
+                {...dragHandlers}
+              >
+                <Unlock size={13.5} strokeWidth={2.5} />
+              </div>
+            );
+          }
+
+          // 2) 승인 완료 세션 - 다른 교사가 수정 중인 경우
+          if (isCurrentlyApproved && isOtherUnlockedSession) {
+            return (
+              <div
+                key="reset"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  alert("다른 교사가 현재 이 세션을 수정하고 있습니다.");
+                }}
+                className={`${resetItemClass} ${
+                  isLight
+                    ? "bg-orange-50 text-orange-700 border border-orange-300 cursor-not-allowed shadow-sm"
+                    : "bg-orange-500/20 text-orange-300 border border-orange-500/30 cursor-not-allowed shadow-sm"
+                }`}
+                title="다른 교사가 수정 중인 세션입니다"
+                {...dragHandlers}
+              >
+                <Lock size={13.5} strokeWidth={2.5} />
+              </div>
+            );
+          }
+
+          // 3) 승인 완료 세션 - 잠금 상태
+          if (isCurrentlyApproved) {
+            return (
+              <div
+                key="reset"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  if (!sId) return;
+                  const menuOptions = [
+                    '1: 임시 잠금 해제 (제출 내용 수정)',
+                    hasSnapshot ? '2: 승인 당시 원본 복원 (잠금 해제 후 복원)' : null,
+                    '3: 학생 제출 상태 초기화 (미제출로 리셋)'
+                  ].filter(Boolean).join('\n');
+
+                  const choice = window.prompt(
+                    `승인 완료된 세션입니다. 작업할 번호를 입력하세요:\n\n${menuOptions}\n\n(취소: 창 닫기 또는 Esc)`
+                  );
+
+                  if (choice === '1') {
+                    await onUnlockSession?.(sId);
+                  } else if (choice === '2' && hasSnapshot) {
+                    if (confirm("승인 당시 제출 원본 내용으로 복원하시겠습니까?\n잠금 해제 후 승인 시점의 원본으로 복원됩니다.")) {
+                      const unlocked = await onUnlockSession?.(sId);
+                      if (unlocked) {
+                        await onRestoreSubmissionSnapshot?.(sId);
+                      }
+                    }
+                  } else if (choice === '3') {
+                    if (confirm("이 학생의 제출 상태를 완전히 초기화하시겠습니까?\n(학생이 다시 내용을 작성하여 제출할 수 있게 됩니다.)")) {
+                      onSave({ approval_status: 'none' });
+                    }
+                  }
+                }}
+                className={`${resetItemClass} ${
+                  isLight
+                    ? "bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-600 hover:text-white cursor-pointer shadow-sm"
+                    : "bg-blue-500/20 text-blue-300 border border-blue-500/30 hover:bg-blue-500/40 hover:text-blue-200 cursor-pointer shadow-sm"
+                }`}
+                title="승인 완료 세션 (클릭 시 잠금 해제 / 원본 복원 / 리셋)"
+                {...dragHandlers}
+              >
+                <Lock size={13.5} strokeWidth={2.5} />
+              </div>
+            );
+          }
+
+          // 4) 승인 대기(제출됨) 상태 또는 미제출 상태
           return (
             <div
               key="reset"
               onClick={(e) => {
                 e.stopPropagation();
-                if (!isSubmittedOrApproved) return;
+                if (!isCurrentlySubmitted) return;
                 if (confirm("이 학생의 제출 상태를 초기화하시겠습니까? (학생이 다시 내용을 수정하고 제출할 수 있습니다.)")) {
                   onSave({ approval_status: 'none' });
                 }
               }}
               className={`${resetItemClass} ${
-                isSubmittedOrApproved
+                isCurrentlySubmitted
                   ? (isLight ? "bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-600 hover:text-white cursor-pointer shadow-sm animate-pulse" : "bg-rose-500/20 text-rose-300 border border-rose-500/30 hover:bg-rose-500/40 hover:text-rose-200 cursor-pointer shadow-sm animate-pulse")
                   : (isLight ? "bg-gray-100 text-gray-400 border border-gray-200 opacity-70 cursor-not-allowed" : "bg-white/10 text-gray-400 border border-white/20 opacity-70 cursor-not-allowed")
               }`}
-              title={isSubmittedOrApproved ? "학생 제출 리셋 (다시 수정 가능하게 하기)" : "제출 또는 승인 전 상태입니다"}
+              title={isCurrentlySubmitted ? "학생 제출 리셋 (다시 수정 가능하게 하기)" : "제출 또는 승인 전 상태입니다"}
               {...dragHandlers}
             >
-              {isSubmittedOrApproved ? (
+              {isCurrentlySubmitted ? (
                 <Unlock size={13.5} strokeWidth={2.5} />
               ) : (
                 <Lock size={13.5} strokeWidth={2.5} />
@@ -566,19 +693,46 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
   const dynamicPadding = getDynamicPadding(currentText);
 
-  // 🔒 [추가] 학생이 모바일로 제출하여 승인 대기 상태인지 검사
-  const isSubmitted = ['pending', 'submitted'].includes(student.todaySession?.approval_status || '');
-  // 보호 대상 컬럼 (진도, 완료된 진도, 과제)
+  // 🔒 [추가] 학생 제출 및 승인 잠금 상태 정밀 판별
+  const currentTargetSession = resolveTargetSession(student, student.todaySession?.moved_to_hour, student.todaySession?.course_name);
+  const currentApprovalStatus = currentTargetSession?.approval_status || student.todaySession?.approval_status || '';
+  const currentEditUnlockedBy = currentTargetSession?.edit_unlocked_by ?? student.todaySession?.edit_unlocked_by ?? null;
+
+  const isSubmitted = ['pending', 'submitted'].includes(currentApprovalStatus);
+  const isApproved = currentApprovalStatus === 'approved';
+  const isMyUnlocked = isApproved && !!currentEditUnlockedBy && currentEditUnlockedBy === currentAuthUid;
+  const isOtherUnlocked = isApproved && !!currentEditUnlockedBy && currentEditUnlockedBy !== currentAuthUid;
+  const isApprovedLocked = isApproved && !currentEditUnlockedBy;
+
+  // 보호 대상 컬럼 (수행 진도, 과제)
   const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
-  const isLockActive = isSubmitted && isProtectedCol;
+  const isLockActive = isProtectedCol && (isSubmitted || isApprovedLocked || isOtherUnlocked);
 
   // 📝 [추가] 다른 기기에서 실시간 편집 중인지 판별 (내 기기인 경우는 제외)
   const coopData = cooperatingCells?.[`${student.id}_${colId}`];
   const isCooperating = Boolean(coopData && (!myClientId || coopData.clientId !== myClientId));
 
-  const handleLockedCellDoubleClick = (e: React.MouseEvent) => {
+  const handleLockedCellDoubleClick = async (e: React.MouseEvent) => {
     e.stopPropagation();
-    alert("아직 승인되지 않은 학생 제출본이 있습니다. 우측 알림창이나 툴박스에서 승인 버튼을 누르시면 학생이 쓴 내용이 일지에 자동으로 입력되며, 입력이 완료된 후에 직접 내용을 확인하고 수정하실 수 있습니다.");
+    if (isSubmitted) {
+      alert("아직 승인되지 않은 학생 제출본이 있습니다. 우측 알림창이나 툴박스에서 승인 버튼을 누르시면 학생이 쓴 내용이 일지에 자동으로 입력되며, 입력이 완료된 후에 직접 내용을 확인하고 수정하실 수 있습니다.");
+      return;
+    }
+    if (isOtherUnlocked) {
+      alert("다른 교사가 현재 이 세션을 수정하고 있습니다. 수정이 완료될 때까지 대기해 주세요.");
+      return;
+    }
+    if (isApprovedLocked) {
+      const confirmUnlock = window.confirm(
+        "승인 완료되어 잠긴 세션입니다.\n내용을 수정하시려면 잠금을 해제해야 합니다.\n\n잠금을 해제하시겠습니까?"
+      );
+      if (confirmUnlock) {
+        const sId = currentTargetSession?.id || (student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:') ? student.todaySession.id : null);
+        if (sId && onUnlockSession) {
+          await onUnlockSession(sId);
+        }
+      }
+    }
   };
 
   const draftValuesRef = useRef<Record<string, string>>({});
@@ -698,7 +852,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
       className={`relative group/td outline-none align-top ${isLight ? 'border-r border-[#e3e2e0] text-[#37352f]' : 'border-r border-white/12 text-white'} ${
         isFirstInTimeSection ? 'border-t-[3px] border-t-blue-500/60 shadow-[inset_0_1px_0_rgba(59,130,246,0.2)]' : ''
       } ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''} ${
-        isLockActive ? 'bg-amber-500/[0.04] border border-dashed border-amber-500/20 cursor-not-allowed' : ''
+        isLockActive
+          ? (isSubmitted
+              ? 'bg-amber-500/[0.04] border border-dashed border-amber-500/20 cursor-not-allowed'
+              : isOtherUnlocked
+              ? 'bg-orange-500/[0.04] border border-dashed border-orange-500/30 cursor-not-allowed'
+              : 'bg-blue-500/[0.04] border border-dashed border-blue-500/20 cursor-not-allowed')
+          : ''
       } ${
         isCooperating ? 'ring-2 ring-inset ring-pink-500/80 z-30 cursor-not-allowed bg-pink-500/[0.02]' : ''
       }`}
@@ -1176,6 +1336,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                   const earliestLinkedMakeup = hasLinkedMakeup ? linkedMakeups[0] : null;
 
                   const handleSaveAbsence = async () => {
+                    if (isSavingAbsenceReason) return;
+
                     const currentAttendanceStatus = formData.attendance_status || student.todaySession?.attendance_status || '';
                     if (!String(currentAttendanceStatus).startsWith('결석')) {
                       alert('결석 상태인 수업에서만 결석 사유와 보강을 연결할 수 있습니다.');
@@ -1183,6 +1345,7 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                     }
 
                     setIsSavingAbsenceReason(true);
+                    setAbsenceSaveError(false);
                     setAbsenceRefreshError(false);
                     try {
                       const cleanReason = absenceReasonInput.trim();
@@ -1207,9 +1370,13 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                       };
 
                       const saveSuccess = await onSave(absencePayload);
+
                       if (!saveSuccess) {
+                        setAbsenceSaveError(true);
                         return;
                       }
+
+                      setIsAbsencePopupOpen(false);
 
                       if (onRefreshAbsenceSession) {
                         try {
@@ -1219,14 +1386,16 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                             courseName: currentRowCourse,
                             movedToHour: currentNormHour
                           });
+
                           if (!refreshed) {
                             setAbsenceRefreshError(true);
                           }
-                        } catch (refreshErr) {
+                        } catch {
                           setAbsenceRefreshError(true);
                         }
                       }
                     } catch (e) {
+                      setAbsenceSaveError(true);
                       console.error('Failed to save absence reason');
                     } finally {
                       setIsSavingAbsenceReason(false);
@@ -1244,6 +1413,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                           onClick={(e) => {
                             e.stopPropagation();
                             setAbsenceReasonInput(initialReason);
+                            setAbsenceSaveError(false);
+                            setAbsenceRefreshError(false);
                             setIsAbsencePopupOpen(prev => !prev);
                           }}
                           className={`w-2 h-2 rounded-full transition-all shrink-0 cursor-pointer ${
@@ -1260,6 +1431,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                           e.stopPropagation();
                           if (isAbsent) {
                             setAbsenceReasonInput(initialReason);
+                            setAbsenceSaveError(false);
+                            setAbsenceRefreshError(false);
                             setIsAbsencePopupOpen(prev => !prev);
                             return;
                           }
@@ -1394,6 +1567,11 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                                       {isSavingAbsenceReason ? '저장중' : '저장'}
                                     </button>
                                   </div>
+                                  {absenceSaveError && (
+                                    <p className="text-[10px] font-medium text-rose-500">
+                                      결석 사유를 저장하지 못했습니다. 네트워크를 확인한 뒤 다시 시도해 주세요.
+                                    </p>
+                                  )}
                                 </div>
 
                                 {/* 후속 보강 안내 섹션 */}
@@ -1968,11 +2146,23 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
           <div className="relative w-full h-full flex items-start justify-start group/cell">
             {/* 💡 칩카드 UI가 제거되었습니다. 선생님이 직접 텍스트로 테스트를 기록합니다. */}
 
-            {/* 🔒 [추가] 실시간 승인 대기 보호 셀 시각 뱃지 */}
+            {/* 🔒 [추가] 실시간 승인/잠금 보호 셀 시각 뱃지 */}
             {isLockActive && !isEditing && (
-              <div className="absolute right-1 top-1 z-30 flex items-center gap-1 bg-amber-500/20 text-amber-400 border border-amber-500/30 px-1 py-[1px] rounded-[3px] text-[9px] font-medium animate-pulse select-none">
+              <div className={`absolute right-1 top-1 z-30 flex items-center gap-1 px-1 py-[1px] rounded-[3px] text-[9px] font-medium select-none ${
+                isSubmitted
+                  ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30 animate-pulse'
+                  : isOtherUnlocked
+                  ? 'bg-orange-500/20 text-orange-400 border border-orange-500/30'
+                  : 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
+              }`}>
                 <Lock size={8} className="stroke-[2.5]" />
-                승인대기
+                {isSubmitted ? '승인대기' : isOtherUnlocked ? '다른교사수정' : '승인잠김'}
+              </div>
+            )}
+            {isMyUnlocked && isProtectedCol && !isEditing && (
+              <div className="absolute right-1 top-1 z-30 flex items-center gap-1 bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1 py-[1px] rounded-[3px] text-[9px] font-medium select-none">
+                <Unlock size={8} className="stroke-[2.5]" />
+                수정중
               </div>
             )}
 
@@ -2030,8 +2220,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
                 <div className="w-full">
                   {currentText ? <CellTextHighlighter text={currentText} columnId={colId} isLight={isLight} /> : (
                     isLockActive ? (
-                      <span className="text-amber-500/40 text-[11px] font-normal italic select-none">
-                        ⏳ 승인을 누르면 내용이 입력됩니다
+                      <span className={`${isSubmitted ? 'text-amber-500/40' : 'text-blue-500/40'} text-[11px] font-normal italic select-none`}>
+                        {isSubmitted ? '⏳ 승인을 누르면 내용이 입력됩니다' : '🔒 승인 완료 (더블클릭하여 수정)'}
                       </span>
                     ) : isCooperating ? (
                       <span className="text-pink-500/40 text-[11px] font-normal italic select-none">
@@ -2045,7 +2235,20 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
             <div className="absolute right-1 top-1 flex items-center gap-1 opacity-30 group-hover/cell:opacity-100 focus-within:opacity-100 transition-all duration-200 z-30">
               {(colId === 'classwork' || colId === 'completed_classwork' || colId === 'assign') && (
-                <button onClick={colId === 'classwork' ? onOpenCwEditor : colId === 'completed_classwork' ? onOpenCcwEditor : onOpenHwEditor} className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"><Wand2 size={10} /></button>
+                <button
+                  onClick={(e) => {
+                    if (isLockActive) {
+                      handleLockedCellDoubleClick(e);
+                      return;
+                    }
+                    if (colId === 'classwork') onOpenCwEditor?.(e);
+                    else if (colId === 'completed_classwork') onOpenCcwEditor?.(e);
+                    else if (colId === 'assign') onOpenHwEditor?.(e);
+                  }}
+                  className="w-5 h-5 rounded-[1px] bg-blue-600/30 text-blue-400 border border-blue-500/40 hover:bg-blue-600 hover:text-white transition-all flex items-center justify-center shadow-sm"
+                >
+                  <Wand2 size={10} />
+                </button>
               )}
             </div>
           </div>

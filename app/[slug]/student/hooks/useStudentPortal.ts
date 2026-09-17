@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { TextbookOption, ExamSchedule } from '@/types/dashboard';
+import { TextbookOption } from '@/types/dashboard';
+import { matchStudentExam, ExamSchedule } from '@/lib/examMatching';
 
 export const WRONG_ANSWER_THEMES: Record<string, { primary: string; bg: string; ring: string; buttonText?: string }> = {
   navy: { primary: '#1e3a8a', bg: '#f8faff', ring: 'focus:ring-blue-900' },
@@ -103,89 +104,7 @@ export function useStudentPortal(slug: string | string[] | undefined) {
   const [invalidDateAlert, setInvalidDateAlert] = useState<string | null>(null);
 
   const matchedExam = useMemo(() => {
-    if (!student || !examSchedules.length) return null;
-    const currentPeriod = academy?.operation_settings?.current_exam_period;
-    const normalizeSchool = (name: string) => (name || '').trim().replace(/\s+/g, '').replace(/학교$/, '');
-
-    // 학생 학년에서 숫자(1~3) 추출
-    const getStudentGradeNumber = (grade?: string | null): string | null => {
-      const match = String(grade || '').match(/[1-3]/);
-      return match ? match[0] : null;
-    };
-
-    const normalizeGrade = (grade?: string | null) =>
-      String(grade || '')
-        .trim()
-        .replace(/\s+/g, '')
-        .replace(/학년$/, '');
-
-    const studentSchool = normalizeSchool(student.school);
-    const studentGradeNumber = getStudentGradeNumber(student.grade);
-    const normalizedStudentGrade = normalizeGrade(student.grade);
-
-    if (!studentSchool) return null;
-
-    // 💡 [수정 1] 시험 종료일까지 학생 페이지에서 시험 일정 노출 유지
-    const upcomingSchedules = examSchedules.filter(ex => (ex.end_date || ex.target_date) >= selectedDate);
-    const currentPeriodSchedules = currentPeriod
-      ? upcomingSchedules.filter(ex => {
-          if (ex.exam_name && ex.exam_name.startsWith(currentPeriod)) return true;
-          const periodType = currentPeriod.split('-').slice(1).join('-');
-          const legacyNames: any = {
-            '1-MID': ['1학기 중간', '1학기 중간고사'],
-            '1-FINAL': ['1학기 기말', '1학기 기말고사'],
-            '2-MID': ['2학기 중간', '2학기 중간고사'],
-            '2-FINAL': ['2학기 기말', '2학기 기말고사']
-          };
-          if (ex.exam_name && (legacyNames[periodType] || []).includes(ex.exam_name)) return true;
-          return false;
-        })
-      : upcomingSchedules;
-
-    // 💡 [수정 2] 학년 매칭 (신규 쉼표 구분 숫자 목록 지원 + 레거시 단일 학년 지원)
-    const matchedList = currentPeriodSchedules.filter(ex => {
-      const isSchoolMatch = normalizeSchool(ex.school_name) === studentSchool;
-      if (!isSchoolMatch) return false;
-
-      const scheduleGradeRaw = String(ex.grade || '').trim();
-      if (!scheduleGradeRaw) return false;
-
-      // 1. 신규 형식: 쉼표 구분 숫자 목록 (예: "1,2,3", "2,3", "3")
-      const scheduleGrades = scheduleGradeRaw.split(',').map(s => s.trim()).filter(Boolean);
-      if (studentGradeNumber && scheduleGrades.includes(studentGradeNumber)) {
-        return true;
-      }
-
-      // 2. 레거시 형식 호환 (예: "중3", "고2", "3학년", "3")
-      const legacyNormalized = normalizeGrade(scheduleGradeRaw);
-      if (legacyNormalized && legacyNormalized === normalizedStudentGrade) {
-        return true;
-      }
-
-      return false;
-    });
-
-    if (matchedList.length === 0) return null;
-
-    // 💡 [일정 선택 우선순위]
-    // 1. 시험 시작일이 더 가까운 일정
-    // 2. 같은 시작일이면 종료일이 더 이른 일정
-    // 3. 그래도 같으면 생성일(created_at)이 더 최근인 일정
-    matchedList.sort((a, b) => {
-      const aStart = a.target_date;
-      const bStart = b.target_date;
-      if (aStart !== bStart) return aStart.localeCompare(bStart);
-
-      const aEnd = a.end_date || a.target_date;
-      const bEnd = b.end_date || b.target_date;
-      if (aEnd !== bEnd) return aEnd.localeCompare(bEnd);
-
-      const aCreated = a.created_at || '';
-      const bCreated = b.created_at || '';
-      return bCreated.localeCompare(aCreated);
-    });
-
-    return matchedList[0];
+    return matchStudentExam(student, examSchedules, academy?.operation_settings?.current_exam_period, selectedDate);
   }, [student, examSchedules, academy?.operation_settings?.current_exam_period, selectedDate]);
 
   const fetchAllStudentData = useCallback(async (studentId: string, courseParam?: string) => {

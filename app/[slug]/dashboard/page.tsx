@@ -18,6 +18,7 @@ import ApprovalModal from '@/components/dashboard/ApprovalModal';
 import ProblemErrorManager from '@/components/dashboard/ProblemErrorManager';
 import WrongAnswerManager from '@/components/dashboard/WrongAnswerManager';
 import ExamPaperManager from '@/components/dashboard/exam/ExamPaperManager';
+import ExamDdayOverview from '@/components/dashboard/examOverview/ExamDdayOverview';
 import TimetableSettings from '@/components/dashboard/settings/TimetableSettings';
 import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
 import DigitalMathLibraryView from '@/components/dashboard/DigitalMathLibraryView';
@@ -33,6 +34,14 @@ import { Student, SessionLog, StudentStatus, TextbookOption, AbsenceLinkContext 
 import { getEnrichedStudentData, evaluateTodayStatus, buildSessionLog } from '@/lib/studentDataEnricher';
 import { Loader2, AlertTriangle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import {
+  callSaveSessionLogGuarded,
+  callApproveSessionLogGuarded,
+  callUnlockSessionForEditGuarded,
+  callRelockSessionGuarded,
+  callRestoreSubmissionSnapshotGuarded,
+  getCurrentAuthUid
+} from '@/lib/sessionLockService';
 
 /**
  * 💡 [리팩토링] 대시보드 데이터 로딩 및 가공 로직 분리
@@ -58,6 +67,11 @@ export default function DashboardPage() {
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
   const [isWarpMode, setIsWarpMode] = useState(false); // 💡 임시 원격 지원 모드 플래그 추가
+  const [currentAuthUid, setCurrentAuthUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCurrentAuthUid().then(uid => setCurrentAuthUid(uid));
+  }, []);
 
   const handleAuthError = useCallback(async (e: any) => {
     if (e && (e.code === '42501' || String(e.message).includes('row-level security') || e.status === 403 || e.status === 401)) {
@@ -73,7 +87,7 @@ export default function DashboardPage() {
   useEffect(() => {
     // 💡 [안정화] 마운트 완료 후 클라이언트 환경에서만 이전 보던 탭 화면을 복구하여 Hydration Mismatch 및 Flash 방지
     setIsMounted(true);
-    const validModes = ['board', 'todayTable', 'studentSupport', 'studentEdit', 'monthlyChanges', 'pdfLibrary', 'digitalLibrary', 'exams', 'wrongAnswersAdmin', 'problemErrors', 'progress', 'teacherTask', 'settings'];
+    const validModes = ['board', 'todayTable', 'studentSupport', 'studentEdit', 'monthlyChanges', 'pdfLibrary', 'digitalLibrary', 'examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors', 'progress', 'teacherTask', 'settings'];
     const savedTab = localStorage.getItem('ams_viewMode');
     if (savedTab && validModes.includes(savedTab)) {
       setViewMode(savedTab);
@@ -944,86 +958,44 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       // 💡 [DB 제약조건 완전 방어] status 컬럼은 DB 제약조건 충돌 방지를 위해 UPDATE/INSERT 페이로드에서 완전 제외
       delete payload.status;
 
-      // 🔒 [승인 보호 방어] 승인된 학생 제출 내용이 다른 오래된 창의 빈값("")으로 덮어써지는 것 차단 (fail-closed)
-      if (targetId && academy?.id) {
-        const isTryingToClearCcw = 'completed_classwork_text' in payload && (payload.completed_classwork_text === '' || payload.completed_classwork_text === null);
-        const isTryingToClearHw = 'homework_text' in payload && (payload.homework_text === '' || payload.homework_text === null);
+      // 🔒 [원자적 잠금 및 버전 방어] Guarded RPC 호출
+      const expectedVersion = targetSession?.version ?? null;
+      const saveRes = await callSaveSessionLogGuarded({
+        sessionId: targetId,
+        academyId: academy.id,
+        studentId: realStudentId,
+        sessionDate: targetSaveDate,
+        courseName: targetCourseName,
+        movedToHour: targetMovedHour,
+        payload,
+        expectedVersion
+      });
 
-        if (isTryingToClearCcw || isTryingToClearHw) {
-          const { data: latestDbLog, error: latestDbLogError } = await supabase
-            .from('ams_session_logs')
-            .select('id, academy_id, approval_status, completed_classwork_text, homework_text')
-            .eq('id', targetId)
-            .eq('academy_id', academy.id)
-            .maybeSingle();
-
-          if (latestDbLogError || !latestDbLog) {
-            console.error('[saveTodaySession] pre-check failed (fail-closed):', latestDbLogError ? latestDbLogError.code || 'fetch_error' : 'log_not_found');
-            alert('최신 승인 기록을 확인할 수 없습니다.\n내용이 사라지는 것을 막기 위해 저장하지 않았습니다.\n새로고침 후 내용을 확인하고 다시 시도해 주세요.');
-            return false;
-          }
-
-          if (latestDbLog.approval_status === 'approved') {
-            const hasExistingCcw = (latestDbLog.completed_classwork_text || '').trim().length > 0;
-            const hasExistingHw = (latestDbLog.homework_text || '').trim().length > 0;
-
-            const isCcwBlocked = isTryingToClearCcw && hasExistingCcw;
-            const isHwBlocked = isTryingToClearHw && hasExistingHw;
-
-            if (isCcwBlocked || isHwBlocked) {
-              alert('다른 선생님이 방금 승인한 학생 제출 내용이 있습니다.\n새로고침 후 내용을 확인하고 다시 저장해 주세요.');
-              setStudents(prev => prev.map(s => {
-                const sRealId = s.originalId || s.id;
-                if (sRealId !== realStudentId) return s;
-                if (!s.todaySession) return s;
-                return {
-                  ...s,
-                  todaySession: {
-                    ...s.todaySession,
-                    approval_status: 'approved',
-                    ...(hasExistingCcw ? { completed_classwork_text: latestDbLog.completed_classwork_text } : {}),
-                    ...(hasExistingHw ? { homework_text: latestDbLog.homework_text } : {})
-                  }
-                };
-              }));
-              return false;
-            }
-          }
+      if (!saveRes.success) {
+        if (saveRes.error === 'SESSION_LOCKED_APPROVED') {
+          alert(saveRes.message || '승인 완료된 세션의 학생 제출 내용은 잠겨 있습니다.\n수정을 원하시면 먼저 [잠금 해제 후 수정]을 진행해 주세요.');
+        } else if (saveRes.error === 'VERSION_MISMATCH') {
+          alert('다른 선생님이 이 학생의 제출을 승인하거나 수정했습니다.\n최신 내용을 불러와 확인해 주세요.');
+        } else {
+          alert(saveRes.message || '저장 중 오류가 발생했습니다.');
         }
+
+        // 💡 단일 학생 최신 세션만 안전하게 로컬 상태 동기화 (전체 refetch 없이 불일치 해소)
+        if (saveRes.current_session) {
+          const freshSession = saveRes.current_session;
+          setStudents(prev => prev.map(s => {
+            const sRealId = s.originalId || s.id;
+            if (sRealId !== realStudentId) return s;
+            return {
+              ...s,
+              todaySession: { ...(s.todaySession || {}), ...freshSession }
+            };
+          }));
+        }
+        return false;
       }
 
-      let savedLog: any = null;
-      if (targetId) {
-        payload.id = targetId;
-        const { data, error } = await supabase
-          .from('ams_session_logs')
-          .update(payload)
-          .eq('id', targetId)
-          .eq('academy_id', academy.id)
-          .select()
-          .maybeSingle();
-
-        if (error) {
-          console.error('[saveTodaySession] update error:', error);
-          throw error;
-        }
-        savedLog = data;
-      } else {
-        if (!('attendance_status' in filteredData)) {
-          payload.attendance_status = null;
-        }
-        const { data, error } = await supabase
-          .from('ams_session_logs')
-          .insert([payload])
-          .select()
-          .maybeSingle();
-
-        if (error) {
-          console.error('[saveTodaySession] insert error:', error);
-          throw error;
-        }
-        savedLog = data;
-      }
+      const savedLog = saveRes.data;
 
       if (savedLog) {
         setStudents(prev => prev.map(s => {
@@ -2067,23 +2039,90 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   const handleApproveSubmissions = async (logIds: string[]) => {
     if (!academy) return;
     try {
-      const updates = logIds.map(logId => {
-        const idVal = parseInt(logId, 10);
-        if (isNaN(idVal)) return null;
-        return supabase.from('ams_session_logs').update({
-          approval_status: 'approved'
-        }).eq('id', idVal);
-      }).filter(Boolean);
-
-      if (updates.length > 0) {
-        await Promise.all(updates);
-        await fetchAllData(true);
+      const res = await callApproveSessionLogGuarded(logIds, academy.id);
+      if (!res.success) {
+        alert(res.message || '승인 중 오류가 발생했습니다.');
+        return;
       }
+      await fetchAllData(true);
     } catch (e) {
       console.error(e);
       alert('승인 중 오류가 발생했습니다.');
     }
   };
+
+  const handleUnlockSession = useCallback(async (logId: number | string): Promise<boolean> => {
+    if (!academy) return false;
+    try {
+      const res = await callUnlockSessionForEditGuarded(logId, academy.id);
+      if (!res.success) {
+        alert(res.message || '잠금 해제 중 오류가 발생했습니다.');
+        return false;
+      }
+      const updatedLog = res.data;
+      setStudents(prev => prev.map(s => {
+        if (s.todaySession?.id === updatedLog.id) {
+          return { ...s, todaySession: { ...s.todaySession, ...updatedLog } };
+        }
+        return s;
+      }));
+      return true;
+    } catch (e) {
+      console.error('handleUnlockSession error:', e);
+      alert('잠금 해제 중 오류가 발생했습니다.');
+      return false;
+    }
+  }, [academy]);
+
+  const handleRelockSession = useCallback(async (logId: number | string): Promise<boolean> => {
+    if (!academy) return false;
+    try {
+      const res = await callRelockSessionGuarded(logId, academy.id);
+      if (!res.success) {
+        alert(res.message || '다시 잠금 처리 중 오류가 발생했습니다.');
+        return false;
+      }
+      const updatedLog = res.data;
+      setStudents(prev => prev.map(s => {
+        if (s.todaySession?.id === updatedLog.id) {
+          return { ...s, todaySession: { ...s.todaySession, ...updatedLog } };
+        }
+        return s;
+      }));
+      return true;
+    } catch (e) {
+      console.error('handleRelockSession error:', e);
+      alert('재잠금 중 오류가 발생했습니다.');
+      return false;
+    }
+  }, [academy]);
+
+  const handleRestoreSubmissionSnapshot = useCallback(async (logId: number | string): Promise<boolean> => {
+    if (!academy) return false;
+    if (!window.confirm("학생이 제출했던 원본 내용으로 복원하시겠습니까?\n복원 후에도 승인 및 잠금 상태는 유지됩니다.")) {
+      return false;
+    }
+    try {
+      const res = await callRestoreSubmissionSnapshotGuarded(logId, academy.id);
+      if (!res.success) {
+        alert(res.message || '원본 복원 중 오류가 발생했습니다.');
+        return false;
+      }
+      const updatedLog = res.data;
+      setStudents(prev => prev.map(s => {
+        if (s.todaySession?.id === updatedLog.id) {
+          return { ...s, todaySession: { ...s.todaySession, ...updatedLog } };
+        }
+        return s;
+      }));
+      alert("학생 제출 원본으로 복원되었습니다.");
+      return true;
+    } catch (e) {
+      console.error('handleRestoreSubmissionSnapshot error:', e);
+      alert('원본 복원 중 오류가 발생했습니다.');
+      return false;
+    }
+  }, [academy]);
 
   const handleRejectSubmissions = async (logIds: string[]) => {
     if (!academy) return;
@@ -2435,7 +2474,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
              )}
 
              {/* [평가 관리 팩] */}
-             {isFeatureEnabled(academy, 'assessment_tools') && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode) && (
+             {isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode) && (
                <div className="flex flex-col h-full">
                  <PackageSubNav
                    packageType="assessment"
@@ -2443,7 +2482,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                    onSelectViewMode={(mode) => navigateTo(mode)}
                    isLight={false}
                  />
-                 <div className="flex-1 overflow-hidden">
+                 <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                   {viewMode === 'examDdayOverview' && (
+                     <ExamDdayOverview
+                       academyInfo={academy}
+                       students={students}
+                       teachers={teachers}
+                       slug={(slug as string) || ''}
+                       isLight={false}
+                     />
+                   )}
                    {viewMode === 'exams' && <ExamPaperManager academyId={academy?.id || ''} />}
                    {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy?.id || ''} currentUser={currentUser} />}
                    {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}
@@ -2479,7 +2527,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
              {(viewMode === 'todayTable' || (
                (!isFeatureEnabled(academy, 'learning_resources') && ['pdfLibrary', 'digitalLibrary'].includes(viewMode)) ||
-               (!isFeatureEnabled(academy, 'assessment_tools') && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)) ||
+               (!isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)) ||
                (!isFeatureEnabled(academy, 'operations_tools') && ['progress', 'teacherTask'].includes(viewMode))
              )) && (
               <TodaySheet
@@ -2518,7 +2566,11 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                  onNavigateTab={handleNavigateToLinkedMakeup}
                  onRefreshAbsenceSession={refreshAbsenceSession}
                  onRefreshData={fetchAllData}
-               />
+                 currentAuthUid={currentAuthUid}
+                 onUnlockSession={handleUnlockSession}
+                 onRelockSession={handleRelockSession}
+                 onRestoreSubmissionSnapshot={handleRestoreSubmissionSnapshot}
+                />
              )}
 
             {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} masterTextbooks={availableTextbooks} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} noticeDrafts={noticeDrafts} onNoticeDraftChange={handleNoticeDraftChange} />}

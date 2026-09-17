@@ -85,12 +85,17 @@ export interface TodaySheetProps {
     movedToHour: number | null;
   }) => Promise<boolean>;
   onRefreshData?: () => Promise<void>;
+  currentAuthUid?: string | null;
+  onUnlockSession?: (logId: number | string) => Promise<boolean>;
+  onRelockSession?: (logId: number | string) => Promise<boolean>;
+  onRestoreSubmissionSnapshot?: (logId: number | string) => Promise<boolean>;
 }
 
 import { useTodaySheetState } from './todaySheet/hooks/useTodaySheetState';
 
 export default function TodaySheet({
   students, allStudents, setStudents, masterTextbooks, onSave, onBatchSave, onUpdateStudentInfo, onRemoveFromToday, selectedDate, onDateChange, onViewProgress, onSelectStudent, academyInfo, currentUser,
+  currentAuthUid, onUnlockSession, onRelockSession, onRestoreSubmissionSnapshot,
   sortMode = 'time', onSortModeChange,
   sortDirection = 'asc', onSortDirectionChange,
   onOpenBriefing,
@@ -1398,6 +1403,7 @@ export default function TodaySheet({
     handleUndo,
     handleRedo,
     isModalOpen: isAnyModalOpen,
+    currentAuthUid: currentAuthUid || currentUser?.user_id || currentUser?.id,
     toggleShowAllTools: () => {
       setShowAllTools(prev => {
         const next = !prev;
@@ -2004,6 +2010,10 @@ export default function TodaySheet({
                       isLight={isLight}
                       onNavigateTab={onNavigateTab}
                       onRefreshAbsenceSession={onRefreshAbsenceSession}
+                      currentAuthUid={currentAuthUid || currentUser?.user_id || currentUser?.id}
+                      onUnlockSession={onUnlockSession}
+                      onRelockSession={onRelockSession}
+                      onRestoreSubmissionSnapshot={onRestoreSubmissionSnapshot}
                       onActiveCellChange={handleActiveCellChange}
                       onEditingCellChange={handleEditingCellChange}
                       isSelected={selectedIds.some((id: any) => String(id) === String(s.id))}

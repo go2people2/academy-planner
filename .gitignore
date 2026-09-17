@@ -46,6 +46,8 @@ next-env.d.ts
 /scratch/
 /current_work/
 /upload_perplexity/
+/backups/
+/hokmanote-mobile/
 book-pdf/**/*.pdf
 *.pdf
 check_*.js

@@ -5,6 +5,7 @@ import { parseClipboardText } from '@/lib/clipboardParser';
 import { mapColumnToProp, mapFieldToColumn, mapColumnToField, COLUMN_TO_FIELD_MAP } from '@/lib/sessionFieldMap';
 import { syncTodaySheetDom } from '@/lib/todaySheetDomSync';
 import { matchRowIdentity } from '@/lib/rowIdentity';
+import { isSessionApprovedAndLocked } from '@/lib/sessionLockService';
 
 interface UseTodaySheetClipboardProps {
   activeCell: { studentId: string; columnId: string } | null;
@@ -18,12 +19,14 @@ interface UseTodaySheetClipboardProps {
   selectedDate: string;
   handleBatchSave: (updates: any[]) => Promise<void>;
   selectedIds: string[];
+  currentAuthUid?: string | null;
 }
 
 export function useTodaySheetClipboard({
   activeCell, editingCell, setEditingCell,
   students, setStudents, filteredStudents, activeColumns,
-  selectedRange, selectedDate, handleBatchSave, selectedIds
+  selectedRange, selectedDate, handleBatchSave, selectedIds,
+  currentAuthUid
 }: UseTodaySheetClipboardProps) {
 
   // 1. 복사 핸들러
@@ -127,19 +130,20 @@ export function useTodaySheetClipboard({
           const prop = mapColumnToProp(colId);
           pastedColIds.add(colId); // 💡 대상 컬럼 추가
 
-          // 🔒 [추가] 붙여넣기 대상 범위 내 승인 대기 보호 셀이 있는지 검사
+          // 🔒 [추가] 붙여넣기 대상 범위 내 승인 대기 또는 승인 잠금 보호 셀이 있는지 검사
           let hasLockedCell = false;
           selectedIds.forEach(id => {
             const st = filteredStudents.find(s => s.id === id);
             if (st) {
               const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
+              const isApprovedLocked = isSessionApprovedAndLocked(st.todaySession, currentAuthUid);
               const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
-              if (isSubmitted && isProtectedCol) hasLockedCell = true;
+              if ((isSubmitted || isApprovedLocked) && isProtectedCol) hasLockedCell = true;
             }
           });
 
           if (hasLockedCell) {
-            alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+            alert("승인 완료되었거나 학생이 제출한 내용이 포함되어 있어 붙여넣을 수 없습니다.\n수정을 원하시면 먼저 [잠금 해제 후 수정]을 진행해 주세요.");
             return;
           }
 
@@ -154,7 +158,7 @@ export function useTodaySheetClipboard({
         const startStudentIdx = filteredStudents.findIndex(s => s.id === activeCell.studentId);
         if (startStudentIdx === -1 || startColIdx === -1) return;
 
-        // 🔒 [추가] 붙여넣기 대상 범위 내 승인 대기 보호 셀이 있는지 검사
+        // 🔒 [추가] 붙여넣기 대상 범위 내 승인 대기 또는 승인 잠금 보호 셀이 있는지 검사
         let hasLockedCell = false;
         dataMatrix.forEach((rowValues, rowOffset) => {
           const targetRow = startStudentIdx + rowOffset;
@@ -165,13 +169,14 @@ export function useTodaySheetClipboard({
             const colId = activeColumns[startColIdx + colOffset]?.id;
             if (!colId || ['select', 'name', 'action', 'date', 'attendance'].includes(colId)) return;
             const isSubmitted = ['pending', 'submitted'].includes(currentStudent.todaySession?.approval_status || '');
+            const isApprovedLocked = isSessionApprovedAndLocked(currentStudent.todaySession, currentAuthUid);
             const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
-            if (isSubmitted && isProtectedCol) hasLockedCell = true;
+            if ((isSubmitted || isApprovedLocked) && isProtectedCol) hasLockedCell = true;
           });
         });
 
         if (hasLockedCell) {
-          alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+          alert("승인 완료되었거나 학생이 제출한 내용이 포함되어 있어 붙여넣을 수 없습니다.\n수정을 원하시면 먼저 [잠금 해제 후 수정]을 진행해 주세요.");
           return;
         }
 
@@ -286,7 +291,7 @@ export function useTodaySheetClipboard({
     }
     if (targetColIds.length === 0) return;
 
-    // 🔒 [추가] 잘라내기 대상 범위 내 승인 대기 보호 셀이 있는지 검사
+    // 🔒 [추가] 잘라내기 대상 범위 내 승인 대기 또는 승인 잠금 보호 셀이 있는지 검사
     let hasLockedCell = false;
     for (let r = rStart; r <= rEnd; r++) {
       const st = filteredStudents[r];
@@ -294,8 +299,9 @@ export function useTodaySheetClipboard({
       for (let c = cStart; c <= cEnd; c++) {
         const colId = activeColumns[c].id;
         const isSubmitted = ['pending', 'submitted'].includes(st.todaySession?.approval_status || '');
+        const isApprovedLocked = isSessionApprovedAndLocked(st.todaySession, currentAuthUid);
         const isProtectedCol = ['completed_classwork', 'assign'].includes(colId);
-        if (isSubmitted && isProtectedCol) {
+        if ((isSubmitted || isApprovedLocked) && isProtectedCol) {
           hasLockedCell = true;
           break;
         }
@@ -304,7 +310,7 @@ export function useTodaySheetClipboard({
     }
 
     if (hasLockedCell) {
-      alert("학생이 제출한 내용이 있습니다. 승인을 한 후 수정이 가능합니다.");
+      alert("승인 완료되었거나 학생이 제출한 내용이 포함되어 있어 잘라내기할 수 없습니다.\n수정을 원하시면 먼저 [잠금 해제 후 수정]을 진행해 주세요.");
       return;
     }
 

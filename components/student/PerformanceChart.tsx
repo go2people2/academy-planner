@@ -7,6 +7,7 @@ import { parseInlineTests } from '@/lib/utils';
 
 interface PerformanceChartProps {
   logs: any[];
+  isLight?: boolean;
 }
 
 interface ChartItem {
@@ -18,16 +19,17 @@ interface ChartItem {
   percentage: number;
 }
 
-export default function PerformanceChart({ logs }: PerformanceChartProps) {
+export default function PerformanceChart({ logs, isLight = false }: PerformanceChartProps) {
   const chartData = useMemo(() => {
     const items: ChartItem[] = [];
 
     // logs는 최신순(역순)으로 들어오므로, 모든 로그를 순회하며 테스트 항목을 추출합니다.
     for (const log of logs) {
-      const date = log.session_date || '';
+      const date = log.session_date || log.date || '';
+      const testContent = log.test_status || log.test_id || '';
 
-      // 1. 인라인 테스트 파싱 시도 (test_status)
-      const parsed = parseInlineTests(log.test_status);
+      // 1. 인라인 테스트 파싱 시도 (하이픈 문법: -단원평가: 85 또는 -단원평가: 8/10)
+      const parsed = parseInlineTests(testContent);
       if (parsed && parsed.length > 0) {
         for (const t of parsed) {
           if (t.numericScore !== null && t.numericScore !== undefined) {
@@ -44,16 +46,17 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
           }
         }
       } else {
-        // 2. 기존 수동 입력 test_score 파싱
-        if (log.test_score !== null && log.test_score !== undefined) {
+        // 2. 기존 수동 입력 test_score 파싱 (점수칸에 직접 입력된 경우)
+        if (log.test_score !== null && log.test_score !== undefined && String(log.test_score).trim() !== '') {
           const isCount = log.test_score_type === 'count';
-          const score = parseFloat(log.test_score) || 0;
-          const maxScore = isCount ? (parseInt(log.test_total_count) || 10) : 100;
+          const score = parseFloat(String(log.test_score)) || 0;
+          const maxScore = isCount ? (parseInt(String(log.test_total_count), 10) || 10) : 100;
           const type = isCount ? 'count' : 'score';
           const percentage = maxScore > 0 ? (score / maxScore) * 100 : 0;
+          const testName = (testContent && !testContent.startsWith('-')) ? testContent.trim() : '테스트';
           items.push({
             date,
-            testName: '테스트',
+            testName,
             score,
             maxScore,
             type,
@@ -67,15 +70,31 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
     return items.slice(0, 10).reverse();
   }, [logs]);
 
-  if (chartData.length === 0) return null;
+  if (chartData.length === 0) {
+    return (
+      <div className={`p-12 text-center border rounded-[4px] ${
+        isLight ? 'bg-gray-50/50 border-gray-200 text-gray-400' : 'bg-white/[0.02] border-white/5 text-gray-600'
+      }`}>
+        <p className="text-[11px] font-bold tracking-wider">기록된 테스트 점수가 없습니다.</p>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-[#121212] border border-white/5 p-10 rounded-[4px] space-y-8 shadow-inner text-left mt-8">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-white/5 pb-3 gap-3">
-        <h4 className="text-xs font-black text-gray-400 uppercase tracking-widest flex items-center gap-2">
+    <div className={`p-6 sm:p-8 rounded-[4px] space-y-6 text-left border ${
+      isLight ? 'bg-gray-50/50 border-gray-200' : 'bg-[#121212] border-white/5 shadow-inner'
+    }`}>
+      <div className={`flex flex-col sm:flex-row sm:items-center justify-between pb-3 gap-2 border-b ${
+        isLight ? 'border-gray-200' : 'border-white/5'
+      }`}>
+        <h4 className={`text-xs font-black uppercase tracking-widest flex items-center gap-2 ${
+          isLight ? 'text-gray-700' : 'text-gray-400'
+        }`}>
           <TrendingUp size={16} className="text-blue-500" /> 성적 변화 추이
         </h4>
-        <div className="flex items-center gap-4 text-[9px] font-bold text-gray-400">
+        <div className={`flex items-center gap-4 text-[9px] font-bold ${
+          isLight ? 'text-gray-500' : 'text-gray-400'
+        }`}>
           <div className="flex items-center gap-1.5">
             <div className="w-2.5 h-2.5 bg-amber-500 rounded-[1px] opacity-80" />
             <span>점수형 (100점 만점)</span>
@@ -87,25 +106,29 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
         </div>
       </div>
       <div className="h-44 flex items-end justify-between gap-3 px-2 pt-8 relative text-center">
-        <div className="absolute inset-x-0 top-0 bottom-0 flex flex-col justify-between pointer-events-none opacity-20 z-0">
-          <div className="border-t border-dashed border-white/30 w-full relative">
-            <span className="absolute -top-3 -left-5 text-[9px] font-black text-white">100</span>
+        <div className={`absolute inset-x-0 top-0 bottom-0 flex flex-col justify-between pointer-events-none z-0 ${
+          isLight ? 'opacity-30' : 'opacity-20'
+        }`}>
+          <div className={`border-t border-dashed w-full relative ${isLight ? 'border-gray-400' : 'border-white/30'}`}>
+            <span className={`absolute -top-3 -left-5 text-[9px] font-black ${isLight ? 'text-gray-700' : 'text-white'}`}>100</span>
           </div>
-          <div className="border-t border-dashed border-white/10 w-full" />
-          <div className="border-t border-dashed border-white/20 w-full relative">
+          <div className={`border-t border-dashed w-full ${isLight ? 'border-gray-200' : 'border-white/10'}`} />
+          <div className={`border-t border-dashed w-full relative ${isLight ? 'border-amber-500/50' : 'border-white/20'}`}>
             <span className="absolute -top-3 -left-4 text-[9px] font-black text-amber-500">60</span>
           </div>
-          <div className="border-t border-solid border-white/30 w-full" />
+          <div className={`border-t border-solid w-full ${isLight ? 'border-gray-300' : 'border-white/30'}`} />
         </div>
         {chartData.map((data, i) => {
           return (
             <div key={i} className="flex-1 flex flex-col items-center gap-3 group relative z-10">
-              <div className="absolute -top-16 left-1/2 -translate-x-1/2 bg-[#1a1a1a] border border-white/10 text-white text-[10px] font-black px-2.5 py-1.5 rounded-[4px] opacity-0 group-hover:opacity-100 transition-all z-30 whitespace-nowrap shadow-2xl scale-75 group-hover:scale-100 origin-bottom pointer-events-none flex flex-col gap-0.5 items-center">
-                <span className="text-gray-400">{data.testName}</span>
+              <div className={`absolute -top-16 left-1/2 -translate-x-1/2 border text-[10px] font-black px-2.5 py-1.5 rounded-[4px] opacity-0 group-hover:opacity-100 transition-all z-30 whitespace-nowrap shadow-2xl scale-75 group-hover:scale-100 origin-bottom pointer-events-none flex flex-col gap-0.5 items-center ${
+                isLight ? 'bg-white border-gray-250 text-gray-800 shadow-gray-400/20' : 'bg-[#1a1a1a] border-white/10 text-white shadow-2xl'
+              }`}>
+                <span className={isLight ? 'text-gray-500' : 'text-gray-400'}>{data.testName}</span>
                 {data.type === 'score' ? (
-                  <span className="text-amber-400 text-[11px]">{data.score}점</span>
+                  <span className="text-amber-500 font-extrabold text-[11px]">{data.score}점</span>
                 ) : (
-                  <span className="text-pink-400 text-[11px]">{data.score} / {data.maxScore} 개</span>
+                  <span className="text-pink-500 font-extrabold text-[11px]">{data.score} / {data.maxScore} 개</span>
                 )}
               </div>
               <div 
@@ -117,12 +140,14 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
                 }}
               >
                 {data.type === 'score' ? (
-                  <span className="text-amber-500/90">{data.score}</span>
+                  <span className="text-amber-500/90 font-extrabold">{data.score}</span>
                 ) : (
-                  <span className="text-pink-500/90">{data.score}/{data.maxScore}</span>
+                  <span className="text-pink-500/90 font-extrabold">{data.score}/{data.maxScore}</span>
                 )}
               </div>
-              <div className="w-full max-w-[28px] bg-white/5 rounded-t-[2px] relative flex items-end h-[140px] overflow-hidden group-hover:bg-white/10 transition-colors">
+              <div className={`w-full max-w-[28px] rounded-t-[2px] relative flex items-end h-[140px] overflow-hidden transition-colors ${
+                isLight ? 'bg-gray-200/60 group-hover:bg-gray-200' : 'bg-white/5 group-hover:bg-white/10'
+              }`}>
                 {data.type === 'score' ? (
                   <motion.div 
                     initial={{ height: 0 }} 
@@ -158,7 +183,7 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
                             className={`w-full flex-1 rounded-[1px] transition-all ${
                               isLightOn 
                                 ? (data.percentage >= 80 ? 'bg-pink-400 shadow-[0_0_8px_rgba(236,72,153,0.4)]' : data.percentage >= 60 ? 'bg-pink-500' : 'bg-red-500')
-                                : 'bg-white/10'
+                                : (isLight ? 'bg-gray-300/40' : 'bg-white/10')
                             }`}
                           />
                         );
@@ -167,7 +192,9 @@ export default function PerformanceChart({ logs }: PerformanceChartProps) {
                   )
                 )}
               </div>
-              <span className="text-[9px] font-black text-gray-500 rotate-45 origin-left whitespace-nowrap ml-2 mt-1 group-hover:text-white transition-colors">
+              <span className={`text-[9px] font-black rotate-45 origin-left whitespace-nowrap ml-2 mt-1 transition-colors ${
+                isLight ? 'text-gray-500 group-hover:text-gray-900' : 'text-gray-500 group-hover:text-white'
+              }`}>
                 {data.date.slice(5).replace('-', '.')}
               </span>
             </div>
