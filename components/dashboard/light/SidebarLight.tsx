@@ -42,7 +42,7 @@ const DAYS_SHORT = ['월', '화', '수', '목', '금', '토', '일'];
 
 const DEFAULT_MENU_ORDER = [
   'live', 'board', 'todayTable', 'pdfLibrary', 'digitalLibrary', 'teacherTask', 'studentEdit',
-  'progress', 'monthlyChanges', 'exams', 'problemErrors', 'wrongAnswersAdmin'
+  'progress', 'monthlyChanges', 'examDdayOverview', 'exams', 'problemErrors', 'wrongAnswersAdmin'
 ];
 
 const formatHour = (hour: number) => {
@@ -250,8 +250,8 @@ export default function Sidebar({
               id="assessmentPackage"
               icon={<FileText size={14} className="text-blue-500" />}
               label="평가 관리"
-              active={isViewModeReady && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)}
-              onClick={() => { setViewMode('exams'); setSelectedFilter('All'); }}
+              active={isViewModeReady && ['examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)}
+              onClick={() => { setViewMode('examDdayOverview'); setSelectedFilter('All'); }}
             />
           )}
           {isFeatureEnabled(academyInfo, 'operations_tools') && (

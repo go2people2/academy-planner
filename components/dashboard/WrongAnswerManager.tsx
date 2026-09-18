@@ -218,7 +218,7 @@ export default function WrongAnswerManager({ academyId, currentUser }: WrongAnsw
 
   if (!waAcademy) {
     return (
-      <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto text-slate-800">
+      <div className="w-full h-full min-h-0 overflow-y-auto p-4 md:p-8 space-y-6 max-w-5xl mx-auto text-slate-800">
         <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col justify-between gap-4">
           <h1 className="text-2xl font-black flex items-center gap-2 text-red-600">
             <BookOpen size={24} />
@@ -239,7 +239,7 @@ export default function WrongAnswerManager({ academyId, currentUser }: WrongAnsw
   const isAdminUser = currentUser?.role === 'admin' || currentUser?.role === 'master';
 
   return (
-    <div className="p-4 md:p-8 space-y-6 max-w-5xl mx-auto text-slate-800 transition-colors" style={{ color: '#1e293b' }}>
+    <div className="w-full h-full min-h-0 overflow-y-auto p-4 md:p-8 space-y-6 max-w-5xl mx-auto text-slate-800 transition-colors" style={{ color: '#1e293b' }}>
       
       {/* 1. 상단 바 */}
       <div className="bg-white p-6 rounded-3xl shadow-sm border border-slate-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">

@@ -19,6 +19,7 @@ import ApprovalModal from '@/components/dashboard/ApprovalModal';
 import ProblemErrorManager from '@/components/dashboard/light/ProblemErrorManagerLight';
 import WrongAnswerManager from '@/components/dashboard/WrongAnswerManager';
 import ExamPaperManager from '@/components/dashboard/exam/light/ExamPaperManagerLight';
+import ExamDdayOverview from '@/components/dashboard/examOverview/ExamDdayOverview';
 import TimetableSettings from '@/components/dashboard/settings/TimetableSettings';
 import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
 import DigitalMathLibraryView from '@/components/dashboard/DigitalMathLibraryView';
@@ -84,7 +85,7 @@ export default function DashboardPage() {
   useEffect(() => {
     // 💡 [안정화] 마운트 완료 후 클라이언트 환경에서만 이전 보던 탭 화면을 복구하여 Hydration Mismatch 및 Flash 방지
     setIsMounted(true);
-    const validModes = ['board', 'todayTable', 'studentSupport', 'studentEdit', 'monthlyChanges', 'pdfLibrary', 'digitalLibrary', 'exams', 'wrongAnswersAdmin', 'problemErrors', 'progress', 'teacherTask', 'settings'];
+    const validModes = ['board', 'todayTable', 'studentSupport', 'studentEdit', 'monthlyChanges', 'pdfLibrary', 'digitalLibrary', 'examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors', 'progress', 'teacherTask', 'settings'];
     const savedTab = localStorage.getItem('ams_viewMode');
     if (savedTab && validModes.includes(savedTab)) {
       setViewMode(savedTab);
@@ -2369,21 +2370,30 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
              )}
 
              {/* [평가 관리 팩] */}
-             {isFeatureEnabled(academy, 'assessment_tools') && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode) && (
-               <div className="flex flex-col h-full">
-                 <PackageSubNav
-                   packageType="assessment"
-                   currentViewMode={viewMode}
-                   onSelectViewMode={(mode) => navigateTo(mode)}
-                   isLight={true}
-                 />
-                 <div className="flex-1 overflow-hidden">
-                   {viewMode === 'exams' && <ExamPaperManager academyId={academy?.id || ''} />}
-                   {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy?.id || ''} currentUser={currentUser} />}
-                   {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}
-                 </div>
-               </div>
-             )}
+              {isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode) && (
+                <div className="flex flex-col h-full">
+                  <PackageSubNav
+                    packageType="assessment"
+                    currentViewMode={viewMode}
+                    onSelectViewMode={(mode) => navigateTo(mode)}
+                    isLight={true}
+                  />
+                  <div className="flex-1 min-h-0 overflow-hidden flex flex-col">
+                    {viewMode === 'examDdayOverview' && (
+                      <ExamDdayOverview
+                        academyInfo={academy}
+                        students={students}
+                        teachers={teachers}
+                        slug={(slug as string) || ''}
+                        isLight={true}
+                      />
+                    )}
+                    {viewMode === 'exams' && <ExamPaperManager academyId={academy?.id || ''} />}
+                    {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy?.id || ''} currentUser={currentUser} />}
+                    {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}
+                  </div>
+                </div>
+              )}
 
              {/* [운영 관리 팩] */}
              {isFeatureEnabled(academy, 'operations_tools') && ['progress', 'teacherTask'].includes(viewMode) && (
@@ -2414,7 +2424,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
              {(viewMode === 'todayTable' || (
                (!isFeatureEnabled(academy, 'learning_resources') && ['pdfLibrary', 'digitalLibrary'].includes(viewMode)) ||
-               (!isFeatureEnabled(academy, 'assessment_tools') && ['exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)) ||
+               (!isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)) ||
                (!isFeatureEnabled(academy, 'operations_tools') && ['progress', 'teacherTask'].includes(viewMode))
              )) && (
               <TodaySheet
