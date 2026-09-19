@@ -1,31 +1,128 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { extractRealStudentId } from '@/lib/rowIdentity';
 
-// 💡 RLS 우회용 Supabase Admin 클라이언트 생성
-function getSupabase() {
-  return createClient(
+const supabaseAdmin = createClient(
+  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
+  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
+  {
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  }
+);
+
+// 허용된 AI 모델 목록
+const ALLOWED_MODELS: Record<string, { provider: 'openai' | 'gemini'; actualModel: string }> = {
+  openai: { provider: 'openai', actualModel: 'gpt-4o' },
+  gemini: { provider: 'gemini', actualModel: 'gemini-3.5-flash-lite' },
+};
+
+// 교사 세션 JWT 인증 검증 헬퍼
+async function authenticateTeacher(req: NextRequest) {
+  const authHeader = req.headers.get('Authorization');
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return { error: '인증 토큰이 누락되었습니다.', status: 401 };
+  }
+
+  const token = authHeader.split(' ')[1];
+  const tempClient = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-    process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-    {
-      auth: {
-        autoRefreshToken: false,
-        persistSession: false,
-      },
-    }
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY || '',
+    { auth: { persistSession: false } }
   );
+
+  const { data: { user }, error: authErr } = await tempClient.auth.getUser(token);
+  if (authErr || !user) {
+    return { error: '유효하지 않거나 만료된 세션입니다.', status: 401 };
+  }
+
+  // ams_teachers 테이블에서 교사 프로필 조회
+  const { data: teacher, error: teacherErr } = await supabaseAdmin
+    .from('ams_teachers')
+    .select('id, academy_id, role')
+    .eq('user_id', user.id)
+    .maybeSingle();
+
+  if (teacherErr || !teacher) {
+    return { error: '등록된 교사 프로필을 찾을 수 없습니다.', status: 403 };
+  }
+
+  // 브리핑 실행 가능한 교사 role 검증 ('admin', 'teacher', 'master')
+  const allowedRoles = ['admin', 'teacher', 'master'];
+  if (!teacher.role || !allowedRoles.includes(teacher.role)) {
+    return { error: '브리핑 실행 권한이 없습니다.', status: 403 };
+  }
+
+  return { teacher, user };
 }
 
 export async function POST(req: NextRequest) {
   try {
+    // 1. JWT 인증 및 교사 프로필 검증 (토큰 없거나 유효하지 않으면 401)
+    const authResult = await authenticateTeacher(req);
+    if ('error' in authResult) {
+      return NextResponse.json({ error: authResult.error }, { status: authResult.status });
+    }
+    const { teacher } = authResult;
+
     const body = await req.json();
-    const { studentId, model, startDate, endDate } = body;
+    const { studentId, model, startDate, endDate, requestId } = body;
 
     if (!studentId) {
       return NextResponse.json({ error: '학생 ID(studentId)가 필요합니다.' }, { status: 400 });
     }
 
-    const selectedModel = model || 'openai';
-    const supabase = getSupabase();
+    // 2. 모델 화이트리스트 검증 (허용되지 않은 모델값은 AI 호출 전 400 차단)
+    const modelKey = model || 'openai';
+    if (!ALLOWED_MODELS[modelKey]) {
+      return NextResponse.json({ error: `지원하지 않는 모델입니다: ${modelKey}` }, { status: 400 });
+    }
+    const { provider: verifiedProvider, actualModel: verifiedActualModel } = ALLOWED_MODELS[modelKey];
+
+    const safeRequestId = (requestId && typeof requestId === 'string') 
+      ? requestId.slice(0, 64) 
+      : `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
+    // 3. 학생 기본 정보 조회 (공용 헬퍼로 파생 ID 정제 및 DB 검증된 academy_id 획득)
+    const realStudentId = extractRealStudentId(String(studentId));
+
+    const { data: student, error: stdErr } = await supabaseAdmin
+      .from('ams_students')
+      .select('id, name, academy_id, grade, school, course, class_name')
+      .eq('id', realStudentId)
+      .maybeSingle();
+
+    if (stdErr || !student) {
+      if (stdErr) {
+        console.error('[Briefing API] ams_students query error:', stdErr);
+      }
+      return NextResponse.json({ error: '학생 정보를 불러오지 못했습니다.' }, { status: 404 });
+    }
+
+    // 4. 테넌트 검증: 학생 소속 학원과 교사 소속 학원이 일치해야 함
+    if (student.academy_id !== teacher.academy_id) {
+      return NextResponse.json({ error: '타 학원 학생의 브리핑을 생성할 수 없습니다.' }, { status: 403 });
+    }
+
+    const verifiedAcademyId = student.academy_id;
+
+    // 5. 사전 멱등성 검사 (동일 academy_id + feature + request_id 성공 건 존재 시 409 Conflict 반환)
+    const { data: existingSuccess } = await supabaseAdmin
+      .from('ams_ai_usage_logs')
+      .select('id')
+      .eq('academy_id', verifiedAcademyId)
+      .eq('feature', 'briefing')
+      .eq('request_id', safeRequestId)
+      .eq('status', 'success')
+      .maybeSingle();
+
+    if (existingSuccess) {
+      return NextResponse.json({
+        error: '동일한 브리핑 생성 요청이 이미 처리되었습니다. 필요하면 브리핑 생성을 다시 눌러 새로 생성해 주세요.'
+      }, { status: 409 });
+    }
 
     // 💡 날짜 기본값 설정 (오늘 기준 최근 30일)
     const todayKST = new Date(Date.now() + 9 * 3600 * 1000);
@@ -35,35 +132,22 @@ export async function POST(req: NextRequest) {
     const finalStartDate = startDate || defaultStartDate;
     const finalEndDate = endDate || defaultEndDate;
 
-    // 1. 학생 기본 정보 조회
-    const { data: student, error: stdErr } = await supabase
-      .from('ams_students')
-      .select('*')
-      .eq('id', studentId)
-      .maybeSingle();
-
-    if (stdErr || !student) {
-      return NextResponse.json({ error: '학생 정보를 불러오지 못했습니다.' }, { status: 404 });
-    }
-
-    // 1-2. 학원 정보 및 operation_settings 조회 (커스텀 프롬프트 로드용)
+    // 6. 학원 정보 및 operation_settings 조회 (커스텀 프롬프트 로드용)
     let academySettings: any = null;
-    if (student.academy_id) {
-      const { data: academy } = await supabase
-        .from('ams_academies')
-        .select('operation_settings')
-        .eq('id', student.academy_id)
-        .maybeSingle();
-      if (academy?.operation_settings) {
-        academySettings = academy.operation_settings;
-      }
+    const { data: academy } = await supabaseAdmin
+      .from('ams_academies')
+      .select('operation_settings')
+      .eq('id', verifiedAcademyId)
+      .maybeSingle();
+    if (academy?.operation_settings) {
+      academySettings = academy.operation_settings;
     }
 
-    // 2. 설정된 기간의 수업 일지 조회
-    const { data: sessionLogs, error: logErr } = await supabase
+    // 2. 설정된 기간의 수업 일지 조회 (정제된 student.id 기준)
+    const { data: sessionLogs, error: logErr } = await supabaseAdmin
       .from('ams_session_logs')
       .select('*')
-      .eq('student_id', studentId)
+      .eq('student_id', student.id)
       .gte('session_date', finalStartDate)
       .lte('session_date', finalEndDate)
       .order('session_date', { ascending: false });
@@ -72,8 +156,8 @@ export async function POST(req: NextRequest) {
       console.error('Error fetching session logs:', logErr);
     }
 
-    // 3. 설정된 기간의 OMR 시험 제출 정보 및 시험지 조인
-    const { data: examSubmissions, error: examErr } = await supabase
+    // 3. 설정된 기간의 OMR 시험 제출 정보 및 시험지 조인 (정제된 student.id 기준)
+    const { data: examSubmissions, error: examErr } = await supabaseAdmin
       .from('ams_exam_submissions')
       .select(`
         id,
@@ -87,7 +171,7 @@ export async function POST(req: NextRequest) {
           question_count
         )
       `)
-      .eq('student_id', studentId)
+      .eq('student_id', student.id)
       .gte('submitted_at', `${finalStartDate}T00:00:00`)
       .lte('submitted_at', `${finalEndDate}T23:59:59`)
       .order('submitted_at', { ascending: false });
@@ -184,7 +268,7 @@ export async function POST(req: NextRequest) {
 - 이름: ${student.name}
 - 학년: ${student.grade || '미정'}
 - 학교: ${student.school || '미정'}
-- 코스/클래스: ${student.course || '미정'} / ${student.class || '미정'}
+- 코스/클래스: ${student.course || '미정'} / ${student.class_name || '미정'}
 
 [최근 수업 일지 기록 (진도, 숙제, 일일/단원평가)]
 ${formattedLogs || '기록된 수업 일지가 없습니다.'}
@@ -195,8 +279,12 @@ ${formattedExams || '기록된 정기 고사 성적이 없습니다.'}
 
     let aiResponseText = '';
 
-    // 6. 모델 분기 처리 및 API 호출
-    if (selectedModel === 'openai') {
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let estimatedCostUsd = 0;
+
+    // 7. 검증된 모델 분기 처리 및 API 호출
+    if (verifiedProvider === 'openai') {
       const apiKey = process.env.OPENAI_API_KEY?.trim().replace(/[\r\n\s]+/g, '');
       if (!apiKey) {
         return NextResponse.json({ error: 'OpenAI API 키가 설정되지 않았습니다. .env.local 파일을 확인해 주세요.' }, { status: 500 });
@@ -209,7 +297,7 @@ ${formattedExams || '기록된 정기 고사 성적이 없습니다.'}
           'Authorization': `Bearer ${apiKey}`
         },
         body: JSON.stringify({
-          model: 'gpt-4o',
+          model: verifiedActualModel,
           messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt }
@@ -226,15 +314,18 @@ ${formattedExams || '기록된 정기 고사 성적이 없습니다.'}
       const openAiData = await openAiRes.json();
       aiResponseText = openAiData.choices?.[0]?.message?.content || '';
 
-    } else if (selectedModel === 'gemini') {
+      // OpenAI 토큰 추출 및 추정 원가 산출 (gpt-4o: 입력 $2.50/1M, 출력 $10.00/1M 기준)
+      inputTokens = Number(openAiData.usage?.prompt_tokens) || 0;
+      outputTokens = Number(openAiData.usage?.completion_tokens) || 0;
+      estimatedCostUsd = Number(((inputTokens * 2.5 + outputTokens * 10.0) / 1000000).toFixed(6));
+
+    } else if (verifiedProvider === 'gemini') {
       const apiKey = process.env.GEMINI_API_KEY?.trim().replace(/[\r\n\s]+/g, '');
       if (!apiKey) {
         return NextResponse.json({ error: 'Google Gemini API 키가 설정되지 않았습니다. .env.local 파일을 확인해 주세요.' }, { status: 500 });
       }
 
-      // Google Gemini API direct fetch 호출 (gemini-3.5-flash-lite)
-      const targetGeminiModel = 'gemini-3.5-flash-lite';
-      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${targetGeminiModel}:generateContent?key=${apiKey}`;
+      const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${verifiedActualModel}:generateContent?key=${apiKey}`;
       const geminiRes = await fetch(geminiUrl, {
         method: 'POST',
         headers: {
@@ -257,19 +348,61 @@ ${formattedExams || '기록된 정기 고사 성적이 없습니다.'}
 
       if (!geminiRes.ok) {
         const errorData = await geminiRes.json().catch(() => ({}));
-        console.error('Gemini API Error details:', { status: geminiRes.status, model: targetGeminiModel, message: errorData.error?.message });
+        console.error('Gemini API Error details:', { status: geminiRes.status, model: verifiedActualModel, message: errorData.error?.message });
         throw new Error(`Gemini 브리핑 연결에 실패했습니다. (상태 코드: ${geminiRes.status})`);
       }
 
       const geminiData = await geminiRes.json();
       aiResponseText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    } else {
-      return NextResponse.json({ error: `지원하지 않는 모델입니다: ${selectedModel}` }, { status: 400 });
+
+      // Gemini 토큰 추출 및 추정 원가 산출 (gemini-3.5-flash-lite: 입력 $0.075/1M, 출력 $0.30/1M 기준)
+      inputTokens = Number(geminiData.usageMetadata?.promptTokenCount) || 0;
+      outputTokens = Number(geminiData.usageMetadata?.candidatesTokenCount) || 0;
+      estimatedCostUsd = Number(((inputTokens * 0.075 + outputTokens * 0.30) / 1000000).toFixed(6));
+    }
+
+    // 8. 💡 [사용량 계량 로그 기록] AI 호출 성공 시에만 success 로그 저장
+    // 로그 실패 시에도 브리핑 본문 반환을 블로킹하지 않도록 안전 분리
+    try {
+      const { error: insertErr } = await supabaseAdmin
+        .from('ams_ai_usage_logs')
+        .insert([
+          {
+            request_id: safeRequestId,
+            academy_id: verifiedAcademyId,
+            student_id: student.id,
+            teacher_id: teacher.id,
+            feature: 'briefing',
+            provider: verifiedProvider,
+            model: verifiedActualModel,
+            status: 'success',
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+            estimated_cost_usd: estimatedCostUsd,
+          }
+        ]);
+
+      if (insertErr) {
+        // 민감 정보 없는 구조화된 에러 로깅
+        console.error('⚠️ [AI Usage Log Insert Error]:', {
+          code: insertErr.code,
+          message: insertErr.message,
+          requestId: safeRequestId,
+          academyId: verifiedAcademyId,
+          provider: verifiedProvider,
+          model: verifiedActualModel,
+        });
+      }
+    } catch (logEx: any) {
+      console.error('⚠️ [AI Usage Log Unexpected Error]:', {
+        error: logEx?.message || 'Unknown logging error',
+        requestId: safeRequestId,
+      });
     }
 
     return NextResponse.json({
       success: true,
-      model: selectedModel,
+      model: modelKey,
       briefing: aiResponseText
     });
 

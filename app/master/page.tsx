@@ -10,6 +10,7 @@ import { useMasterDashboard } from './hooks/useMasterDashboard';
 import { useMasterModules } from './hooks/useMasterModules';
 import { ModuleOverviewTab } from './components/ModuleOverviewTab';
 import { ModuleManageModal } from './components/ModuleManageModal';
+import { AiUsageOverviewTab } from './components/AiUsageOverviewTab';
 
 export default function MasterDashboard() {
   const {
@@ -60,7 +61,7 @@ export default function MasterDashboard() {
     handleCloseEditModal,
   } = useMasterDashboard();
 
-  const [masterTab, setMasterTab] = useState<'modules' | 'academies'>('modules');
+  const [masterTab, setMasterTab] = useState<'modules' | 'academies' | 'ai-usage'>('modules');
   const {
     moduleOverviews,
     isLoadingModules,
@@ -85,6 +86,10 @@ export default function MasterDashboard() {
     issuedCodeInfo,
     isIssuingCode,
     handleIssueActivationCode,
+    activationCodes,
+    isLoadingCodes,
+    isRevokingCodeId,
+    handleRevokeActivationCode,
     isRevokingDevice,
     handleRevokeDevice,
     summaryStats,
@@ -272,6 +277,18 @@ export default function MasterDashboard() {
             <School size={14} />
             <span>학원 인스턴스 개설 및 설정</span>
           </button>
+
+          <button
+            onClick={() => setMasterTab('ai-usage')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all ${
+              masterTab === 'ai-usage'
+                ? 'border-purple-500 text-purple-400 bg-white/[0.02]'
+                : 'border-transparent text-gray-400 hover:text-white hover:bg-white/[0.01]'
+            }`}
+          >
+            <Sparkles size={14} className="text-purple-400" />
+            <span>AI 사용량 및 과금 분석</span>
+          </button>
         </div>
       </div>
 
@@ -290,6 +307,8 @@ export default function MasterDashboard() {
             summaryStats={summaryStats}
             onOpenManageModal={openModuleModal}
           />
+        ) : masterTab === 'ai-usage' ? (
+          <AiUsageOverviewTab />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Left: Create Academy Form */}
@@ -895,6 +914,10 @@ export default function MasterDashboard() {
         issuedCodeInfo={issuedCodeInfo}
         isIssuingCode={isIssuingCode}
         onIssueCode={handleIssueActivationCode}
+        activationCodes={activationCodes}
+        isLoadingCodes={isLoadingCodes}
+        isRevokingCodeId={isRevokingCodeId}
+        onRevokeCode={handleRevokeActivationCode}
         isRevokingDevice={isRevokingDevice}
         onRevokeDevice={handleRevokeDevice}
       />

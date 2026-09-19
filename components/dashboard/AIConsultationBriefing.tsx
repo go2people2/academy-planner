@@ -62,11 +62,31 @@ export default function AIConsultationBriefing({ student, onBriefingSaved, isLig
     setLoadingModel(model);
     setErrorMsg(null);
 
+    // 💡 네트워크 재시도 시에도 동일 요청으로 추적할 수 있도록 1회 실행 동안 고유 requestId 생성
+    const requestId = typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : `req_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+      if (!token) {
+        setErrorMsg('로그인 세션이 만료되었습니다. 다시 로그인한 후 브리핑을 생성해 주세요.');
+        setLoadingModel(null);
+        return;
+      }
+
       const res = await fetch('/api/briefing', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ studentId: student.id, model, startDate, endDate })
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          studentId: student.id,
+          model,
+          startDate,
+          endDate,
+          requestId
+        })
       });
 
       const data = await res.json();
