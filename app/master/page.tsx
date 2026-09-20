@@ -86,10 +86,6 @@ export default function MasterDashboard() {
     issuedCodeInfo,
     isIssuingCode,
     handleIssueActivationCode,
-    activationCodes,
-    isLoadingCodes,
-    isRevokingCodeId,
-    handleRevokeActivationCode,
     isRevokingDevice,
     handleRevokeDevice,
     summaryStats,
@@ -898,7 +894,7 @@ export default function MasterDashboard() {
         )}
       </AnimatePresence>
 
-      {/* 💡 HokmaNote 모듈 및 기기 관리 모달 */}
+      {/* 💡 HokmaNote 모듈 및 기기 관리 모달 (deploy/main Props 인터페이스 준수) */}
       <ModuleManageModal
         academy={selectedModuleAcademy}
         isOpen={isModuleModalOpen}
@@ -914,10 +910,6 @@ export default function MasterDashboard() {
         issuedCodeInfo={issuedCodeInfo}
         isIssuingCode={isIssuingCode}
         onIssueCode={handleIssueActivationCode}
-        activationCodes={activationCodes}
-        isLoadingCodes={isLoadingCodes}
-        isRevokingCodeId={isRevokingCodeId}
-        onRevokeCode={handleRevokeActivationCode}
         isRevokingDevice={isRevokingDevice}
         onRevokeDevice={handleRevokeDevice}
       />
