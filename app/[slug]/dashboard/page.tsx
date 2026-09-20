@@ -2578,9 +2578,20 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         )}
       </main>
       <AnimatePresence>
-        {isClassroomModeOpen && < ClassroomMode students={students} onSave={saveTodaySession} onClose={() => setIsClassroomModeOpen(false)} selectedDate={selectedDate} academyInfo={academy} selectedTeacherId={selectedTeacherId} />}
+        {isClassroomModeOpen && (
+          <ClassroomMode
+            key="classroom-mode-modal"
+            students={students}
+            onSave={saveTodaySession}
+            onClose={() => setIsClassroomModeOpen(false)}
+            selectedDate={selectedDate}
+            academyInfo={academy}
+            selectedTeacherId={selectedTeacherId}
+          />
+        )}
         {showMorningBriefing && (
           <MorningBriefingModal
+            key="morning-briefing-modal"
             academyInfo={academy}
             todayStudents={todayStudents}
             allStudents={students}
@@ -2593,6 +2604,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         {selectedStudentId && selectedStudent && !isBatchMode && (
           (['studentSupport', 'studentEdit'].includes(viewMode) || selectedStudent.is_deleted) ? (
             <StudentDetailDrawer
+              key={`student-detail-drawer-${selectedStudent.id}`}
               student={selectedStudent}
               availableTextbooks={availableTextbooks}
               isRefreshingBooks={isRefreshingBooks}
@@ -2605,6 +2617,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
             />
           ) : (
             <StudentStudyReportDrawer
+              key={`student-study-report-drawer-${selectedStudent.id}`}
               student={selectedStudent}
               availableTextbooks={availableTextbooks}
               onClose={() => setSelectedStudentId(null)}
