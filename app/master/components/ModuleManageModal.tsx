@@ -1,9 +1,9 @@
 'use client';
 
 import React, { useState } from 'react';
-import { AcademyModuleOverview, ModuleStatus } from '@/types/modules';
+import { AcademyModuleOverview, ModuleStatus, ActivationCode } from '@/types/modules';
 import { motion } from 'framer-motion';
-import { X, KeyRound, Laptop, ShieldCheck, Copy, Check, AlertTriangle, Trash2, Loader2 } from 'lucide-react';
+import { X, KeyRound, Laptop, ShieldCheck, Copy, Check, AlertTriangle, Trash2, Loader2, Ban } from 'lucide-react';
 
 interface ModuleManageModalProps {
   academy: AcademyModuleOverview | null;
@@ -20,6 +20,10 @@ interface ModuleManageModalProps {
   issuedCodeInfo: { code: string; expires_at: string; prefix: string } | null;
   isIssuingCode: boolean;
   onIssueCode: () => void;
+  activationCodes: ActivationCode[];
+  isLoadingCodes: boolean;
+  isRevokingCodeId: string | null;
+  onRevokeCode: (codeId: string) => void;
   isRevokingDevice: boolean;
   onRevokeDevice: (deviceId: string) => void;
 }
@@ -39,6 +43,10 @@ export const ModuleManageModal: React.FC<ModuleManageModalProps> = ({
   issuedCodeInfo,
   isIssuingCode,
   onIssueCode,
+  activationCodes,
+  isLoadingCodes,
+  isRevokingCodeId,
+  onRevokeCode,
   isRevokingDevice,
   onRevokeDevice,
 }) => {
@@ -157,51 +165,140 @@ export const ModuleManageModal: React.FC<ModuleManageModalProps> = ({
             </div>
           </div>
 
-          {/* 섹션 2: HokmaNote 설치 코드 발급 */}
+          {/* 섹션 2: HokmaNote 설치 코드 발급 및 관리 */}
           <div className="space-y-3 bg-white/[0.02] border border-white/5 p-4 rounded-sm">
             <div className="flex items-center justify-between">
               <span className="text-[11px] font-black uppercase tracking-wider text-gray-300 flex items-center gap-1.5">
                 <KeyRound size={14} className="text-amber-400" />
                 <span>2. HokmaNote Mac 설치 코드 발급</span>
               </span>
-              <button
-                onClick={onIssueCode}
-                disabled={isIssuingCode}
-                className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-sm text-xs font-bold transition-all flex items-center gap-1"
-              >
-                {isIssuingCode ? <Loader2 size={12} className="animate-spin" /> : null}
-                <span>새 설치 코드 발급</span>
-              </button>
+              {academy.hokmanote_status === 'active' || academy.hokmanote_status === 'pending_setup' || academy.hokmanote_status === 'trial' ? (
+                <button
+                  onClick={onIssueCode}
+                  disabled={isIssuingCode}
+                  className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/30 rounded-sm text-xs font-bold transition-all flex items-center gap-1"
+                >
+                  {isIssuingCode ? <Loader2 size={12} className="animate-spin" /> : null}
+                  <span>새 설치 코드 발급</span>
+                </button>
+              ) : (
+                <span className="text-[10px] text-gray-500 italic">HokmaNote 활성 후 발급 가능</span>
+              )}
             </div>
 
             <p className="text-[10px] text-gray-400 leading-relaxed font-normal">
-              원장님이 Mac에서 HokmaNote 앱을 처음 실행했을 때 입력할 16자리 일회성 인증 코드입니다. (발급 후 72시간 동안 유효)
+              원장님이 Mac에서 HokmaNote 앱을 처음 실행했을 때 입력할 1회성 설치 코드(HN-XXXX-XXXX)입니다. (발급 후 24시간 동안 유효)
             </p>
 
+            {/* 💡 원문 코드 발급 직후 1회성 노출 카드 */}
             {issuedCodeInfo && (
-              <div className="p-3 bg-black/60 border border-amber-500/30 rounded-sm space-y-2">
+              <div className="p-3.5 bg-black/80 border border-amber-500/40 rounded-sm space-y-2.5 shadow-lg">
                 <div className="flex items-center justify-between">
-                  <span className="text-[9px] text-amber-400 font-bold uppercase tracking-wider">발급된 설치 코드:</span>
-                  <span className="text-[9px] text-gray-500">72시간 후 자동 만료</span>
+                  <span className="text-[10px] text-amber-400 font-black uppercase tracking-wider flex items-center gap-1">
+                    <KeyRound size={12} />
+                    <span>신규 발급된 설치 코드 (1회성)</span>
+                  </span>
+                  <span className="text-[9px] text-gray-400 font-bold">24시간 후 자동 만료</span>
                 </div>
-                <div className="flex items-center justify-between bg-black/80 p-2.5 rounded border border-white/10">
-                  <code className="text-sm font-mono font-black text-amber-300 tracking-wider">
+                <div className="flex items-center justify-between bg-black/90 p-2.5 rounded border border-white/10">
+                  <code className="text-base font-mono font-black text-amber-300 tracking-wider">
                     {issuedCodeInfo.code}
                   </code>
                   <button
                     onClick={handleCopyCode}
-                    className="flex items-center gap-1 px-2 py-1 bg-amber-500 hover:bg-amber-400 text-black text-[10px] font-bold rounded transition-all"
+                    className="flex items-center gap-1 px-2.5 py-1.5 bg-amber-500 hover:bg-amber-400 text-black text-[11px] font-black rounded transition-all shadow-sm"
                   >
-                    {isCopied ? <Check size={12} /> : <Copy size={12} />}
-                    <span>{isCopied ? '복사됨' : '복사'}</span>
+                    {isCopied ? <Check size={13} /> : <Copy size={13} />}
+                    <span>{isCopied ? '복사됨' : '코드 복사'}</span>
                   </button>
                 </div>
-                <div className="flex items-start gap-1.5 text-[9px] text-amber-200/80">
-                  <AlertTriangle size={12} className="shrink-0 mt-0.5" />
-                  <span>이 코드는 창을 닫으면 다시 조회할 수 없습니다. 즉시 복사하여 원장님께 전달하세요.</span>
+                <div className="flex items-start gap-1.5 text-[9.5px] text-amber-200/90 leading-normal">
+                  <AlertTriangle size={13} className="shrink-0 mt-0.5 text-amber-400" />
+                  <span>원문 코드는 보안을 위해 DB에 저장되지 않으며 지금만 확인 가능합니다. 즉시 복사하여 원장님께 전달하세요.</span>
                 </div>
               </div>
             )}
+
+            {/* 💡 발급된 코드 이력 및 상태 관리 목록 */}
+            <div className="pt-2 border-t border-white/5 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+                  최근 발급 코드 내역 ({activationCodes.length}건)
+                </span>
+                {isLoadingCodes && <Loader2 size={11} className="animate-spin text-gray-500" />}
+              </div>
+
+              {activationCodes.length === 0 ? (
+                <div className="py-2.5 text-center text-[10px] text-gray-500 bg-black/30 rounded border border-white/[0.03]">
+                  발급된 설치 코드가 없습니다.
+                </div>
+              ) : (
+                <div className="space-y-1.5 max-h-36 overflow-y-auto custom-scrollbar-v pr-1">
+                  {activationCodes.map((code) => {
+                    const isIssued = code.status === 'issued';
+                    const isUsed = code.status === 'used';
+                    const isExpired = code.status === 'expired';
+                    const isRevoked = code.status === 'revoked';
+
+                    return (
+                      <div
+                        key={code.id}
+                        className="p-2 bg-black/40 border border-white/5 rounded flex items-center justify-between gap-2 text-[10.5px]"
+                      >
+                        <div className="flex items-center gap-2">
+                          <code className="font-mono font-bold text-gray-300">
+                            {code.code_masked || `${code.code_prefix || 'HN-****'}-****`}
+                          </code>
+                          
+                          {/* 상태 태그 */}
+                          {isIssued && (
+                            <span className="px-1.5 py-0.5 rounded-[2px] bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 text-[9px] font-bold">
+                              사용 가능
+                            </span>
+                          )}
+                          {isUsed && (
+                            <span className="px-1.5 py-0.5 rounded-[2px] bg-blue-500/10 text-blue-400 border border-blue-500/20 text-[9px] font-bold">
+                              사용됨
+                            </span>
+                          )}
+                          {isExpired && (
+                            <span className="px-1.5 py-0.5 rounded-[2px] bg-gray-500/10 text-gray-400 border border-white/10 text-[9px] font-bold">
+                              만료됨
+                            </span>
+                          )}
+                          {isRevoked && (
+                            <span className="px-1.5 py-0.5 rounded-[2px] bg-red-500/10 text-red-400 border border-red-500/20 text-[9px] font-bold">
+                              폐기됨
+                            </span>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2 text-[9.5px] text-gray-500">
+                          <span>
+                            {code.created_at ? code.created_at.slice(5, 16).replace('T', ' ') : '-'}
+                          </span>
+
+                          {isIssued && (
+                            <button
+                              onClick={() => onRevokeCode(code.id)}
+                              disabled={isRevokingCodeId === code.id}
+                              className="px-1.5 py-0.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-[2px] text-[9.5px] font-bold transition-all flex items-center gap-1 disabled:opacity-50"
+                            >
+                              {isRevokingCodeId === code.id ? (
+                                <Loader2 size={10} className="animate-spin" />
+                              ) : (
+                                <Ban size={10} />
+                              )}
+                              <span>코드 폐기</span>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 섹션 3: 등록된 Mac 기기 목록 */}

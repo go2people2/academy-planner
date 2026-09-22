@@ -32,6 +32,7 @@ export interface ActivationCode {
   module_code: ModuleCode;
   code_hash?: string;
   code_prefix: string;
+  code_masked?: string;
   status: ActivationCodeStatus;
   expires_at: string;
   max_uses: number;

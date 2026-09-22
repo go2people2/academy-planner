@@ -39,6 +39,19 @@ export function useTodaySheetClipboard({
       ? (target as HTMLInputElement | HTMLTextAreaElement).selectionStart !== (target as HTMLInputElement | HTMLTextAreaElement).selectionEnd
       : false;
 
+    // 0. 히스토리([data-history-content]) 영역 텍스트 드래그 복사 허용
+    const selection = window.getSelection();
+    const selectedText = selection?.toString() || '';
+    if (selectedText.length > 0) {
+      const anchorNode = selection?.anchorNode;
+      const focusNode = selection?.focusNode;
+      const anchorEl = anchorNode instanceof Element ? anchorNode : anchorNode?.parentElement;
+      const focusEl = focusNode instanceof Element ? focusNode : focusNode?.parentElement;
+      if (anchorEl?.closest('[data-history-content]') || focusEl?.closest('[data-history-content]')) {
+        return; // 브라우저 기본 복사 동작 수행
+      }
+    }
+
     const targetRange = selectedRange || (activeCell ? {
       startStudentId: activeCell.studentId,
       endStudentId: activeCell.studentId,

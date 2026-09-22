@@ -418,8 +418,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
           const isCurrentlyApproved = rawApprovalStatus === 'approved';
           const isCurrentlySubmitted = ['pending', 'submitted'].includes(rawApprovalStatus);
-          const isMyUnlockedSession = isCurrentlyApproved && !!currentEditUnlockedBy && currentEditUnlockedBy === currentAuthUid;
-          const isOtherUnlockedSession = isCurrentlyApproved && !!currentEditUnlockedBy && currentEditUnlockedBy !== currentAuthUid;
+          const isMyUnlockedSession = isCurrentlyApproved && Boolean(currentEditUnlockedBy && currentAuthUid && currentEditUnlockedBy === currentAuthUid);
+          const isOtherUnlockedSession = isCurrentlyApproved && Boolean(currentEditUnlockedBy && (!currentAuthUid || currentEditUnlockedBy !== currentAuthUid));
 
           const resetItemClass = `w-[21px] h-[21px] rounded-[4px] transition-all shrink-0 flex items-center justify-center cursor-pointer ${
             isToolsEditMode
@@ -700,8 +700,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
 
   const isSubmitted = ['pending', 'submitted'].includes(currentApprovalStatus);
   const isApproved = currentApprovalStatus === 'approved';
-  const isMyUnlocked = isApproved && !!currentEditUnlockedBy && currentEditUnlockedBy === currentAuthUid;
-  const isOtherUnlocked = isApproved && !!currentEditUnlockedBy && currentEditUnlockedBy !== currentAuthUid;
+  const isMyUnlocked = isApproved && Boolean(currentEditUnlockedBy && currentAuthUid && currentEditUnlockedBy === currentAuthUid);
+  const isOtherUnlocked = isApproved && Boolean(currentEditUnlockedBy && (!currentAuthUid || currentEditUnlockedBy !== currentAuthUid));
   const isApprovedLocked = isApproved && !currentEditUnlockedBy;
 
   // 보호 대상 컬럼 (수행 진도, 과제)
@@ -730,6 +730,10 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
         const sId = currentTargetSession?.id || (student.todaySession?.id && student.todaySession.id !== 'temp' && !String(student.todaySession.id).startsWith('temp:') ? student.todaySession.id : null);
         if (sId && onUnlockSession) {
           await onUnlockSession(sId);
+        } else if (!onUnlockSession) {
+          alert('잠금 해제 핸들러가 연결되지 않았습니다. 관리자에게 문의해 주세요.');
+        } else {
+          alert('해당 학생의 세션 일지 ID를 찾을 수 없습니다.');
         }
       }
     }

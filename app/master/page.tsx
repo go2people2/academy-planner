@@ -86,6 +86,10 @@ export default function MasterDashboard() {
     issuedCodeInfo,
     isIssuingCode,
     handleIssueActivationCode,
+    activationCodes,
+    isLoadingCodes,
+    isRevokingCodeId,
+    handleRevokeActivationCode,
     isRevokingDevice,
     handleRevokeDevice,
     summaryStats,
@@ -912,6 +916,10 @@ export default function MasterDashboard() {
         onIssueCode={handleIssueActivationCode}
         isRevokingDevice={isRevokingDevice}
         onRevokeDevice={handleRevokeDevice}
+        activationCodes={activationCodes}
+        isLoadingCodes={isLoadingCodes}
+        isRevokingCodeId={isRevokingCodeId}
+        onRevokeCode={handleRevokeActivationCode}
       />
     </div>
   );

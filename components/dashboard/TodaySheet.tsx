@@ -1403,7 +1403,7 @@ export default function TodaySheet({
     handleUndo,
     handleRedo,
     isModalOpen: isAnyModalOpen,
-    currentAuthUid: currentAuthUid || currentUser?.user_id || currentUser?.id,
+    currentAuthUid: currentAuthUid || currentUser?.user_id || null,
     toggleShowAllTools: () => {
       setShowAllTools(prev => {
         const next = !prev;
@@ -2010,7 +2010,7 @@ export default function TodaySheet({
                       isLight={isLight}
                       onNavigateTab={onNavigateTab}
                       onRefreshAbsenceSession={onRefreshAbsenceSession}
-                      currentAuthUid={currentAuthUid || currentUser?.user_id || currentUser?.id}
+                      currentAuthUid={currentAuthUid || currentUser?.user_id || null}
                       onUnlockSession={onUnlockSession}
                       onRelockSession={onRelockSession}
                       onRestoreSubmissionSnapshot={onRestoreSubmissionSnapshot}

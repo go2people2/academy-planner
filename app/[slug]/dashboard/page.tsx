@@ -2051,6 +2051,35 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
     }
   };
 
+  const applySessionLogUpdateToStudents = useCallback((updatedLog: any) => {
+    if (!updatedLog || updatedLog.id == null) return;
+    const targetLogId = String(updatedLog.id);
+    setStudents(prev => prev.map(s => {
+      const hasMatchingToday = s.todaySession && String(s.todaySession.id) === targetLogId;
+      const hasMatchingInAllLogs = (s.allLogs || []).some((l: any) => String(l.id) === targetLogId);
+      const isMatchingStudent = String(s.id) === String(updatedLog.student_id);
+
+      if (!hasMatchingToday && !hasMatchingInAllLogs && !isMatchingStudent) {
+        return s;
+      }
+
+      const nextAllLogs = (s.allLogs || []).map((l: any) =>
+        String(l.id) === targetLogId ? { ...l, ...updatedLog } : l
+      );
+
+      let nextTodaySession = s.todaySession;
+      if (hasMatchingToday) {
+        nextTodaySession = { ...s.todaySession, ...updatedLog };
+      }
+
+      return {
+        ...s,
+        ...(nextTodaySession ? { todaySession: nextTodaySession } : {}),
+        allLogs: nextAllLogs
+      };
+    }));
+  }, []);
+
   const handleUnlockSession = useCallback(async (logId: number | string): Promise<boolean> => {
     if (!academy) return false;
     try {
@@ -2059,20 +2088,14 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         alert(res.message || '잠금 해제 중 오류가 발생했습니다.');
         return false;
       }
-      const updatedLog = res.data;
-      setStudents(prev => prev.map(s => {
-        if (s.todaySession?.id === updatedLog.id) {
-          return { ...s, todaySession: { ...s.todaySession, ...updatedLog } };
-        }
-        return s;
-      }));
+      applySessionLogUpdateToStudents(res.data);
       return true;
     } catch (e) {
       console.error('handleUnlockSession error:', e);
       alert('잠금 해제 중 오류가 발생했습니다.');
       return false;
     }
-  }, [academy]);
+  }, [academy, applySessionLogUpdateToStudents]);
 
   const handleRelockSession = useCallback(async (logId: number | string): Promise<boolean> => {
     if (!academy) return false;
@@ -2082,20 +2105,14 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         alert(res.message || '다시 잠금 처리 중 오류가 발생했습니다.');
         return false;
       }
-      const updatedLog = res.data;
-      setStudents(prev => prev.map(s => {
-        if (s.todaySession?.id === updatedLog.id) {
-          return { ...s, todaySession: { ...s.todaySession, ...updatedLog } };
-        }
-        return s;
-      }));
+      applySessionLogUpdateToStudents(res.data);
       return true;
     } catch (e) {
       console.error('handleRelockSession error:', e);
       alert('재잠금 중 오류가 발생했습니다.');
       return false;
     }
-  }, [academy]);
+  }, [academy, applySessionLogUpdateToStudents]);
 
   const handleRestoreSubmissionSnapshot = useCallback(async (logId: number | string): Promise<boolean> => {
     if (!academy) return false;
@@ -2108,13 +2125,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         alert(res.message || '원본 복원 중 오류가 발생했습니다.');
         return false;
       }
-      const updatedLog = res.data;
-      setStudents(prev => prev.map(s => {
-        if (s.todaySession?.id === updatedLog.id) {
-          return { ...s, todaySession: { ...s.todaySession, ...updatedLog } };
-        }
-        return s;
-      }));
+      applySessionLogUpdateToStudents(res.data);
       alert("학생 제출 원본으로 복원되었습니다.");
       return true;
     } catch (e) {
@@ -2122,7 +2133,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
       alert('원본 복원 중 오류가 발생했습니다.');
       return false;
     }
-  }, [academy]);
+  }, [academy, applySessionLogUpdateToStudents]);
 
   const handleRejectSubmissions = async (logIds: string[]) => {
     if (!academy) return;

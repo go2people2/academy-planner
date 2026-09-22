@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
-import { AcademyModuleOverview, ModuleStatus } from '@/types/modules';
+import { AcademyModuleOverview, ModuleStatus, ActivationCode } from '@/types/modules';
 
 export function useMasterModules(isAuthorized: boolean) {
   const [moduleOverviews, setModuleOverviews] = useState<AcademyModuleOverview[]>([]);
@@ -26,6 +26,9 @@ export function useMasterModules(isAuthorized: boolean) {
   // 설치 코드 발급 상태
   const [issuedCodeInfo, setIssuedCodeInfo] = useState<{ code: string; expires_at: string; prefix: string } | null>(null);
   const [isIssuingCode, setIsIssuingCode] = useState(false);
+  const [activationCodes, setActivationCodes] = useState<ActivationCode[]>([]);
+  const [isLoadingCodes, setIsLoadingCodes] = useState(false);
+  const [isRevokingCodeId, setIsRevokingCodeId] = useState<string | null>(null);
 
   // 기기 해제 처리 상태
   const [isRevokingDevice, setIsRevokingDevice] = useState(false);
@@ -57,6 +60,32 @@ export function useMasterModules(isAuthorized: boolean) {
     }
   }, [isAuthorized]);
 
+  // 1-1. 특정 학원의 설치 코드 목록 조회
+  const fetchActivationCodes = useCallback(async (academyId: string) => {
+    setIsLoadingCodes(true);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
+      const res = await fetch(`/api/master/activation-codes?academy_id=${academyId}`, {
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        setActivationCodes(data.codes || []);
+      } else {
+        setActivationCodes([]);
+      }
+    } catch (err) {
+      console.error('Fetch activation codes error:', err);
+      setActivationCodes([]);
+    } finally {
+      setIsLoadingCodes(false);
+    }
+  }, []);
+
   // 2. 모달 열기
   const openModuleModal = useCallback((academy: AcademyModuleOverview) => {
     setSelectedAcademy(academy);
@@ -65,13 +94,15 @@ export function useMasterModules(isAuthorized: boolean) {
     setEditHokmaMaxDevices(academy.hokmanote_max_devices || 1);
     setIssuedCodeInfo(null);
     setIsModalOpen(true);
-  }, []);
+    fetchActivationCodes(academy.id);
+  }, [fetchActivationCodes]);
 
   // 3. 모달 닫기
   const closeModuleModal = useCallback(() => {
     setIsModalOpen(false);
     setSelectedAcademy(null);
     setIssuedCodeInfo(null);
+    setActivationCodes([]);
   }, []);
 
   // 4. 모듈 상태 저장 (AMS & HokmaNote)
@@ -154,12 +185,48 @@ export function useMasterModules(isAuthorized: boolean) {
         expires_at: data.expires_at,
         prefix: data.prefix,
       });
+
+      // 발급 후 코드 목록 새로고침
+      await fetchActivationCodes(selectedAcademy.id);
     } catch (err: any) {
       alert(`코드 발급 실패: ${err.message}`);
     } finally {
       setIsIssuingCode(false);
     }
-  }, [selectedAcademy]);
+  }, [selectedAcademy, fetchActivationCodes]);
+
+  // 5-1. 설치 코드 즉시 폐기 (Revoke)
+  const handleRevokeActivationCode = useCallback(async (codeId: string) => {
+    if (!selectedAcademy) return;
+    if (!confirm('이 설치 코드를 즉시 폐기하시겠습니까? 폐기된 코드는 더 이상 사용할 수 없습니다.')) {
+      return;
+    }
+    setIsRevokingCodeId(codeId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
+      const res = await fetch('/api/master/activation-codes', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code_id: codeId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || '코드 폐기 실패');
+      }
+
+      // 목록 새로고침
+      await fetchActivationCodes(selectedAcademy.id);
+    } catch (err: any) {
+      alert(`코드 폐기 실패: ${err.message}`);
+    } finally {
+      setIsRevokingCodeId(null);
+    }
+  }, [selectedAcademy, fetchActivationCodes]);
 
   // 6. 등록 기기 원격 해제 (Revoke)
   const handleRevokeDevice = useCallback(async (deviceId: string) => {
@@ -248,6 +315,10 @@ export function useMasterModules(isAuthorized: boolean) {
     issuedCodeInfo,
     isIssuingCode,
     handleIssueActivationCode,
+    activationCodes,
+    isLoadingCodes,
+    isRevokingCodeId,
+    handleRevokeActivationCode,
     isRevokingDevice,
     handleRevokeDevice,
     summaryStats,

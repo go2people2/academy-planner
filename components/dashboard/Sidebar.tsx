@@ -130,6 +130,16 @@ export default function Sidebar({
   const isAcademyHeaderReady = Boolean(academyInfo?.id && academyInfo?.academy_name);
   const isUserHeaderReady = Boolean(user?.id && user?.name && user?.role);
 
+  const [mountedDate, setMountedDate] = useState<{ monthDay: string; weekday: string } | null>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    setMountedDate({
+      monthDay: now.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }),
+      weekday: now.toLocaleDateString('ko-KR', { weekday: 'short' }),
+    });
+  }, []);
+
   return (
     <aside className="w-52 border-r border-white/5 bg-[#0a0a0a]/90 backdrop-blur-2xl flex flex-col p-3 sticky top-0 h-screen z-30">
       {/* 내비게이션 제어 */}
@@ -142,26 +152,23 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className="mb-6 px-1 space-y-4">
-        {/* 1. 학원 브랜딩 */}
-        <div className="flex items-center gap-2 cursor-pointer min-h-[32px]" onClick={() => setViewMode('board')}>
-          <div className="w-8 h-8 bg-blue-600 rounded-[2px] flex items-center justify-center shadow-lg shrink-0">
-            <GraduationCap className="text-white" size={18} />
+      {/* 헤더 섹션: 학원 정보 & 사용자 프로필 */}
+      <div className="space-y-1.5 mb-6">
+        {/* 1. 학원 브랜드명 */}
+        <div className="flex items-center gap-2 p-1.5 bg-white/[0.03] rounded-[2px] border border-white/5 min-h-[36px]">
+          <div className="w-6 h-6 rounded-[2px] bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-blue-500/20 shrink-0">
+            <GraduationCap size={14} />
           </div>
-          <div className="min-w-0 flex-1">
+          <div className="flex-1 min-w-0">
             {isAcademyHeaderReady ? (
               <>
-                <h1 className="text-xs font-black tracking-tight text-white leading-tight uppercase truncate">
-                  {academyInfo.academy_name}
-                </h1>
-                <p className="text-[7px] font-bold text-blue-500 tracking-[0.2em] uppercase mt-0.5 truncate">
-                  {academyInfo.slug ? `${academyInfo.slug}` : 'Management'}
-                </p>
+                <h2 className="text-xs font-black text-white truncate uppercase tracking-tight leading-tight">{academyInfo?.academy_name}</h2>
+                <span className="text-[9px] font-bold text-blue-400 block tracking-wider uppercase opacity-80 leading-none mt-0.5">Management</span>
               </>
             ) : (
               <div className="animate-pulse space-y-1 py-0.5">
-                <div className="h-2.5 bg-white/15 rounded w-20" />
-                <div className="h-2 bg-blue-500/20 rounded w-12" />
+                <div className="h-2.5 bg-white/15 rounded w-16" />
+                <div className="h-1.5 bg-white/10 rounded w-10" />
               </div>
             )}
           </div>
@@ -170,8 +177,14 @@ export default function Sidebar({
         {/* 2 & 3. 날짜 및 사용자 정보 */}
         <div className="flex items-stretch gap-1 min-h-[32px]">
           <div className="flex-[1.2] px-1.5 py-1 bg-white/[0.05] rounded-[2px] border border-white/10 flex items-center justify-center gap-1 min-w-0">
-            <span className="text-[15px] font-black text-gray-100 tabular-nums leading-none">{new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
-            <span className="text-[13px] font-bold text-blue-400 leading-none">({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})</span>
+            {mountedDate ? (
+              <>
+                <span className="text-[15px] font-black text-gray-100 tabular-nums leading-none">{mountedDate.monthDay}</span>
+                <span className="text-[13px] font-bold text-blue-400 leading-none">({mountedDate.weekday})</span>
+              </>
+            ) : (
+              <span className="text-[14px] font-medium text-gray-500 tabular-nums leading-none">-</span>
+            )}
           </div>
           <div className="flex-1 p-1.5 bg-white/5 rounded-[2px] border border-white/5 flex items-center gap-1.5 min-w-0">
             <div className="w-4 h-4 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 shrink-0"><UserCircle size={10} /></div>

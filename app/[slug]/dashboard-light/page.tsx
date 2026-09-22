@@ -35,9 +35,13 @@ import { Loader2, AlertTriangle, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { getEnrichedStudentData, evaluateTodayStatus, buildSessionLog } from '@/lib/studentDataEnricher';
 
-/**
- * 💡 [리팩토링] 파생 상태 계산 및 필터링 유틸리티
- */
+import {
+  callApproveSessionLogGuarded,
+  callUnlockSessionForEditGuarded,
+  callRelockSessionGuarded,
+  callRestoreSubmissionSnapshotGuarded,
+  getCurrentAuthUid
+} from '@/lib/sessionLockService';
 
 import { getStudentStartTime, getStudentActiveHours, getPureFilteredStudents, filterStudentList } from '../dashboard/utils/dashboardFilters';
 
@@ -52,6 +56,11 @@ export default function DashboardPage() {
   const [isFullScreen, setIsFullScreen] = useState<boolean>(false);
   const [activeProgressStudentId, setActiveProgressStudentId] = useState<string | null>(null);
   const [isWarpMode, setIsWarpMode] = useState(false); // 💡 임시 원격 지원 모드 플래그 추가
+  const [currentAuthUid, setCurrentAuthUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    getCurrentAuthUid().then(uid => setCurrentAuthUid(uid));
+  }, []);
 
   const handleAuthError = useCallback(async (e: any) => {
     if (e && (e.code === '42501' || String(e.message).includes('row-level security') || e.status === 403 || e.status === 401)) {
@@ -2010,23 +2019,101 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
   const handleApproveSubmissions = async (logIds: string[]) => {
     if (!academy) return;
     try {
-      const updates = logIds.map(logId => {
-        const idVal = parseInt(logId, 10);
-        if (isNaN(idVal)) return null;
-        return supabase.from('ams_session_logs').update({
-          approval_status: 'approved'
-        }).eq('id', idVal);
-      }).filter(Boolean);
-
-      if (updates.length > 0) {
-        await Promise.all(updates);
-        await fetchAllData(true);
+      const res = await callApproveSessionLogGuarded(logIds, academy.id);
+      if (!res.success) {
+        alert(res.message || '승인 중 오류가 발생했습니다.');
+        return;
       }
+      await fetchAllData(true);
     } catch (e) {
       console.error(e);
       alert('승인 중 오류가 발생했습니다.');
     }
   };
+
+  const applySessionLogUpdateToStudents = useCallback((updatedLog: any) => {
+    if (!updatedLog || updatedLog.id == null) return;
+    const targetLogId = String(updatedLog.id);
+    setStudents(prev => prev.map(s => {
+      const hasMatchingToday = s.todaySession && String(s.todaySession.id) === targetLogId;
+      const hasMatchingInAllLogs = (s.allLogs || []).some((l: any) => String(l.id) === targetLogId);
+      const isMatchingStudent = String(s.id) === String(updatedLog.student_id);
+
+      if (!hasMatchingToday && !hasMatchingInAllLogs && !isMatchingStudent) {
+        return s;
+      }
+
+      const nextAllLogs = (s.allLogs || []).map((l: any) =>
+        String(l.id) === targetLogId ? { ...l, ...updatedLog } : l
+      );
+
+      let nextTodaySession = s.todaySession;
+      if (hasMatchingToday) {
+        nextTodaySession = { ...s.todaySession, ...updatedLog };
+      }
+
+      return {
+        ...s,
+        ...(nextTodaySession ? { todaySession: nextTodaySession } : {}),
+        allLogs: nextAllLogs
+      };
+    }));
+  }, []);
+
+  const handleUnlockSession = useCallback(async (logId: number | string): Promise<boolean> => {
+    if (!academy) return false;
+    try {
+      const res = await callUnlockSessionForEditGuarded(logId, academy.id);
+      if (!res.success) {
+        alert(res.message || '잠금 해제 중 오류가 발생했습니다.');
+        return false;
+      }
+      applySessionLogUpdateToStudents(res.data);
+      return true;
+    } catch (e) {
+      console.error('handleUnlockSession error:', e);
+      alert('잠금 해제 중 오류가 발생했습니다.');
+      return false;
+    }
+  }, [academy, applySessionLogUpdateToStudents]);
+
+  const handleRelockSession = useCallback(async (logId: number | string): Promise<boolean> => {
+    if (!academy) return false;
+    try {
+      const res = await callRelockSessionGuarded(logId, academy.id);
+      if (!res.success) {
+        alert(res.message || '다시 잠금 처리 중 오류가 발생했습니다.');
+        return false;
+      }
+      applySessionLogUpdateToStudents(res.data);
+      return true;
+    } catch (e) {
+      console.error('handleRelockSession error:', e);
+      alert('재잠금 중 오류가 발생했습니다.');
+      return false;
+    }
+  }, [academy, applySessionLogUpdateToStudents]);
+
+  const handleRestoreSubmissionSnapshot = useCallback(async (logId: number | string): Promise<boolean> => {
+    if (!academy) return false;
+    if (!window.confirm("학생이 제출했던 원본 내용으로 복원하시겠습니까?\n복원 후에도 승인 및 잠금 상태는 유지됩니다.")) {
+      return false;
+    }
+    try {
+      const res = await callRestoreSubmissionSnapshotGuarded(logId, academy.id);
+      if (!res.success) {
+        alert(res.message || '원본 복원 중 오류가 발생했습니다.');
+        return false;
+      }
+      applySessionLogUpdateToStudents(res.data);
+      alert("학생 제출 원본으로 복원되었습니다.");
+      return true;
+    } catch (e) {
+      console.error('handleRestoreSubmissionSnapshot error:', e);
+      alert('원본 복원 중 오류가 발생했습니다.');
+      return false;
+    }
+  }, [academy, applySessionLogUpdateToStudents]);
 
   const handleRejectSubmissions = async (logIds: string[]) => {
     if (!academy) return;
@@ -2463,7 +2550,11 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                  onNavigateTab={handleNavigateToLinkedMakeup}
                  onRefreshAbsenceSession={refreshAbsenceSession}
                  onRefreshData={fetchAllData}
-               />
+                 currentAuthUid={currentAuthUid}
+                 onUnlockSession={handleUnlockSession}
+                 onRelockSession={handleRelockSession}
+                 onRestoreSubmissionSnapshot={handleRestoreSubmissionSnapshot}
+                />
              )}
 
             {viewMode === 'settings' && <SettingsView teachers={teachers} students={students} masterTextbooks={availableTextbooks} onAddTeacher={handleAddNewTeacherAccount} onDeleteTeacher={handleDeleteTeacher} onUpdateTeacher={handleUpdateTeacher} onUpdateCurrentUser={handleUpdateCurrentUser} onUpdateAcademyInfo={handleUpdateAcademyInfo} academyInfo={academy} currentUser={currentUser} noticeDrafts={noticeDrafts} onNoticeDraftChange={handleNoticeDraftChange} />}

@@ -57,20 +57,49 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: false, error: '설치 코드는 현재 HokmaNote 모듈만 지원합니다.' }, { status: 400 });
     }
 
-    // 💡 16자리 영숫자 무작위 코드 생성 (예: HN-7K9A-4820-WXYZ)
-    const rawChars = crypto.randomBytes(12).toString('hex').toUpperCase(); // 24글자
-    const part1 = rawChars.slice(0, 4);
-    const part2 = rawChars.slice(4, 8);
-    const part3 = rawChars.slice(8, 12);
-    const rawCode = `HN-${part1}-${part2}-${part3}`;
-    const codePrefix = `HN-${part1}`;
-
-    // SHA-256 해시 생성 (Pepper 추가)
+    // 💡 혼동 문자(0, O, 1, I, L)를 제외한 31자 영숫자 셋
+    const SAFE_CHARS = '23456789ABCDEFGHJKMNPQRSTUVWXYZ';
     const pepper = process.env.SUPABASE_SERVICE_ROLE_KEY || 'hokma-salt-secret';
-    const codeHash = crypto.createHash('sha256').update(rawCode + pepper).digest('hex');
 
-    // 72시간 후 만료
-    const expiresAt = new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString();
+    function generateSingleCode(): { rawCode: string; codePrefix: string; codeHash: string } {
+      const bytes = crypto.randomBytes(8);
+      let part1 = '';
+      let part2 = '';
+      for (let i = 0; i < 4; i++) {
+        part1 += SAFE_CHARS[bytes[i] % SAFE_CHARS.length];
+        part2 += SAFE_CHARS[bytes[i + 4] % SAFE_CHARS.length];
+      }
+      const rawCode = `HN-${part1}-${part2}`;
+      const codePrefix = `HN-${part1}`;
+      const codeHash = crypto.createHash('sha256').update(rawCode + pepper).digest('hex');
+      return { rawCode, codePrefix, codeHash };
+    }
+
+    // 미사용 중복 코드 방지 (최대 5회 재시도)
+    let selectedCode: { rawCode: string; codePrefix: string; codeHash: string } | null = null;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const candidate = generateSingleCode();
+      const { data: existing } = await supabaseAdmin
+        .from('activation_codes')
+        .select('id')
+        .eq('code_hash', candidate.codeHash)
+        .eq('status', 'issued')
+        .maybeSingle();
+
+      if (!existing) {
+        selectedCode = candidate;
+        break;
+      }
+    }
+
+    if (!selectedCode) {
+      return NextResponse.json({ success: false, error: '설치 코드 생성 중 충돌이 발생했습니다. 다시 시도해 주세요.' }, { status: 500 });
+    }
+
+    const { rawCode, codePrefix, codeHash } = selectedCode;
+
+    // 기본 24시간 후 만료
+    const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
 
     const { data: inserted, error: insertErr } = await supabaseAdmin
       .from('activation_codes')
@@ -138,7 +167,7 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ success: false, error: codeErr.message }, { status: 500 });
     }
 
-    // 만료 시간 초과 항목 클라이언트단 표기 보정
+    // 만료 시간 초과 항목 상태 보정 및 마스킹된 코드 표기 (HN-XXXX-****)
     const now = Date.now();
     const formattedCodes = (codes || []).map((c) => {
       let currentStatus = c.status;
@@ -148,6 +177,7 @@ export async function GET(req: NextRequest) {
       return {
         ...c,
         status: currentStatus,
+        code_masked: `${c.code_prefix || 'HN-****'}-****`,
       };
     });
 

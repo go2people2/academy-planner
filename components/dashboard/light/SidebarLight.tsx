@@ -130,6 +130,16 @@ export default function Sidebar({
   const isAcademyHeaderReady = Boolean(academyInfo?.id && academyInfo?.academy_name);
   const isUserHeaderReady = Boolean(user?.id && user?.name && user?.role);
 
+  const [mountedDate, setMountedDate] = useState<{ monthDay: string; weekday: string } | null>(null);
+
+  useEffect(() => {
+    const now = new Date();
+    setMountedDate({
+      monthDay: now.toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' }),
+      weekday: now.toLocaleDateString('ko-KR', { weekday: 'short' }),
+    });
+  }, []);
+
   return (
     <aside className="w-52 border-r border-[#edece9] bg-[#f7f7f5] flex flex-col p-3 sticky top-0 h-screen z-30">
       {/* 내비게이션 제어 */}
@@ -170,8 +180,14 @@ export default function Sidebar({
         {/* 2 & 3. 날짜 및 사용자 정보 */}
         <div className="flex items-stretch gap-1 min-h-[32px]">
           <div className="flex-[1.2] px-1.5 py-1 bg-white rounded-[2px] border border-[#edece9] flex items-center justify-center gap-1 min-w-0">
-            <span className="text-[15px] font-black text-[#37352f] tabular-nums leading-none">{new Date().toLocaleDateString('ko-KR', { month: 'numeric', day: 'numeric' })}</span>
-            <span className="text-[13px] font-bold text-[#0c73e8] leading-none">({new Date().toLocaleDateString('ko-KR', { weekday: 'short' })})</span>
+            {mountedDate ? (
+              <>
+                <span className="text-[15px] font-black text-[#37352f] tabular-nums leading-none">{mountedDate.monthDay}</span>
+                <span className="text-[13px] font-bold text-[#0c73e8] leading-none">({mountedDate.weekday})</span>
+              </>
+            ) : (
+              <span className="text-[14px] font-medium text-gray-500 tabular-nums leading-none">-</span>
+            )}
           </div>
           <div className="flex-1 p-1.5 bg-white rounded-[2px] border border-[#edece9] flex items-center gap-1.5 min-w-0">
             <div className="w-4 h-4 rounded-full bg-blue-50 flex items-center justify-center text-[#0c73e8] shrink-0"><UserCircle size={10} /></div>
