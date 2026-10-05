@@ -3,7 +3,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { supabase } from '@/lib/supabase';
 import { Student, Teacher } from '@/types/dashboard';
-import { Sparkles, Loader2, AlertCircle, Cpu, CheckCircle2, XCircle, RotateCcw, ChevronDown, ChevronUp, AlertTriangle } from 'lucide-react';
+import { Sparkles, Loader2, AlertCircle, Cpu, CheckCircle2, XCircle, RotateCcw, ChevronDown, ChevronUp, AlertTriangle, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 
 interface AIBulkBriefingViewProps {
   academyInfo: any;
@@ -14,6 +15,11 @@ interface AIBulkBriefingViewProps {
 }
 
 type StudentTaskStatus = 'idle' | 'waiting' | 'generating' | 'completed' | 'failed';
+
+interface BriefingResultItem {
+  text: string;
+  createdAt: string;
+}
 
 export default function AIBulkBriefingView({
   academyInfo,
@@ -126,7 +132,7 @@ export default function AIBulkBriefingView({
   // 5. 큐 실행 상태 관리
   const [isProcessing, setIsProcessing] = useState(false);
   const [statusMap, setStatusMap] = useState<Record<string, StudentTaskStatus>>({});
-  const [resultsMap, setResultsMap] = useState<Record<string, string>>({});
+  const [resultsMap, setResultsMap] = useState<Record<string, BriefingResultItem>>({});
   const [errorMap, setErrorMap] = useState<Record<string, string>>({});
   const [expandedStudentId, setExpandedStudentId] = useState<string | null>(null);
 
@@ -158,6 +164,13 @@ export default function AIBulkBriefingView({
 
     return { total, completed, failed, generating, waiting };
   }, [targetStudentList, statusMap]);
+
+  // 화면 메모리에 생성 완료된 전체 학생 수 (다운로드 대상 수)
+  const totalCompletedCount = useMemo(() => {
+    return students.filter(
+      (s) => statusMap[s.id] === 'completed' && Boolean(resultsMap[s.id]?.text)
+    ).length;
+  }, [students, statusMap, resultsMap]);
 
   // 단일 학생 브리핑 생성 내부 실행기 (1명 단위)
   const executeBriefingForStudent = useCallback(
@@ -229,7 +242,16 @@ export default function AIBulkBriefingView({
           endDate
         );
 
-        setResultsMap((prev) => ({ ...prev, [student.id]: briefingText }));
+        const nowKST = new Date(Date.now() + 9 * 3600 * 1000);
+        const kstFormatted = nowKST.toISOString().replace('T', ' ').slice(0, 19);
+
+        setResultsMap((prev) => ({
+          ...prev,
+          [student.id]: {
+            text: briefingText,
+            createdAt: kstFormatted,
+          },
+        }));
         setStatusMap((prev) => ({ ...prev, [student.id]: 'completed' }));
         setErrorMap((prev) => {
           const next = { ...prev };
@@ -266,13 +288,111 @@ export default function AIBulkBriefingView({
         endDate
       );
 
-      setResultsMap((prev) => ({ ...prev, [studentId]: briefingText }));
+      const nowKST = new Date(Date.now() + 9 * 3600 * 1000);
+      const kstFormatted = nowKST.toISOString().replace('T', ' ').slice(0, 19);
+
+      setResultsMap((prev) => ({
+        ...prev,
+        [studentId]: {
+          text: briefingText,
+          createdAt: kstFormatted,
+        },
+      }));
       setStatusMap((prev) => ({ ...prev, [studentId]: 'completed' }));
     } catch (err: any) {
       const safeError = err?.message || '재시도에 실패했습니다.';
       setErrorMap((prev) => ({ ...prev, [studentId]: safeError }));
       setStatusMap((prev) => ({ ...prev, [studentId]: 'failed' }));
     }
+  };
+
+  // 8. 엑셀 다운로드 핸들러
+  const handleDownloadExcel = () => {
+    if (isProcessing) return;
+
+    // 생성 완료된 학생만 추출 (결과가 있는 학생)
+    const completedStudents = students.filter(
+      (s) => statusMap[s.id] === 'completed' && resultsMap[s.id]?.text
+    );
+
+    if (completedStudents.length === 0) {
+      alert('다운로드할 완료된 브리핑 결과가 없습니다.');
+      return;
+    }
+
+    const modelDisplayName = selectedModel === 'openai' ? 'OpenAI GPT-4o' : 'Google Gemini Pro';
+
+    // 헤더 행 정의
+    const headers = [
+      '생성 일시',
+      '분석 시작일',
+      '분석 종료일',
+      'AI 모델',
+      '학생명',
+      '학교',
+      '학년',
+      '담당 교사',
+      '최근 상담일',
+      '브리핑 내용',
+    ];
+
+    // 데이터 행 생성
+    const dataRows = completedStudents.map((st) => {
+      const resultItem = resultsMap[st.id];
+      const teacher = teachers.find((t) => t.id === st.teacher_id);
+      const teacherName = teacher?.name || st.teacher_name || '-';
+      const lastConsulted = st.last_consulted_at ? st.last_consulted_at.slice(0, 10) : '기록 없음';
+
+      return [
+        resultItem.createdAt,
+        startDate,
+        endDate,
+        modelDisplayName,
+        st.name,
+        st.school || '미지정',
+        st.grade || '',
+        teacherName,
+        lastConsulted,
+        resultItem.text,
+      ];
+    });
+
+    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...dataRows]);
+
+    // 열 너비 및 자동 줄바꿈 설정
+    worksheet['!cols'] = [
+      { wch: 20 }, // A: 생성 일시
+      { wch: 13 }, // B: 분석 시작일
+      { wch: 13 }, // C: 분석 종료일
+      { wch: 18 }, // D: AI 모델
+      { wch: 12 }, // E: 학생명
+      { wch: 16 }, // F: 학교
+      { wch: 8 },  // G: 학년
+      { wch: 12 }, // H: 담당 교사
+      { wch: 13 }, // I: 최근 상담일
+      { wch: 80 }, // J: 브리핑 내용
+    ];
+
+    // J열(브리핑 내용)의 셀에 자동 줄바꿈(wrapText) 스타일 플래그 활성화
+    const range = XLSX.utils.decode_range(worksheet['!ref'] || 'A1:J1');
+    for (let R = 1; R <= range.e.r; ++R) {
+      const cellRef = XLSX.utils.encode_cell({ r: R, c: 9 }); // J열 (인덱스 9)
+      if (worksheet[cellRef]) {
+        worksheet[cellRef].s = {
+          alignment: { wrapText: true, vertical: 'top' },
+        };
+      }
+    }
+
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, '상담 브리핑');
+
+    // 파일명: AI_상담브리핑_YYYY-MM-DD.xlsx (다운로드 시점 KST 날짜 기준)
+    const todayKST = new Date(Date.now() + 9 * 3600 * 1000);
+    const dateStr = todayKST.toISOString().split('T')[0];
+    const fileName = `AI_상담브리핑_${dateStr}.xlsx`;
+
+    XLSX.writeFile(workbook, fileName);
   };
 
   // 8. 기존 AIConsultationBriefing의 안전한 마크다운 렌더러 재사용 (dangerouslySetInnerHTML 미사용)
@@ -332,7 +452,7 @@ export default function AIBulkBriefingView({
           <p className="font-black text-xs mb-0.5">생성 작업 안내</p>
           <p>
             생성 중 화면을 닫거나 새로고침하면 아직 처리되지 않은 작업은 중단됩니다.{' '}
-            생성된 브리핑은 이번 단계에서는 현재 화면에서만 확인할 수 있습니다.
+            생성된 브리핑은 현재 화면에서만 확인할 수 있습니다. 필요한 결과는 Excel 다운로드로 보관해 주세요.
           </p>
         </div>
       </div>
@@ -414,8 +534,8 @@ export default function AIBulkBriefingView({
             </div>
           </div>
 
-          {/* 생성 버튼 */}
-          <div>
+          {/* 액션 버튼 그룹 (순차 생성 & Excel 다운로드) */}
+          <div className="flex items-center gap-2">
             <button
               type="button"
               disabled={isProcessing || targetStudentList.length === 0 || !isDateRangeValid}
@@ -437,6 +557,25 @@ export default function AIBulkBriefingView({
                   선택 {targetStudentList.length}명 브리핑 순차 생성
                 </>
               )}
+            </button>
+
+            {/* 📥 완료 결과 Excel 다운로드 버튼 */}
+            <button
+              type="button"
+              disabled={isProcessing || totalCompletedCount === 0}
+              onClick={handleDownloadExcel}
+              className={`px-4 py-2.5 rounded-[3px] text-xs font-black uppercase tracking-wider transition-all flex items-center gap-2 border shadow-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                totalCompletedCount > 0 && !isProcessing
+                  ? isLight
+                    ? 'bg-emerald-600 hover:bg-emerald-500 text-white border-emerald-600 shadow-emerald-900/20 cursor-pointer'
+                    : 'bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/40 shadow-emerald-950/30 cursor-pointer'
+                  : isLight
+                  ? 'bg-gray-100 text-gray-400 border-gray-200'
+                  : 'bg-white/5 text-gray-500 border-white/10'
+              }`}
+            >
+              <Download size={14} />
+              완료 결과 Excel 다운로드 ({totalCompletedCount}명)
             </button>
           </div>
         </div>
@@ -724,7 +863,7 @@ export default function AIBulkBriefingView({
                               </span>
                             </div>
                             <div className="prose prose-invert max-w-none space-y-2">
-                              {renderMarkdown(resultsMap[st.id])}
+                              {renderMarkdown(resultsMap[st.id]?.text)}
                             </div>
                           </div>
                         </td>
