@@ -29,6 +29,11 @@ export function useMasterModules(isAuthorized: boolean) {
   const [activationCodes, setActivationCodes] = useState<ActivationCode[]>([]);
   const [isLoadingCodes, setIsLoadingCodes] = useState(false);
   const [isRevokingCodeId, setIsRevokingCodeId] = useState<string | null>(null);
+  const [revealingCodeId, setRevealingCodeId] = useState<string | null>(null);
+
+  // 설치 링크 상태
+  const [installUrl, setInstallUrl] = useState<string>('');
+  const [isInstallUrlConfigured, setIsInstallUrlConfigured] = useState<boolean>(false);
 
   // 기기 해제 처리 상태
   const [isRevokingDevice, setIsRevokingDevice] = useState(false);
@@ -60,7 +65,7 @@ export function useMasterModules(isAuthorized: boolean) {
     }
   }, [isAuthorized]);
 
-  // 1-1. 특정 학원의 설치 코드 목록 조회
+  // 1-1. 특정 학원의 설치 코드 목록 조회 (plain_code 미포함, 메타데이터만)
   const fetchActivationCodes = useCallback(async (academyId: string) => {
     setIsLoadingCodes(true);
     try {
@@ -75,6 +80,8 @@ export function useMasterModules(isAuthorized: boolean) {
       const data = await res.json();
       if (res.ok && data.success) {
         setActivationCodes(data.codes || []);
+        setIsInstallUrlConfigured(Boolean(data.install_url_configured));
+        setInstallUrl(data.install_url || '');
       } else {
         setActivationCodes([]);
       }
@@ -156,8 +163,8 @@ export function useMasterModules(isAuthorized: boolean) {
     }
   }, [selectedAcademy, editAmsStatus, editHokmaStatus, editHokmaMaxDevices, fetchModuleOverviews, closeModuleModal]);
 
-  // 5. HokmaNote 설치 코드 발급
-  const handleIssueActivationCode = useCallback(async () => {
+  // 5. HokmaNote 설치 코드 발급 (forceReissue 및 expectedActiveCodeId 옵션 지원)
+  const handleIssueActivationCode = useCallback(async (forceReissue = false, expectedActiveCodeId?: string) => {
     if (!selectedAcademy) return;
     setIsIssuingCode(true);
     try {
@@ -173,10 +180,29 @@ export function useMasterModules(isAuthorized: boolean) {
         body: JSON.stringify({
           academy_id: selectedAcademy.id,
           module_code: 'hokmanote',
+          force_reissue: forceReissue,
+          expected_active_code_id: expectedActiveCodeId || null,
         }),
       });
       const data = await res.json();
       if (!res.ok || !data.success) {
+        if (data.error_code === 'ACTIVE_CODE_ALREADY_EXISTS') {
+          const existingId = data.existing_code_id;
+          const doReissue = confirm(
+            '이미 사용 가능한 설치 코드가 발급되어 있습니다.\n\n기존 코드를 폐기하고 새 설치 코드를 재발급하시겠습니까?'
+          );
+          if (doReissue) {
+            // 원자적 재발급: 확인했던 기존 코드 ID를 expected_active_code_id로 전달
+            await handleIssueActivationCode(true, existingId);
+            return;
+          }
+          return;
+        }
+        if (data.error_code === 'ACTIVE_CODE_CHANGED' || data.error_code === 'ACTIVE_CODE_NOT_FOUND') {
+          alert(data.error || '설치 코드 상태가 변경되었습니다. 최신 코드를 목록에서 확인해 주세요.');
+          await fetchActivationCodes(selectedAcademy.id);
+          return;
+        }
         throw new Error(data.error || '설치 코드 발급 실패');
       }
 
@@ -219,6 +245,11 @@ export function useMasterModules(isAuthorized: boolean) {
         throw new Error(data.error || '코드 폐기 실패');
       }
 
+      // 만약 방금 노출 중이던 코드가 폐기된 것이라면 노출 정보도 해제
+      if (issuedCodeInfo) {
+        setIssuedCodeInfo(null);
+      }
+
       // 목록 새로고침
       await fetchActivationCodes(selectedAcademy.id);
     } catch (err: any) {
@@ -226,7 +257,49 @@ export function useMasterModules(isAuthorized: boolean) {
     } finally {
       setIsRevokingCodeId(null);
     }
-  }, [selectedAcademy, fetchActivationCodes]);
+  }, [selectedAcademy, issuedCodeInfo, fetchActivationCodes]);
+
+  // 5-2. 특정 코드의 원문 복호화 조회 (Reveal)
+  const handleRevealCode = useCallback(async (codeId: string): Promise<string | null> => {
+    setRevealingCodeId(codeId);
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token || '';
+
+      const res = await fetch('/api/master/activation-codes/reveal', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ code_id: codeId }),
+      });
+      const data = await res.json();
+      if (!res.ok || !data.success) {
+        alert(data.error || '코드 원문 조회에 실패했습니다.');
+        return null;
+      }
+
+      // 해당 코드의 plain_code를 로컬 목록 상태에 반영
+      setActivationCodes((prev) =>
+        prev.map((c) => (c.id === codeId ? { ...c, plain_code: data.code } : c))
+      );
+
+      // 상단 활성 코드 카드에도 동기화
+      setIssuedCodeInfo({
+        code: data.code,
+        expires_at: data.expires_at,
+        prefix: data.code.substring(0, 7),
+      });
+
+      return data.code;
+    } catch (err: any) {
+      alert(`코드 복호화 실패: ${err.message}`);
+      return null;
+    } finally {
+      setRevealingCodeId(null);
+    }
+  }, []);
 
   // 6. 등록 기기 원격 해제 (Revoke)
   const handleRevokeDevice = useCallback(async (deviceId: string) => {
@@ -313,12 +386,17 @@ export function useMasterModules(isAuthorized: boolean) {
     isSavingStatus,
     handleSaveModuleStatus,
     issuedCodeInfo,
+    setIssuedCodeInfo,
     isIssuingCode,
     handleIssueActivationCode,
     activationCodes,
     isLoadingCodes,
     isRevokingCodeId,
     handleRevokeActivationCode,
+    revealingCodeId,
+    handleRevealCode,
+    installUrl,
+    isInstallUrlConfigured,
     isRevokingDevice,
     handleRevokeDevice,
     summaryStats,

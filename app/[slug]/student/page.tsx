@@ -431,8 +431,78 @@ export default function StudentPortal() {
     return () => { supabase.removeChannel(channel); };
   }, [student?.id, selectedDate]);
 
+  // 💡 [제출 허용 판정식]
+  // 1. 학생의 정규 수업일 (휴일 제외)
+  // 2. 학생의 선택과목/특강 수업일 (활성 기간 내, 휴일 제외)
+  // 3. 교사가 실제 보강으로 생성·확정한 보강 세션이 존재하는 날
+  // (단순 당일(isToday)이나 단순 일반 로그 존재(!!todaySession)는 허용 근거에서 제외)
+  const isSubmittableClassDate = useMemo(() => {
+    if (!student || !selectedDate) return false;
+    const parsedDate = parseLocalDate(selectedDate);
+    const dayOfWeek = ['일', '월', '화', '수', '목', '금', '토'][parsedDate.getDay()];
+    const currentCourse = normalizeCourseName(selectedCourse);
+    const holidays = academy?.operation_settings?.holidays || [];
+    const isHoliday = holidays.some((h: any) => h.date === selectedDate);
+
+    // 1. 학생의 정규 수업일
+    const isRegularDay =
+      currentCourse === '정규' &&
+      !isHoliday &&
+      Array.isArray(student.class_days) &&
+      student.class_days.some((d: any) => String(d).trim() === dayOfWeek);
+
+    // 2. 학생의 선택과목/특강 수업일
+    let isElectiveDay = false;
+    if (currentCourse !== '정규' && !isHoliday) {
+      const rawElective = student.book_courses?.['__elective_courses'] || student.book_courses?.["'__elective_courses'"];
+      if (rawElective) {
+        try {
+          const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
+          if (Array.isArray(courses)) {
+            const targetCourse = courses.find((c: any) => normalizeCourseName(c?.subject) === currentCourse);
+            if (targetCourse && isActiveElectiveCourse(targetCourse, selectedDate)) {
+              if (Array.isArray(targetCourse.days)) {
+                isElectiveDay = targetCourse.days.some((d: any) => String(d).trim() === dayOfWeek);
+              } else if (typeof targetCourse.days === 'string') {
+                isElectiveDay = targetCourse.days.includes(dayOfWeek);
+              }
+            }
+          }
+        } catch (e) {}
+      }
+    }
+
+    // 3. 교사가 실제 보강으로 생성·확정한 보강 세션이 존재하는 날
+    const isMakeupSessionDay = (allLogs || []).some((l: any) => {
+      if (getLogDate(l) !== selectedDate) return false;
+      if (normalizeCourseName(l.course_name) !== currentCourse) return false;
+      const att = String(l.attendance_status || '').trim();
+      if (att === '수업취소' || att === '수업제외') return false;
+      return (
+        l.is_pure_makeup === true ||
+        att.startsWith('보강') ||
+        (typeof l.attendance_reason === 'string' && l.attendance_reason.includes('보강')) ||
+        l.session_snapshot?.sessionType === 'makeup'
+      );
+    });
+
+    return isRegularDay || isElectiveDay || isMakeupSessionDay;
+  }, [student, selectedDate, selectedCourse, academy, allLogs, parseLocalDate, normalizeCourseName, getLogDate]);
+
+  const formatSelectedDateWithDay = useCallback((dateStr: string) => {
+    if (!dateStr) return '';
+    const parsed = parseLocalDate(dateStr);
+    const year = parsed.getFullYear();
+    const month = parsed.getMonth() + 1;
+    const day = parsed.getDate();
+    const dayName = ['일', '월', '화', '수', '목', '금', '토'][parsed.getDay()];
+    return `${year}년 ${month}월 ${day}일 (${dayName})`;
+  }, [parseLocalDate]);
+
   const handleManualSave = async (field: 'classwork' | 'completed_classwork' | 'homework' | 'special_notes', value: string) => {
     if (!student || !academy) return;
+    // 💡 비수업일에는 화면 임시 작성만 허용하고 DB 저장/세션 생성은 차단
+    if (!isSubmittableClassDate) return;
 
     // 💡 기존 값과 입력값이 완전히 같은 경우 불필요한 저장 스킵
     const dbField = field === 'special_notes' ? field : `${field}_text`;
@@ -469,6 +539,10 @@ export default function StudentPortal() {
 
   const handleTodoAchievement = async (percentage: number) => {
     if (!student || !academy) return;
+    if (!isSubmittableClassDate) {
+      setInvalidDateAlert(selectedDate);
+      return;
+    }
     setIsSaving(true);
     try {
       const currentVal = todaySession?.todo_achievement !== undefined ? todaySession.todo_achievement : null;
@@ -517,6 +591,10 @@ export default function StudentPortal() {
 
   const handleTodoToggle = async (index: number, totalCount: number) => {
     if (!student || !academy) return;
+    if (!isSubmittableClassDate) {
+      setInvalidDateAlert(selectedDate);
+      return;
+    }
     setIsSaving(true);
     try {
       const currentResult = todaySession?.test_result && todaySession.test_result.startsWith('{') ? JSON.parse(todaySession.test_result) : {};
@@ -594,6 +672,11 @@ export default function StudentPortal() {
   const handleApprovalSubmit = async (status: 'none' | 'submitted') => {
     if (!student) { alert("학생 정보를 불러오지 못했습니다."); return; }
     if (!academy) { alert("학원 정보를 불러오지 못했습니다."); return; }
+    if (!isSubmittableClassDate) {
+      setConfirmSubmitOpen(false);
+      setInvalidDateAlert(selectedDate);
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -649,6 +732,10 @@ export default function StudentPortal() {
 
   const handleSelfEval = async (level: number) => {
     if (!student || !academy) return;
+    if (!isSubmittableClassDate) {
+      setInvalidDateAlert(selectedDate);
+      return;
+    }
 
     // 💡 [안전 규칙] 0~10 정수 범위 검증
     if (!isValidHwEval(level)) {
@@ -713,6 +800,11 @@ export default function StudentPortal() {
 
   const handleTestSubmit = async (result: any) => {
     if (!student || isSaving) return;
+    if (!isSubmittableClassDate) {
+      setIsTestModalOpen(false);
+      setInvalidDateAlert(selectedDate);
+      return;
+    }
     setIsSaving(true);
     try {
       const { answers, calculatedScore, testId } = result;
@@ -965,61 +1057,31 @@ export default function StudentPortal() {
               onUpdateAssignedBooks={handleUpdateAssignedBooks}
               academy={academy}
             />
-            {(() => {
-              const dayOfWeek = selectedDate ? ['일', '월', '화', '수', '목', '금', '토'][new Date(selectedDate).getDay()] : '';
-              const isRegularDay = (selectedCourse === '정규' || !selectedCourse) && student?.class_days?.includes(dayOfWeek);
-
-              let isElectiveDay = false;
-              if (selectedCourse && selectedCourse !== '정규') {
-                const rawElective = student?.book_courses?.['__elective_courses'];
-                if (rawElective) {
-                  try {
-                    const courses = typeof rawElective === 'string' ? JSON.parse(rawElective) : rawElective;
-                    if (Array.isArray(courses)) {
-                      const targetCourse = courses.find((c: any) => c.subject?.trim() === selectedCourse);
-                      if (targetCourse && Array.isArray(targetCourse.days)) {
-                        isElectiveDay = targetCourse.days.includes(dayOfWeek);
-                      }
+            <div className="mt-8 mb-4">
+              {approvalStatus === 'none' ? (
+                <button
+                  onClick={() => {
+                    if (!isSubmittableClassDate) {
+                      setInvalidDateAlert(selectedDate);
+                      return;
                     }
-                  } catch (e) {}
-                }
-              }
-
-              const todayStr = new Date().toLocaleDateString('sv-SE');
-              const isToday = selectedDate === todayStr;
-              const isValidClassDate = isToday || isRegularDay || isElectiveDay || !!todaySession || validClassDates.some(d => d.date === selectedDate);
-
-              return (
-                <div className="mt-8 mb-4">
-                  {approvalStatus === 'none' ? (
-                    isValidClassDate ? (
-                      <button
-                        onClick={() => setConfirmSubmitOpen(true)}
-                        disabled={isSaving}
-                        className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 text-lg transition-all animate-in slide-in-from-bottom-2"
-                      >
-                        🚀 오늘의 학습 제출하기
-                      </button>
-                    ) : (
-                      <button
-                        disabled={true}
-                        className="w-full py-4 bg-gray-800/80 border border-gray-700/50 text-gray-400 font-bold rounded-xl text-base cursor-not-allowed flex items-center justify-center gap-2 shadow-inner"
-                      >
-                        🚫 수업일이 아니라 제출할 수 없습니다
-                      </button>
-                    )
+                    setConfirmSubmitOpen(true);
+                  }}
+                  disabled={isSaving}
+                  className="w-full py-4 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-black rounded-xl shadow-lg shadow-emerald-900/20 text-lg transition-all animate-in slide-in-from-bottom-2"
+                >
+                  🚀 오늘의 학습 제출하기
+                </button>
+              ) : (
+                <div className="w-full py-4 bg-white/10 border border-white/20 text-white font-black rounded-xl text-lg flex items-center justify-center gap-2">
+                  {approvalStatus === 'approved' ? (
+                    <><Check size={24} className="text-blue-400" /> 선생님 검사 완료</>
                   ) : (
-                    <div className="w-full py-4 bg-white/10 border border-white/20 text-white font-black rounded-xl text-lg flex items-center justify-center gap-2">
-                      {approvalStatus === 'approved' ? (
-                        <><Check size={24} className="text-blue-400" /> 선생님 검사 완료</>
-                      ) : (
-                        <><Lock size={24} className="text-amber-400" /> 검사 대기 중 (수정 불가)</>
-                      )}
-                    </div>
+                    <><Lock size={24} className="text-amber-400" /> 검사 대기 중 (수정 불가)</>
                   )}
                 </div>
-              );
-            })()}
+              )}
+            </div>
           </div>
 
           <div className={activeTab === 'history' ? 'block mt-4' : 'hidden lg:block lg:mt-8'}>
@@ -1396,7 +1458,7 @@ export default function StudentPortal() {
         )}
       </AnimatePresence>
 
-      {/* 💡 비수업일 선택 시 안내 모달 */}
+      {/* 💡 비수업일 제출 차단 안내 모달 */}
       <AnimatePresence>
         {invalidDateAlert && (
           <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
@@ -1416,15 +1478,16 @@ export default function StudentPortal() {
               <div className="w-12 h-12 bg-amber-500/20 border border-amber-500/40 rounded-full flex items-center justify-center mx-auto mb-4 text-amber-400">
                 <AlertTriangle size={24} />
               </div>
-              <h3 className="text-lg font-black text-white mb-2">이동할 수 없는 날짜입니다</h3>
-              <p className="text-[13px] text-gray-300 font-semibold leading-relaxed mb-6">
-                선생님 출석부에 등록된 <span className="text-amber-400 font-bold">수업일(정규/보강/특강)</span>이 아니어서 일지를 제출하거나 조회할 수 없습니다.
+              <h3 className="text-lg font-black text-white mb-2">제출 날짜를 확인해 주세요.</h3>
+              <p className="text-[13px] text-gray-300 font-semibold leading-relaxed mb-6 whitespace-pre-line">
+                선택한 날짜(<span className="text-amber-400 font-bold">{formatSelectedDateWithDay(invalidDateAlert)}</span>)는 등록된 수업일이 아닙니다.{'\n'}
+                상단 날짜에서 실제 수업이 있는 날짜로 변경한 뒤 제출해 주세요.
               </p>
               <button
                 onClick={() => setInvalidDateAlert(null)}
                 className="w-full py-3.5 bg-gradient-to-r from-amber-500 to-orange-600 hover:from-amber-400 hover:to-orange-500 text-white font-black rounded-xl shadow-lg shadow-amber-950/40 text-sm transition-all"
               >
-                확인 (수업일 선택하기)
+                확인
               </button>
             </motion.div>
           </div>

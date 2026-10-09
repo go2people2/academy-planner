@@ -90,6 +90,10 @@ export default function MasterDashboard() {
     isLoadingCodes,
     isRevokingCodeId,
     handleRevokeActivationCode,
+    revealingCodeId,
+    handleRevealCode,
+    installUrl,
+    isInstallUrlConfigured,
     isRevokingDevice,
     handleRevokeDevice,
     summaryStats,
@@ -920,6 +924,10 @@ export default function MasterDashboard() {
         isLoadingCodes={isLoadingCodes}
         isRevokingCodeId={isRevokingCodeId}
         onRevokeCode={handleRevokeActivationCode}
+        revealingCodeId={revealingCodeId}
+        onRevealCode={handleRevealCode}
+        installUrl={installUrl}
+        isInstallUrlConfigured={isInstallUrlConfigured}
       />
     </div>
   );

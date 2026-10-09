@@ -137,7 +137,11 @@ export const filterStudentList = (params: {
       )
     );
 
-    const isTodaySession = s.isTodayClassDay || hasTodayMakeup;
+    const hasTodayExistingLog = (s.allLogs || []).some((l: any) =>
+      (l.date || l.session_date) === selectedDate && l.id && l.id !== 'temp'
+    );
+
+    const isTodaySession = s.isTodayClassDay || hasTodayMakeup || hasTodayExistingLog;
 
     // 검색어 필터
     if (searchQuery && !s.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -208,7 +212,7 @@ export const filterStudentList = (params: {
 
     if (isTodayTarget && isTodaySession) {
       if (selectedFilter !== 'All' && !s.grade.includes(selectedFilter)) return false;
-      if (selectedDays.length > 0 && !hasTodayMakeup) {
+      if (selectedDays.length > 0 && !hasTodayMakeup && !hasTodayExistingLog) {
         const matchesDays = isAndFilter 
           ? selectedDays.every(day => s.class_days.includes(day))
           : selectedDays.some(day => s.class_days.includes(day)); 

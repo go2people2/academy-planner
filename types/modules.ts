@@ -41,6 +41,8 @@ export interface ActivationCode {
   revoked_at?: string | null;
   created_by?: string | null;
   created_at: string;
+  can_reveal?: boolean; // 서버에 복호화 가능한 암호문이 저장되어 있는지 여부
+  plain_code?: string;  // 명시적 복호화 요청 시 반환된 원문 코드
 }
 
 export interface AcademyDevice {

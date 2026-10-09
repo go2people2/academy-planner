@@ -2294,8 +2294,10 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         } catch (e) {}
       }
 
-      // 1. 오늘이 정규 수업일이거나 활성 선택과목이 있는 경우: Overview 통합 카드 1개 생성
-      if (s.isScheduledToday || hasActiveElectiveToday) {
+      const hasNonMakeupTodayLog = todayLogs.some((l: any) => !isMakeupLog(l));
+
+      // 1. 오늘이 정규 수업일이거나 활성 선택과목이 있거나 해당 날짜에 실제 세션 로그가 존재하는 경우: Overview 통합 카드 1개 생성
+      if (s.isScheduledToday || hasActiveElectiveToday || hasNonMakeupTodayLog) {
         expandedList.push({
           ...s,
           __courseType: 'regular',

@@ -369,8 +369,9 @@ export function useTodaySheetRows({
           ? [normalizedMovedHour]
           : regularHours;
 
-        if (isRegularClassDay || hasActiveMovedSession) {
-          // 1. 원래 오늘 정규 수업일이거나 당일 정규 이동 세션이 있는 경우 정규 행 배치
+        const hasExistingRegularLog = Boolean(regularLog && regularLog.id && regularLog.id !== 'temp');
+        if (isRegularClassDay || hasActiveMovedSession || hasExistingRegularLog) {
+          // 1. 원래 오늘 정규 수업일이거나 당일 정규 이동/실제 로그 세션이 있는 경우 정규 행 배치
           shouldShowRegular = true;
         }
 

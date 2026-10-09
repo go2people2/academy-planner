@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
 import crypto from 'crypto';
+import { normalizeHokmaActivationCode } from '@/lib/server/hokmaCodeCrypto';
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL || '',
@@ -83,8 +84,14 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const cleanCode = code.trim().toUpperCase();
-    const pepper = process.env.SUPABASE_SERVICE_ROLE_KEY || 'hokma-salt-secret';
+    const cleanCode = normalizeHokmaActivationCode(code);
+    const pepper = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!pepper) {
+      return NextResponse.json(
+        { success: false, error: '서버 환경 설정 오류가 발생했습니다. (SUPABASE_SERVICE_ROLE_KEY 누락)' },
+        { status: 500 }
+      );
+    }
     const codeHash = crypto.createHash('sha256').update(cleanCode + pepper).digest('hex');
 
     // 2. 새 세션용 Refresh Token 생성

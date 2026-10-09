@@ -57,6 +57,20 @@ export async function getCurrentAuthUid(): Promise<string | null> {
   }
 }
 
+/**
+ * 💡 Guarded RPC 오류 메시지를 사용자가 이해하기 쉬운 문구로 변환
+ */
+export function formatGuardedRpcErrorMessage(
+  rawMessage?: string | null,
+  defaultMessage = '작업 중 오류가 발생했습니다.'
+): string {
+  if (!rawMessage) return defaultMessage;
+  if (rawMessage.includes('AUTH_REQUIRED')) {
+    return '로그인 시간이 만료되었습니다.\n\n안전하게 저장하거나 수정하려면 다시 로그인해 주세요.';
+  }
+  return rawMessage;
+}
+
 export interface GuardedSaveResult {
   success: boolean;
   data?: any;
@@ -95,6 +109,7 @@ export async function callSaveSessionLogGuarded(params: {
     });
 
     if (error) {
+      console.error('Guarded save RPC error:', error);
       // 🔒 [보안 강화] RPC 미설치 시 direct update/insert fallback을 전면 차단 (Fail-Closed)
       if (error.code === 'PGRST202' || error.message?.includes('save_session_log_guarded')) {
         return {
@@ -106,7 +121,7 @@ export async function callSaveSessionLogGuarded(params: {
       return {
         success: false,
         error: error.code || 'RPC_ERROR',
-        message: error.message || '저장 중 오류가 발생했습니다.'
+        message: formatGuardedRpcErrorMessage(error.message, '저장 중 오류가 발생했습니다.')
       };
     }
 
@@ -116,7 +131,7 @@ export async function callSaveSessionLogGuarded(params: {
     return {
       success: false,
       error: 'NETWORK_ERROR',
-      message: err.message || '네트워크 오류가 발생했습니다.'
+      message: formatGuardedRpcErrorMessage(err.message, '네트워크 오류가 발생했습니다.')
     };
   }
 }
@@ -138,6 +153,7 @@ export async function callApproveSessionLogGuarded(
     });
 
     if (error) {
+      console.error('Guarded approve RPC error:', error);
       if (error.code === 'PGRST202' || error.message?.includes('approve_session_log_guarded')) {
         return {
           success: false,
@@ -145,12 +161,21 @@ export async function callApproveSessionLogGuarded(
           message: '잠금 기능의 DB 설정이 완료되지 않아 승인할 수 없습니다. 관리자에게 문의해 주세요.'
         };
       }
-      return { success: false, error: error.code, message: error.message };
+      return {
+        success: false,
+        error: error.code,
+        message: formatGuardedRpcErrorMessage(error.message, '제출 승인 중 오류가 발생했습니다.')
+      };
     }
 
     return data;
   } catch (err: any) {
-    return { success: false, error: 'EXCEPTION', message: err.message };
+    console.error('Guarded approve exception:', err);
+    return {
+      success: false,
+      error: 'EXCEPTION',
+      message: formatGuardedRpcErrorMessage(err.message, '승인 처리 중 예외가 발생했습니다.')
+    };
   }
 }
 
@@ -171,15 +196,24 @@ export async function callUnlockSessionForEditGuarded(
     });
 
     if (error) {
-      const msg = (error.code === 'PGRST202' || error.message?.includes('unlock_session_for_edit_guarded'))
+      console.error('Guarded unlock RPC error:', error);
+      const defaultMsg = (error.code === 'PGRST202' || error.message?.includes('unlock_session_for_edit_guarded'))
         ? '잠금 기능의 DB 설정이 완료되지 않아 잠금 해제할 수 없습니다. 관리자에게 문의해 주세요.'
-        : error.message;
+        : '잠금 해제 중 오류가 발생했습니다.';
+      const msg = (error.code === 'PGRST202' || error.message?.includes('unlock_session_for_edit_guarded'))
+        ? defaultMsg
+        : formatGuardedRpcErrorMessage(error.message, defaultMsg);
       return { success: false, error: error.code, message: msg };
     }
 
     return data as GuardedSaveResult;
   } catch (err: any) {
-    return { success: false, error: 'EXCEPTION', message: err.message };
+    console.error('Guarded unlock exception:', err);
+    return {
+      success: false,
+      error: 'EXCEPTION',
+      message: formatGuardedRpcErrorMessage(err.message, '잠금 해제 처리 중 예외가 발생했습니다.')
+    };
   }
 }
 
@@ -200,15 +234,24 @@ export async function callRelockSessionGuarded(
     });
 
     if (error) {
-      const msg = (error.code === 'PGRST202' || error.message?.includes('relock_session_guarded'))
+      console.error('Guarded relock RPC error:', error);
+      const defaultMsg = (error.code === 'PGRST202' || error.message?.includes('relock_session_guarded'))
         ? '잠금 기능의 DB 설정이 완료되지 않아 다시 잠글 수 없습니다. 관리자에게 문의해 주세요.'
-        : error.message;
+        : '다시 잠금 처리 중 오류가 발생했습니다.';
+      const msg = (error.code === 'PGRST202' || error.message?.includes('relock_session_guarded'))
+        ? defaultMsg
+        : formatGuardedRpcErrorMessage(error.message, defaultMsg);
       return { success: false, error: error.code, message: msg };
     }
 
     return data as GuardedSaveResult;
   } catch (err: any) {
-    return { success: false, error: 'EXCEPTION', message: err.message };
+    console.error('Guarded relock exception:', err);
+    return {
+      success: false,
+      error: 'EXCEPTION',
+      message: formatGuardedRpcErrorMessage(err.message, '재잠금 처리 중 예외가 발생했습니다.')
+    };
   }
 }
 
@@ -229,14 +272,23 @@ export async function callRestoreSubmissionSnapshotGuarded(
     });
 
     if (error) {
-      const msg = (error.code === 'PGRST202' || error.message?.includes('restore_submission_snapshot_guarded'))
+      console.error('Guarded restore snapshot RPC error:', error);
+      const defaultMsg = (error.code === 'PGRST202' || error.message?.includes('restore_submission_snapshot_guarded'))
         ? '잠금 기능의 DB 설정이 완료되지 않아 원본을 복원할 수 없습니다. 관리자에게 문의해 주세요.'
-        : error.message;
+        : '제출 원본 복원 중 오류가 발생했습니다.';
+      const msg = (error.code === 'PGRST202' || error.message?.includes('restore_submission_snapshot_guarded'))
+        ? defaultMsg
+        : formatGuardedRpcErrorMessage(error.message, defaultMsg);
       return { success: false, error: error.code, message: msg };
     }
 
     return data as GuardedSaveResult;
   } catch (err: any) {
-    return { success: false, error: 'EXCEPTION', message: err.message };
+    console.error('Guarded restore snapshot exception:', err);
+    return {
+      success: false,
+      error: 'EXCEPTION',
+      message: formatGuardedRpcErrorMessage(err.message, '원본 복원 처리 중 예외가 발생했습니다.')
+    };
   }
 }

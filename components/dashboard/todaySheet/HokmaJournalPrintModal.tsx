@@ -27,6 +27,112 @@ import {
   PEN_COLORS
 } from './hooks/useHokmaJournalPrint';
 
+/**
+ * 💡 세션 로그의 테스트 정보를 줄바꿈 단위로 분리하여 일지 행 목록으로 변환
+ */
+function parseJournalTestItems(
+  log: SessionLog,
+  masterTextbooks: any[] = []
+): Array<{ dateText: string; testName: string; scoreText: string }> {
+  const rawText = log.test_id || (log as any).test_status || '';
+  if (!rawText || rawText.trim() === '' || rawText.trim() === '없음' || rawText.trim() === '-') {
+    return [];
+  }
+
+  const logDate = new Date(log.date || log.session_date || '');
+  const dateText = !isNaN(logDate.getTime())
+    ? `${logDate.getMonth() + 1}월 ${logDate.getDate()}일`
+    : '';
+
+  // 1. 원문을 줄바꿈(/\r?\n/) 기준으로 분리 및 빈 줄 제거
+  const lines = rawText.split(/\r?\n/).map((l: string) => l.trim()).filter(Boolean);
+  if (lines.length === 0) return [];
+
+  const items: Array<{ dateText: string; testName: string; scoreText: string }> = [];
+
+  for (const line of lines) {
+    // 3. 각 줄은 마지막 콜론(:)을 점수 구분자로 사용
+    const lastColonIdx = line.lastIndexOf(':');
+    let testName = '';
+    let rawScore = '';
+
+    if (lastColonIdx !== -1) {
+      testName = line.slice(0, lastColonIdx).trim();
+      rawScore = line.slice(lastColonIdx + 1).trim();
+    } else {
+      testName = line.trim();
+      rawScore = '';
+    }
+
+    // 5. 시험명 앞의 목록 표기 하이픈(-) 등 제거
+    testName = testName.replace(/^[-•*]\s*/, '').trim();
+
+    // 빈 시험명이거나 무효한 시험명이면 제외
+    if (!testName || testName === '없음' || testName === '-') {
+      continue;
+    }
+
+    // 슬래시 컷라인 미응시 체크 (예: /8/2 처럼 슬래시 앞 맞은 개수가 빈칸인 경우 인쇄 대상에서 제외)
+    if (rawScore && rawScore.includes('/')) {
+      const slashParts = rawScore.split('/');
+      const correctCount = slashParts[0].trim();
+      if (correctCount === '' || isNaN(Number(correctCount))) {
+        continue;
+      }
+    }
+
+    // 7. 점수 가공
+    let scoreText = '';
+
+    // 라인별 점수가 비어있고 단일 라인이며 세션 로그에 test_score 필드가 있는 경우
+    if (!rawScore && lines.length === 1 && log.test_score !== undefined && log.test_score !== null && String(log.test_score).trim() !== '') {
+      if (log.test_score_type === 'count') {
+        scoreText = `${log.test_score} / ${log.test_total_count || 20}`;
+      } else {
+        scoreText = `${log.test_score}점`;
+      }
+    } else if (rawScore) {
+      // 쉼표 메모 제거
+      if (rawScore.includes(',,')) {
+        rawScore = rawScore.split(',,')[0].trim();
+      }
+
+      // 슬래시 점수 형태 (예: 7/10/2 -> 7/10)
+      if (rawScore.includes('/')) {
+        const slashParts = rawScore.split('/');
+        if (slashParts.length >= 3) {
+          scoreText = `${slashParts[0].trim()}/${slashParts[1].trim()}`;
+        } else {
+          scoreText = rawScore;
+        }
+      } else {
+        // %, 점, 개, ea 등의 접미사가 있으면 보존, 순수 숫자면 '점' 추가
+        if (/[%점개eaEA]$/.test(rawScore)) {
+          scoreText = rawScore;
+        } else if (!isNaN(Number(rawScore))) {
+          scoreText = `${rawScore}점`;
+        } else {
+          scoreText = rawScore;
+        }
+      }
+    }
+
+    // 교재 마스터 매칭
+    const matchedTextbook = masterTextbooks.find((m) => m.bookcode === testName);
+    if (matchedTextbook) {
+      testName = matchedTextbook.title;
+    }
+
+    items.push({
+      dateText,
+      testName,
+      scoreText
+    });
+  }
+
+  return items;
+}
+
 export default function HokmaJournalPrintModal({
   isOpen,
   onClose,
@@ -792,35 +898,13 @@ export default function HokmaJournalPrintModal({
             return true;
           });
 
-          // 💡 [안정화] 예정만 잡아놓고 미응시한 날(예: /8/2)은 제외하고, 실제로 채점(예: 6/8/2 또는 90점)이 완료된 건만 앞페이지에 인쇄합니다.
-          const testLogs = validMonthLogs.filter((log) => {
-            const hasTestId = log.test_id &&
-                              log.test_id.trim() !== '' &&
-                              log.test_id.trim() !== '없음' &&
-                              log.test_id.trim() !== '-';
-            if (!hasTestId) return false;
-
-            const hasScoreField = log.test_score !== undefined &&
-                                  log.test_score !== null &&
-                                  String(log.test_score).trim() !== '';
-            if (hasScoreField) return true;
-
-            if (log.test_id && log.test_id.includes(':')) {
-              const parts = log.test_id.split(':');
-              const scorePart = parts.slice(1).join(':').trim(); // 예: "6/8/2" 또는 "/8/2"
-              if (scorePart.includes('/')) {
-                const correctCount = scorePart.split('/')[0].trim();
-                return correctCount !== '' && !isNaN(Number(correctCount)); // 슬래시 앞 맞은 개수가 빈칸이 아닌 숫자인지 체크
-              }
-              return scorePart !== '';
-            }
-            return false;
-          });
+          // 💡 [개선] 오늘 테스트에 줄바꿈으로 여러 시험이 입력된 경우 각각 독립된 일지 행으로 파싱하여 인쇄합니다.
+          const allTestItems = validMonthLogs.flatMap((log) => parseJournalTestItems(log, masterTextbooks));
 
           const logsPerSheet = 13;
           const totalSheets = Math.max(
             Math.ceil(validMonthLogs.length / logsPerSheet),
-            Math.ceil(testLogs.length / logsPerSheet),
+            Math.ceil(allTestItems.length / logsPerSheet),
             1
           );
 
@@ -904,49 +988,10 @@ export default function HokmaJournalPrintModal({
 
             const testRows = Array.from({ length: logsPerSheet }).map((_, idx) => {
               const globalTestIdx = startIdx + idx;
-              const log = testLogs[globalTestIdx] as SessionLog | undefined;
+              const item = allTestItems[globalTestIdx];
 
-              if (log) {
-                const logDate = new Date(log.date || log.session_date || '');
-                const dateText = `${logDate.getMonth() + 1}월 ${logDate.getDate()}일`;
-
-                let scoreText = '';
-                let testName = log.test_id || '';
-
-                const hasScoreField = log.test_score !== undefined && log.test_score !== null && log.test_score !== '';
-                const hasInlineScore = testName.includes(':');
-
-                if (hasScoreField) {
-                  if (log.test_score_type === 'count') {
-                    scoreText = `${log.test_score} / ${log.test_total_count || 20}`;
-                  } else {
-                    scoreText = `${log.test_score}점`;
-                  }
-                } else if (hasInlineScore) {
-                  const parts = testName.split(':');
-                  testName = parts[0].trim();
-                  scoreText = parts.slice(1).join(':').trim();
-                }
-
-                if (scoreText.includes(',,')) {
-                  scoreText = scoreText.split(',,')[0].trim();
-                }
-
-                if (scoreText.includes('/')) {
-                  const slashParts = scoreText.split('/');
-                  if (slashParts.length >= 3) {
-                    scoreText = `${slashParts[0].trim()}/${slashParts[1].trim()}`;
-                  }
-                }
-
-                const matchedTextbook = masterTextbooks.find((m) => m.bookcode === testName);
-                if (matchedTextbook) testName = matchedTextbook.title;
-
-                return {
-                  dateText,
-                  testName,
-                  scoreText
-                };
+              if (item) {
+                return item;
               }
               return {
                 dateText: '',
