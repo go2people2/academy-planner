@@ -44,6 +44,8 @@ export default function MasterDashboard() {
     setUsername,
     password,
     setPassword,
+    isHokmanoteOnly,
+    setIsHokmanoteOnly,
     isSubmitting,
     statusMsg,
     masterId,
@@ -358,35 +360,59 @@ export default function MasterDashboard() {
                 </div>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">원장님 관리자 로그인 ID</label>
-                <div className="relative">
-                  <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+              {/* 💡 오답노트 전용 학원 여부 토글 */}
+              <div className="bg-black/50 border border-white/5 rounded-sm p-3 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
                   <input
-                    type="text"
-                    required
-                    placeholder="예: mac_admin"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    className="w-full bg-black/40 border border-white/5 focus:border-blue-500/60 rounded-sm py-3.5 pl-12 pr-4 text-xs text-white outline-none focus:ring-1 focus:ring-blue-500/30 transition-all font-bold"
+                    type="checkbox"
+                    checked={isHokmanoteOnly}
+                    onChange={(e) => setIsHokmanoteOnly(e.target.checked)}
+                    className="accent-amber-500 rounded border-white/10 cursor-pointer w-4 h-4"
                   />
-                </div>
+                  <span className="text-xs font-bold text-amber-300">
+                    오답노트(HokmaNote) 전용 학원으로 등록
+                  </span>
+                </label>
+                <p className="text-[10px] text-gray-500 leading-relaxed font-bold ml-6">
+                  {isHokmanoteOnly
+                    ? 'AMS 웹 로그인 계정(Auth)을 생성하지 않고 오답노트 전용으로 개설합니다. 개설 후 [모듈 및 기기 관리] 탭에서 Mac 설치 코드를 발급해 주세요.'
+                    : '체크 시 AMS 웹 교사 계정 없이 오답노트 전용 학원으로 등록합니다.'}
+                </p>
               </div>
 
-              <div className="space-y-1">
-                <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">관리자 비밀번호</label>
-                <div className="relative">
-                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
-                  <input
-                    type="password"
-                    required
-                    placeholder="비밀번호 설정"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    className="w-full bg-black/40 border border-white/5 focus:border-blue-500/60 rounded-sm py-3.5 pl-12 pr-4 text-xs text-white outline-none focus:ring-1 focus:ring-blue-500/30 transition-all font-bold"
-                  />
-                </div>
-              </div>
+              {!isHokmanoteOnly && (
+                <>
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">원장님 관리자 로그인 ID</label>
+                    <div className="relative">
+                      <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+                      <input
+                        type="text"
+                        required={!isHokmanoteOnly}
+                        placeholder="예: mac_admin"
+                        value={username}
+                        onChange={(e) => setUsername(e.target.value)}
+                        className="w-full bg-black/40 border border-white/5 focus:border-blue-500/60 rounded-sm py-3.5 pl-12 pr-4 text-xs text-white outline-none focus:ring-1 focus:ring-blue-500/30 transition-all font-bold"
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="text-[10px] font-bold text-gray-500 uppercase tracking-widest ml-1">관리자 비밀번호</label>
+                    <div className="relative">
+                      <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-600" />
+                      <input
+                        type="password"
+                        required={!isHokmanoteOnly}
+                        placeholder="비밀번호 설정"
+                        value={password}
+                        onChange={(e) => setPassword(e.target.value)}
+                        className="w-full bg-black/40 border border-white/5 focus:border-blue-500/60 rounded-sm py-3.5 pl-12 pr-4 text-xs text-white outline-none focus:ring-1 focus:ring-blue-500/30 transition-all font-bold"
+                      />
+                    </div>
+                  </div>
+                </>
+              )}
 
               {/* Status Display */}
               <AnimatePresence>
@@ -410,7 +436,11 @@ export default function MasterDashboard() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-blue-600 hover:bg-blue-500 disabled:opacity-50 transition-all py-4 text-[11px] font-black uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 group"
+                className={`w-full disabled:opacity-50 transition-all py-4 text-[11px] font-black uppercase tracking-widest rounded-sm flex items-center justify-center gap-2 group ${
+                  isHokmanoteOnly
+                    ? 'bg-amber-500 hover:bg-amber-400 text-black shadow-md shadow-amber-950/20 font-black'
+                    : 'bg-blue-600 hover:bg-blue-500 text-white'
+                }`}
               >
                 {isSubmitting ? (
                   <>
@@ -419,7 +449,7 @@ export default function MasterDashboard() {
                   </>
                 ) : (
                   <>
-                    <span>학원 자동 개설하기</span>
+                    <span>{isHokmanoteOnly ? '오답노트 전용 학원 개설하기' : '학원 자동 개설하기'}</span>
                     <ChevronRight size={14} className="group-hover:translate-x-0.5 transition-transform" />
                   </>
                 )}

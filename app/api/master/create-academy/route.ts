@@ -58,18 +58,26 @@ export async function POST(req: NextRequest) {
 
     // 💡 3. Body 파싱 및 파라미터 유효성 검증
     const body = await req.json();
-    const { academyName, slug, username, password } = body;
+    const { academyName, slug, username, password, isHokmanoteOnly } = body;
 
     // 1. 파라미터 유효성 검증
-    if (!academyName || !slug || !username || !password) {
-      return NextResponse.json(
-        { success: false, error: '모든 필수 입력 값을 기입해 주세요.' },
-        { status: 400 }
-      );
+    if (isHokmanoteOnly) {
+      if (!academyName || !slug) {
+        return NextResponse.json(
+          { success: false, error: '학원 이름과 영문 슬러그를 입력해 주세요.' },
+          { status: 400 }
+        );
+      }
+    } else {
+      if (!academyName || !slug || !username || !password) {
+        return NextResponse.json(
+          { success: false, error: '모든 필수 입력 값을 기입해 주세요.' },
+          { status: 400 }
+        );
+      }
     }
 
     const cleanSlug = slug.trim().toLowerCase();
-    const cleanUsername = username.trim().toLowerCase();
 
     // 2. 슬러그 중복 검사
     const { data: existingAc } = await supabaseAdmin
@@ -84,6 +92,83 @@ export async function POST(req: NextRequest) {
         { status: 400 }
       );
     }
+
+    // 💡 분기 A: 오답노트(HokmaNote) 전용 신규 학원 등록 (AMS 교사 및 Auth 계정 미생성)
+    if (isHokmanoteOnly) {
+      // 1) ams_academies 생성 (admin_password는 null)
+      const { data: academyData, error: acError } = await supabaseAdmin
+        .from('ams_academies')
+        .insert([
+          {
+            academy_name: academyName.trim(),
+            slug: cleanSlug,
+            theme: 'blue',
+            admin_password: null,
+            operation_settings: {
+              holidays: [],
+              test_presets: [],
+              timer_presets: [12, 40, 45],
+              late_threshold: 10,
+              alert_threshold: 15,
+              default_score_cut: 70,
+              first_period_time: '16:00',
+              textbook_categories: ['초5', '초6', '중1', '중2', '중3', '대수', '미적분1', '확통']
+            }
+          }
+        ])
+        .select('id')
+        .single();
+
+      if (acError || !academyData) {
+        console.error('HokmaNote-only Academy Insert Error:', acError);
+        return NextResponse.json(
+          { success: false, error: `학원 정보 저장 실패: ${acError?.message || '알 수 없는 오류'}` },
+          { status: 400 }
+        );
+      }
+
+      const academyId = academyData.id;
+
+      // 2) academy_modules 초기화 (ams: inactive, hokmanote: pending_setup, max_devices: 1)
+      const { error: modError } = await supabaseAdmin
+        .from('academy_modules')
+        .insert([
+          {
+            academy_id: academyId,
+            module_code: 'ams',
+            status: 'inactive',
+            max_devices: 1,
+            plan_code: 'standard'
+          },
+          {
+            academy_id: academyId,
+            module_code: 'hokmanote',
+            status: 'pending_setup',
+            max_devices: 1,
+            plan_code: 'standard'
+          }
+        ]);
+
+      if (modError) {
+        console.error('HokmaNote-only Module Insert Error:', modError);
+        // 롤백: 생성된 ams_academies 삭제
+        await supabaseAdmin.from('ams_academies').delete().eq('id', academyId);
+        return NextResponse.json(
+          { success: false, error: `모듈 권한 초기화 실패: ${modError.message}` },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: '오답노트 전용 학원이 성공적으로 개설되었습니다. 모듈 관리에서 설치 코드를 발급해 주세요.',
+        academyId,
+        isHokmanoteOnly: true
+      });
+    }
+
+    // 💡 분기 B: 기존 AMS 학원 개설 (기존 로직 100% 유지)
+    const cleanUsername = username.trim().toLowerCase();
 
     // 3. Supabase Auth 유저 생성 (이메일 기반 매핑 포맷)
     const email = `${cleanUsername}@hokma-academy.com`;

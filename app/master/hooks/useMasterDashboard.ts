@@ -28,6 +28,7 @@ export function useMasterDashboard() {
   const [slug, setSlug] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [isHokmanoteOnly, setIsHokmanoteOnly] = useState(false);
   
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [statusMsg, setStatusMsg] = useState<{ type: 'success' | 'error' | null, text: string }>({ type: null, text: '' });
@@ -190,19 +191,28 @@ export function useMasterDashboard() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ academyName, slug, username, password })
+        body: JSON.stringify({
+          academyName,
+          slug,
+          username: isHokmanoteOnly ? undefined : username,
+          password: isHokmanoteOnly ? undefined : password,
+          isHokmanoteOnly,
+        })
       });
       const data = await res.json();
       
       if (data.success) {
         setStatusMsg({
           type: 'success',
-          text: `[${academyName}] 학원이 성공적으로 자동 개설되었습니다! 로그인 ID: ${username}`
+          text: isHokmanoteOnly
+            ? `[${academyName}] 오답노트 전용 학원이 성공적으로 개설되었습니다! (모듈 관리 탭에서 설치 코드를 발급해 주세요)`
+            : `[${academyName}] 학원이 성공적으로 자동 개설되었습니다! 로그인 ID: ${username}`
         });
         setAcademyName('');
         setSlug('');
         setUsername('');
         setPassword('');
+        setIsHokmanoteOnly(false);
         fetchAcademies();
       } else {
         setStatusMsg({
@@ -437,6 +447,8 @@ export function useMasterDashboard() {
     setUsername,
     password,
     setPassword,
+    isHokmanoteOnly,
+    setIsHokmanoteOnly,
     isSubmitting,
     statusMsg,
     masterId,
