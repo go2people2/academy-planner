@@ -850,18 +850,36 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
   return (
     <td
       ref={tdRef}
-      style={styles}
+      style={{
+        ...styles,
+        ...(isFirstInTimeSection ? {
+          borderTopWidth: '3px',
+          borderTopStyle: 'solid',
+          borderTopColor: 'rgba(59, 130, 246, 0.6)',
+          ...(isLockActive ? {
+            borderBottomWidth: '1px',
+            borderBottomStyle: 'dashed',
+            borderBottomColor: isSubmitted ? 'rgba(245, 158, 11, 0.3)' : isOtherUnlocked ? 'rgba(249, 115, 22, 0.3)' : 'rgba(59, 130, 246, 0.3)',
+            borderLeftWidth: '1px',
+            borderLeftStyle: 'dashed',
+            borderLeftColor: isSubmitted ? 'rgba(245, 158, 11, 0.3)' : isOtherUnlocked ? 'rgba(249, 115, 22, 0.3)' : 'rgba(59, 130, 246, 0.3)',
+            borderRightWidth: '1px',
+            borderRightStyle: 'dashed',
+            borderRightColor: isSubmitted ? 'rgba(245, 158, 11, 0.3)' : isOtherUnlocked ? 'rgba(249, 115, 22, 0.3)' : 'rgba(59, 130, 246, 0.3)',
+          } : {})
+        } : {})
+      }}
       tabIndex={0}
       data-col-id={colId}
       className={`relative group/td outline-none align-top ${isLight ? 'border-r border-[#e3e2e0] text-[#37352f]' : 'border-r border-white/12 text-white'} ${
-        isFirstInTimeSection ? 'border-t-[3px] border-t-blue-500/60 shadow-[inset_0_1px_0_rgba(59,130,246,0.2)]' : ''
+        isFirstInTimeSection ? '!border-t-[3px] !border-t-blue-500/60 shadow-[inset_0_1px_0_rgba(59,130,246,0.2)]' : ''
       } ${isActive ? 'ring-2 ring-inset ring-blue-500 z-30' : isInRange ? 'ring-1 ring-inset ring-blue-500/50' : ''} ${
         isLockActive
           ? (isSubmitted
-              ? 'bg-amber-500/[0.04] border border-dashed border-amber-500/20 cursor-not-allowed'
+              ? `bg-amber-500/[0.04] cursor-not-allowed ${isFirstInTimeSection ? '' : 'border border-dashed border-amber-500/20'}`
               : isOtherUnlocked
-              ? 'bg-orange-500/[0.04] border border-dashed border-orange-500/30 cursor-not-allowed'
-              : 'bg-blue-500/[0.04] border border-dashed border-blue-500/20 cursor-not-allowed')
+              ? `bg-orange-500/[0.04] cursor-not-allowed ${isFirstInTimeSection ? '' : 'border border-dashed border-orange-500/30'}`
+              : `bg-blue-500/[0.04] cursor-not-allowed ${isFirstInTimeSection ? '' : 'border border-dashed border-blue-500/20'}`)
           : ''
       } ${
         isCooperating ? 'ring-2 ring-inset ring-pink-500/80 z-30 cursor-not-allowed bg-pink-500/[0.02]' : ''

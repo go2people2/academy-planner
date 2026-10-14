@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Printer, X, FileText, Palette } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
 import { useModalEsc } from '@/hooks/useModalEsc';
+import { scheduleValueToMinutes, minutesToGroupLabel } from '@/lib/scheduleTime';
 
 interface PrintPreviewModalProps {
   isOpen: boolean;
@@ -142,32 +143,49 @@ export default function PrintPreviewModal({
   const [_, configM] = (academyInfo?.operation_settings?.first_period_time || "00:00").split(':').map(Number);
   const displayMinute = configM.toString().padStart(2, '0');
 
-  // Class time calculation helper
-  const getStartTime = (st: any) => {
+  // Class time calculation helper (자정 기준 분(minutes) 단위 반환)
+  const getStartTime = (st: any): number => {
+    // 1. 시간이동 정보 최우선 적용
     if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-      return st.todaySession.moved_to_hour;
+      const m = scheduleValueToMinutes(st.todaySession.moved_to_hour);
+      if (m !== null) return m;
     }
-    const stat = st.todaySession?.attendance_status || '수업전';
-    if (stat.includes(':')) {
+    // 2. 출결 상태 문자열 파싱 (예: "보강:16:00~18:00")
+    const stat = st.todaySession?.attendance_status || '';
+    if (stat.startsWith('보강:')) {
+      const match = stat.match(/(\d{1,2}):(\d{2})/);
+      if (match) {
+        const hh = parseInt(match[1], 10);
+        const mm = parseInt(match[2], 10);
+        let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+        return h24 * 60 + mm;
+      }
+      const matchH = stat.match(/(\d{1,2}):/);
+      if (matchH) {
+        const hh = parseInt(matchH[1], 10);
+        let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+        return h24 * 60;
+      }
+    } else if (stat.includes(':')) {
       const parts = stat.split(':');
-      const val = parseInt(parts[parts.length - 1]);
-      if (!isNaN(val) && val < 24) return val;
+      const val = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(val) && val < 24) {
+        let h24 = (val > 0 && val < 10) ? val + 12 : val;
+        return h24 * 60;
+      }
     }
+    // 3. 당일 정규 시간표
     const hours = st.day_schedules?.[dayKey] || [];
     if (hours.length > 0) {
-      const firstVal = hours[0];
-      let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-      if (h <= 12) h += 12;
-      return h;
+      const m = scheduleValueToMinutes(hours[0]);
+      if (m !== null) return m;
     }
-    return 999;
+    return 999 * 60;
   };
 
-  const getTimeLabel = (time: number) => {
-    if (time === 999) return '보강 / 기타 수업';
-    return (time >= 12
-      ? (time === 12 ? `오후 12:${displayMinute}` : `오후 ${time-12}:${displayMinute}`)
-      : `오전 ${time}:${displayMinute}`) + ' 수업';
+  const getTimeLabel = (minutes: number) => {
+    if (minutes >= 999 * 60) return '보강 / 기타 수업';
+    return minutesToGroupLabel(minutes);
   };
 
   // 💡 students prop은 TodaySheet의 filteredStudents로, 이미 정규/특강 행이 분리 확장된 상태.

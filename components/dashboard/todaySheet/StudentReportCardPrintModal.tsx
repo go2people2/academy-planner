@@ -6,6 +6,7 @@ import { motion } from 'framer-motion';
 import { Printer, X, FileSpreadsheet } from 'lucide-react';
 import { getDayOfWeek } from '@/lib/utils';
 import { useModalEsc } from '@/hooks/useModalEsc';
+import { scheduleValueToMinutes } from '@/lib/scheduleTime';
 
 interface StudentReportCardPrintModalProps {
   isOpen: boolean;
@@ -62,47 +63,60 @@ export default function StudentReportCardPrintModal({
     return '';
   };
 
-  // 교시 구하기
-  const getPeriod = (st: any) => {
+  // 교시 / 시작시간 분(minutes) 구하기
+  const getPeriodMinutes = (st: any): number | null => {
     if (st.todaySession?.moved_to_hour !== undefined && st.todaySession?.moved_to_hour !== null) {
-      return st.todaySession.moved_to_hour;
+      const m = scheduleValueToMinutes(st.todaySession.moved_to_hour);
+      if (m !== null) return m;
     }
     const stat = st.todaySession?.attendance_status || '';
-    if (stat.includes(':')) {
+    if (stat.startsWith('보강:')) {
+      const match = stat.match(/(\d{1,2}):(\d{2})/);
+      if (match) {
+        const hh = parseInt(match[1], 10);
+        const mm = parseInt(match[2], 10);
+        let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+        return h24 * 60 + mm;
+      }
+      const matchH = stat.match(/(\d{1,2}):/);
+      if (matchH) {
+        const hh = parseInt(matchH[1], 10);
+        let h24 = (hh > 0 && hh < 10) ? hh + 12 : hh;
+        return h24 * 60;
+      }
+    } else if (stat.includes(':')) {
       const parts = stat.split(':');
-      const val = parseInt(parts[parts.length - 1]);
-      if (!isNaN(val) && val < 24) return val;
+      const val = parseInt(parts[parts.length - 1], 10);
+      if (!isNaN(val) && val < 24) {
+        let h24 = (val > 0 && val < 10) ? val + 12 : val;
+        return h24 * 60;
+      }
     }
     const hours = st.day_schedules?.[dayKey] || [];
     if (hours.length > 0) {
-      const firstVal = hours[0];
-      let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
-      if (h <= 12) h += 12;
-      return h;
+      const m = scheduleValueToMinutes(hours[0]);
+      if (m !== null) return m;
     }
-    return '';
+    return null;
   };
 
-  // 시작 시간(교시) 12시간제 포맷 변환 헬퍼 (예: 17 -> 5시, 7 -> 7시)
-  const formatPeriod = (period: number | string) => {
-    if (period === undefined || period === null || period === '') return '-';
-    const hour = Number(period);
-    if (isNaN(hour)) return String(period);
-    if (hour > 12) {
-      return `${hour - 12}시`;
-    }
-    return `${hour}시`;
+  // 시작 시간(교시) 12시간제 포맷 변환 헬퍼 (예: 960 -> 4시, 990 -> 4시 30분, 1140 -> 7시)
+  const formatPeriod = (minutes: number | null | undefined) => {
+    if (minutes === null || minutes === undefined || minutes >= 999 * 60) return '-';
+    const hour24 = Math.floor(minutes / 60);
+    const minute = minutes % 60;
+    const hour12 = hour24 % 12 === 0 ? 12 : hour24 % 12;
+    return minute > 0 ? `${hour12}시 ${minute}분` : `${hour12}시`;
   };
 
   // 💡 시작 시간에 따른 왼쪽 열 배경색/텍스트색 매핑 스타일 리턴
-  const getHeaderBgStyle = (period: number | string) => {
-    if (period === undefined || period === null || period === '') {
+  const getHeaderBgStyle = (minutes: number | null | undefined) => {
+    if (minutes === null || minutes === undefined || minutes >= 999 * 60) {
       return { backgroundColor: '#f3f4f6', color: '#374151' };
     }
-    const hour = Number(period);
-    if (isNaN(hour)) return { backgroundColor: '#f3f4f6', color: '#374151' };
+    const hour24 = Math.floor(minutes / 60);
 
-    switch (hour) {
+    switch (hour24) {
       case 14:
       case 2:
         return { backgroundColor: '#ffe4e6', color: '#9f1239' }; // Rose
@@ -143,8 +157,8 @@ export default function StudentReportCardPrintModal({
 
   // 1. 인쇄 대상 리스트 가공 (교시 오름차순, 이름 오름차순 정렬)
   const sortedStudents = [...students].sort((a, b) => {
-    const periodA = Number(getPeriod(a)) || 999;
-    const periodB = Number(getPeriod(b)) || 999;
+    const periodA = getPeriodMinutes(a) ?? (999 * 60);
+    const periodB = getPeriodMinutes(b) ?? (999 * 60);
     if (periodA !== periodB) return periodA - periodB;
     return a.name.localeCompare(b.name, 'ko');
   });
@@ -238,7 +252,7 @@ export default function StudentReportCardPrintModal({
               const todaySess = student.todaySession || {};
               const lastSess = student.lastSession || {};
               const classDays = getClassDays(student);
-              const period = getPeriod(student);
+              const period = getPeriodMinutes(student);
               const formattedPeriod = formatPeriod(period);
               const headerStyle = getHeaderBgStyle(period);
               const testDisplay = getTestDisplay(todaySess);
