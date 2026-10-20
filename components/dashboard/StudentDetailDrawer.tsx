@@ -878,6 +878,8 @@ export default function StudentDetailDrawer({
                       : dischargeTag;
                     onUpdateInfo(student.id, {
                       is_deleted: true,
+                      last_teacher_id: student.teacher_id || student.last_teacher_id || null,
+                      teacher_id: null,
                       management_notes: updatedNotes
                     });
                     onClose();
@@ -889,7 +891,15 @@ export default function StudentDetailDrawer({
               </button>
             ) : (
               <div className="space-y-3">
-                <button onClick={() => onUpdateInfo(student.id, 'is_deleted', false)}
+                <button
+                  onClick={() => {
+                    const prevTeacherId = student.last_teacher_id || student.teacher_id;
+                    const isTeacherActive = prevTeacherId && teachers.some((t: any) => t.id === prevTeacherId && !t.is_deleted);
+                    onUpdateInfo(student.id, {
+                      is_deleted: false,
+                      teacher_id: isTeacherActive ? prevTeacherId : null
+                    });
+                  }}
                   className="flex items-center justify-center gap-2 w-full py-3 bg-emerald-600/10 text-emerald-500 border border-emerald-500/20 rounded-[2px] text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 hover:text-white transition-all"
                 >
                   <UserCheck size={14} /> 재원생으로 복구

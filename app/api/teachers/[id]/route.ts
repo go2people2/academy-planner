@@ -189,27 +189,20 @@ export async function DELETE(request: Request, context: any) {
       return NextResponse.json({ error: '본인 계정은 삭제할 수 없습니다.' }, { status: 400 });
     }
 
-    // 💡 4. Auth Layer에서 유저 삭제
-    if (targetTeacher.user_id) {
-      const { error: authErr } = await supabaseAdmin.auth.admin.deleteUser(targetTeacher.user_id);
-      if (authErr) {
-        console.error('[API] Auth user deletion failed:', authErr.message);
-        return NextResponse.json({ error: '인증 서버 계정 삭제 실패' }, { status: 500 });
-      }
+    // 💡 4. 담당 학생 0명 검증 및 소프트 삭제(퇴사) 처리 일원화
+    const { retireTeacher } = await import('@/lib/concurrency/teacherRetire');
+    const retireResult = await retireTeacher(targetTeacher.academy_id, targetTeacherId, supabaseAdmin);
+
+    if (!retireResult.success) {
+      const status = retireResult.error_code === 'TEACHER_HAS_ASSIGNED_STUDENTS' ? 409 : 400;
+      return NextResponse.json({
+        error: retireResult.error || '교사 퇴사 처리에 실패했습니다.',
+        error_code: retireResult.error_code,
+        assigned_count: retireResult.assigned_count
+      }, { status });
     }
 
-    // 💡 5. Public DB(ams_teachers)에서 교사 삭제
-    const { error: dbErr } = await supabaseAdmin
-      .from('ams_teachers')
-      .delete()
-      .eq('id', targetTeacherId);
-
-    if (dbErr) {
-      console.error('[API] Public schema deletion failed:', dbErr.message);
-      return NextResponse.json({ error: 'DB 교사 정보 삭제 실패' }, { status: 500 });
-    }
-
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, status: retireResult.status });
   } catch (error: any) {
     console.error('[API] Teacher delete critical error:', error);
     return NextResponse.json({ error: '서버 내부 오류' }, { status: 500 });

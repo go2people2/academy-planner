@@ -44,7 +44,7 @@ export async function GET(req: NextRequest) {
 
       const { data: teacher, error: teacherErr } = await supabaseAdmin
         .from('ams_teachers')
-        .select('id, name, login_id, academy_id, role')
+        .select('id, name, login_id, academy_id, role, is_deleted')
         .eq('academy_id', amsAcademyId)
         .or(`login_id.eq.${loginId},login_id.eq.${cleanLoginId}`)
         .maybeSingle();
@@ -66,6 +66,18 @@ export async function GET(req: NextRequest) {
             error: '해당 학원에 등록되지 않은 교사 아이디입니다.',
           },
           { status: 404 }
+        );
+      }
+
+      // 퇴사 교사는 활성 교사로 연결하지 않고 명시적으로 구분
+      if (teacher.is_deleted === true) {
+        return NextResponse.json(
+          {
+            success: false,
+            error_code: 'TEACHER_RETIRED',
+            error: '퇴사 처리된 교사 아이디입니다.',
+          },
+          { status: 409 }
         );
       }
 

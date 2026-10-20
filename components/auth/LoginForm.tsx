@@ -158,7 +158,7 @@ export default function LoginForm({ academy }: { academy: any }) {
           let profile: any = null;
           const { data: directProfile, error: pErr } = await supabase
             .from('ams_teachers')
-            .select('id, name, role, academy_id, user_id')
+            .select('id, name, role, academy_id, user_id, is_deleted')
             .eq('user_id', data.user.id)
             .maybeSingle();
 
@@ -170,7 +170,7 @@ export default function LoginForm({ academy }: { academy: any }) {
           if (!profile && !pErr) {
             const { data: fallbackProfile } = await supabase
               .from('ams_teachers')
-              .select('id, name, role, academy_id, user_id')
+              .select('id, name, role, academy_id, user_id, is_deleted')
               .eq('login_id', username.trim())
               .maybeSingle();
 
@@ -190,6 +190,14 @@ export default function LoginForm({ academy }: { academy: any }) {
           if (!profile) {
             console.error('Profile fetch error:', pErr);
             alert('인증은 성공했으나 교사 정보를 찾을 수 없습니다. (계정 정보 일치 확인 필요)');
+            await supabase.auth.signOut();
+            setIsLoading(false);
+            return;
+          }
+
+          // 💡 [퇴사자 로그인 차단]
+          if (profile.is_deleted === true) {
+            alert('퇴사 처리된 계정입니다. 관리자에게 문의하세요.');
             await supabase.auth.signOut();
             setIsLoading(false);
             return;

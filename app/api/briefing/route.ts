@@ -43,6 +43,7 @@ async function authenticateTeacher(req: NextRequest) {
     .from('ams_teachers')
     .select('id, academy_id, role')
     .eq('user_id', user.id)
+    .eq('is_deleted', false)
     .maybeSingle();
 
   if (teacherErr || !teacher) {

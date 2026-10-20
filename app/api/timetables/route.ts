@@ -40,6 +40,7 @@ async function getTeacherProfile(userId: string) {
     .from('ams_teachers')
     .select('role, academy_id')
     .eq('user_id', userId)
+    .eq('is_deleted', false)
     .maybeSingle();
 
   if (error || !teacher) return null;

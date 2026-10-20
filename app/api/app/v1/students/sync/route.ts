@@ -69,8 +69,8 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 3. 요청에 포함된 교사 ID 목록 사전 유효성 조회 (해당 학원 소속 검증)
-    const validTeacherIds = await prefetchValidTeachers(students, academyId);
+    // 3. 요청에 포함된 교사 ID 목록 사전 유효성 조회 (해당 학원 소속 및 퇴사 여부 검증)
+    const teacherMap = await prefetchTeacherMap(students, academyId);
 
     // 4. 요청에 포함된 기존 학생 정보 일괄 사전 조회
     const existingStudentsMap = await prefetchExistingStudents(students);
@@ -89,13 +89,32 @@ export async function POST(req: NextRequest) {
         continue;
       }
 
-      // 5-2. 담당 교사 유효성 검증
+      // 5-2. 담당 교사 유효성 검증 (퇴사 교사 배정 차단)
       if (item.teacher_id !== undefined && item.teacher_id !== null) {
-        if (!UUID_REGEX.test(item.teacher_id) || !validTeacherIds.has(item.teacher_id)) {
+        if (!UUID_REGEX.test(item.teacher_id)) {
+          errors.push({
+            id: studentId,
+            error_code: 'INVALID_TEACHER',
+            message: '지정한 담당 교사의 ID 형식이 올바르지 않습니다.',
+          });
+          continue;
+        }
+
+        const teacherInfo = teacherMap.get(item.teacher_id);
+        if (!teacherInfo) {
           errors.push({
             id: studentId,
             error_code: 'INVALID_TEACHER',
             message: '지정한 담당 교사를 찾을 수 없거나 다른 학원 소속입니다.',
+          });
+          continue;
+        }
+
+        if (teacherInfo.is_deleted) {
+          errors.push({
+            id: studentId,
+            error_code: 'TEACHER_RETIRED',
+            message: '퇴사 처리된 교사에게는 학생을 배정할 수 없습니다.',
           });
           continue;
         }
@@ -254,8 +273,11 @@ export async function POST(req: NextRequest) {
   }
 }
 
-/** 💡 교사 ID 유효성 일괄 확인 */
-async function prefetchValidTeachers(students: StudentSyncPayload[], academyId: string): Promise<Set<string>> {
+/** 💡 교사 ID 유효성 및 퇴사 여부 일괄 확인 */
+async function prefetchTeacherMap(
+  students: StudentSyncPayload[],
+  academyId: string
+): Promise<Map<string, { id: string; is_deleted: boolean }>> {
   const teacherIds = Array.from(
     new Set(
       students
@@ -264,15 +286,20 @@ async function prefetchValidTeachers(students: StudentSyncPayload[], academyId: 
     )
   );
 
-  if (teacherIds.length === 0) return new Set();
+  if (teacherIds.length === 0) return new Map();
 
   const { data } = await supabaseAdmin
     .from('ams_teachers')
-    .select('id')
+    .select('id, is_deleted')
     .eq('academy_id', academyId)
     .in('id', teacherIds);
 
-  return new Set((data || []).map((t: any) => t.id));
+  const map = new Map<string, { id: string; is_deleted: boolean }>();
+  (data || []).forEach((t: any) => {
+    map.set(t.id, { id: t.id, is_deleted: !!t.is_deleted });
+  });
+
+  return map;
 }
 
 /** 💡 기존 학생 정보 일괄 확인 */

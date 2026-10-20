@@ -114,12 +114,16 @@ export async function POST(req: NextRequest) {
       ...(typeof body.aiSettings === 'object' ? body.aiSettings : {})
     } : currentAiSettings;
 
-    const nextSettings = {
+    const nextSettings: Record<string, any> = {
       ...(currentAc?.operation_settings || {}),
       is_suspended: body.isSuspended === true,
       ai_settings: nextAiSettings,
       features: nextFeatures
     };
+
+    if (body.service_mode === 'standalone_hokmanote' || body.service_mode === 'integrated') {
+      nextSettings.service_mode = body.service_mode;
+    }
 
     // 2. ams_academies 학원 테이블 업데이트
     const { data: updateData, error: acError } = await supabaseAdmin

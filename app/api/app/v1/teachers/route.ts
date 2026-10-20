@@ -28,11 +28,12 @@ export async function GET(req: NextRequest) {
 
     const academyId = auth.academyId;
 
-    // 2. 해당 학원의 전체 교사 목록 조회 (비밀번호 제외)
+    // 2. 해당 학원의 활성 교사 목록 조회 (퇴사자 및 비밀번호 제외)
     const { data, error } = await supabaseAdmin
       .from('ams_teachers')
       .select('id, academy_id, name, login_id, role, created_at')
       .eq('academy_id', academyId)
+      .or('is_deleted.is.null,is_deleted.eq.false')
       .order('name', { ascending: true });
 
     if (error) {
@@ -103,8 +104,20 @@ export async function POST(req: NextRequest) {
     const existingTeacher = await findTeacherByNormalizedLoginId(cleanLoginId);
 
     if (existingTeacher) {
-      // 3-1. 같은 학원 소속인 경우: 기존 교사 정보 반환 (멱등성 보장, 기존 값 보존)
+      // 3-1. 같은 학원 소속인 경우
       if (existingTeacher.academy_id === academyId) {
+        if (existingTeacher.is_deleted) {
+          return NextResponse.json(
+            {
+              success: false,
+              error_code: 'TEACHER_RETIRED',
+              error: '해당 아이디는 이미 퇴사 처리된 교사입니다. 복직 처리가 필요합니다.',
+            },
+            { status: 409 }
+          );
+        }
+
+        // 기존 활성 교사 정보 반환 (멱등성 보장, 기존 값 보존)
         return NextResponse.json({
           success: true,
           created: false,
@@ -214,7 +227,7 @@ export async function POST(req: NextRequest) {
 async function findTeacherByNormalizedLoginId(cleanLoginId: string): Promise<any | null> {
   const { data, error } = await supabaseAdmin
     .from('ams_teachers')
-    .select('id, academy_id, name, login_id, role')
+    .select('id, academy_id, name, login_id, role, is_deleted')
     .ilike('login_id', cleanLoginId)
     .maybeSingle();
 

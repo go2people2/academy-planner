@@ -46,17 +46,23 @@ export async function POST(req: NextRequest) {
     // 2. 권한 검증: ams_teachers 테이블에서 원장(admin) 또는 마스터(master) 권한 확인
     let { data: teacher, error: teacherErr } = await supabaseAdmin
       .from('ams_teachers')
-      .select('id, role, academy_id')
+      .select('id, role, academy_id, is_deleted')
       .eq('user_id', user.id)
       .maybeSingle();
+
+    // 퇴사 교사는 아래 fallback(학원 원장 행 대체)으로 우회하지 못하도록 먼저 차단
+    if (teacher?.is_deleted === true) {
+      return NextResponse.json({ error: '퇴사 처리된 계정입니다.' }, { status: 403 });
+    }
 
     if (!teacher) {
       // Supabase Auth session user.id fallback check
       const { data: fallbackTeacher } = await supabaseAdmin
         .from('ams_teachers')
-        .select('id, role, academy_id')
+        .select('id, role, academy_id, is_deleted')
         .eq('academy_id', academyId)
         .in('role', ['admin', 'master'])
+        .eq('is_deleted', false)
         .maybeSingle();
       if (fallbackTeacher) {
         teacher = fallbackTeacher;

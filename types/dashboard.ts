@@ -118,6 +118,7 @@ export interface Student {
   todaySessions?: SessionLog[];
   allLogs: SessionLog[];
   is_deleted?: boolean; // 💡 추가 (퇴원 여부)
+  last_teacher_id?: string | null; // 💡 추가 (퇴원 시 마지막 담당 교사 보존)
   isTodayClassDay?: boolean; // 💡 추가 (오늘 수업 여부)
   isSkipped?: boolean; // 💡 추가 (오늘 제외 여부)
   isScheduledToday?: boolean; // 💡 추가 (정규 등원 여부)
@@ -142,6 +143,8 @@ export interface Teacher {
   email?: string;
   role: 'admin' | 'teacher';
   homework_presets?: Record<string, string>; // 💡 추가
+  is_deleted?: boolean; // 💡 추가 (퇴사 여부)
+  retired_at?: string; // 💡 추가 (퇴사 시각)
 }
 
 export interface TextbookOption {
