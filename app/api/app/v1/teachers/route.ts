@@ -14,6 +14,49 @@ const supabaseAdmin = createClient(
   }
 );
 
+
+export async function GET(req: NextRequest) {
+  try {
+    // 1. 호스트 토큰 및 오답노트 모듈 권한 검증
+    const auth = await verifyHostRequest(req, supabaseAdmin);
+    if (!auth.ok) {
+      return NextResponse.json(
+        { success: false, error_code: auth.errorCode, error: auth.error },
+        { status: auth.status }
+      );
+    }
+
+    const academyId = auth.academyId;
+
+    // 2. 해당 학원의 전체 교사 목록 조회 (비밀번호 제외)
+    const { data, error } = await supabaseAdmin
+      .from('ams_teachers')
+      .select('id, academy_id, name, login_id, role, created_at')
+      .eq('academy_id', academyId)
+      .order('name', { ascending: true });
+
+    if (error) {
+      console.error('[teachers] Failed to fetch teachers:', error);
+      return NextResponse.json(
+        { success: false, error: '교사 목록 조회 중 데이터베이스 오류가 발생했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      count: (data || []).length,
+      teachers: data || [],
+    });
+  } catch (err: any) {
+    console.error('[teachers] GET Fatal Exception:', err);
+    return NextResponse.json(
+      { success: false, error: '서버 내부 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
 export async function POST(req: NextRequest) {
   try {
     // 1. 호스트 토큰 및 오답노트 모듈 권한 검증
