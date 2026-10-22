@@ -91,27 +91,32 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 3. 토큰의 slug로 오답노트 학원(academies) ID 확정 (학원 격리)
-    const { data: waAcademy, error: waAcErr } = await supabaseAdmin
-      .from('academies')
-      .select('id')
-      .eq('slug', slug)
-      .maybeSingle();
+    // 3. 버전 감지 (v3 기본 지원 및 v2 하위호환)
+    const { searchParams } = new URL(req.url);
+    const versionParam = (searchParams.get('version') || searchParams.get('v') || 'v3').toLowerCase();
+    const isV3 = versionParam === 'v3' || versionParam === '3';
 
-    if (waAcErr || !waAcademy) {
-      return NextResponse.json(
-        { success: false, error: '해당 학원의 오답노트 지점 정보를 찾을 수 없습니다.' },
-        { status: 404 }
-      );
+    let targetAcademyId = amsAcademyId;
+    if (!isV3) {
+      const { data: waAcademy, error: waAcErr } = await supabaseAdmin
+        .from('academies')
+        .select('id')
+        .eq('slug', slug)
+        .maybeSingle();
+
+      if (waAcErr || !waAcademy) {
+        return NextResponse.json(
+          { success: false, error: '해당 학원의 오답노트 지점 정보를 찾을 수 없습니다.' },
+          { status: 404 }
+        );
+      }
+      targetAcademyId = waAcademy.id;
     }
 
-    const targetAcademyId = waAcademy.id;
-
     // 4. 쿼리 파라미터 파싱 및 유효성 검증
-    const { searchParams } = new URL(req.url);
     const teacherId = searchParams.get('teacher_id')?.trim() || null;
     const statusParam = (searchParams.get('status') || 'pending').trim().toLowerCase();
-    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10) || 50, 1), 100);
+    const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '100', 10) || 100, 1), 200);
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0);
 
     // status 파라미터 검증
@@ -123,8 +128,8 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 5. teacher_id 제공 시 해당 학원 소속 교사인지 검증
-    if (teacherId) {
+    // 5. teacher_id 제공 시 해당 학원 소속 교사인지 검증 (v2 전용)
+    if (!isV3 && teacherId) {
       const { data: teacher, error: teacherErr } = await supabaseAdmin
         .from('teachers')
         .select('id')
@@ -140,13 +145,18 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // 6. 학원 격리 기반 오답 수신함 조회
+    // 6. 학원 격리 기반 오답 수신함 조회 (v3 / v2 분기)
+    const tableName = isV3 ? 'wrong_answer_submissions_v3' : 'wrong_answer_submissions';
+    const selectCols = isV3
+      ? 'id, academy_id, student_id, student_name, bookcode, book_name, chapter_codes, problem_codes, problems_detail, memo, status, metadata, created_at'
+      : 'id, student_id, student_name, teacher_id, book_name, chapter_name, problem_numbers, memo, status, completed_at, created_at';
+
     let query = supabaseAdmin
-      .from('wrong_answer_submissions')
-      .select('id, student_id, student_name, teacher_id, book_name, chapter_name, problem_numbers, memo, status, completed_at, created_at', { count: 'exact' })
+      .from(tableName)
+      .select(selectCols, { count: 'exact' })
       .eq('academy_id', targetAcademyId);
 
-    if (teacherId) {
+    if (!isV3 && teacherId) {
       query = query.eq('teacher_id', teacherId);
     }
 
@@ -159,7 +169,7 @@ export async function GET(req: NextRequest) {
       .range(offset, offset + limit - 1);
 
     if (queryErr) {
-      console.error('Failed to fetch wrong_answer_submissions:', queryErr);
+      console.error(`Failed to fetch ${tableName}:`, queryErr);
       return NextResponse.json(
         { success: false, error: '오답 수신함 조회 중 오류가 발생했습니다.' },
         { status: 500 }

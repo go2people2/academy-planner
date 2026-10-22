@@ -35,7 +35,7 @@ function verifyDeviceToken(token: string): { valid: boolean; payload?: any } {
 }
 
 async function authenticateAndResolveAcademy(req: NextRequest): Promise<
-  | { success: true; targetAcademyId: string }
+  | { success: true; targetAcademyId: string; amsAcademyId: string; isV3: boolean }
   | { success: false; response: NextResponse }
 > {
   const authHeader = req.headers.get('Authorization');
@@ -107,7 +107,16 @@ async function authenticateAndResolveAcademy(req: NextRequest): Promise<
     };
   }
 
-  // 오답노트 학원 ID 매핑
+  // 버전 판별 (v3 기본 지원 및 v2 하위호환)
+  const { searchParams } = new URL(req.url);
+  const versionParam = (searchParams.get('version') || searchParams.get('v') || 'v3').toLowerCase();
+  const isV3 = versionParam === 'v3' || versionParam === '3';
+
+  if (isV3) {
+    return { success: true, targetAcademyId: amsAcademyId, amsAcademyId, isV3: true };
+  }
+
+  // v2: 오답노트 학원 ID 매핑
   const { data: waAcademy, error: waAcErr } = await supabaseAdmin
     .from('academies')
     .select('id')
@@ -124,7 +133,7 @@ async function authenticateAndResolveAcademy(req: NextRequest): Promise<
     };
   }
 
-  return { success: true, targetAcademyId: waAcademy.id };
+  return { success: true, targetAcademyId: waAcademy.id, amsAcademyId, isV3: false };
 }
 
 export async function PATCH(
@@ -136,7 +145,7 @@ export async function PATCH(
     if (!authResult.success) {
       return authResult.response;
     }
-    const { targetAcademyId } = authResult;
+    const { targetAcademyId, isV3 } = authResult;
 
     const resolvedParams = await params;
     const submissionId = resolvedParams.id?.trim();
@@ -148,6 +157,52 @@ export async function PATCH(
     }
 
     const nowIso = new Date().toISOString();
+
+    if (isV3) {
+      // v3: metadata에 completed_at 기록 및 status='completed' 갱신
+      const { data: existing } = await supabaseAdmin
+        .from('wrong_answer_submissions_v3')
+        .select('id, metadata')
+        .eq('id', submissionId)
+        .eq('academy_id', targetAcademyId)
+        .maybeSingle();
+
+      if (!existing) {
+        return NextResponse.json(
+          { success: false, error: '해당 학원의 오답 제출 건을 찾을 수 없습니다.' },
+          { status: 404 }
+        );
+      }
+
+      const meta = (existing.metadata && typeof existing.metadata === 'object') ? { ...existing.metadata } : {};
+      meta.completed_at = nowIso;
+
+      const { data, error } = await supabaseAdmin
+        .from('wrong_answer_submissions_v3')
+        .update({
+          status: 'completed',
+          metadata: meta,
+        })
+        .eq('id', submissionId)
+        .eq('academy_id', targetAcademyId)
+        .select('id');
+
+      if (error) {
+        console.error('Failed to complete wrong_answer_submissions_v3:', error);
+        return NextResponse.json(
+          { success: false, error: '오답 완료 처리 중 오류가 발생했습니다.' },
+          { status: 500 }
+        );
+      }
+
+      return NextResponse.json({
+        success: true,
+        message: '처리 완료되었습니다.',
+        id: data[0].id,
+      });
+    }
+
+    // v2 완료 처리
     const { data, error } = await supabaseAdmin
       .from('wrong_answer_submissions')
       .update({
@@ -196,7 +251,7 @@ export async function DELETE(
     if (!authResult.success) {
       return authResult.response;
     }
-    const { targetAcademyId } = authResult;
+    const { targetAcademyId, isV3 } = authResult;
 
     const resolvedParams = await params;
     const submissionId = resolvedParams.id?.trim();
@@ -207,15 +262,16 @@ export async function DELETE(
       );
     }
 
+    const tableName = isV3 ? 'wrong_answer_submissions_v3' : 'wrong_answer_submissions';
     const { data, error } = await supabaseAdmin
-      .from('wrong_answer_submissions')
+      .from(tableName)
       .delete()
       .eq('id', submissionId)
       .eq('academy_id', targetAcademyId)
       .select('id');
 
     if (error) {
-      console.error('Failed to delete wrong_answer_submission:', error);
+      console.error(`Failed to delete from ${tableName}:`, error);
       return NextResponse.json(
         { success: false, error: '오답 삭제 처리 중 오류가 발생했습니다.' },
         { status: 500 }
