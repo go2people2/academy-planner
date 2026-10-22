@@ -1,125 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
-import crypto from 'crypto';
+import { supabaseAdmin, authenticateDeviceRequest } from './authHelper';
 
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL || '',
-  process.env.SUPABASE_SERVICE_ROLE_KEY || '',
-  {
-    auth: {
-      autoRefreshToken: false,
-      persistSession: false,
-    },
-  }
-);
-
-// 💡 디바이스 토큰 서명 및 만료 검증 헬퍼
-function verifyDeviceToken(token: string): { valid: boolean; payload?: any } {
-  try {
-    const parts = token.split('.');
-    if (parts.length !== 3) return { valid: false };
-    const [header, body, signature] = parts;
-    const secret = process.env.SUPABASE_SERVICE_ROLE_KEY || 'hokma-secret-key';
-    const expectedSignature = crypto.createHmac('sha256', secret).update(`${header}.${body}`).digest('base64url');
-    if (signature !== expectedSignature) return { valid: false };
-
-    const payload = JSON.parse(Buffer.from(body, 'base64url').toString('utf8'));
-    const now = Math.floor(Date.now() / 1000);
-    if (payload.exp && payload.exp < now) {
-      return { valid: false };
-    }
-    return { valid: true, payload };
-  } catch {
-    return { valid: false };
-  }
-}
-
+/**
+ * 💡 GET /api/app/v1/wrong-answers
+ * 호크마노트 v3 전용 오답 목록 조회 (wrong_answer_submissions_v3)
+ */
 export async function GET(req: NextRequest) {
   try {
-    // 1. Bearer 기기 토큰 추출 및 서명 검증
-    const authHeader = req.headers.get('Authorization');
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return NextResponse.json(
-        { success: false, error: '인증 토큰이 누락되었습니다.' },
-        { status: 401 }
-      );
-    }
+    const auth = await authenticateDeviceRequest(req);
+    if (!auth.success) return auth.response;
+    const academyId = auth.academyId;
 
-    const token = authHeader.substring(7);
-    const tokenCheck = verifyDeviceToken(token);
-    if (!tokenCheck.valid || !tokenCheck.payload) {
-      return NextResponse.json(
-        { success: false, error: '유효하지 않거나 만료된 기기 토큰입니다.' },
-        { status: 401 }
-      );
-    }
-
-    const { device_id, academy_id: amsAcademyId, slug } = tokenCheck.payload;
-
-    if (!device_id || !slug) {
-      return NextResponse.json(
-        { success: false, error: '기기 토큰 페이로드가 올바르지 않습니다.' },
-        { status: 401 }
-      );
-    }
-
-    // 2. 기기 등록 상태 및 모듈 활성 여부 검증
-    const { data: device, error: devErr } = await supabaseAdmin
-      .from('academy_devices')
-      .select('id, status')
-      .eq('id', device_id)
-      .maybeSingle();
-
-    if (devErr || !device || device.status === 'revoked') {
-      return NextResponse.json(
-        { success: false, error_code: 'DEVICE_REVOKED', error: '등록이 해제된 기기입니다.' },
-        { status: 401 }
-      );
-    }
-
-    const { data: mod } = await supabaseAdmin
-      .from('academy_modules')
-      .select('status')
-      .eq('academy_id', amsAcademyId)
-      .eq('module_code', 'hokmanote')
-      .maybeSingle();
-
-    if (mod && ['inactive', 'suspended'].includes(mod.status)) {
-      return NextResponse.json(
-        { success: false, error_code: 'MODULE_SUSPENDED', error: '오답노트 모듈 이용 권한이 정지되었거나 비활성 상태입니다.' },
-        { status: 403 }
-      );
-    }
-
-    // 3. 버전 감지 (v3 기본 지원 및 v2 하위호환)
     const { searchParams } = new URL(req.url);
-    const versionParam = (searchParams.get('version') || searchParams.get('v') || 'v3').toLowerCase();
-    const isV3 = versionParam === 'v3' || versionParam === '3';
-
-    let targetAcademyId = amsAcademyId;
-    if (!isV3) {
-      const { data: waAcademy, error: waAcErr } = await supabaseAdmin
-        .from('academies')
-        .select('id')
-        .eq('slug', slug)
-        .maybeSingle();
-
-      if (waAcErr || !waAcademy) {
-        return NextResponse.json(
-          { success: false, error: '해당 학원의 오답노트 지점 정보를 찾을 수 없습니다.' },
-          { status: 404 }
-        );
-      }
-      targetAcademyId = waAcademy.id;
-    }
-
-    // 4. 쿼리 파라미터 파싱 및 유효성 검증
-    const teacherId = searchParams.get('teacher_id')?.trim() || null;
     const statusParam = (searchParams.get('status') || 'pending').trim().toLowerCase();
+    const studentId = searchParams.get('student_id')?.trim() || null;
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '100', 10) || 100, 1), 200);
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10) || 0, 0);
 
-    // status 파라미터 검증
     const validStatuses = ['pending', 'completed', 'all'];
     if (!validStatuses.includes(statusParam)) {
       return NextResponse.json(
@@ -128,36 +25,15 @@ export async function GET(req: NextRequest) {
       );
     }
 
-    // 5. teacher_id 제공 시 해당 학원 소속 교사인지 검증 (v2 전용)
-    if (!isV3 && teacherId) {
-      const { data: teacher, error: teacherErr } = await supabaseAdmin
-        .from('teachers')
-        .select('id')
-        .eq('id', teacherId)
-        .eq('academy_id', targetAcademyId)
-        .maybeSingle();
-
-      if (teacherErr || !teacher) {
-        return NextResponse.json(
-          { success: false, error: '해당 학원에 소속되지 않은 교사 ID이거나 유효하지 않습니다.' },
-          { status: 403 }
-        );
-      }
-    }
-
-    // 6. 학원 격리 기반 오답 수신함 조회 (v3 / v2 분기)
-    const tableName = isV3 ? 'wrong_answer_submissions_v3' : 'wrong_answer_submissions';
-    const selectCols = isV3
-      ? 'id, academy_id, student_id, student_name, bookcode, book_name, chapter_codes, problem_codes, problems_detail, memo, status, metadata, created_at'
-      : 'id, student_id, student_name, teacher_id, book_name, chapter_name, problem_numbers, memo, status, completed_at, created_at';
+    const selectCols = 'id, academy_id, student_id, student_name, bookcode, book_name, chapter_codes, problem_codes, problems_detail, memo, status, metadata, created_at';
 
     let query = supabaseAdmin
-      .from(tableName)
+      .from('wrong_answer_submissions_v3')
       .select(selectCols, { count: 'exact' })
-      .eq('academy_id', targetAcademyId);
+      .eq('academy_id', academyId);
 
-    if (!isV3 && teacherId) {
-      query = query.eq('teacher_id', teacherId);
+    if (studentId) {
+      query = query.eq('student_id', studentId);
     }
 
     if (statusParam !== 'all') {
@@ -169,7 +45,7 @@ export async function GET(req: NextRequest) {
       .range(offset, offset + limit - 1);
 
     if (queryErr) {
-      console.error(`Failed to fetch ${tableName}:`, queryErr);
+      console.error('Failed to fetch wrong_answer_submissions_v3:', queryErr);
       return NextResponse.json(
         { success: false, error: '오답 수신함 조회 중 오류가 발생했습니다.' },
         { status: 500 }
@@ -178,13 +54,163 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      submissions: submissions || [],
       data: submissions || [],
       total: count ?? (submissions?.length || 0),
       limit,
       offset,
     });
   } catch (err: any) {
-    console.error('Exception in wrong-answers route:', err);
+    console.error('Exception in wrong-answers GET route:', err);
+    return NextResponse.json(
+      { success: false, error: '서버 내부 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * 💡 PATCH /api/app/v1/wrong-answers
+ * 호크마노트 v3 전용 오답 상태 변경 (Body 또는 Query의 id 기준)
+ */
+export async function PATCH(req: NextRequest) {
+  try {
+    const auth = await authenticateDeviceRequest(req);
+    if (!auth.success) return auth.response;
+    const academyId = auth.academyId;
+
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
+    const { searchParams } = new URL(req.url);
+    const submissionId = (body?.id || searchParams.get('id'))?.trim();
+    if (!submissionId) {
+      return NextResponse.json(
+        { success: false, error: '오답 ID가 지정되지 않았습니다.' },
+        { status: 400 }
+      );
+    }
+
+    const targetStatus = (body?.status || 'completed').trim().toLowerCase();
+    const nowIso = new Date().toISOString();
+
+    const { data: existing } = await supabaseAdmin
+      .from('wrong_answer_submissions_v3')
+      .select('id, metadata')
+      .eq('id', submissionId)
+      .eq('academy_id', academyId)
+      .maybeSingle();
+
+    if (!existing) {
+      return NextResponse.json(
+        { success: false, error: '해당 학원의 오답 제출 건을 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    const meta = (existing.metadata && typeof existing.metadata === 'object') ? { ...existing.metadata } : {};
+    if (targetStatus === 'completed') {
+      meta.completed_at = nowIso;
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('wrong_answer_submissions_v3')
+      .update({
+        status: targetStatus,
+        metadata: meta,
+      })
+      .eq('id', submissionId)
+      .eq('academy_id', academyId)
+      .select('id');
+
+    if (error) {
+      console.error('Failed to update wrong_answer_submissions_v3:', error);
+      return NextResponse.json(
+        { success: false, error: '오답 상태 변경 중 오류가 발생했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '해당 학원의 오답 제출 건을 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '처리 완료되었습니다.',
+      id: data[0].id,
+    });
+  } catch (err: any) {
+    console.error('Exception in wrong-answers PATCH route:', err);
+    return NextResponse.json(
+      { success: false, error: '서버 내부 오류가 발생했습니다.' },
+      { status: 500 }
+    );
+  }
+}
+
+/**
+ * 💡 DELETE /api/app/v1/wrong-answers
+ * 호크마노트 v3 전용 오답 삭제 (Body 또는 Query의 id 기준)
+ */
+export async function DELETE(req: NextRequest) {
+  try {
+    const auth = await authenticateDeviceRequest(req);
+    if (!auth.success) return auth.response;
+    const academyId = auth.academyId;
+
+    let body: any = {};
+    try {
+      body = await req.json();
+    } catch {
+      body = {};
+    }
+
+    const { searchParams } = new URL(req.url);
+    const submissionId = (body?.id || searchParams.get('id'))?.trim();
+    if (!submissionId) {
+      return NextResponse.json(
+        { success: false, error: '오답 ID가 지정되지 않았습니다.' },
+        { status: 400 }
+      );
+    }
+
+    const { data, error } = await supabaseAdmin
+      .from('wrong_answer_submissions_v3')
+      .delete()
+      .eq('id', submissionId)
+      .eq('academy_id', academyId)
+      .select('id');
+
+    if (error) {
+      console.error('Failed to delete wrong_answer_submissions_v3:', error);
+      return NextResponse.json(
+        { success: false, error: '오답 삭제 처리 중 오류가 발생했습니다.' },
+        { status: 500 }
+      );
+    }
+
+    if (!data || data.length === 0) {
+      return NextResponse.json(
+        { success: false, error: '해당 학원의 오답 제출 건을 찾을 수 없습니다.' },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      success: true,
+      message: '영구 삭제되었습니다.',
+      id: data[0].id,
+    });
+  } catch (err: any) {
+    console.error('Exception in wrong-answers DELETE route:', err);
     return NextResponse.json(
       { success: false, error: '서버 내부 오류가 발생했습니다.' },
       { status: 500 }
