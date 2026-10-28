@@ -1,15 +1,16 @@
 'use client';
 
 import React, { useState, useEffect, useMemo } from 'react';
-import { UserCheck, CalendarRange, UserMinus, ArrowLeftRight, Sparkles } from 'lucide-react';
+import { UserCheck, CalendarRange, UserMinus, ArrowLeftRight, Sparkles, BookOpen } from 'lucide-react';
 import Overview from './Overview';
 import TeacherTasks from './TeacherTasks';
 import MonthlyChanges from './MonthlyChanges';
 import MonthlyChangesLight from './light/MonthlyChangesLight';
 import AIBulkBriefingView from './AIBulkBriefingView';
+import TextbookManagementView from './settings/textbooks/TextbookManagementView';
 import { Student, Teacher, TextbookOption, AbsenceLinkContext } from '@/types/dashboard';
 
-export type StudentSupportTab = 'info' | 'makeups' | 'discharged' | 'history' | 'aiBriefing';
+export type StudentSupportTab = 'info' | 'makeups' | 'discharged' | 'history' | 'aiBriefing' | 'textbooks';
 
 interface StudentSupportViewProps {
   academyInfo: any;
@@ -46,6 +47,7 @@ const TABS: { id: StudentSupportTab; label: string; icon: React.ComponentType<{ 
   { id: 'discharged', label: '수강 종료·퇴원생', icon: UserMinus },
   { id: 'history', label: '변동 이력 (월별)', icon: ArrowLeftRight },
   { id: 'aiBriefing', label: 'AI 상담 브리핑', icon: Sparkles },
+  { id: 'textbooks', label: '교재 목록', icon: BookOpen },
 ];
 
 export default function StudentSupportView({
@@ -243,6 +245,18 @@ export default function StudentSupportView({
             currentUser={currentUser}
             isLight={isLight}
           />
+        )}
+
+        {/* 탭 6: 교재 목록 & 단원 관리 */}
+        {activeTab === 'textbooks' && (
+          <div className="bg-[#111111]/80 border border-gray-800 rounded-lg p-4">
+            <TextbookManagementView
+              academyInfo={academyInfo}
+              masterTextbooks={availableTextbooks}
+              onUpdateAcademyInfo={onRefreshData as any}
+              isLight={isLight}
+            />
+          </div>
         )}
       </div>
     </div>

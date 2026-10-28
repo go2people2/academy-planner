@@ -171,7 +171,9 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
 
       const todayLogs = (s.allLogs || []).filter((l: any) => (l.date || l.session_date) === selectedDate);
       const isLogMakeup = (log: any) => log?.is_pure_makeup === true;
-      const regularSession = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isLogMakeup(l));
+      const movedRegularLog = todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isLogMakeup(l) && l.moved_to_hour !== null && l.moved_to_hour !== undefined && l.moved_to_hour > 0);
+      const regularSession = movedRegularLog || todayLogs.find((l: any) => (l.course_name === '정규' || !l.course_name) && !isLogMakeup(l));
+      const hasRegularClassSession = hasRegularSession || !!movedRegularLog;
       const rawMakeupLogs = todayLogs.filter((l: any) => isLogMakeup(l));
 
       // 💡 [새로고침 중복 차단] 동일 학생/날짜 보강 세션 중 가장 최신의 1개 보강 세션만 카드 채택!
@@ -182,8 +184,8 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
       });
       const makeupLogs = Array.from(uniqueMakeupMap.values());
 
-      // 1. 정규 수업 카드 (정규 등원일인 경우 - 순수 보강 세션과 분리하여 정규 교시 보존)
-      if (hasRegularSession) {
+      // 1. 정규 수업 카드 (정규 등원일이거나 당일 정규 시간이동 로그가 있는 경우)
+      if (hasRegularClassSession) {
         const activeSession = regularSession || {
           ...(s.todaySession || {}),
           id: regularSession ? (regularSession as any).id : 'temp',
@@ -191,7 +193,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
           status: regularSession ? (regularSession as any).status || 'none' : 'none',
           attendance_status: regularSession ? (regularSession as any).attendance_status || ATTENDANCE_STATUS.BEFORE : ATTENDANCE_STATUS.BEFORE,
           course_name: '정규',
-          moved_to_hour: regularSession ? (regularSession as any).moved_to_hour : null
+          moved_to_hour: regularSession ? (regularSession as any).moved_to_hour : (s.todaySession?.moved_to_hour ?? null)
         };
 
         const regCard = {

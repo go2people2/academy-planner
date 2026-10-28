@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
-import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X, Sparkles, Layers } from 'lucide-react';
+import { LayoutGrid, Plus, Globe, User, Lock, Loader2, LogOut, CheckCircle2, AlertTriangle, ChevronRight, School, X, Sparkles, Layers, BookOpen } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useMasterDashboard } from './hooks/useMasterDashboard';
@@ -11,6 +11,7 @@ import { useMasterModules } from './hooks/useMasterModules';
 import { ModuleOverviewTab } from './components/ModuleOverviewTab';
 import { ModuleManageModal } from './components/ModuleManageModal';
 import { AiUsageOverviewTab } from './components/AiUsageOverviewTab';
+import { MasterTextbookTab } from './components/MasterTextbookTab';
 
 export default function MasterDashboard() {
   const {
@@ -63,7 +64,7 @@ export default function MasterDashboard() {
     handleCloseEditModal,
   } = useMasterDashboard();
 
-  const [masterTab, setMasterTab] = useState<'modules' | 'academies' | 'ai-usage'>('modules');
+  const [masterTab, setMasterTab] = useState<'modules' | 'academies' | 'ai-usage' | 'textbooks'>('modules');
   const {
     moduleOverviews,
     isLoadingModules,
@@ -295,6 +296,18 @@ export default function MasterDashboard() {
             <Sparkles size={14} className="text-purple-400" />
             <span>AI 사용량 및 과금 분석</span>
           </button>
+
+          <button
+            onClick={() => setMasterTab('textbooks')}
+            className={`flex items-center gap-2 py-3 px-4 text-xs font-bold border-b-2 transition-all ${
+              masterTab === 'textbooks'
+                ? 'border-indigo-500 text-indigo-400 bg-white/[0.02]'
+                : 'border-transparent text-gray-400 hover:text-white hover:bg-white/[0.01]'
+            }`}
+          >
+            <BookOpen size={14} className="text-indigo-400" />
+            <span>공용 교재 관리 및 통계</span>
+          </button>
         </div>
       </div>
 
@@ -315,6 +328,8 @@ export default function MasterDashboard() {
           />
         ) : masterTab === 'ai-usage' ? (
           <AiUsageOverviewTab />
+        ) : masterTab === 'textbooks' ? (
+          <MasterTextbookTab isAuthorized={isAuthorized} />
         ) : (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
             {/* Left: Create Academy Form */}

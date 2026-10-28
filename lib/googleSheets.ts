@@ -10,6 +10,8 @@ export interface TextbookMaster {
   grade: string;
   status: string;
   ePeriod: string; // e-period
+  unit_count?: number;
+  has_hn?: boolean;
 }
 
 /**

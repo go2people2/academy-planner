@@ -153,6 +153,8 @@ export interface TextbookOption {
   grade: string;
   status: string;
   ePeriod: string;
+  unit_count?: number;
+  has_hn?: boolean;
 }
 
 export interface ExamSchedule {

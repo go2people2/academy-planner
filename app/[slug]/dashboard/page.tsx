@@ -796,16 +796,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
         updatedAllLogs = [{ ...logToPut, course_name: targetCourseName, moved_to_hour: targetMovedHour, is_pure_makeup: finalIsPureMakeup }, ...updatedAllLogs];
       }
 
-      // todaySession은 오직 정규 원래 수업(targetCourseName === '정규', targetMovedHour === null && !finalIsPureMakeup)일 때만 업데이트!
-      const isRegularOriginalCourse = (targetCourseName === '정규' || !targetCourseName) && targetMovedHour === null && !finalIsPureMakeup;
+      // todaySession은 정규 수업(순수 보강이 아닌 경우)일 때 시간이동(targetMovedHour) 정보도 함께 반영하여 즉각 동기화!
+      const isRegularCourse = (targetCourseName === '정규' || !targetCourseName) && !finalIsPureMakeup;
 
-      const updatedTodaySession = isRegularOriginalCourse ? {
-        ...(s.todaySession || { id: sessionId || `temp:${realStudentId}:${selectedDate}:정규:regular:null`, student_id: realStudentId, academy_id: academy.id, date: selectedDate, session_date: selectedDate }),
+      const updatedTodaySession = isRegularCourse ? {
+        ...(s.todaySession || { id: sessionId || `temp:${realStudentId}:${selectedDate}:정규:regular:${targetMovedHour ?? 'null'}`, student_id: realStudentId, academy_id: academy.id, date: selectedDate, session_date: selectedDate }),
         ...filteredData,
         date: selectedDate,
         status: filteredData.status || 'none',
         course_name: '정규',
-        moved_to_hour: null,
+        moved_to_hour: targetMovedHour,
         is_pure_makeup: false,
         management_notes: ('management_notes' in dataToSave) ? (dataToSave.management_notes ?? '') : (s.todaySession?.management_notes ?? ''),
         test_id: ('test_id' in dataToSave) ? dataToSave.test_id : (('test_status' in dataToSave) ? dataToSave.test_status : s.todaySession?.test_id),

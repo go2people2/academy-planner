@@ -56,15 +56,19 @@ export function useClassroomModeState({
 
     if (student.__courseType === 'regular') {
       const isPureMakeup = student.todaySession?.is_pure_makeup;
-      if (!isPureMakeup && student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null && student.todaySession?.moved_to_hour > 0) {
-        const mVal = student.todaySession.moved_to_hour;
+      const rawMoved = student.todaySession?.moved_to_hour !== undefined && student.todaySession?.moved_to_hour !== null
+        ? student.todaySession.moved_to_hour
+        : (student.moved_to_hour !== undefined && student.moved_to_hour !== null ? student.moved_to_hour : null);
+
+      if (!isPureMakeup && rawMoved !== null && Number(rawMoved) > 0) {
+        const mVal = Number(rawMoved);
         let h = mVal >= 100 ? Math.floor(mVal / 100) : mVal;
         if (h > 0 && h <= 12 && h < 10) h += 12;
         return h;
       }
       const hours = student.day_schedules?.[day] || [];
       if (hours.length > 0) {
-        const firstVal = hours[0];
+        const firstVal = Number(hours[0]);
         let h = firstVal >= 100 ? Math.floor(firstVal / 100) : firstVal;
         if (h > 0 && h <= 12 && h < 10) h += 12;
         return h;

@@ -16,7 +16,6 @@ import TeacherManagement from './settings/TeacherManagement';
 import AcademyProfile from './settings/AcademyProfile';
 import AccountSettings from './settings/AccountSettings';
 import SystemManual from './settings/SystemManual';
-import TextbookPdfSettings from './settings/TextbookPdfSettings';
 import TimetableSettings from './settings/TimetableSettings';
 
 interface SettingsViewProps {
@@ -37,7 +36,7 @@ interface SettingsViewProps {
 // --- Main SettingsView Component ---
 
 export default function SettingsView({ teachers, students, masterTextbooks, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual' | 'textbooks' | 'timetables'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual' | 'timetables'>('teachers');
 
   // 💡 휴일 관리 함수
   const handleAddHoliday = async (date: string, note: string) => {
@@ -147,7 +146,6 @@ const updateTimerPreset = async (index: number, value: number) => {
     { id: 'teachers', label: 'Teachers', color: 'text-blue-500', roles: ['admin', 'master'] },
     { id: 'holidays', label: 'Holidays', color: 'text-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-500', roles: ['admin', 'master'] },
-    { id: 'textbooks', label: 'Textbook PDFs', color: 'text-indigo-500', roles: ['admin', 'master'] },
     { id: 'timetables', label: 'Weekly Timetable', color: 'text-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'manual', label: 'Manual', color: 'text-purple-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'account', label: 'My Account', color: 'text-blue-500', roles: ['admin', 'master', 'teacher'] }
@@ -272,16 +270,6 @@ const updateTimerPreset = async (index: number, value: number) => {
             onUpdateCurrentUser={onUpdateCurrentUser} 
             academyInfo={academyInfo} 
             onUpdateAcademyInfo={onUpdateAcademyInfo} 
-          />
-        )}
-
-        {/* 📖 교재 PDF 링크 관리 탭 */}
-        {activeTab === 'textbooks' && (
-          <TextbookPdfSettings 
-            academyInfo={academyInfo}
-            masterTextbooks={masterTextbooks}
-            onUpdateAcademyInfo={onUpdateAcademyInfo}
-            isLight={false}
           />
         )}
 
