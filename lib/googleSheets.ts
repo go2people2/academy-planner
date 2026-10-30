@@ -7,6 +7,8 @@ const SHEET_ID = process.env.NEXT_PUBLIC_GOOGLE_SHEET_ID_TEXTBOOK_MASTER;
 export interface TextbookMaster {
   bookcode: string;
   title: string;
+  custom_title?: string;
+  is_enabled?: boolean;
   grade: string;
   status: string;
   ePeriod: string; // e-period

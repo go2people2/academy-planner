@@ -26,7 +26,7 @@ body {
 }
 
 * {
-  transition: background-color 0.3s ease, border-color 0.3s ease;
+  transition: background-color 0.3s ease;
 }
 
 /* ===== 기본 @page 설정: A4 가로 인쇄 (Daily Sheet 기준) ===== */

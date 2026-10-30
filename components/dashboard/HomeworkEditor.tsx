@@ -184,7 +184,7 @@ export default function HomeworkEditor({
                     const textbook = masterTextbooks.find(m => m.bookcode === h.book_name) ||
                                     masterTextbooks.find(m => m.bookcode.toLowerCase().startsWith(h.book_name.toLowerCase())) ||
                                     masterTextbooks.find(m => h.book_name.toLowerCase().startsWith(m.bookcode.toLowerCase()));
-                    const fullTitle = textbook?.title || h.book_name;
+                    const fullTitle = textbook?.custom_title || textbook?.title || h.book_name;
                     return `${fullTitle} ${h.range}`;
                   });
                 return lines.length > 0 ? lines.join('\n') : '입력된 내용이 없습니다. 페이지 범위를 기입해 주세요.';
@@ -332,7 +332,7 @@ function HomeworkRow({
                 isLight ? 'text-gray-800 font-bold' : 'text-white font-black'
               }`}
             >
-              {masterTextbooks.find(m => m.bookcode === hw.book_name)?.title || hw.book_name}
+              {masterTextbooks.find(m => m.bookcode === hw.book_name)?.custom_title || masterTextbooks.find(m => m.bookcode === hw.book_name)?.title || hw.book_name}
             </span>
           )}
         </div>

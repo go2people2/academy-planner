@@ -703,14 +703,16 @@ export function useTodaySheetRowLogic({
       .map(item => {
         const book = masterTextbooks.find(m => m.bookcode === item.book_name);
         const cleanRange = (item.range.startsWith('p') || item.range.includes(' p')) ? item.range : `p${item.range}`;
-        return `${book?.title || item.book_name} ${cleanRange}`;
+        const displayTitle = book?.custom_title || book?.title || item.book_name;
+        return `${displayTitle} ${cleanRange}`;
       });
 
-    // 💡 현재 에디터가 관리 대상인 교재 제목 목록 (빈 교재명에 의한 오동작 방지 가드 포함)
+    // 💡 현재 에디터가 관리 대상인 교재 제목 목록 (별칭 및 원본명 모두 포함하여 과거 기록 호환)
     const managedBookTitles = newJson
-      .map(item => {
+      .flatMap(item => {
         const book = masterTextbooks.find(m => m.bookcode === item.book_name);
-        return (book?.title || item.book_name || '').trim();
+        const titles = [book?.custom_title, book?.title, item.book_name].filter(Boolean) as string[];
+        return titles.map(t => t.trim());
       })
       .filter(title => title.length > 0);
 

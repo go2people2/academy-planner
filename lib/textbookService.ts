@@ -141,14 +141,13 @@ export async function getVisibleTextbookMasterList(academyId: string): Promise<T
     const result: TextbookMaster[] = [];
     for (const b of books || []) {
       const setting = settingsMap.get(b.bookcode);
-      // 명시적으로 OFF(false)된 교재는 제외 (기본값 ON)
-      if (setting && setting.is_enabled === false) {
-        continue;
-      }
+      const isEnabled = setting ? setting.is_enabled !== false : true;
 
       result.push({
         bookcode: b.bookcode,
-        title: setting?.custom_title || b.title,
+        title: b.title,
+        custom_title: setting?.custom_title || undefined,
+        is_enabled: isEnabled,
         grade: b.grade || '',
         status: b.status,
         ePeriod: b.e_period || '',

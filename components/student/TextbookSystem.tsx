@@ -315,7 +315,7 @@ export default function TextbookSystem({
               (b.title && b.title.trim() === code.trim()) ||
               (b.bookcode && b.bookcode.toLowerCase() === code.toLowerCase())
             ); 
-            const book = found || { bookcode: code, title: code };
+            const book = found || { bookcode: code, title: code, custom_title: undefined };
             const isActive = activeBook?.bookcode === book.bookcode;
             return (
               <motion.button 
@@ -330,7 +330,7 @@ export default function TextbookSystem({
                 className={`flex items-center gap-2 border rounded-[4px] px-3 py-1.5 transition-all shrink-0 ${isActive ? 'bg-emerald-600 border-emerald-400 text-white shadow-lg' : 'bg-white/10 border-white/20 text-white hover:border-emerald-500/50 hover:bg-emerald-500/10'}`}
               >
                 <BookOpen size={12} className={isActive ? 'text-white' : 'text-emerald-500'} />
-                <span className="text-[11px] font-black whitespace-nowrap">{book.title}</span>
+                <span className="text-[11px] font-black whitespace-nowrap">{book.custom_title || book.title}</span>
               </motion.button>
             );
           });
@@ -532,7 +532,7 @@ export default function TextbookSystem({
                     <div className="flex items-center justify-between shrink-0">
                       <div className="flex items-center gap-3">
                         <button onClick={() => { setActiveUnit(null); setIsMergedViewActive(false); setSelectedUnits([]); setLastClickedUnitIdx(null); setSelectedPages([]); }} className="p-1.5 bg-white/10 rounded-full text-white hover:bg-emerald-500 transition-all shadow-lg border border-white/10"><ArrowLeft size={14}/></button>
-                        <div className="text-left"><h3 className="text-[15px] font-black text-white">{selectedUnits.length > 1 ? (() => { const sorted = [...selectedUnits].sort((a,b) => parseInt(a.start_page) - parseInt(b.start_page)); return `${sorted[0].unit.match(/\d+/)?.[0]}~${sorted[sorted.length-1].unit.match(/\d+/)?.[0]}${sorted[0].unit.replace(/\d+/g, '').trim()}`; })() : (activeUnit?.unit || selectedUnits[0]?.unit)}</h3><p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{activeBook.title}</p></div>
+                        <div className="text-left"><h3 className="text-[15px] font-black text-white">{selectedUnits.length > 1 ? (() => { const sorted = [...selectedUnits].sort((a,b) => parseInt(a.start_page) - parseInt(b.start_page)); return `${sorted[0].unit.match(/\d+/)?.[0]}~${sorted[sorted.length-1].unit.match(/\d+/)?.[0]}${sorted[0].unit.replace(/\d+/g, '').trim()}`; })() : (activeUnit?.unit || selectedUnits[0]?.unit)}</h3><p className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{activeBook.custom_title || activeBook.title}</p></div>
                       </div>
                       <button onClick={() => setSelectedPages([])} className="px-3 py-1.5 bg-white/15 hover:bg-white/25 text-white text-[11px] font-black rounded uppercase border border-white/10">Clear All</button>
                     </div>
@@ -650,7 +650,7 @@ export default function TextbookSystem({
                       <div className="flex items-center gap-3">
                         <BookOpen size={16} className="text-emerald-500 group-hover:scale-110 transition-transform" />
                         <div>
-                          <span className="text-[13px] md:text-[14px] font-black text-white block">{book.title}</span>
+                          <span className="text-[13px] md:text-[14px] font-black text-white block">{book.custom_title || book.title}</span>
                           <span className="text-[10px] text-white/40 font-bold block mt-0.5">{book.grade || '공통'}</span>
                         </div>
                       </div>

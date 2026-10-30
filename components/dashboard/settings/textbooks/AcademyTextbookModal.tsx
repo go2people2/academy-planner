@@ -18,10 +18,10 @@ interface AcademyTextbookModalProps {
   academySlug: string;
   academyName: string;
   onSuccess: () => void;
+  isLight?: boolean;
 }
 
 const CUSTOM_GRADE = '__custom';
-const inputCls = 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-indigo-500';
 
 export default function AcademyTextbookModal({
   isOpen,
@@ -29,6 +29,7 @@ export default function AcademyTextbookModal({
   academySlug,
   academyName,
   onSuccess,
+  isLight = false,
 }: AcademyTextbookModalProps) {
   const [year, setYear] = useState('2022');
   const [gradeSelect, setGradeSelect] = useState('m22');
@@ -91,15 +92,21 @@ export default function AcademyTextbookModal({
     }
   };
 
+  const inputCls = isLight
+    ? 'w-full px-3 py-2 bg-white border border-gray-300 rounded text-gray-900 focus:outline-none focus:border-indigo-500'
+    : 'w-full px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white focus:outline-none focus:border-indigo-500';
+
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="bg-[#121212] border border-gray-800 rounded-lg max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 space-y-4 shadow-2xl">
-        <div className="flex items-center justify-between border-b border-gray-800 pb-3">
+      <div className={`border rounded-lg max-w-2xl w-full max-h-[92vh] overflow-y-auto p-6 space-y-4 shadow-2xl ${
+        isLight ? 'bg-white border-gray-200 text-gray-900' : 'bg-[#121212] border-gray-800 text-white'
+      }`}>
+        <div className={`flex items-center justify-between border-b pb-3 ${isLight ? 'border-gray-200' : 'border-gray-800'}`}>
           <div className="flex items-center gap-2">
             <BookPlus size={18} className="text-indigo-400" />
-            <h3 className="text-sm font-bold text-white">우리 학원 자체 교재 등록</h3>
+            <h3 className={`text-sm font-bold ${isLight ? 'text-gray-900' : 'text-white'}`}>우리 학원 자체 교재 등록</h3>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors"><X size={16} /></button>
+          <button onClick={onClose} className={`transition-colors ${isLight ? 'text-gray-400 hover:text-gray-700' : 'text-gray-400 hover:text-white'}`}><X size={16} /></button>
         </div>
 
         <form
@@ -112,22 +119,26 @@ export default function AcademyTextbookModal({
           className="space-y-4 text-xs"
         >
           {/* 1. 교재코드 자동 생성 (학원 slug 고정) */}
-          <div className="p-3 rounded border border-purple-800/40 bg-purple-950/20 space-y-2.5">
+          <div className={`p-3 rounded border space-y-2.5 ${
+            isLight ? 'border-purple-200 bg-purple-50/60' : 'border-purple-800/40 bg-purple-950/20'
+          }`}>
             <div className="flex items-center justify-between">
-              <label className="text-purple-300 font-bold flex items-center gap-1.5">
+              <label className={`font-bold flex items-center gap-1.5 ${isLight ? 'text-purple-800' : 'text-purple-300'}`}>
                 <Lock size={12} /> 학원 전용 식별자 (접두어 고정)
               </label>
-              <span className="text-[11px] font-mono px-2 py-0.5 rounded bg-purple-900/60 text-purple-200 border border-purple-700/50">
+              <span className={`text-[11px] font-mono px-2 py-0.5 rounded border ${
+                isLight ? 'bg-purple-100 text-purple-800 border-purple-250' : 'bg-purple-900/60 text-purple-200 border-purple-700/50'
+              }`}>
                 {academySlug}
               </span>
             </div>
-            <p className="text-[10px] text-gray-400">
+            <p className={`text-[10px] ${isLight ? 'text-gray-500' : 'text-gray-400'}`}>
               * {academyName || academySlug} 학원 전용 교재로 등록되며, 타 학원에는 절대 노출되지 않습니다.
             </p>
 
             <div className="grid grid-cols-4 gap-2 pt-1">
               <div>
-                <label className="block text-gray-400 font-bold mb-1">개정연도</label>
+                <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>개정연도</label>
                 <input
                   type="text"
                   maxLength={4}
@@ -137,7 +148,7 @@ export default function AcademyTextbookModal({
                 />
               </div>
               <div>
-                <label className="block text-gray-400 font-bold mb-1">학년·학기</label>
+                <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>학년·학기</label>
                 <select value={gradeSelect} onChange={(e) => setGradeSelect(e.target.value)} className={inputCls}>
                   {GRADE_CODE_OPTIONS.map((g) => (
                     <option key={g.code} value={g.code}>{g.label} · {g.code}</option>
@@ -155,7 +166,7 @@ export default function AcademyTextbookModal({
                 )}
               </div>
               <div>
-                <label className="block text-gray-400 font-bold mb-1">교재 약어 *</label>
+                <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>교재 약어 *</label>
                 <input
                   type="text"
                   value={abbr}
@@ -165,7 +176,7 @@ export default function AcademyTextbookModal({
                 />
               </div>
               <div>
-                <label className="block text-gray-400 font-bold mb-1">끝말</label>
+                <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>끝말</label>
                 <select value={suffix} onChange={(e) => setSuffix(e.target.value as BookcodeSuffix)} className={inputCls}>
                   {BOOKCODE_SUFFIXES.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
                 </select>
@@ -173,9 +184,11 @@ export default function AcademyTextbookModal({
             </div>
 
             <div>
-              <label className="block text-gray-400 font-bold mb-1">생성될 교재코드</label>
+              <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>생성될 교재코드</label>
               <div className={`px-3 py-1.5 rounded border font-mono text-[11px] break-all ${
-                bookcode ? 'border-purple-600/50 bg-purple-950/40 text-purple-200' : 'border-gray-800 text-gray-500'
+                bookcode
+                  ? (isLight ? 'border-purple-300 bg-purple-50 text-purple-800' : 'border-purple-600/50 bg-purple-950/40 text-purple-200')
+                  : (isLight ? 'border-gray-200 text-gray-400 bg-gray-50' : 'border-gray-800 text-gray-500 bg-black/20')
               }`}>
                 {bookcode ?? '약어(소문자 영문·숫자)를 입력하시면 코드가 조합됩니다.'}
               </div>
@@ -185,7 +198,7 @@ export default function AcademyTextbookModal({
           {/* 2. 교재 기본 정보 */}
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-gray-400 font-bold mb-1">교재명 *</label>
+              <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>교재명 *</label>
               <input
                 type="text"
                 value={title}
@@ -195,7 +208,7 @@ export default function AcademyTextbookModal({
               />
             </div>
             <div>
-              <label className="block text-gray-400 font-bold mb-1">구분(시즌)</label>
+              <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>구분(시즌)</label>
               <input
                 type="text"
                 value={category}
@@ -208,7 +221,7 @@ export default function AcademyTextbookModal({
 
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-gray-400 font-bold mb-1">출판사/제작처</label>
+              <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>출판사/제작처</label>
               <input
                 type="text"
                 value={publisher}
@@ -218,7 +231,7 @@ export default function AcademyTextbookModal({
               />
             </div>
             <div>
-              <label className="block text-gray-400 font-bold mb-1">기준 회차(e-period)</label>
+              <label className={`block font-bold mb-1 ${isLight ? 'text-gray-700' : 'text-gray-400'}`}>기준 회차(e-period)</label>
               <input
                 type="text"
                 value={ePeriod}
@@ -233,12 +246,14 @@ export default function AcademyTextbookModal({
           <MasterUnitEditor units={units} onChange={setUnits} />
 
           {/* 하단 버튼 */}
-          <div className="flex items-center justify-end gap-2 pt-3 border-t border-gray-800">
+          <div className={`flex items-center justify-end gap-2 pt-3 border-t ${isLight ? 'border-gray-200' : 'border-gray-800'}`}>
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 bg-gray-800 hover:bg-gray-700 text-gray-300 rounded font-bold transition-colors"
+              className={`px-4 py-2 rounded font-bold transition-colors ${
+                isLight ? 'bg-gray-100 hover:bg-gray-200 text-gray-700' : 'bg-gray-800 hover:bg-gray-700 text-gray-300'
+              }`}
             >
               취소
             </button>

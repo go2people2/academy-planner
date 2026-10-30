@@ -152,7 +152,7 @@ export default function Sidebar({
         </button>
       </div>
 
-      <div className="mb-6 px-1 space-y-4">
+      <div className="mb-6 space-y-4">
         {/* 1. 학원 브랜딩 */}
         <div className="flex items-center gap-2 cursor-pointer min-h-[32px]" onClick={() => setViewMode('board')}>
           <div className="w-8 h-8 bg-[#0c73e8] rounded-[2px] flex items-center justify-center shadow-lg shrink-0">
@@ -182,8 +182,8 @@ export default function Sidebar({
           <div className="flex-[1.2] px-1.5 py-1 bg-white rounded-[2px] border border-[#edece9] flex items-center justify-center gap-1 min-w-0">
             {mountedDate ? (
               <>
-                <span className="text-[15px] font-black text-[#37352f] tabular-nums leading-none">{mountedDate.monthDay}</span>
-                <span className="text-[13px] font-bold text-[#0c73e8] leading-none">({mountedDate.weekday})</span>
+                <span className="text-[15px] font-black text-[#37352f] tabular-nums leading-none whitespace-nowrap">{mountedDate.monthDay}</span>
+                <span className="text-[13px] font-bold text-[#0c73e8] leading-none whitespace-nowrap">({mountedDate.weekday})</span>
               </>
             ) : (
               <span className="text-[14px] font-medium text-gray-500 tabular-nums leading-none">-</span>

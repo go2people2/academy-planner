@@ -2457,6 +2457,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                  onRemoveFromToday={removeStudentFromToday}
                  onRestoreStudent={addStudentToToday}
                  onRefreshData={fetchAllData}
+                 onRefreshBooks={refreshTextbooks}
                  isLight={false}
                  filteredAllStudents={pureFilteredStudents}
                  searchQuery={studentEditSearchQuery}

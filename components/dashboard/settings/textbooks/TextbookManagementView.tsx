@@ -9,6 +9,7 @@ interface TextbookManagementViewProps {
   academyInfo: any;
   masterTextbooks: any[];
   onUpdateAcademyInfo?: (updates: any) => Promise<void> | void;
+  onRefreshBooks?: () => Promise<void> | void;
   isLight?: boolean;
 }
 
@@ -16,6 +17,7 @@ export default function TextbookManagementView({
   academyInfo,
   masterTextbooks = [],
   onUpdateAcademyInfo,
+  onRefreshBooks,
   isLight = false,
 }: TextbookManagementViewProps) {
   const [subTab, setSubTab] = useState<'master' | 'units' | 'pdfs'>('master');
@@ -29,13 +31,13 @@ export default function TextbookManagementView({
   return (
     <div className="space-y-6">
       {/* 1. 상단 서브 탭 바 */}
-      <div className="flex items-center gap-1 border-b border-gray-800 pb-2">
+      <div className={`flex items-center gap-1 border-b pb-2 ${isLight ? 'border-gray-200' : 'border-gray-800'}`}>
         <button
           onClick={() => setSubTab('master')}
           className={`px-3 py-1.5 text-xs font-bold rounded-t transition-colors ${
             subTab === 'master'
               ? 'bg-indigo-600 text-white border-b-2 border-indigo-400'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800/40'
+              : (isLight ? 'text-gray-500 hover:text-gray-900 hover:bg-gray-100' : 'text-gray-400 hover:text-white hover:bg-gray-800/40')
           }`}
         >
           📚 교재 목록 & 사용 설정
@@ -45,7 +47,7 @@ export default function TextbookManagementView({
           className={`px-3 py-1.5 text-xs font-bold rounded-t transition-colors ${
             subTab === 'units'
               ? 'bg-indigo-600 text-white border-b-2 border-indigo-400'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800/40'
+              : (isLight ? 'text-gray-500 hover:text-gray-900 hover:bg-gray-100' : 'text-gray-400 hover:text-white hover:bg-gray-800/40')
           }`}
         >
           📑 단원 및 페이지 관리
@@ -55,7 +57,7 @@ export default function TextbookManagementView({
           className={`px-3 py-1.5 text-xs font-bold rounded-t transition-colors ${
             subTab === 'pdfs'
               ? 'bg-indigo-600 text-white border-b-2 border-indigo-400'
-              : 'text-gray-400 hover:text-white hover:bg-gray-800/40'
+              : (isLight ? 'text-gray-500 hover:text-gray-900 hover:bg-gray-100' : 'text-gray-400 hover:text-white hover:bg-gray-800/40')
           }`}
         >
           🔗 교재 PDF / 퀴즈 링크
@@ -69,7 +71,7 @@ export default function TextbookManagementView({
             academyInfo={academyInfo}
             masterTextbooks={masterTextbooks}
             isLight={isLight}
-            onRefresh={() => onUpdateAcademyInfo?.({})}
+            onRefresh={onRefreshBooks}
             onNavigateToUnits={handleNavigateToUnits}
           />
         )}

@@ -18,6 +18,7 @@ interface TextbookUnitRowProps {
   readOnly?: boolean;
   onChange: (index: number, field: keyof UnitRowData, val: any) => void;
   onDelete: (index: number) => void;
+  isLight?: boolean;
 }
 
 export default function TextbookUnitRow({
@@ -26,45 +27,50 @@ export default function TextbookUnitRow({
   readOnly = false,
   onChange,
   onDelete,
+  isLight = false,
 }: TextbookUnitRowProps) {
+  const inputClass = `w-full px-2 py-1 rounded text-xs focus:outline-none focus:border-indigo-500 border ${
+    isLight ? 'bg-white border-gray-300 text-gray-900' : 'bg-gray-900 border-gray-700 text-white'
+  }`;
+
   return (
-    <tr className="hover:bg-gray-800/30 transition-colors">
-      <td className="py-1.5 px-3 text-center font-mono text-gray-500">
+    <tr className={`${isLight ? 'hover:bg-gray-50' : 'hover:bg-gray-800/30'} transition-colors`}>
+      <td className={`py-1.5 px-3 text-center font-mono ${isLight ? 'text-gray-400' : 'text-gray-500'}`}>
         {index + 1}
       </td>
       <td className="py-1.5 px-3">
         {readOnly ? (
-          <span className="text-white text-xs block py-1 font-medium">{unit.unit_name}</span>
+          <span className={`text-xs block py-1 font-medium ${isLight ? 'text-gray-900' : 'text-white'}`}>{unit.unit_name}</span>
         ) : (
           <input
             type="text"
             value={unit.unit_name}
             onChange={(e) => onChange(index, 'unit_name', e.target.value)}
-            className="w-full px-2 py-1 bg-gray-900 border border-gray-700 rounded text-white text-xs focus:outline-none focus:border-indigo-500"
+            className={inputClass}
           />
         )}
       </td>
       <td className="py-1.5 px-3">
         {readOnly ? (
-          <span className="text-gray-300 font-mono text-xs block py-1 text-center">{unit.start_page}</span>
+          <span className={`font-mono text-xs block py-1 text-center ${isLight ? 'text-gray-600' : 'text-gray-300'}`}>{unit.start_page}</span>
         ) : (
           <input
             type="number"
             value={unit.start_page}
             onChange={(e) => onChange(index, 'start_page', parseInt(e.target.value, 10) || 0)}
-            className="w-full px-2 py-1 bg-gray-900 border border-gray-700 rounded text-white text-xs text-center focus:outline-none focus:border-indigo-500"
+            className={`${inputClass} text-center`}
           />
         )}
       </td>
       <td className="py-1.5 px-3">
         {readOnly ? (
-          <span className="text-gray-300 font-mono text-xs block py-1 text-center">{unit.end_page}</span>
+          <span className={`font-mono text-xs block py-1 text-center ${isLight ? 'text-gray-600' : 'text-gray-300'}`}>{unit.end_page}</span>
         ) : (
           <input
             type="number"
             value={unit.end_page}
             onChange={(e) => onChange(index, 'end_page', parseInt(e.target.value, 10) || 0)}
-            className="w-full px-2 py-1 bg-gray-900 border border-gray-700 rounded text-white text-xs text-center focus:outline-none focus:border-indigo-500"
+            className={`${inputClass} text-center`}
           />
         )}
       </td>
@@ -72,7 +78,7 @@ export default function TextbookUnitRow({
         <td className="py-1.5 px-3 text-center">
           <button
             onClick={() => onDelete(index)}
-            className="p-1 text-gray-500 hover:text-red-400 rounded transition-colors"
+            className={`p-1 rounded transition-colors ${isLight ? 'text-gray-400 hover:text-red-600' : 'text-gray-500 hover:text-red-400'}`}
             title="단원 삭제"
           >
             <Trash2 size={14} />

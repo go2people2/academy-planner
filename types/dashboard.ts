@@ -150,6 +150,8 @@ export interface Teacher {
 export interface TextbookOption {
   bookcode: string;
   title: string;
+  custom_title?: string;
+  is_enabled?: boolean;
   grade: string;
   status: string;
   ePeriod: string;

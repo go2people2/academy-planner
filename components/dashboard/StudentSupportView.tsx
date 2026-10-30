@@ -28,6 +28,7 @@ interface StudentSupportViewProps {
   onRemoveFromToday: (id: string, reason?: string, actionType?: any, sessionMeta?: any) => Promise<void>;
   onRestoreStudent: (id: string) => Promise<void>;
   onRefreshData: (showLoader?: boolean) => Promise<void>;
+  onRefreshBooks?: () => Promise<void>;
   isLight?: boolean;
   filteredAllStudents?: Student[];
   searchQuery: string;
@@ -66,6 +67,7 @@ export default function StudentSupportView({
   onRemoveFromToday,
   onRestoreStudent,
   onRefreshData,
+  onRefreshBooks,
   isLight = false,
   filteredAllStudents,
   searchQuery,
@@ -249,11 +251,11 @@ export default function StudentSupportView({
 
         {/* 탭 6: 교재 목록 & 단원 관리 */}
         {activeTab === 'textbooks' && (
-          <div className="bg-[#111111]/80 border border-gray-800 rounded-lg p-4">
+          <div className={`border rounded-lg p-4 ${isLight ? 'bg-white border-[#e3e2e0] shadow-xs' : 'bg-[#111111]/80 border-gray-800'}`}>
             <TextbookManagementView
               academyInfo={academyInfo}
               masterTextbooks={availableTextbooks}
-              onUpdateAcademyInfo={onRefreshData as any}
+              onRefreshBooks={onRefreshBooks}
               isLight={isLight}
             />
           </div>

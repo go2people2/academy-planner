@@ -48,7 +48,7 @@ const getBookTitle = (item: HomeworkItem, masterList: TextbookOption[] = []): st
   const textbook = masterList.find(m => m.bookcode === name) ||
                   masterList.find(m => m.bookcode.toLowerCase().startsWith(name.toLowerCase())) ||
                   masterList.find(m => name.toLowerCase().startsWith(m.bookcode.toLowerCase()));
-  return (textbook?.title || (item as any).title || name || '').trim();
+  return (textbook?.custom_title || textbook?.title || (item as any).title || name || '').trim();
 };
 
 const sortHomeworkItems = (list: HomeworkItem[], masterList: TextbookOption[] = []): HomeworkItem[] => {

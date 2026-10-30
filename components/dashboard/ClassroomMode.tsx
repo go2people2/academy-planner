@@ -861,11 +861,11 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                             : isMakeupActive 
                             ? (isLight ? 'bg-purple-50 border-purple-300 shadow-sm' : 'bg-blue-600/20 border-blue-500 shadow-lg shadow-blue-900/20') 
                             : isAbsent 
-                            ? (isLight ? 'bg-red-50 border-red-300 shadow-sm' : 'bg-red-500/20 border-red-500 shadow-lg shadow-red-900/20') 
+                            ? (isLight ? 'bg-rose-50/70 border-rose-300 opacity-70' : 'bg-rose-950/30 border-rose-900/60 opacity-60') 
                             : isLate 
                             ? (isLight ? 'bg-amber-50 border-amber-300 shadow-sm' : 'bg-amber-500/20 border-amber-500 shadow-lg shadow-amber-900/20') 
                             : isCriticalWarning 
-                            ? (isLight ? 'bg-red-50 border-red-400 shadow-md animate-pulse' : 'bg-red-500/20 border-red-500 shadow-[0_0_20px_rgba(239,68,68,0.3)] animate-pulse') 
+                            ? (isLight ? 'bg-orange-50 border-orange-400 shadow-md animate-pulse' : 'bg-orange-500/20 border-orange-500 shadow-[0_0_20px_rgba(249,115,22,0.35)] animate-pulse') 
                             : isLateWarning 
                             ? (isLight ? 'bg-amber-50 border-amber-300 shadow-xs' : 'bg-amber-500/10 border-amber-500') 
                             : isSupplementPending 
@@ -962,7 +962,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                               <MoreHorizontal size={12} />
                             </button>
                           </div>
-                          <div className="text-center px-1"><h3 className={`text-2xl font-bold tracking-tight leading-none ${isPureAttend ? (isLight ? 'text-gray-500 font-semibold' : 'text-gray-500') : (isLight ? 'text-[#0f172a]' : 'text-white')}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
+                          <div className="text-center px-1"><h3 className={`text-2xl font-bold tracking-tight leading-none ${isPureAttend ? (isLight ? 'text-gray-500 font-semibold' : 'text-gray-500') : isAbsent ? (isLight ? 'text-rose-950/70 font-semibold' : 'text-rose-300/60 font-semibold') : (isLight ? 'text-[#0f172a]' : 'text-white')}`}>{s.name}</h3><div className="mt-2 flex flex-col items-center gap-1">
                             {(() => { 
                               const isES = s.grade.includes('초'); 
                               const isHS = s.grade.includes('고'); 
@@ -1004,7 +1004,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                                       ? '결석' 
                                       : (status.startsWith('보강') ? '이동' : status)));
                             const badgeStyle = isAbsent 
-                              ? (isLight ? 'bg-rose-600 text-white font-bold' : 'bg-red-500 text-white') 
+                              ? (isLight ? 'bg-rose-700 text-white font-bold' : 'bg-rose-900/80 text-rose-300 border border-rose-700/60 font-bold') 
                               : (isLate 
                                 ? (isLight ? 'bg-amber-500 text-white font-bold' : 'bg-amber-500 text-black') 
                                 : (isMakeupCard 
@@ -1022,11 +1022,11 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                                     : isMakeupActive 
                                     ? 'bg-purple-600 text-white' 
                                     : isAbsent 
-                                    ? 'bg-rose-600 text-white' 
+                                    ? (isLight ? 'bg-rose-700 text-white' : 'bg-rose-900 text-rose-200') 
                                     : isLate 
                                     ? 'bg-amber-500 text-white' 
                                     : isCriticalWarning 
-                                    ? 'bg-rose-600 text-white' 
+                                    ? 'bg-orange-500 text-white' 
                                     : isLateWarning 
                                     ? 'bg-amber-500 text-white' 
                                     : isSupplementPending 
@@ -1045,7 +1045,7 @@ export default function ClassroomMode({ students, onSave, onClose, selectedDate,
                               </div>
                             );
                           })()}
-                          {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight ${isCriticalWarning ? (isLight ? 'bg-rose-600 text-white' : 'bg-red-500 text-white') : (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black')}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
+                          {!isAnyMarked && !isSupplementPending && isLateWarning && <div className={`absolute bottom-1 left-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[8px] font-bold uppercase tracking-tight ${isCriticalWarning ? (isLight ? 'bg-orange-600 text-white' : 'bg-orange-500 text-white') : (isLight ? 'bg-amber-500 text-white' : 'bg-amber-500 text-black')}`}><AlertCircle size={8} /> {isCriticalWarning ? '미등원' : '지각위험'}</div>}
                         </>
                       )}
                       <AnimatePresence>

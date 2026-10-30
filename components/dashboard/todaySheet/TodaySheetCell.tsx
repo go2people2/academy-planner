@@ -1801,7 +1801,8 @@ export const TodaySheetCell = React.memo(function TodaySheetCell({
               }
 
               return assignedBooks.map((bookKey, bIdx) => {
-                const bookTitle = masterTextbooks?.find((m: any) => m.bookcode?.toLowerCase() === bookKey.toLowerCase() || m.title === bookKey)?.title || bookKey;
+                const matchedBook = masterTextbooks?.find((m: any) => m.bookcode?.toLowerCase() === bookKey.toLowerCase() || m.title === bookKey);
+                const bookTitle = matchedBook?.custom_title || matchedBook?.title || bookKey;
                 const rawVal = String((student.book_courses || {})[bookKey] || '');
                 const { targetTag } = parseBookCourseValue(rawVal);
                 const isElectiveBook = targetTag.startsWith('선택:');
