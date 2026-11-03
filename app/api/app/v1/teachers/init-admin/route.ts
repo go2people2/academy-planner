@@ -115,13 +115,12 @@ export async function POST(req: NextRequest) {
     }
 
     // 5. 기존 원장(admin) 계정 존재 여부 확인
-    // (기존 admin이 있는 경우 중복 생성하지 않고 기존 계정 정보를 반환하여 재로그인 지원)
-    const { data: existingAdmin, error: adminQueryErr } = await supabaseAdmin
+    // (기존 admin이 있는 경우 중복 생성하지 않고 일치하는 계정 정보를 확인하여 재로그인 지원)
+    const { data: existingAdmins, error: adminQueryErr } = await supabaseAdmin
       .from('ams_teachers')
-      .select('id, name, login_id, user_id, academy_id')
+      .select('id, name, login_id, user_id, academy_id, password')
       .eq('academy_id', amsAcademyId)
-      .eq('role', 'admin')
-      .maybeSingle();
+      .eq('role', 'admin');
 
     if (adminQueryErr) {
       console.error('[init-admin] Failed to query existing admin:', adminQueryErr);
@@ -131,47 +130,73 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    if (existingAdmin) {
-      // 1) 아이디 일치 검증
-      if (existingAdmin.login_id.toLowerCase() !== cleanUsername) {
+    if (existingAdmins && existingAdmins.length > 0) {
+      // 1) 입력한 아이디와 일치하는 원장 계정 탐색
+      const matchedAdmin = existingAdmins.find(
+        (a) => a.login_id?.toLowerCase() === cleanUsername
+      );
+
+      if (matchedAdmin) {
+        // 2) 비밀번호 검증 (Supabase Auth 또는 ams_teachers 비밀번호 확인)
+        let isPasswordValid = false;
+        const adminEmail = `${cleanUsername}@hokma-academy.com`;
+        const { data: signInData, error: signInErr } = await supabaseAdmin.auth.signInWithPassword({
+          email: adminEmail,
+          password: rawPassword,
+        });
+
+        if (!signInErr && signInData?.user) {
+          isPasswordValid = true;
+        } else if (matchedAdmin.password && matchedAdmin.password === rawPassword) {
+          isPasswordValid = true;
+          if (matchedAdmin.user_id) {
+            try {
+              await supabaseAdmin.auth.admin.updateUserById(matchedAdmin.user_id, {
+                password: rawPassword,
+              });
+            } catch (syncErr) {
+              console.warn('[init-admin] Failed to sync auth password:', syncErr);
+            }
+          }
+        }
+
+        if (!isPasswordValid) {
+          return NextResponse.json(
+            {
+              success: false,
+              error: '기존에 등록된 원장 계정의 비밀번호와 일치하지 않습니다. 올바른 비밀번호를 입력해 주세요.',
+              code: 'INVALID_CREDENTIALS',
+            },
+            { status: 401 }
+          );
+        }
+
+        // 비밀번호 검증 성공: 인증된 원장 정보 반환
+        return NextResponse.json({
+          success: true,
+          already_exists: true,
+          verified: true,
+          teacher_id: matchedAdmin.id,
+          username: matchedAdmin.login_id,
+          name: matchedAdmin.name,
+          message: '기존 원장 계정 인증이 확인되었습니다. 로컬 관리자 연결을 완료합니다.',
+        });
+      } else {
+        // 기존 원장 목록은 있으나, 입력한 아이디와 일치하는 원장이 없는 경우
+        const registeredIds = existingAdmins
+          .map((a) => a.login_id)
+          .filter(Boolean)
+          .join(', ');
+
         return NextResponse.json(
           {
             success: false,
-            error: `해당 학원에는 다른 아이디(${existingAdmin.login_id})로 원장 계정이 이미 등록되어 있습니다. 기존 아이디로 입력해 주세요.`,
-            existing_username: existingAdmin.login_id,
+            error: `해당 학원에는 기존 원장 계정(${registeredIds})이 등록되어 있습니다. 기존 원장 아이디 중 하나로 입력해 주세요.`,
+            existing_usernames: existingAdmins.map((a) => a.login_id),
           },
           { status: 409 }
         );
       }
-
-      // 2) 비밀번호 검증 (Supabase Auth signInWithPassword)
-      const adminEmail = `${cleanUsername}@hokma-academy.com`;
-      const { data: signInData, error: signInErr } = await supabaseAdmin.auth.signInWithPassword({
-        email: adminEmail,
-        password: rawPassword,
-      });
-
-      if (signInErr || !signInData.user) {
-        return NextResponse.json(
-          {
-            success: false,
-            error: '기존에 등록된 원장 계정의 비밀번호와 일치하지 않습니다. 올바른 비밀번호를 입력해 주세요.',
-            code: 'INVALID_CREDENTIALS',
-          },
-          { status: 401 }
-        );
-      }
-
-      // 비밀번호 검증 성공: 인증된 원장 정보 반환
-      return NextResponse.json({
-        success: true,
-        already_exists: true,
-        verified: true,
-        teacher_id: existingAdmin.id,
-        username: existingAdmin.login_id,
-        name: existingAdmin.name,
-        message: '기존 원장 계정 인증이 확인되었습니다. 로컬 관리자 연결을 완료합니다.',
-      });
     }
 
     // 6. Supabase Auth 유저 생성 (이메일: "${cleanUsername}@hokma-academy.com")
