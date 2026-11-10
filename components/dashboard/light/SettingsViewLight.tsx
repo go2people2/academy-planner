@@ -5,7 +5,6 @@ import { motion } from 'framer-motion';
 import { 
   Settings as SettingsIcon
 } from 'lucide-react';
-import SchoolExamSettings from './SchoolExamSettingsLight';
 import NoticeSettings from '../settings/light/NoticeSettingsLight';
 import HolidayManagement from '../settings/light/HolidayManagementLight';
 import TeacherManagement from '../settings/light/TeacherManagementLight';
@@ -31,7 +30,7 @@ interface SettingsViewProps {
 }
 
 export default function SettingsViewLight({ teachers, students, masterTextbooks, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual' | 'textbooks' | 'timetables'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'manual' | 'textbooks' | 'timetables'>('teachers');
 
   // 학원 운영 설정 로컬 상태
   const [opSettings, setOpSettings] = useState<any>({
@@ -123,7 +122,6 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
 
   const TABS = useMemo(() => [
     { id: 'notices', label: 'Notices', color: 'text-amber-600', activeBg: 'bg-amber-500', roles: ['admin', 'master'] },
-    { id: 'exams', label: 'Exams', color: 'text-rose-600', activeBg: 'bg-rose-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'teachers', label: 'Teachers', color: 'text-blue-600', activeBg: 'bg-blue-500', roles: ['admin', 'master'] },
     { id: 'holidays', label: 'Holidays', color: 'text-emerald-600', activeBg: 'bg-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-650', activeBg: 'bg-blue-650', roles: ['admin', 'master'] },
@@ -204,14 +202,6 @@ export default function SettingsViewLight({ teachers, students, masterTextbooks,
             onAddHoliday={handleAddHoliday} 
             onDeleteHoliday={handleDeleteHoliday} 
             isAdmin={isAdmin}
-          />
-        )}
-
-        {activeTab === 'exams' && (
-          <SchoolExamSettings 
-            academyInfo={academyInfo}
-            students={students}
-            onUpdateAcademyInfo={onUpdateAcademyInfo}
           />
         )}
 

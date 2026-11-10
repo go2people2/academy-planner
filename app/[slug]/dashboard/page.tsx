@@ -16,9 +16,9 @@ import ClassroomMode from '@/components/dashboard/ClassroomMode';
 import TeacherTasks from '@/components/dashboard/TeacherTasks';
 import ApprovalModal from '@/components/dashboard/ApprovalModal';
 import ProblemErrorManager from '@/components/dashboard/ProblemErrorManager';
-import WrongAnswerManager from '@/components/dashboard/WrongAnswerManager';
 import ExamPaperManager from '@/components/dashboard/exam/ExamPaperManager';
 import ExamDdayOverview from '@/components/dashboard/examOverview/ExamDdayOverview';
+import SchoolExamSettings from '@/components/dashboard/SchoolExamSettings';
 import TimetableSettings from '@/components/dashboard/settings/TimetableSettings';
 import PdfLibraryView from '@/components/dashboard/PdfLibraryView';
 import DigitalMathLibraryView from '@/components/dashboard/DigitalMathLibraryView';
@@ -87,9 +87,12 @@ export default function DashboardPage() {
   useEffect(() => {
     // 💡 [안정화] 마운트 완료 후 클라이언트 환경에서만 이전 보던 탭 화면을 복구하여 Hydration Mismatch 및 Flash 방지
     setIsMounted(true);
-    const validModes = ['board', 'todayTable', 'studentSupport', 'studentEdit', 'monthlyChanges', 'pdfLibrary', 'digitalLibrary', 'examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors', 'progress', 'teacherTask', 'settings'];
+    const validModes = ['board', 'todayTable', 'studentSupport', 'studentEdit', 'monthlyChanges', 'pdfLibrary', 'digitalLibrary', 'examDdayOverview', 'schoolExams', 'exams', 'problemErrors', 'progress', 'teacherTask', 'settings'];
     const savedTab = localStorage.getItem('ams_viewMode');
-    if (savedTab && validModes.includes(savedTab)) {
+    if (savedTab === 'wrongAnswersAdmin') {
+      setViewMode('examDdayOverview');
+      localStorage.setItem('ams_viewMode', 'examDdayOverview');
+    } else if (savedTab && validModes.includes(savedTab)) {
       setViewMode(savedTab);
     } else {
       setViewMode('board');
@@ -2488,7 +2491,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
              )}
 
              {/* [평가 관리 팩] */}
-             {isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode) && (
+             {isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'schoolExams', 'exams', 'problemErrors'].includes(viewMode) && (
                <div className="flex flex-col h-full">
                  <PackageSubNav
                    packageType="assessment"
@@ -2506,8 +2509,16 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
                        isLight={false}
                      />
                    )}
+                   {viewMode === 'schoolExams' && (
+                     <div className="flex-1 overflow-y-auto custom-scrollbar-v p-6">
+                       <SchoolExamSettings
+                         academyInfo={academy}
+                         students={students}
+                         onUpdateAcademyInfo={handleUpdateAcademyInfo}
+                       />
+                     </div>
+                   )}
                    {viewMode === 'exams' && <ExamPaperManager academyId={academy?.id || ''} />}
-                   {viewMode === 'wrongAnswersAdmin' && <WrongAnswerManager academyId={academy?.id || ''} currentUser={currentUser} />}
                    {viewMode === 'problemErrors' && <ProblemErrorManager academyInfo={academy} students={students} teachers={teachers} currentUser={currentUser} />}
                  </div>
                </div>
@@ -2541,7 +2552,7 @@ const saveTodaySession = useCallback(async (studentId: string, sessionData: Part
 
              {(viewMode === 'todayTable' || (
                (!isFeatureEnabled(academy, 'learning_resources') && ['pdfLibrary', 'digitalLibrary'].includes(viewMode)) ||
-               (!isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'exams', 'wrongAnswersAdmin', 'problemErrors'].includes(viewMode)) ||
+               (!isFeatureEnabled(academy, 'assessment_tools') && ['examDdayOverview', 'schoolExams', 'exams', 'problemErrors'].includes(viewMode)) ||
                (!isFeatureEnabled(academy, 'operations_tools') && ['progress', 'teacherTask'].includes(viewMode))
              )) && (
               <TodaySheet

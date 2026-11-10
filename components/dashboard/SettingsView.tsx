@@ -9,7 +9,6 @@ import {
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { getInitial } from '@/lib/utils';
-import SchoolExamSettings from './SchoolExamSettings';
 import NoticeSettings from './settings/NoticeSettings';
 import HolidayManagement from './settings/HolidayManagement';
 import TeacherManagement from './settings/TeacherManagement';
@@ -36,7 +35,7 @@ interface SettingsViewProps {
 // --- Main SettingsView Component ---
 
 export default function SettingsView({ teachers, students, masterTextbooks, onAddTeacher, onDeleteTeacher, onUpdateTeacher, onUpdateCurrentUser, onUpdateAcademyInfo, academyInfo, currentUser, noticeDrafts, onNoticeDraftChange }: SettingsViewProps) {
-  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'exams' | 'manual' | 'timetables'>('teachers');
+  const [activeTab, setActiveTab] = useState<'teachers' | 'academy' | 'account' | 'notices' | 'holidays' | 'manual' | 'timetables'>('teachers');
 
   // 💡 휴일 관리 함수
   const handleAddHoliday = async (date: string, note: string) => {
@@ -142,7 +141,6 @@ const updateTimerPreset = async (index: number, value: number) => {
   // 💡 탭 정의 배열 (권한별 역할(roles) 기반으로 접근 제어 고도화)
   const TABS = useMemo(() => [
     { id: 'notices', label: 'Notices', color: 'text-amber-500', roles: ['admin', 'master'] },
-    { id: 'exams', label: 'Exams', color: 'text-rose-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'teachers', label: 'Teachers', color: 'text-blue-500', roles: ['admin', 'master'] },
     { id: 'holidays', label: 'Holidays', color: 'text-emerald-500', roles: ['admin', 'master', 'teacher'] },
     { id: 'academy', label: 'Academy Info', color: 'text-blue-500', roles: ['admin', 'master'] },
@@ -223,17 +221,6 @@ const updateTimerPreset = async (index: number, value: number) => {
             isAdmin={isAdmin}
           />
         )}
-
-        {/* 학교별 시험 일정 관리 탭 */}
-
-        {activeTab === 'exams' && (
-          <SchoolExamSettings 
-            academyInfo={academyInfo}
-            students={students}
-            onUpdateAcademyInfo={onUpdateAcademyInfo}
-          />
-        )}
-
 
         {/* 💡 매뉴얼 관리 탭 */}
         {activeTab === 'manual' && (

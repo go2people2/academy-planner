@@ -3,7 +3,7 @@
 import React from 'react';
 import { 
   Library, BookOpen, FileText, AlertTriangle, 
-  ArrowLeftRight, Activity, ClipboardCheck, Calendar 
+  ArrowLeftRight, Activity, ClipboardCheck, Calendar, School 
 } from 'lucide-react';
 
 export type PackageType = 'materials' | 'assessment' | 'operations';
@@ -21,8 +21,8 @@ const PACKAGE_TABS: Record<PackageType, TabItem[]> = {
   ],
   assessment: [
     { id: 'examDdayOverview', label: '시험 대비 현황', icon: Calendar },
+    { id: 'schoolExams', label: '학교별 시험 일정', icon: School },
     { id: 'exams', label: '기출문제 관리', icon: FileText },
-    { id: 'wrongAnswersAdmin', label: '오답노트 관리', icon: BookOpen },
     { id: 'problemErrors', label: '교재 오류 관리', icon: AlertTriangle },
   ],
   operations: [
